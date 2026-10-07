@@ -42,7 +42,7 @@ npm run build              # production build
 
 ## Rules of thumb
 
-- Match the approved mockup, and use the plain-language clinical wording.
+- Match the approved mockup (`design/mhai-clinical-mockup-v2.html`), and use the plain-language clinical wording.
   No technical terms in the UI.
 - An escalated or degraded result always shows the review banner.
 - Never log, store or cache patient data in the browser. Use mock or

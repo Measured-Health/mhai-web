@@ -37,7 +37,8 @@ Every PR must pass:
 
 ## Clinical UI rules
 
-- **The approved mockup is the visual source of truth.**
+- **The approved mockup is the visual source of truth:**
+  `design/mhai-clinical-mockup-v2.html`.
 - **Clinicians never see technical terms:** no "trust score", "NLI",
   "semantic entropy", PASS/REGENERATE/ESCALATE or KB ids. Use the
   plain-language mapping from the Phase 1 build guide.
