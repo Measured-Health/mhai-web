@@ -18,6 +18,16 @@ updates:
           ]
       dev-tools:
         dependency-type: development
+    # Major versions of the toolchain need deliberate upgrades (e.g. TypeScript
+    # 7 before typescript-eslint supports it; @types/node must match .nvmrc).
+    # Do those by hand in their own PR.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
