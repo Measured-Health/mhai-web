@@ -7,3 +7,45 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+# Agent guide: mhai-web
+
+The clinician-facing frontend for MHAI. Backend and API:
+Measured-Health/mhai-multiagent (read its SKILLS.md for the security
+model).
+
+## Read first
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): conventions, the clinical UI rules,
+  the rules for patient data in the browser, and the agent contribution
+  workflow.
+- `docs/adr/`: decisions so far.
+
+## Workflow
+
+- Work on your own branch (`agent/<topic>`) and open a PR using the template.
+- **Never merge, approve or push to `main`.** A human reviews and merges.
+- If changes are requested, fix on the same branch, reply to each comment,
+  and re-request review.
+- No AI attribution in commits or PRs.
+
+## Commands
+
+```bash
+nvm use && npm ci          # Node from .nvmrc, exact lockfile install
+npm run dev                # http://localhost:3000
+npm run lint               # ESLint
+npm run typecheck          # tsc --noEmit
+npm run format             # Prettier (format:check in CI)
+npm run build              # production build
+```
+
+## Rules of thumb
+
+- Match the approved mockup, and use the plain-language clinical wording.
+  No technical terms in the UI.
+- An escalated or degraded result always shows the review banner.
+- Never log, store or cache patient data in the browser. Use mock or
+  synthetic data only.
+- Generate API types from the backend OpenAPI schema; never send user ids
+  from the client.
