@@ -1,0 +1,29 @@
+name: Feature or change
+description: Propose new functionality or a change in behaviour
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Who needs this, and why?
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+    validations: { required: true }
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How a reviewer can tell it's done.
+    validations: { required: true }
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - label: Changes how clinical results, confidence or citations are shown (needs `clinical-review`)
+        - label: Touches patient data handling, roles or session behaviour
+        - label: Needs a backend API change (link the mhai-multiagent issue)

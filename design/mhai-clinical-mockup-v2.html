@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MHAI — Clinical Decision Support</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F4F5F3;
+  --panel: #FFFFFF;
+  --ink: #111A1E;
+  --ink-soft: #4A5860;
+  --ink-faint: #8A969C;
+  --line: #D9DFDE;
+  --line-soft: #E8ECEB;
+  --line-faint: #F0F2F1;
+  --teal: #0E6E66;
+  --teal-deep: #094F49;
+  --teal-light: #12A296;
+  --teal-wash: #E5F1EF;
+  --teal-wash2: #D0E6E2;
+  --navy: #14202A;
+  --navy-soft: #1B2F38;
+  --navy-mid: #243D48;
+  --navy-line: #2C4752;
+  --navy-text: #C8D6DA;
+  --amber: #B5742A;
+  --amber-deep: #8C5A1F;
+  --amber-wash: #FBF0E2;
+  --amber-line: #ECCA8E;
+  --red: #A04438;
+  --red-deep: #7D3029;
+  --red-wash: #F8E8E5;
+  --red-line: #E0B5AE;
+  --green: #1B7A4A;
+  --green-deep: #135A36;
+  --green-wash: #E4F5EC;
+  --green-line: #A8D9BF;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow-xs: 0 1px 2px rgba(17,26,30,0.04);
+  --shadow-sm: 0 1px 3px rgba(17,26,30,0.06), 0 1px 2px rgba(17,26,30,0.04);
+  --shadow-md: 0 4px 16px rgba(17,26,30,0.08), 0 1px 3px rgba(17,26,30,0.04);
+  --shadow-navy: 0 1px 0 rgba(255,255,255,0.02) inset, 0 8px 28px rgba(0,0,0,0.32);
+  --sans: 'IBM Plex Sans', -apple-system, system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', 'SFMono-Regular', monospace;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { font-family: var(--sans); background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+textarea, input, select { font-family: inherit; }
+::-webkit-scrollbar { width: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #C4CBC9; border-radius: 20px; }
+.sidebar ::-webkit-scrollbar-thumb { background: #3A5058; }
+
+@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pulseRing { 0% { transform:scale(0.85); opacity:0.8; } 70% { transform:scale(1.4); opacity:0; } 100% { opacity:0; } }
+@keyframes ecgDraw { 0% { stroke-dashoffset:160; opacity:0.3; } 45% { stroke-dashoffset:0; opacity:1; } 70% { stroke-dashoffset:0; opacity:1; } 100% { stroke-dashoffset:-160; opacity:0.3; } }
+@keyframes gentlePulse { 0%,100% { opacity:0.5; } 50% { opacity:1; } }
+
+.app { display: grid; grid-template-columns: 250px 1fr 330px; height: 100vh; min-height: 600px; transition: grid-template-columns .25s var(--ease); }
+.app.panel-closed { grid-template-columns: 250px 1fr 0px; }
+.app.panel-closed .evidence-panel { opacity: 0; pointer-events: none; }
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  background: radial-gradient(500px 240px at 20% -10%, rgba(14,110,102,0.18), transparent 65%),
+              linear-gradient(180deg, var(--navy) 0%, #0F1920 100%);
+  color: var(--navy-text); display: flex; flex-direction: column;
+  box-shadow: var(--shadow-navy); position: relative; z-index: 2;
+}
+.sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 20px 18px 16px; border-bottom: 1px solid var(--navy-line); }
+.brand-mark {
+  width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+  background: linear-gradient(140deg, var(--teal), var(--teal-light));
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 3px rgba(18,162,150,0.12), 0 2px 8px rgba(0,0,0,0.3);
+  position: relative;
+}
+.brand-mark::after { content: ""; position: absolute; inset: -4px; border-radius: 12px; border: 1px solid rgba(18,162,150,0.30); animation: pulseRing 2.8s ease-out infinite; }
+.brand-mark svg { width: 15px; height: 15px; position: relative; }
+.brand-title { font-weight: 700; font-size: 16px; color: #fff; letter-spacing: 0.3px; }
+.brand-sub { display: block; font-size: 10px; color: #6C8890; margin-top: 1px; }
+
+.new-btn {
+  margin: 14px 14px 12px;
+  background: linear-gradient(135deg, var(--teal-deep), var(--teal));
+  color: #fff; border-radius: var(--radius-sm); padding: 11px 14px; font-size: 13.5px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+  box-shadow: 0 2px 8px rgba(14,110,102,0.3); transition: transform .12s, box-shadow .15s;
+}
+.new-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(14,110,102,0.35); }
+.new-btn:active { transform: scale(0.97); }
+.new-btn svg { width: 14px; height: 14px; }
+
+.search-box { margin: 0 14px 10px; position: relative; }
+.search-box input {
+  width: 100%; background: var(--navy-soft); border: 1px solid var(--navy-line); border-radius: 7px;
+  padding: 8px 10px 8px 30px; color: #DCE6E7; font-size: 12.5px; outline: none;
+}
+.search-box input::placeholder { color: #6E848C; }
+.search-box svg { position: absolute; left: 9px; top: 9px; width: 13px; height: 13px; stroke: #6E848C; }
+
+.history { flex: 1; overflow-y: auto; padding: 4px 10px 16px; }
+.hist-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.7px; color: #546E76; padding: 12px 8px 6px; font-family: var(--mono); }
+
+.hist-item {
+  padding: 11px 12px; border-radius: var(--radius-sm); margin-bottom: 3px;
+  cursor: pointer; border: 1px solid transparent; position: relative;
+  display: flex; gap: 10px; align-items: flex-start; transition: background .15s, border-color .15s;
+}
+.hist-item:hover { background: var(--navy-soft); }
+.hist-item.active { background: rgba(14,110,102,0.12); border-color: rgba(14,110,102,0.25); }
+.hist-item.active::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; background: var(--teal); border-radius: 2px; }
+.hi-icon {
+  width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0; margin-top: 1px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--navy-soft); border: 1px solid var(--navy-line);
+}
+.hi-icon svg { width: 13px; height: 13px; stroke: #8BA4AC; }
+.hist-item.active .hi-icon { background: var(--teal-deep); border-color: var(--teal); }
+.hist-item.active .hi-icon svg { stroke: #E6F4F1; }
+.hi-body { flex: 1; min-width: 0; }
+.hi-title { font-size: 13px; color: #E0EAED; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+.hi-flag { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.hi-flag.amber { background: var(--amber); }
+.hi-meta { font-size: 10.5px; color: #6E868E; margin-top: 3px; }
+
+.sidebar-foot {
+  padding: 12px 16px; border-top: 1px solid var(--navy-line);
+  display: flex; align-items: center; gap: 9px;
+}
+.op-avatar {
+  width: 29px; height: 29px; border-radius: 50%; background: #2C414B; color: #CBD8DA;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 600; font-family: var(--mono);
+  box-shadow: 0 0 0 2px var(--navy), 0 0 0 3px #3A5560;
+}
+.op-info { line-height: 1.25; }
+.op-name { font-size: 12.5px; color: #E4ECED; font-weight: 500; }
+.op-role { font-size: 10.5px; color: #7C929A; }
+
+/* ===== CENTER ===== */
+.center { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+.top-bar {
+  padding: 14px 28px; border-bottom: 1px solid var(--line); background: var(--panel);
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 1px 0 rgba(17,26,30,0.02); position: relative; z-index: 1;
+}
+.tb-left { display: flex; flex-direction: column; gap: 2px; }
+.tb-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.tb-sub { font-size: 11.5px; color: var(--ink-faint); font-family: var(--mono); }
+.urg-badge { font-size: 10px; font-family: var(--mono); font-weight: 600; padding: 2px 9px; border-radius: 20px; letter-spacing: 0.3px; text-transform: uppercase; }
+.urg-badge.routine { background: var(--teal-wash); color: var(--teal-deep); border: 1px solid var(--teal-wash2); }
+.urg-badge.urgent { background: var(--amber-wash); color: var(--amber-deep); border: 1px solid var(--amber-line); }
+.urg-badge.emergency { background: var(--red-wash); color: var(--red-deep); border: 1px solid var(--red-line); }
+.persona-chip { font-family: var(--mono); font-size: 10.5px; color: var(--teal-deep); background: var(--teal-wash); border: 1px solid var(--teal-wash2); padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+.tb-actions { display: flex; gap: 6px; }
+.icon-btn {
+  width: 34px; height: 34px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line); background: var(--panel);
+  display: flex; align-items: center; justify-content: center; transition: all .15s;
+}
+.icon-btn:hover { background: var(--line-faint); }
+.icon-btn svg { width: 15px; height: 15px; stroke: var(--ink-soft); }
+.icon-btn.active { background: var(--teal-wash); border-color: var(--teal-wash2); }
+.icon-btn.active svg { stroke: var(--teal-deep); }
+
+.center-body { flex: 1; overflow-y: auto; padding: 32px; display: flex; flex-direction: column; align-items: center; }
+
+/* ===== FORM ===== */
+.form-card { width: 100%; max-width: 620px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-md); animation: fadeUp .35s var(--ease) both; }
+.form-banner { background: linear-gradient(135deg, var(--navy), var(--navy-mid)); border-radius: var(--radius) var(--radius) 0 0; padding: 24px 28px; color: #fff; }
+.form-banner h2 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+.form-banner p { font-size: 12.5px; color: var(--navy-text); margin: 0; }
+.form-body { padding: 24px 28px 28px; }
+.field { margin-bottom: 18px; }
+.field-label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin-bottom: 6px; }
+.field-label .req { color: var(--red); }
+.field-row { display: flex; gap: 12px; }
+.field-row .field { flex: 1; margin-bottom: 0; }
+.f-input, .f-select, .f-textarea {
+  width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 10px 12px; font-size: 13.5px; color: var(--ink); background: var(--bg); outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.f-input:focus, .f-select:focus, .f-textarea:focus { border-color: var(--teal); box-shadow: 0 0 0 3px var(--teal-wash); }
+.f-textarea { resize: vertical; min-height: 80px; line-height: 1.55; }
+.f-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' stroke='%234A5860' stroke-width='1.4' fill='none'/></svg>");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px;
+}
+.field-hint { font-size: 11px; color: var(--ink-faint); margin-top: 4px; }
+.toggle-extra { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: var(--teal-deep); padding: 8px 0; cursor: pointer; }
+.toggle-extra svg { width: 12px; height: 12px; transition: transform .2s; }
+.toggle-extra.open svg { transform: rotate(90deg); }
+.extra-fields { display: none; padding-top: 4px; }
+.extra-fields.open { display: block; animation: fadeUp .2s var(--ease); }
+.submit-btn {
+  width: 100%; padding: 13px; border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--teal), var(--teal-light));
+  color: #fff; font-size: 14px; font-weight: 600;
+  box-shadow: 0 2px 10px rgba(14,110,102,0.3);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 24px; transition: all .15s;
+}
+.submit-btn:hover { box-shadow: 0 4px 18px rgba(14,110,102,0.35); transform: translateY(-1px); }
+.submit-btn:active { transform: scale(0.98); }
+.submit-btn svg { width: 16px; height: 16px; }
+
+/* ===== PROCESSING ===== */
+.proc-card { width: 100%; max-width: 520px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-md); padding: 44px 36px; text-align: center; animation: fadeUp .35s var(--ease) both; display: none; }
+.proc-card.show { display: block; }
+.ecg-wrap { display: flex; justify-content: center; margin-bottom: 20px; }
+.ecg-pulse { width: 120px; height: 30px; }
+.ecg-pulse path { fill: none; stroke: var(--teal); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 160; stroke-dashoffset: 160; animation: ecgDraw 1.8s ease-in-out infinite; }
+.proc-title { font-size: 17px; font-weight: 600; margin-bottom: 5px; }
+.proc-sub { font-size: 12.5px; color: var(--ink-faint); margin-bottom: 30px; }
+.steps { display: flex; flex-direction: column; text-align: left; max-width: 320px; margin: 0 auto; }
+.step-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; position: relative; }
+.step-item::before { content: ""; position: absolute; left: 12px; top: 34px; bottom: -10px; width: 1.5px; background: var(--line); }
+.step-item:last-child::before { display: none; }
+.step-dot {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--line); background: var(--panel);
+  display: flex; align-items: center; justify-content: center;
+  position: relative; z-index: 1; transition: all .3s var(--ease);
+}
+.step-dot svg { width: 12px; height: 12px; stroke: var(--line); stroke-width: 2.5; display: none; }
+.step-item.done .step-dot { border-color: var(--teal); background: var(--teal-wash); }
+.step-item.done .step-dot svg { display: block; stroke: var(--teal); }
+.step-item.done::before { background: var(--teal); }
+.step-item.active .step-dot { border-color: var(--teal); background: var(--teal); box-shadow: 0 0 0 4px var(--teal-wash); }
+.step-item.active .step-dot::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: gentlePulse 1.2s ease infinite; }
+.step-text { font-size: 13px; font-weight: 500; color: var(--ink-faint); transition: color .2s; }
+.step-item.done .step-text { color: var(--teal-deep); }
+.step-item.active .step-text { color: var(--ink); font-weight: 600; }
+.step-time { font-size: 10.5px; font-family: var(--mono); color: var(--ink-faint); margin-left: auto; }
+.prog-wrap { margin-top: 28px; }
+.prog-track { height: 4px; background: var(--line-soft); border-radius: 2px; overflow: hidden; }
+.prog-fill { height: 100%; background: linear-gradient(90deg, var(--teal), var(--teal-light)); border-radius: 2px; transition: width .5s var(--ease); }
+.prog-pct { font-size: 11px; font-family: var(--mono); color: var(--ink-faint); margin-top: 6px; text-align: right; }
+
+/* ===== RESULT ===== */
+.result-wrap { width: 100%; max-width: 680px; animation: fadeUp .4s var(--ease) both; display: none; }
+.result-wrap.show { display: block; }
+
+.caution-banner {
+  background: var(--amber-wash); border: 1px solid var(--amber-line); color: var(--amber-deep);
+  border-radius: var(--radius); padding: 13px 18px; margin-bottom: 14px;
+  display: none; align-items: center; gap: 10px; font-size: 13px; font-weight: 600;
+}
+.caution-banner.show { display: flex; }
+.caution-banner svg { width: 18px; height: 18px; flex-shrink: 0; stroke: var(--amber); }
+
+.result-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-md); overflow: hidden; }
+.conf-strip { height: 4px; }
+.conf-strip.high { background: linear-gradient(90deg, var(--green), var(--teal-light)); }
+.conf-strip.caution { background: linear-gradient(90deg, var(--amber), #D4983C); }
+.conf-strip.review { background: linear-gradient(90deg, var(--red), #C75A4E); }
+
+.result-top { padding: 20px 24px 16px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.rt-left { flex: 1; }
+.rt-diag { font-size: 19px; font-weight: 700; color: var(--ink); margin: 0 0 5px; line-height: 1.3; }
+.rt-code { display: inline-flex; font-size: 11px; font-family: var(--mono); font-weight: 500; color: var(--teal-deep); background: var(--teal-wash); border: 1px solid var(--teal-wash2); padding: 2px 9px; border-radius: 20px; }
+
+.conf-badge {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 12px 18px; border-radius: var(--radius-sm); border: 1px solid transparent;
+  min-width: 100px; flex-shrink: 0; text-align: center;
+}
+.conf-badge.high { background: var(--green-wash); border-color: var(--green-line); }
+.conf-badge.caution { background: var(--amber-wash); border-color: var(--amber-line); }
+.conf-badge.review { background: var(--red-wash); border-color: var(--red-line); }
+.strength-bars { display: flex; gap: 2px; align-items: flex-end; height: 14px; margin-bottom: 2px; }
+.strength-bars span { width: 4px; border-radius: 1px; opacity: 0.2; }
+.strength-bars span.on { opacity: 1; }
+.conf-badge.high .strength-bars span { background: var(--green); }
+.conf-badge.caution .strength-bars span { background: var(--amber); }
+.conf-badge.review .strength-bars span { background: var(--red); }
+.strength-bars span:nth-child(1) { height: 30%; }
+.strength-bars span:nth-child(2) { height: 50%; }
+.strength-bars span:nth-child(3) { height: 70%; }
+.strength-bars span:nth-child(4) { height: 85%; }
+.strength-bars span:nth-child(5) { height: 100%; }
+.cb-level { font-size: 14px; font-weight: 700; line-height: 1; }
+.conf-badge.high .cb-level { color: var(--green); }
+.conf-badge.caution .cb-level { color: var(--amber); }
+.conf-badge.review .cb-level { color: var(--red); }
+.cb-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: var(--ink-faint); }
+
+.result-body { padding: 22px 24px; }
+.response-text { font-size: 14px; line-height: 1.75; color: var(--ink-soft); margin-bottom: 18px; }
+.response-text strong { color: var(--ink); font-weight: 600; }
+.ref-tag {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10.5px; font-weight: 600; padding: 1px 8px; border-radius: 5px;
+  cursor: pointer; transition: all .12s; vertical-align: middle; margin: 0 1px;
+}
+.ref-tag.verified { background: var(--green-wash); color: var(--green); border: 1px solid var(--green-line); }
+.ref-tag.unverified { background: var(--amber-wash); color: var(--amber); border: 1px solid var(--amber-line); }
+.ref-tag:hover { transform: translateY(-1px); box-shadow: var(--shadow-xs); }
+.ref-tag svg { width: 10px; height: 10px; }
+
+.time-line { font-size: 11px; color: var(--ink-faint); padding: 12px 0 0; border-top: 1px solid var(--line-faint); display: flex; align-items: center; gap: 6px; }
+.time-line svg { width: 12px; height: 12px; stroke: var(--ink-faint); }
+
+.result-actions { padding: 16px 24px 20px; border-top: 1px solid var(--line-soft); display: flex; align-items: center; gap: 10px; }
+.act-agree, .act-correct { padding: 10px 22px; border-radius: var(--radius-sm); font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 7px; transition: all .15s; }
+.act-agree { background: var(--green); color: #fff; box-shadow: 0 2px 6px rgba(27,122,74,0.25); }
+.act-agree:hover { background: var(--green-deep); }
+.act-correct { background: var(--panel); color: var(--amber); border: 1px solid var(--amber-line); }
+.act-correct:hover { background: var(--amber-wash); }
+.act-agree svg, .act-correct svg { width: 15px; height: 15px; }
+.act-spacer { flex: 1; }
+.act-copy { padding: 8px 14px; border-radius: var(--radius-sm); border: 1px solid var(--line); font-size: 12px; font-weight: 500; color: var(--ink-faint); display: flex; align-items: center; gap: 5px; transition: all .12s; }
+.act-copy:hover { background: var(--line-faint); color: var(--ink-soft); }
+.act-copy svg { width: 13px; height: 13px; }
+
+.corr-form { background: var(--amber-wash); border: 1px solid var(--amber-line); border-radius: var(--radius-sm); padding: 18px 20px; margin-top: 14px; animation: fadeUp .25s var(--ease); display: none; }
+.corr-form.show { display: block; }
+.cf-head { font-size: 14px; font-weight: 600; color: var(--amber-deep); margin-bottom: 14px; display: flex; align-items: center; gap: 7px; }
+.cf-head svg { width: 16px; height: 16px; }
+.cf-field { margin-bottom: 12px; }
+.cf-field label { display: block; font-size: 12px; font-weight: 500; color: var(--amber-deep); margin-bottom: 5px; }
+.cf-input, .cf-textarea { width: 100%; border: 1px solid var(--amber-line); border-radius: 7px; padding: 9px 11px; font-size: 13px; background: #fff; color: var(--ink); outline: none; }
+.cf-textarea { resize: vertical; min-height: 56px; line-height: 1.5; }
+.cf-input:focus, .cf-textarea:focus { border-color: var(--amber); }
+.cf-btns { display: flex; gap: 8px; margin-top: 12px; }
+.cf-submit { padding: 9px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; background: var(--amber); color: #fff; }
+.cf-cancel { padding: 9px 16px; border-radius: 7px; font-size: 13px; font-weight: 500; border: 1px solid var(--amber-line); color: var(--amber-deep); background: #fff; }
+
+.done-banner { background: var(--green-wash); border: 1px solid var(--green-line); border-radius: var(--radius-sm); padding: 13px 18px; margin-top: 14px; display: none; align-items: center; gap: 9px; font-size: 13px; font-weight: 500; color: var(--green); animation: fadeUp .25s var(--ease); }
+.done-banner.show { display: flex; }
+.done-banner svg { width: 18px; height: 18px; flex-shrink: 0; }
+.disclaimer { font-size: 10.5px; color: var(--ink-faint); text-align: center; margin-top: 20px; max-width: 500px; }
+
+/* ===== RIGHT PANEL ===== */
+.evidence-panel { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; transition: opacity .2s var(--ease); overflow: hidden; }
+.ep-header { padding: 15px 18px; border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ep-header svg { width: 16px; height: 16px; stroke: var(--teal); }
+.ep-body { flex: 1; overflow-y: auto; padding: 16px 16px 28px; }
+
+.ep-section { background: var(--bg); border: 1px solid var(--line-soft); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.ep-label { display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-faint); margin-bottom: 10px; }
+.ep-label svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+.check-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line-faint); }
+.check-item:last-child { border-bottom: none; }
+.check-icon { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.check-icon.pass { background: var(--green-wash); }
+.check-icon.pass svg { stroke: var(--green); }
+.check-icon.warn { background: var(--amber-wash); }
+.check-icon.warn svg { stroke: var(--amber); }
+.check-icon svg { width: 12px; height: 12px; stroke-width: 2.5; }
+.check-info { flex: 1; min-width: 0; }
+.check-name { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.check-desc { font-size: 10.5px; color: var(--ink-faint); line-height: 1.4; margin-top: 1px; }
+
+.conf-bars { display: flex; flex-direction: column; gap: 8px; }
+.cbar-item { display: flex; align-items: center; gap: 10px; }
+.cbar-label { font-size: 11.5px; font-weight: 500; color: var(--ink-soft); width: 115px; flex-shrink: 0; }
+.cbar-track { flex: 1; height: 6px; background: var(--line-soft); border-radius: 3px; overflow: hidden; }
+.cbar-fill { height: 100%; border-radius: 3px; transition: width .6s var(--ease); }
+.cbar-fill.good { background: var(--teal); }
+.cbar-fill.ok { background: var(--amber); }
+.cbar-val { font-size: 11px; font-family: var(--mono); color: var(--ink-faint); width: 30px; text-align: right; }
+
+.src-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; margin-bottom: 8px; }
+.sc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+.sc-name { font-size: 12px; font-weight: 600; color: var(--ink); }
+.sc-badge { font-size: 9px; font-family: var(--mono); font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+.sc-badge.verified { background: var(--green-wash); color: var(--green); }
+.sc-badge.caution { background: var(--amber-wash); color: var(--amber); }
+.sc-excerpt { font-size: 11.5px; color: var(--ink-soft); line-height: 1.45; }
+.sc-meta { font-size: 10px; color: var(--ink-faint); margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><path d="M4 12h4l2 7 4-14 2 7h4"/></svg></div>
+      <div><div class="brand-title">MHAI</div><span class="brand-sub">Clinical Decision Support</span></div>
+    </div>
+    <button class="new-btn" id="new-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New Consultation</button>
+    <div class="search-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input type="text" placeholder="Search consultations"></div>
+
+    <div class="history">
+      <div class="hist-label">Today</div>
+      <div class="hist-item active" data-q="main">
+        <div class="hi-icon" title="Cardiology"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z"/></svg></div>
+        <div class="hi-body"><div class="hi-title">Chest pain, 54M — differential <span class="hi-flag amber" title="Has flagged finding"></span></div><div class="hi-meta">Use with caution · 2 min ago</div></div>
+      </div>
+      <div class="hist-item" data-q="2">
+        <div class="hi-icon" title="Pediatrics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg></div>
+        <div class="hi-body"><div class="hi-title">Pediatric rash, 6yo</div><div class="hi-meta">High confidence · 41 min ago</div></div>
+      </div>
+      <div class="hist-label">Yesterday</div>
+      <div class="hist-item" data-q="3">
+        <div class="hi-icon" title="Laboratory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6.4a2 2 0 01-.3 1L4.5 16a3 3 0 002.5 4.7h10a3 3 0 002.5-4.7l-4.2-6.6a2 2 0 01-.3-1V2"/><path d="M8.5 2h7M6 16h12"/></svg></div>
+        <div class="hi-body"><div class="hi-title">Lab review — CBC anomaly</div><div class="hi-meta">High confidence · 1d ago</div></div>
+      </div>
+      <div class="hist-item" data-q="4">
+        <div class="hi-icon" title="Post-operative"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg></div>
+        <div class="hi-body"><div class="hi-title">Post-op fever workup</div><div class="hi-meta">High confidence · 1d ago</div></div>
+      </div>
+      <div class="hist-label">Earlier</div>
+      <div class="hist-item" data-q="5">
+        <div class="hi-icon" title="Pharmacology"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="10" rx="2"/><path d="M8 9V7a4 4 0 018 0v2"/></svg></div>
+        <div class="hi-body"><div class="hi-title">Medication interaction check</div><div class="hi-meta">High confidence · 5d ago</div></div>
+      </div>
+    </div>
+
+    <div class="sidebar-foot">
+      <div class="op-avatar">DR</div>
+      <div class="op-info"><div class="op-name">Dr. Reyes</div><div class="op-role">Attending · Internal Medicine</div></div>
+    </div>
+  </aside>
+
+  <!-- ===== CENTER ===== -->
+  <main class="center">
+    <div class="top-bar">
+      <div class="tb-left">
+        <div class="tb-title" id="tb-title">Chest pain, 54M — differential <span class="urg-badge emergency">Emergency</span></div>
+        <span class="tb-sub" id="tb-sub">Completed · 14:06</span>
+      </div>
+      <div class="tb-actions">
+        <button class="icon-btn" id="panel-toggle" title="Show/hide evidence panel"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></svg></button>
+      </div>
+    </div>
+    <div class="center-body" id="center-body">
+
+      <!-- === FORM === -->
+      <div class="form-card" id="view-form" style="display:none">
+        <div class="form-banner"><h2>Patient Assessment</h2><p>Provide clinical details for AI-assisted diagnostic support</p></div>
+        <div class="form-body">
+          <div class="field-row">
+            <div class="field"><label class="field-label">Age <span class="req">*</span></label><input class="f-input" type="number" id="f-age" value="54" min="0" max="120"></div>
+            <div class="field"><label class="field-label">Sex <span class="req">*</span></label><select class="f-select" id="f-sex"><option value="M" selected>Male</option><option value="F">Female</option><option value="O">Other</option></select></div>
+            <div class="field"><label class="field-label">Priority <span class="req">*</span></label><select class="f-select" id="f-urg"><option value="routine">Routine</option><option value="urgent">Urgent</option><option value="emergency" selected>Emergency</option></select></div>
+          </div>
+          <div class="field"><label class="field-label">Presenting symptoms <span class="req">*</span></label><input class="f-input" type="text" id="f-symp" value="Substernal chest pressure, radiating to left arm, diaphoresis"></div>
+          <div class="field"><label class="field-label">Clinical question <span class="req">*</span></label><textarea class="f-textarea" id="f-q">54-year-old male, substernal chest pressure x45 min, radiating to left arm, diaphoretic. BP 148/92, HR 104. What's the differential and immediate workup?</textarea><div class="field-hint">Include vitals, duration, and relevant history for best results.</div></div>
+          <div class="field"><label class="field-label">Specialty area</label><select class="f-select"><option value="">Let the system decide</option><option value="diagnosis" selected>Diagnosis</option><option value="emergency">Emergency</option></select></div>
+          <button class="toggle-extra" id="extra-toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>Additional context (optional)</button>
+          <div class="extra-fields" id="extra-fields"><div class="field"><label class="field-label">Medical history</label><textarea class="f-textarea" rows="3" placeholder="Past diagnoses, medications, allergies...">Hx of HTN, hyperlipidemia. Current meds: lisinopril 20mg, atorvastatin 40mg. No known drug allergies. Former smoker (quit 5 yrs ago).</textarea></div></div>
+          <button class="submit-btn" id="submit-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>Analyze</button>
+        </div>
+      </div>
+
+      <!-- === PROCESSING === -->
+      <div class="proc-card" id="view-proc">
+        <div class="ecg-wrap"><svg class="ecg-pulse" viewBox="0 0 120 30"><path d="M0 15 H30 L36 4 L44 26 L50 15 H68 L73 8 L79 22 L84 15 H120"/></svg></div>
+        <div class="proc-title">Analyzing your query</div>
+        <div class="proc-sub">Running through clinical safety checks...</div>
+        <div class="steps" id="steps">
+          <div class="step-item done"><div class="step-dot"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><span class="step-text">Protecting patient privacy</span><span class="step-time">3 ms</span></div>
+          <div class="step-item done"><div class="step-dot"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><span class="step-text">Searching medical guidelines</span><span class="step-time">31 ms</span></div>
+          <div class="step-item active"><div class="step-dot"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><span class="step-text">Generating clinical assessment</span><span class="step-time"></span></div>
+          <div class="step-item"><div class="step-dot"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><span class="step-text">Verifying against evidence</span><span class="step-time"></span></div>
+          <div class="step-item"><div class="step-dot"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><span class="step-text">Running safety checks</span><span class="step-time"></span></div>
+          <div class="step-item"><div class="step-dot"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><span class="step-text">Finalizing recommendation</span><span class="step-time"></span></div>
+        </div>
+        <div class="prog-wrap"><div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:35%"></div></div><div class="prog-pct" id="prog-pct">35%</div></div>
+      </div>
+
+      <!-- === RESULT === -->
+      <div class="result-wrap show" id="view-result">
+        <div class="caution-banner show" id="caution-banner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+          One recommendation flagged for review — please verify the RV lead sequencing before acting.
+        </div>
+
+        <div class="result-card">
+          <div class="conf-strip caution"></div>
+          <div class="result-top">
+            <div class="rt-left">
+              <h1 class="rt-diag">Acute Coronary Syndrome — Inferior STEMI</h1>
+              <span class="rt-code">ICD-10: I21.19</span>
+            </div>
+            <div class="conf-badge caution">
+              <div class="strength-bars"><span class="on"></span><span class="on"></span><span class="on"></span><span></span><span></span></div>
+              <span class="cb-level">Caution</span>
+              <span class="cb-label">Confidence</span>
+            </div>
+          </div>
+
+          <div class="result-body">
+            <div class="response-text">
+              Presentation is highly concerning for <strong>acute coronary syndrome</strong>. The 2mm ST elevation in leads II, III, and aVF indicates an <strong>inferior STEMI pattern</strong> <span class="ref-tag verified" title="AHA/ACC STEMI Protocol — verified"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> AHA STEMI Protocol</span>.
+
+              <br><br><strong>Immediate actions:</strong>
+              <br>• <strong>Activate cath lab now</strong> — door-to-balloon target under 90 minutes
+              <br>• Continue aspirin 325mg, add P2Y12 inhibitor per institutional protocol
+              <br>• Obtain right-sided leads (V4R) to rule out RV involvement before administering nitrates <span class="ref-tag unverified" title="RV lead timing — needs verification"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg> ACC Pathway</span>
+              <br>• Hold beta-blocker if any sign of hemodynamic instability <span class="ref-tag verified" title="AHA/ACC STEMI Protocol — verified"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> AHA STEMI Protocol</span>
+
+              <br><br><strong>Leading differential:</strong> STEMI/NSTEMI, unstable angina. Also consider aortic dissection (especially given HTN history) and pulmonary embolism. Serial troponins (repeat at 3 hours) and portable CXR to narrow.
+
+              <br><br><strong>Caution:</strong> Nitrates can precipitate hypotension in right ventricular infarct — confirm RV involvement status before administration.
+            </div>
+            <div class="time-line"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Analysis completed in 11.8 seconds</div>
+          </div>
+
+          <div class="result-actions" id="result-actions">
+            <button class="act-agree" id="btn-agree"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>I Agree</button>
+            <button class="act-correct" id="btn-correct"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>Suggest Correction</button>
+            <div class="act-spacer"></div>
+            <button class="act-copy" id="btn-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copy</button>
+          </div>
+        </div>
+
+        <div class="corr-form" id="corr-form">
+          <div class="cf-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>Suggest a Correction</div>
+          <div class="cf-field"><label>What should the diagnosis or recommendation be?</label><input class="cf-input" type="text" placeholder="e.g. Confirm RV lead timing against latest ACC pathway"></div>
+          <div class="cf-field"><label>Why? <span style="color:var(--red)">*</span></label><textarea class="cf-textarea" placeholder="Briefly explain...">Verify RV-lead timing recommendation — confirm sequencing against latest ACC pathway before this is shown to residents.</textarea></div>
+          <div class="cf-btns"><button class="cf-submit" id="cf-submit">Submit</button><button class="cf-cancel" id="cf-cancel">Cancel</button></div>
+        </div>
+
+        <div class="done-banner" id="done-banner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg><span id="done-text">Feedback recorded. Thank you.</span></div>
+        <div class="disclaimer">This is an AI-assisted decision support tool. All recommendations must be verified against your clinical judgment and institutional protocols before any patient care decisions are made.</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ===== RIGHT PANEL ===== -->
+  <aside class="evidence-panel" id="evidence-panel">
+    <div class="ep-header"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Evidence &amp; Safety</div>
+    <div class="ep-body">
+
+      <div class="ep-section">
+        <div class="ep-label"><svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>Safety Checks</div>
+        <div class="check-item">
+          <div class="check-icon pass"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <div class="check-info"><div class="check-name">Patient data protected</div><div class="check-desc">All identifying information was removed before processing</div></div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon pass"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <div class="check-info"><div class="check-name">Consistent reasoning</div><div class="check-desc">The system produced consistent answers across multiple runs</div></div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon pass"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <div class="check-info"><div class="check-name">Evidence-backed claims</div><div class="check-desc">3 of 4 clinical claims were verified against source guidelines</div></div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon warn"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div>
+          <div class="check-info"><div class="check-name">1 recommendation needs review</div><div class="check-desc">The RV lead sequencing could not be fully verified against the latest ACC pathway</div></div>
+        </div>
+      </div>
+
+      <div class="ep-section">
+        <div class="ep-label"><svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>Confidence Breakdown</div>
+        <div class="conf-bars">
+          <div class="cbar-item"><span class="cbar-label">Evidence match</span><div class="cbar-track"><div class="cbar-fill good" style="width:75%"></div></div><span class="cbar-val">75%</span></div>
+          <div class="cbar-item"><span class="cbar-label">Internal consistency</span><div class="cbar-track"><div class="cbar-fill good" style="width:100%"></div></div><span class="cbar-val">100%</span></div>
+          <div class="cbar-item"><span class="cbar-label">Values &amp; dosages</span><div class="cbar-track"><div class="cbar-fill good" style="width:90%"></div></div><span class="cbar-val">90%</span></div>
+          <div class="cbar-item"><span class="cbar-label">Answer stability</span><div class="cbar-track"><div class="cbar-fill ok" style="width:61%"></div></div><span class="cbar-val">61%</span></div>
+        </div>
+      </div>
+
+      <div class="ep-section">
+        <div class="ep-label"><svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z"/></svg>Sources Used</div>
+        <div class="src-card">
+          <div class="sc-top"><span class="sc-name">AHA/ACC STEMI Protocol</span><span class="sc-badge verified">Verified</span></div>
+          <div class="sc-excerpt">Inferior STEMI pattern identified by ST elevation in leads II, III, aVF. Door-to-balloon target under 90 minutes. Aspirin + P2Y12 inhibitor per protocol.</div>
+          <div class="sc-meta">AHA 2021 Chest Pain Guideline · Used 2 times</div>
+        </div>
+        <div class="src-card">
+          <div class="sc-top"><span class="sc-name">ACC Pathway — RV Infarction</span><span class="sc-badge caution">Needs Review</span></div>
+          <div class="sc-excerpt">Right-sided leads (V4R) recommended to rule out RV involvement before nitrate administration to avoid precipitating hypotension.</div>
+          <div class="sc-meta">ACC/AHA clinical pathway · Used 1 time</div>
+        </div>
+        <div class="src-card">
+          <div class="sc-top"><span class="sc-name">UpToDate: ACS Workup</span><span class="sc-badge verified">Verified</span></div>
+          <div class="sc-excerpt">Initial assessment: 12-lead ECG within 10 minutes, serial troponins at 0 and 3 hours, portable CXR. Continuous cardiac monitoring.</div>
+          <div class="sc-meta">UpToDate reference · Used 1 time</div>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+</div>
+
+<script>
+const vForm = document.getElementById('view-form');
+const vProc = document.getElementById('view-proc');
+const vResult = document.getElementById('view-result');
+function showView(v) { vForm.style.display = v==='form' ? 'block' : 'none'; vProc.classList.toggle('show', v==='proc'); vResult.classList.toggle('show', v==='result'); }
+
+document.getElementById('submit-btn').addEventListener('click', () => {
+  if (document.getElementById('f-q').value.trim().length < 10) { alert('Please provide more clinical detail.'); return; }
+  const u = document.getElementById('f-urg').value;
+  document.getElementById('tb-title').innerHTML = 'Chest pain, 54M — differential <span class="urg-badge ' + u + '">' + u.charAt(0).toUpperCase()+u.slice(1) + '</span>';
+  document.getElementById('tb-sub').textContent = 'Analyzing...';
+  showView('proc');
+  document.getElementById('corr-form').classList.remove('show');
+  document.getElementById('done-banner').classList.remove('show');
+  document.getElementById('btn-agree').disabled = false; document.getElementById('btn-agree').style.opacity = '1';
+  document.getElementById('btn-correct').disabled = false; document.getElementById('btn-correct').style.opacity = '1';
+  const items = document.querySelectorAll('.step-item');
+  const times = ['3 ms','31 ms','11.2 s','186 ms','74 ms','—'];
+  let s = 2;
+  function next() {
+    if (s >= items.length) { document.getElementById('tb-sub').textContent = 'Completed · ' + new Date().toTimeString().slice(0,5); showView('result'); return; }
+    const pct = Math.round(((s+1)/items.length)*100);
+    document.getElementById('prog-fill').style.width = pct+'%';
+    document.getElementById('prog-pct').textContent = pct+'%';
+    items[s].classList.remove('active'); items[s].classList.add('done');
+    items[s].querySelector('.step-time').textContent = times[s];
+    s++;
+    if (s < items.length) items[s].classList.add('active');
+    setTimeout(next, s===3 ? 1000 : 500);
+  }
+  setTimeout(next, 1600);
+});
+
+document.getElementById('new-btn').addEventListener('click', () => {
+  document.getElementById('tb-title').textContent = 'New Consultation';
+  document.getElementById('tb-sub').textContent = 'Enter patient details to begin';
+  showView('form');
+  document.querySelectorAll('.step-item').forEach((s,i) => { s.classList.remove('done','active'); if(i<2) s.classList.add('done'); if(i===2) s.classList.add('active'); s.querySelector('.step-time').textContent = i<2 ? ['3 ms','31 ms'][i] : ''; });
+  document.getElementById('prog-fill').style.width = '35%'; document.getElementById('prog-pct').textContent = '35%';
+  document.getElementById('corr-form').classList.remove('show'); document.getElementById('done-banner').classList.remove('show');
+});
+
+document.getElementById('panel-toggle').addEventListener('click', function() { document.getElementById('app').classList.toggle('panel-closed'); this.classList.toggle('active'); });
+document.getElementById('extra-toggle').addEventListener('click', function() { this.classList.toggle('open'); document.getElementById('extra-fields').classList.toggle('open'); });
+
+document.getElementById('btn-agree').addEventListener('click', () => {
+  document.getElementById('done-banner').classList.add('show'); document.getElementById('done-text').textContent = 'Thank you — your agreement has been recorded.';
+  document.getElementById('corr-form').classList.remove('show');
+  document.getElementById('btn-agree').disabled = true; document.getElementById('btn-agree').style.opacity = '0.4';
+  document.getElementById('btn-correct').disabled = true; document.getElementById('btn-correct').style.opacity = '0.4';
+});
+document.getElementById('btn-correct').addEventListener('click', () => { document.getElementById('corr-form').classList.add('show'); document.getElementById('done-banner').classList.remove('show'); });
+document.getElementById('cf-cancel').addEventListener('click', () => { document.getElementById('corr-form').classList.remove('show'); });
+document.getElementById('cf-submit').addEventListener('click', () => {
+  document.getElementById('corr-form').classList.remove('show'); document.getElementById('done-banner').classList.add('show');
+  document.getElementById('done-text').textContent = 'Correction submitted — thank you for helping improve the system.';
+  document.getElementById('btn-agree').disabled = true; document.getElementById('btn-agree').style.opacity = '0.4';
+  document.getElementById('btn-correct').disabled = true; document.getElementById('btn-correct').style.opacity = '0.4';
+});
+document.getElementById('btn-copy').addEventListener('click', function() {
+  const t = document.querySelector('.response-text').innerText; navigator.clipboard.writeText(t).catch(()=>{});
+  const o = this.innerHTML; this.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M20 6L9 17l-5-5"/></svg> Copied';
+  setTimeout(() => { this.innerHTML = o; }, 1400);
+});
+
+document.querySelectorAll('.hist-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.hist-item').forEach(i => i.classList.remove('active')); item.classList.add('active');
+    document.getElementById('tb-title').textContent = item.querySelector('.hi-title').textContent.trim();
+    document.getElementById('tb-sub').textContent = 'Viewing result'; showView('result');
+  });
+});
+</script>
+</body>
+</html>

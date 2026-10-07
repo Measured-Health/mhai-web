@@ -1,0 +1,9 @@
+# Owners are requested automatically on PRs. With branch protection's
+# "require review from Code Owners", a matching owner must approve. The PR
+# author can't approve their own PR, so list at least two people.
+
+*                @ojies
+
+# API client and types: must match the backend contract (mhai-multiagent #8)
+/lib/api/        @ojies
+/.github/        @ojies
