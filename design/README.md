@@ -8,7 +8,8 @@ depends on.
 
 `brand/` holds the Measured Health logo (original and transparent PNG) and
 the "M" mark redrawn as SVG. Replace them with the official SVGs when
-they're available.
+they're available. `bhai-logo-placeholder.svg` is a text placeholder for the
+partner's logo; swap in the official BHAI logo when it arrives.
 
 `mhai-clinical-mockup-v2.html` is the originally approved mockup. v3
 restyles it but keeps all of its content. Use it as the checklist of what
