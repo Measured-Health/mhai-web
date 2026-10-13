@@ -326,30 +326,38 @@ h1.dx{font-family:'Darker Grotesque';font-size:38px;font-weight:900;line-height:
 .sw{width:40px;height:24px;border-radius:999px;background:var(--mint);position:relative;flex:none}.sw::after{content:"";position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff}
 .sw.off{background:var(--lilac-2)}.sw.off::after{right:auto;left:3px}
 .mini{min-height:38px;padding:8px 12px;width:auto;display:inline-block}
-#b1:checked~.tabbar [for=b1],#b2:checked~.tabbar [for=b2],#b3:checked~.tabbar [for=b3],#b4:checked~.tabbar [for=b4],#b5:checked~.tabbar [for=b5]{background:var(--mint);color:#fff;border-color:var(--mint)}
+#b1:checked~.tabbar [for=b1],#b2:checked~.tabbar [for=b2],#b3:checked~.tabbar [for=b3],#b4:checked~.tabbar [for=b4],#b5:checked~.tabbar [for=b5],#b6:checked~.tabbar [for=b6],#b7:checked~.tabbar [for=b7]{background:var(--mint);color:#fff;border-color:var(--mint)}
 .ww{display:none!important}
 #b1:checked~.w1.ww{display:grid!important}
 #b2:checked~.w2.ww{display:grid!important}
 #b3:checked~.w3.ww{display:grid!important}
 #b4:checked~.w4.ww{display:grid!important}
 #b5:checked~.w5.ww{display:grid!important}
+#b6:checked~.w6.ww{display:grid!important}
+#b7:checked~.w7.ww{display:grid!important}
 .nn{display:none}
 #b1:checked~.nn1{display:block}
 #b2:checked~.nn2{display:block}
 #b3:checked~.nn3{display:block}
 #b4:checked~.nn4{display:block}
-#b5:checked~.nn5{display:block}</style></head><body>
+#b5:checked~.nn5{display:block}
+#b6:checked~.nn6{display:block}
+#b7:checked~.nn7{display:block}</style></head><body>
 <input class="tabs-in" type="radio" name="b" id="b1" checked>
 <input class="tabs-in" type="radio" name="b" id="b2">
 <input class="tabs-in" type="radio" name="b" id="b3">
 <input class="tabs-in" type="radio" name="b" id="b4">
 <input class="tabs-in" type="radio" name="b" id="b5">
-<div class="tabbar"><span class="ttl">Hospital admin (inside the clinical app) · v1</span><label for="b1">1 · Staff</label><label for="b2">2 · Invite staff</label><label for="b3">3 · Staff member</label><label for="b4">4 · Hospital settings</label><label for="b5">5 · Usage</label></div>
+<input class="tabs-in" type="radio" name="b" id="b6">
+<input class="tabs-in" type="radio" name="b" id="b7">
+<div class="tabbar"><span class="ttl">Hospital admin (inside the clinical app) · v1</span><label for="b1">1 · Staff</label><label for="b2">2 · Invite staff</label><label for="b3">3 · Staff member</label><label for="b4">4 · Hospital settings</label><label for="b5">5 · Usage</label><label for="b6">6 · Activity log</label><label for="b7">7 · Review oversight</label></div>
 <div class="note nn nn1">The hospital admin's home. Everyone at the hospital is listed with their roles, specialty, status, sign-in method and last activity. Problems surface as filters, for example "2-step not set up". Roles can be combined: a medical director can be both clinician and hospital admin.</div>
 <div class="note nn nn2">Invite one person or paste a list. The invitee gets an email and goes through first sign-in (terms, 2-step setup, backup codes). With hospital single sign-on on, they just sign in with their hospital account.</div>
 <div class="note nn nn3">Click a row to open a side panel. You can change roles and specialty, reset 2-step verification (they set it up again at next sign-in), send a password reset, or deactivate. Every action is recorded in the hospital's activity log. You can't remove your own admin role.</div>
 <div class="note nn nn4">Rules that apply to everyone at this hospital, within limits Measured Health sets: correction review turnaround and who can review, 2-step policy, session timeout, and single sign-on status. Sign-in configuration is shown read-only. Measured Health sets it up.</div>
 <div class="note nn nn5">How the hospital uses MHAI, in counts only. No patient details and no question text. It helps leads see adoption, how often results need review, and correction turnaround.</div>
+<div class="note nn nn6">What happened at the hospital, newest first. It covers sign-ins, consultations run, feedback, review decisions, account changes and security events. Rows never show question text, results or patient details; a consultation shows only its specialty and confidence level. Filter by person, type or date, and export CSV for audits. Security events (lockouts, policy breaches) are flagged.</div>
+<div class="note nn nn7">Keep corrections moving. See what's waiting, how long it's been, and which specialties are short of reviewers. You can remind reviewers or assign a specific reviewer, but you can't approve or reject unless you're a clinician yourself. You see the specialty and age, not the clinical content.</div>
 <div class="app ww w1 " style="grid-template-columns:256px minmax(0,1fr) 0"><aside class="sb">
     <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
     <div class="newc">＋<span class="lbl"> New consultation</span></div>
@@ -358,6 +366,7 @@ h1.dx{font-family:'Darker Grotesque';font-size:38px;font-weight:900;line-height:
     <div class="grp">Hospital admin</div>
     <div class="it on"><div class="ic">☺</div><div class="lbl">Staff<small>48 members · 2 invites pending</small></div></div>
     <div class="it"><div class="ic">⚙</div><div class="lbl">Hospital settings<small>Review rules, security, sign-in</small></div></div>
+    <div class="it"><div class="ic">≋</div><div class="lbl">Activity<small>Log and review oversight</small></div></div>
     <div class="it"><div class="ic">▤</div><div class="lbl">Usage<small>This month</small></div></div>
     <div class="grp">Today</div>
     <div class="it"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
@@ -375,6 +384,7 @@ h1.dx{font-family:'Darker Grotesque';font-size:38px;font-weight:900;line-height:
     <div class="grp">Hospital admin</div>
     <div class="it on"><div class="ic">☺</div><div class="lbl">Staff<small>48 members · 2 invites pending</small></div></div>
     <div class="it"><div class="ic">⚙</div><div class="lbl">Hospital settings<small>Review rules, security, sign-in</small></div></div>
+    <div class="it"><div class="ic">≋</div><div class="lbl">Activity<small>Log and review oversight</small></div></div>
     <div class="it"><div class="ic">▤</div><div class="lbl">Usage<small>This month</small></div></div>
     <div class="grp">Today</div>
     <div class="it"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
@@ -396,6 +406,7 @@ h1.dx{font-family:'Darker Grotesque';font-size:38px;font-weight:900;line-height:
     <div class="grp">Hospital admin</div>
     <div class="it on"><div class="ic">☺</div><div class="lbl">Staff<small>48 members · 2 invites pending</small></div></div>
     <div class="it"><div class="ic">⚙</div><div class="lbl">Hospital settings<small>Review rules, security, sign-in</small></div></div>
+    <div class="it"><div class="ic">≋</div><div class="lbl">Activity<small>Log and review oversight</small></div></div>
     <div class="it"><div class="ic">▤</div><div class="lbl">Usage<small>This month</small></div></div>
     <div class="grp">Today</div>
     <div class="it"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
@@ -423,6 +434,7 @@ h1.dx{font-family:'Darker Grotesque';font-size:38px;font-weight:900;line-height:
     <div class="grp">Hospital admin</div>
     <div class="it"><div class="ic">☺</div><div class="lbl">Staff<small>48 members · 2 invites pending</small></div></div>
     <div class="it on"><div class="ic">⚙</div><div class="lbl">Hospital settings<small>Review rules, security, sign-in</small></div></div>
+    <div class="it"><div class="ic">≋</div><div class="lbl">Activity<small>Log and review oversight</small></div></div>
     <div class="it"><div class="ic">▤</div><div class="lbl">Usage<small>This month</small></div></div>
     <div class="grp">Today</div>
     <div class="it"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
@@ -448,6 +460,7 @@ h1.dx{font-family:'Darker Grotesque';font-size:38px;font-weight:900;line-height:
     <div class="grp">Hospital admin</div>
     <div class="it"><div class="ic">☺</div><div class="lbl">Staff<small>48 members · 2 invites pending</small></div></div>
     <div class="it"><div class="ic">⚙</div><div class="lbl">Hospital settings<small>Review rules, security, sign-in</small></div></div>
+    <div class="it"><div class="ic">≋</div><div class="lbl">Activity<small>Log and review oversight</small></div></div>
     <div class="it on"><div class="ic">▤</div><div class="lbl">Usage<small>This month</small></div></div>
     <div class="grp">Today</div>
     <div class="it"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
@@ -467,5 +480,49 @@ h1.dx{font-family:'Darker Grotesque';font-size:38px;font-weight:900;line-height:
 <div class="barh"><span>Emergency</span><i style="width:35%;background:var(--mint)"></i><b class="mono">251</b></div>
 <div class="barh"><span>Infectious disease</span><i style="width:28%;background:var(--mint)"></i><b class="mono">203</b></div></div></div>
 <div style="font-size:12.5px;color:var(--ink-3);margin-top:12px">Counts only. No patient details or question text are shown here.</div></div></div></main><aside></aside></div>
+<div class="app ww w6 " style="grid-template-columns:256px minmax(0,1fr) 0"><aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="navr2"><span>⇄</span><span class="lbl">Review corrections</span><span class="cnt2 lbl">3</span></div>
+    <div class="grp">Hospital admin</div>
+    <div class="it"><div class="ic">☺</div><div class="lbl">Staff<small>48 members · 2 invites pending</small></div></div>
+    <div class="it"><div class="ic">⚙</div><div class="lbl">Hospital settings<small>Review rules, security, sign-in</small></div></div>
+    <div class="it on"><div class="ic">≋</div><div class="lbl">Activity<small>Log and review oversight</small></div></div>
+    <div class="it"><div class="ic">▤</div><div class="lbl">Usage<small>This month</small></div></div>
+    <div class="grp">Today</div>
+    <div class="it"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Medical director · Hospital admin</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside><main class="center"><div class="top"><div><h2>Activity</h2><div class="sub">Hospital admin · Havana Hospital</div></div><div class="tbtn"></div></div><div class="scroll"><div style="max-width:1080px;margin:0 auto"><div class="row"><div><div class="eyebrow">Havana Hospital</div><h1 class="dx" style="font-size:40px">Activity</h1></div><span class="btn ghost" style="margin-left:auto">⤓ Export CSV</span></div>
+<div class="row" style="margin:10px 0 0"><span class="pl n" style="padding:8px 14px;background:var(--ink);color:#fff">Log</span><span class="pl n" style="padding:8px 14px">Review oversight · 1 overdue</span></div>
+<div class="toolbar"><div class="inp">⌕ Filter by person</div><span class="pl n" style="padding:8px 12px">All types ▾</span><span class="pl n" style="padding:8px 12px">Today ▾</span><span class="pl b" style="padding:8px 12px">⚑ Flagged only</span></div>
+<div class="card" style="padding:6px 10px"><table class="tbl"><tr><th>Time</th><th>Who</th><th>Type</th><th>What happened</th><th></th></tr><tr><td class="mono" style="color:var(--ink-3)">09:41</td><td><div class="who2"><div class="av">AR</div><b>Dr. Reyes</b></div></td><td><span class="pl n">Admin</span></td><td>Changed Dr. Mensah's specialty to Cardiology</td><td></td></tr><tr><td class="mono" style="color:var(--ink-3)">09:38</td><td><div class="who2"><div class="av">CO</div><b>Dr. Okafor</b></div></td><td><span class="pl ok">Review</span></td><td>Approved a correction · Infectious disease</td><td></td></tr><tr><td class="mono" style="color:var(--ink-3)">09:31</td><td><div class="who2"><div class="av">TB</div><b>Dr. Bello</b></div></td><td><span class="pl n">Consultation</span></td><td>Ran a consultation · Internal Medicine · <span class="pl w">Use with caution</span></td><td></td></tr><tr><td class="mono" style="color:var(--ink-3)">09:20</td><td><div class="who2"><div class="av">KM</div><b>Dr. Mensah</b></div></td><td><span class="pl w">Sign-in</span></td><td>Signed in without 2-step (setup pending) · Chrome on Windows</td><td><span class="pl w">Policy</span></td></tr><tr><td class="mono" style="color:var(--ink-3)">09:02</td><td><div class="who2"><div class="av">FA</div><b>Dr. Adeyemi</b></div></td><td><span class="pl n">Account</span></td><td>Accepted invite and finished first sign-in</td><td></td></tr><tr><td class="mono" style="color:var(--ink-3)">08:55</td><td><div class="who2"><div class="av">—</div><b>System</b></div></td><td><span class="pl b">Security</span></td><td>5 failed sign-ins for t.bello@… · account locked 15 min</td><td><span class="pl b">Alert</span></td></tr><tr><td class="mono" style="color:var(--ink-3)">08:40</td><td><div class="who2"><div class="av">JE</div><b>Dr. Eze</b></div></td><td><span class="pl n">Feedback</span></td><td>Suggested a correction · Surgery</td><td></td></tr></table></div>
+<div style="font-size:12.5px;color:var(--ink-3);margin-top:10px">Kept for 12 months. No question text, results or patient details are recorded here.</div></div></div></main><aside></aside></div>
+<div class="app ww w7 " style="grid-template-columns:256px minmax(0,1fr) 0"><aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="navr2"><span>⇄</span><span class="lbl">Review corrections</span><span class="cnt2 lbl">3</span></div>
+    <div class="grp">Hospital admin</div>
+    <div class="it"><div class="ic">☺</div><div class="lbl">Staff<small>48 members · 2 invites pending</small></div></div>
+    <div class="it"><div class="ic">⚙</div><div class="lbl">Hospital settings<small>Review rules, security, sign-in</small></div></div>
+    <div class="it on"><div class="ic">≋</div><div class="lbl">Activity<small>Log and review oversight</small></div></div>
+    <div class="it"><div class="ic">▤</div><div class="lbl">Usage<small>This month</small></div></div>
+    <div class="grp">Today</div>
+    <div class="it"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Medical director · Hospital admin</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside><main class="center"><div class="top"><div><h2>Activity</h2><div class="sub">Hospital admin · Havana Hospital</div></div><div class="tbtn"></div></div><div class="scroll"><div style="max-width:1080px;margin:0 auto"><div class="eyebrow">Havana Hospital</div><h1 class="dx" style="font-size:40px">Activity</h1>
+<div class="row" style="margin:10px 0 14px"><span class="pl n" style="padding:8px 14px">Log</span><span class="pl n" style="padding:8px 14px;background:var(--ink);color:#fff">Review oversight · 1 overdue</span></div>
+<div class="kpis"><div class="card"><b>3</b><small>Waiting</small></div><div class="card"><b style="color:var(--bad)">1</b><small>Overdue (over 4 h)</small></div><div class="card"><b>3.1 h</b><small>Median time to decision</small></div><div class="card"><b>12</b><small>Decided this week</small></div></div>
+<div class="card" style="padding:6px 10px"><table class="tbl"><tr><th>Correction</th><th>Specialty</th><th>Waiting</th><th>Eligible reviewers</th><th></th></tr>
+<tr class="on"><td><b>#C-118</b> · suggested by Dr. Reyes</td><td>Paediatrics</td><td class="mono" style="color:var(--bad);font-weight:700">5 h</td><td>1 <span class="pl w">Short</span></td><td><span class="btn ghost" style="padding:7px 12px">Remind</span> <span class="go" style="padding:8px 14px;font-size:13px">Assign reviewer</span></td></tr>
+<tr><td><b>#C-117</b> · suggested by Dr. Bello</td><td>Internal Medicine</td><td class="mono">3 h</td><td>9</td><td><span class="btn ghost" style="padding:7px 12px">Remind</span></td></tr>
+<tr><td><b>#C-116</b> · suggested by Dr. Okafor</td><td>Infectious disease</td><td class="mono">42 min</td><td>4</td><td><span class="btn ghost" style="padding:7px 12px">Remind</span></td></tr></table></div>
+<div class="card" style="margin-top:14px"><h3 style="margin:0 0 10px">Reviewers by specialty</h3>
+<div class="barh"><span>Internal Medicine</span><i style="width:60%;background:var(--mint)"></i><b class="mono">9</b></div>
+<div class="barh"><span>Infectious disease</span><i style="width:27%;background:var(--mint)"></i><b class="mono">4</b></div>
+<div class="barh"><span>Paediatrics</span><i style="width:7%;background:var(--warn)"></i><b class="mono">1</b> <span style="font-size:12px;color:var(--warn-deep)">Consider adding a reviewer in Staff</span></div></div></div></div></main><aside></aside></div>
 
 </body></html>
