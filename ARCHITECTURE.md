@@ -108,6 +108,7 @@ flowchart TB
         h2[Reset a member's password / 2-step]
         h3[Hospital settings: review rules, 2-step, timeout]
         h4[Usage counts for the hospital]
+        h5[Activity log & review oversight]
     end
     subgraph A["Platform admin app"]
         a0[Hospitals & SSO setup]
@@ -118,7 +119,7 @@ flowchart TB
         a6[Audit log + verify]
     end
     clinician((clinician)) --> c1 & c2 & c3 & c4 & c5
-    hadmin((hospital admin · MFA)) --> h1 & h2 & h3 & h4
+    hadmin((hospital admin · MFA)) --> h1 & h2 & h3 & h4 & h5
     hadmin --> c5
     admin((platform admin · MFA)) --> a0 & a1 & a3 & a4 & a5 & a6
     auditor((auditor · MFA)) --> a6
@@ -209,6 +210,7 @@ flowchart TD
     hstaff --> hmem[Staff member panel]
     home -->|hospital admin role| hset[Hospital settings]
     home -->|hospital admin role| huse[Usage]
+    home -->|hospital admin role| hact[Activity & review oversight]
 ```
 
 Wireframe of the desktop layout:
@@ -366,13 +368,14 @@ new endpoints. They're listed in the design spec §10.
 
 Designs: `design/v3/hospital-admin.html`.
 
-| Screen             | What it does                                                                                                                                                                       |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Staff              | Everyone at the hospital: roles, specialty, status, sign-in method, last active. Filters surface problems such as "2-step not set up"                                              |
-| Invite staff       | One person or a pasted list, with a role and a specialty. With hospital single sign-on they just sign in; otherwise they get an email invite (7 days) and go through first sign-in |
-| Staff member panel | Change roles and specialty, set who can review corrections, send a password reset, reset 2-step, deactivate. You can't remove your own admin role                                  |
-| Hospital settings  | Review turnaround and reviewer rules, 2-step policy for clinicians, idle timeout, "trust this device", and SSO status (read-only; Measured Health configures it)                   |
-| Usage              | Counts only: consultations, active clinicians, the confidence mix, agreement rate, review time and specialty breakdown. CSV export                                                 |
+| Screen             | What it does                                                                                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Staff              | Everyone at the hospital: roles, specialty, status, sign-in method, last active. Filters surface problems such as "2-step not set up"                                                                                               |
+| Invite staff       | One person or a pasted list, with a role and a specialty. With hospital single sign-on they just sign in; otherwise they get an email invite (7 days) and go through first sign-in                                                  |
+| Staff member panel | Change roles and specialty, set who can review corrections, send a password reset, reset 2-step, deactivate. You can't remove your own admin role                                                                                   |
+| Hospital settings  | Review turnaround and reviewer rules, 2-step policy for clinicians, idle timeout, "trust this device", and SSO status (read-only; Measured Health configures it)                                                                    |
+| Usage              | Counts only: consultations, active clinicians, the confidence mix, agreement rate, review time and specialty breakdown. CSV export                                                                                                  |
+| Activity           | A log of sign-ins, consultations (specialty and confidence only), feedback, review decisions, account changes and flagged security events; plus review oversight: overdue corrections, reviewer coverage, remind, assign a reviewer |
 
 ```text
 ┌────────────┬──────────────────────────────────────────────────────┐
@@ -383,7 +386,8 @@ Designs: `design/v3/hospital-admin.html`.
 │ ADMIN      │ Dr. Reyes     Clinician·Admin   Int. Med   Active    │
 │ ☺ Staff    │ Dr. Mensah    Clinician         Cardiology ⚠ 2-step  │──► member panel
 │ ⚙ Settings │ Dr. Adeyemi   Clinician         Paeds      Invited   │
-│ ▤ Usage    │ …                                                    │
+│ ≋ Activity │ …                                                    │
+│ ▤ Usage    │                                                      │
 │ TODAY …    │                                                      │
 │ DR Reyes   │                                                      │
 └────────────┴──────────────────────────────────────────────────────┘
