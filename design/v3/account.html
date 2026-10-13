@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>MHAI · Account screens v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Darker+Grotesque:wght@600;700;800;900&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bloom:#460351;--bloom-2:#2c0136;--bloom-tint:#6e3c6a;--orchid:#a8499e;--lilac:#f1ecf4;--lilac-2:#e8dfee;
+  --mint:#15999E;--mint-2:#43c1c5;--mint-deep:#15777c;--mint-wash:#e3f4f4;
+  --ink:#1c0d22;--ink-2:#4a3d50;--ink-3:#8a7f90;--line:#ece4ef;--bg:#f6f2f8;
+  --ok:#1b7a4a;--ok-wash:#e4f5ec;--ok-deep:#135a36;
+  --warn:#b5742a;--warn-wash:#fbf0e2;--warn-deep:#8c5a1f;--warn-line:#eccA8e;
+  --bad:#a04438;--bad-wash:#f8e8e5;--bad-deep:#7d3029;--bad-line:#e0b5ae;
+  --r:22px;--r-sm:12px;--shadow:0 24px 50px -28px rgba(70,3,81,.4);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Outfit,sans-serif;color:var(--ink);background:#1a1320}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+/* tabs */
+.tabs-in{display:none}
+.tabbar{display:flex;gap:6px;padding:14px 20px;background:#1a1320;position:sticky;top:0;z-index:5;flex-wrap:wrap;align-items:center}
+.tabbar .ttl{color:#efe6f2;font-weight:600;margin-right:14px}
+.tabbar label{color:#cbbfd3;font-size:13px;padding:7px 13px;border-radius:999px;cursor:pointer;border:1px solid #3a2e44}
+#t1:checked~.tabbar [for=t1],#t2:checked~.tabbar [for=t2],#t3:checked~.tabbar [for=t3],#t4:checked~.tabbar [for=t4],#t5:checked~.tabbar [for=t5],#t6:checked~.tabbar [for=t6],#t7:checked~.tabbar [for=t7]{background:var(--mint);color:#fff;border-color:var(--mint)}
+.v{display:none}
+.fo{display:none}#t1:checked~.app .fo{display:inline}#t1:checked~.app .nf{display:none}
+#t1:checked~.app .v1,#t2:checked~.app .v2,#t3:checked~.app .v3,#t4:checked~.app .v4,#t5:checked~.app .v5,#t6:checked~.app .v6,#t7:checked~.app .v7{display:block}
+#t1:checked~.app .p1,#t2:checked~.app .p2,#t3:checked~.app .p3,#t4:checked~.app .p4,#t5:checked~.app .p5,#t6:checked~.app .p3{display:flex}
+#t7:checked~.app{grid-template-columns:256px minmax(0,1fr) 0}
+#d2:checked~#t7:checked~.app,#d3:checked~#t7:checked~.app{grid-template-columns:76px minmax(0,1fr) 0}
+.ib.on{background:var(--lilac);color:var(--bloom);border-color:var(--lilac-2)}
+.note{display:none;color:#cbbfd3;font-size:13px;padding:0 20px 14px;line-height:1.5;max-width:1200px}
+#t1:checked~.n1,#t2:checked~.n2,#t3:checked~.n3,#t4:checked~.n4,#t5:checked~.n5,#t6:checked~.n6,#t7:checked~.n7{display:block}
+
+/* shell */
+.app{display:grid;grid-template-columns:256px minmax(0,1fr) 330px;height:860px;margin:0 20px 20px;border-radius:18px;overflow:hidden;background:var(--bg);position:relative}
+/* sidebar */
+.sb{background:linear-gradient(175deg,#4d0a5b 0%,var(--bloom) 40%,var(--bloom-2) 100%);color:#efe6f2;display:flex;flex-direction:column;padding:18px 14px;position:relative;overflow:hidden}
+.sb::after{content:"";position:absolute;right:-70px;bottom:-90px;width:240px;height:240px;background:radial-gradient(circle,#15999e44,transparent 70%);pointer-events:none}
+.brand{display:flex;align-items:center;gap:10px;padding:2px 6px 16px}
+.mark{position:relative;width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,var(--mint),var(--mint-2));display:grid;place-items:center;box-shadow:0 0 0 4px #15999e2e}
+.brand b{font-family:'Darker Grotesque';font-size:22px;font-weight:900;letter-spacing:-.01em;line-height:.9;display:block}
+.brand small{font-size:10.5px;opacity:.6;letter-spacing:.04em}
+.newc{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--mint);color:#fff;border-radius:12px;padding:11px;font-weight:600;font-size:14px;box-shadow:0 10px 24px -10px var(--mint)}
+.search{margin-top:10px;display:flex;align-items:center;gap:8px;background:#ffffff12;border:1px solid #ffffff1c;border-radius:10px;padding:8px 10px;font-size:13px;color:#cdbcd6}
+.kbd{margin-left:auto;font-family:'JetBrains Mono';font-size:10.5px;border:1px solid #ffffff30;border-radius:5px;padding:1px 5px;opacity:.8}
+.grp{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.5;margin:18px 8px 6px}
+.it{display:flex;gap:10px;padding:8px;border-radius:10px;font-size:13px;line-height:1.3;align-items:flex-start}
+.it .ic{width:28px;height:28px;border-radius:8px;background:#ffffff14;display:grid;place-items:center;flex:none;font-size:13px}
+.it small{display:flex;align-items:center;gap:5px;opacity:.65;font-size:11px;margin-top:2px}
+.it.on{background:#ffffff17;box-shadow:inset 3px 0 0 var(--mint-2)}
+.sd{width:7px;height:7px;border-radius:50%;display:inline-block}
+.me{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px 6px 0;border-top:1px solid #ffffff1a;font-size:13px;position:relative;z-index:1}
+.av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--orchid),var(--bloom-tint));display:grid;place-items:center;font-weight:700;font-size:12px}
+.me small{display:block;opacity:.6;font-size:11px}
+.session-note{font-size:10.5px;opacity:.45;padding:8px 8px 0;line-height:1.4}
+
+/* center */
+.center{display:flex;flex-direction:column;min-width:0;position:relative;
+  background:radial-gradient(700px 360px at 85% -10%,#15999e22,transparent 60%),radial-gradient(600px 360px at -10% 110%,#4603511a,transparent 60%),var(--bg)}
+.center::before{content:"";position:absolute;inset:0;background-image:linear-gradient(#4603510a 1px,transparent 1px),linear-gradient(90deg,#4603510a 1px,transparent 1px);background-size:26px 26px;mask-image:radial-gradient(ellipse at 50% 0%,#000 20%,transparent 70%);pointer-events:none}
+.top{display:flex;align-items:center;gap:12px;padding:16px 26px;border-bottom:1px solid #ffffffaa;position:relative}
+.top h2{margin:0;font-size:16px;font-weight:600}
+.top .sub{font-size:12px;color:var(--ink-3)}
+.urg{font-family:'JetBrains Mono';font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px;font-weight:600}
+.urg.routine{background:var(--mint-wash);color:var(--mint-deep)}.urg.urgent{background:var(--warn-wash);color:var(--warn-deep)}.urg.emerg{background:var(--bad-wash);color:var(--bad-deep)}
+.tbtn{margin-left:auto;display:flex;gap:8px}
+.ib{height:34px;padding:0 11px;border-radius:10px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)}
+.scroll{flex:1;overflow:auto;padding:28px 26px 40px;position:relative}
+.v{max-width:700px;margin:0 auto}
+
+/* card */
+.card{position:relative;background:rgba(255,255,255,.84);backdrop-filter:blur(18px);border-radius:var(--r);padding:24px 26px;box-shadow:var(--shadow)}
+.card::before{content:"";position:absolute;inset:0;border-radius:var(--r);padding:1px;background:linear-gradient(135deg,var(--mint),#46035133,transparent 60%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+h1.dx{font-family:'Darker Grotesque';font-size:38px;font-weight:900;line-height:.95;margin:10px 0 8px;letter-spacing:-.005em}
+.eyebrow{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mint);font-weight:600}
+.chip{font-family:'JetBrains Mono';font-size:11px;padding:4px 10px;border-radius:999px;background:var(--lilac);color:var(--bloom)}
+.conf{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:7px 13px;border-radius:999px}
+.conf.ok{background:var(--ok-wash);color:var(--ok-deep)}.conf.warn{background:var(--warn-wash);color:var(--warn-deep)}
+.bars{display:inline-flex;gap:2px;align-items:flex-end}.bars i{width:4px;border-radius:2px;display:block;background:currentColor}.bars i.off{opacity:.22}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sec{margin-top:18px}
+.sec h4{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.prose{font-size:14.5px;line-height:1.75;color:var(--ink-2)}
+.prose ul{margin:0;padding-left:18px}.prose li{margin:4px 0}
+.ref{font-size:11px;padding:2px 8px;border-radius:7px;white-space:nowrap;font-weight:500;cursor:pointer}
+.ref.v{background:var(--ok-wash);color:var(--ok-deep)}.ref.u{background:var(--warn-wash);color:var(--warn-deep)}
+.ref.hl{outline:2px solid var(--mint);outline-offset:1px}
+.acts{display:flex;gap:8px;margin-top:22px;align-items:center;padding-top:18px;border-top:1px solid var(--line)}
+.btn{padding:10px 18px;border-radius:999px;font-size:13.5px;font-weight:600;border:0;display:inline-flex;gap:7px;align-items:center}
+.b-agree{background:var(--bloom);color:#fff}.b-sugg{background:var(--lilac);color:var(--bloom)}
+.b-copy{margin-left:auto;background:#fff;border:1px solid var(--line);color:var(--ink-2)}
+.meta{font-size:11.5px;color:var(--ink-3);margin-top:12px;display:flex;gap:14px}
+.disc{font-size:11.5px;color:var(--ink-3);margin-top:16px;text-align:center}
+.banner{display:flex;gap:12px;align-items:flex-start;border-radius:16px;padding:14px 16px;margin-bottom:14px;font-size:13.5px;line-height:1.5}
+.banner b{display:block;font-size:14px}
+.banner.warn{background:var(--warn-wash);border:1px solid var(--warn-line);color:var(--warn-deep)}
+.banner.bad{background:var(--bad-wash);border:1px solid var(--bad-line);color:var(--bad-deep)}
+.banner.info{background:#fff8dc;border:1px solid #f1df9a;color:#7a6512}
+.bic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;font-weight:700}
+.banner.warn .bic{background:#f3dcb8}.banner.bad .bic{background:#efc9c3}
+
+/* form */
+.fhead h1{font-family:'Darker Grotesque';font-size:40px;font-weight:900;margin:0;line-height:1}
+.fhead p{margin:6px 0 20px;color:var(--ink-2);font-size:14.5px}
+.fs{padding:18px 0;border-top:1px solid var(--line)}
+.fs:first-of-type{border-top:0;padding-top:4px}
+.fsl{display:flex;gap:10px;align-items:baseline;margin-bottom:12px}
+.fsl .n{font-family:'JetBrains Mono';font-size:11px;color:var(--mint);font-weight:600}
+.fsl b{font-size:14px}
+.grid2{display:grid;grid-template-columns:140px 1fr;gap:14px}
+.lab{font-size:12.5px;color:var(--ink-2);margin-bottom:6px;display:flex;justify-content:space-between}
+.lab .req{color:var(--bad)}
+.inp{background:#fff;border:1px solid var(--lilac-2);border-radius:12px;padding:11px 13px;font-size:14px;color:var(--ink);min-height:44px}
+.inp.focus{border-color:var(--mint);box-shadow:0 0 0 4px #15999e22}
+.inp.ph{color:var(--ink-3)}
+.seg{display:flex;background:var(--lilac);border-radius:12px;padding:4px;gap:4px}
+.seg span{flex:1;text-align:center;padding:8px 6px;border-radius:9px;font-size:13.5px;color:var(--ink-2)}
+.seg span.on{background:#fff;color:var(--bloom);font-weight:600;box-shadow:0 2px 8px -4px #46035155}
+.prio{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.prio>span{border:1px solid var(--lilac-2);background:#fff;border-radius:12px;padding:10px 12px;font-size:13.5px;display:flex;gap:8px;align-items:center}
+.prio>span small{display:block;font-size:11px;color:var(--ink-3)}
+.prio>span.on{border-color:var(--mint);box-shadow:0 0 0 3px #15999e1f}
+.sugg{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.sugg span{font-size:12px;padding:4px 10px;border-radius:999px;background:#fff;border:1px dashed var(--lilac-2);color:var(--ink-2)}
+.tag2{font-size:12.5px;padding:4px 10px;border-radius:999px;background:var(--mint-wash);color:var(--mint-deep);display:inline-flex;gap:6px;align-items:center}
+.ta{min-height:110px;line-height:1.6}
+.hint{font-size:12px;color:var(--ink-3);margin-top:6px;display:flex;justify-content:space-between}
+.coll{display:flex;justify-content:space-between;align-items:center;color:var(--ink-2);font-size:13.5px}
+.submit{position:sticky;bottom:0;margin-top:6px;display:flex;align-items:center;gap:12px;padding:16px 0 0}
+.go{background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;border-radius:999px;padding:13px 24px;font-weight:600;font-size:15px;display:inline-flex;gap:10px;align-items:center;box-shadow:0 14px 28px -12px var(--mint)}
+.go .kbd{border-color:#ffffff66}
+
+/* processing */
+.proc{text-align:center;max-width:540px;margin:20px auto 0}
+.ecg{height:70px;margin:4px auto 6px}
+.ecg path{stroke:var(--mint);stroke-width:2.6;fill:none;stroke-dasharray:400;animation:draw 2.2s linear infinite}
+@keyframes draw{from{stroke-dashoffset:400}to{stroke-dashoffset:0}}
+.proc h1{font-family:'Darker Grotesque';font-size:34px;font-weight:900;margin:0}
+.proc p{color:var(--ink-2);margin:4px 0 18px}
+.steps{text-align:left;display:flex;flex-direction:column;gap:6px}
+.st{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:14px;font-size:14px;background:#fff;border:1px solid var(--line)}
+.st .d{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;flex:none;border:2px solid var(--lilac-2);color:var(--ink-3)}
+.st.done{background:var(--mint-wash);border-color:transparent;color:var(--mint-deep)}.st.done .d{background:var(--mint);border-color:var(--mint);color:#fff}
+.st.now{background:#fff;border-color:var(--mint);box-shadow:0 0 0 4px #15999e1a;font-weight:600}.st.now .d{border-color:var(--mint);position:relative}
+.st.now .d::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--mint);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.6);opacity:.4}}
+.st.todo{color:var(--ink-3)}
+.st .tm{margin-left:auto;font-family:'JetBrains Mono';font-size:11.5px;opacity:.75}
+.pb{height:6px;background:var(--lilac);border-radius:9px;overflow:hidden;margin-top:18px}.pb i{display:block;height:100%;width:58%;background:linear-gradient(90deg,var(--mint),var(--mint-2));border-radius:9px}
+.pbl{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3);margin-top:6px}
+
+/* right panel */
+.panel{background:#fffffff2;border-left:1px solid var(--line);padding:20px 18px;flex-direction:column;gap:18px;overflow:auto;display:none}
+.ph{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px}
+.ph .s{width:30px;height:30px;border-radius:9px;background:var(--mint-wash);display:grid;place-items:center;color:var(--mint-deep)}
+.pt{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin-bottom:8px}
+.chk{display:flex;gap:10px;align-items:center;font-size:13px;padding:7px 0}
+.chk .ci{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-size:11px;flex:none}
+.ci.ok{background:var(--ok-wash);color:var(--ok)}.ci.w{background:var(--warn-wash);color:var(--warn)}.ci.b{background:var(--bad-wash);color:var(--bad)}
+.chk small{display:block;color:var(--ink-3);font-size:11.5px}
+.m{margin:9px 0}.mr{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;color:var(--ink-2)}
+.mt{height:7px;background:var(--lilac);border-radius:9px;overflow:hidden}.mt i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,var(--mint),var(--mint-2))}.mt i.w{background:linear-gradient(90deg,var(--warn),#d4983c)}
+.src{border:1px solid var(--line);border-radius:14px;padding:11px 12px;font-size:12.5px;line-height:1.45;margin-bottom:8px;background:#fff}
+.src.hl{border-color:var(--mint);box-shadow:0 0 0 3px #15999e1f}
+.src .sh{display:flex;justify-content:space-between;gap:8px;align-items:center;font-weight:600}
+.src q{display:block;color:var(--ink-2);font-style:italic;margin:6px 0;quotes:none}
+.src small{color:var(--ink-3);font-size:11px}
+.vb{font-size:10.5px;padding:2px 7px;border-radius:6px;font-weight:600}
+.vb.ok{background:var(--ok-wash);color:var(--ok-deep)}.vb.w{background:var(--warn-wash);color:var(--warn-deep)}
+.tip{background:var(--lilac);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.55;color:var(--ink-2)}
+.tip b{color:var(--bloom)}
+.how{counter-reset:h;display:flex;flex-direction:column;gap:10px}
+.how div{display:flex;gap:10px;font-size:13px;line-height:1.45;color:var(--ink-2)}
+.how div::before{counter-increment:h;content:counter(h);width:22px;height:22px;border-radius:50%;background:var(--mint-wash);color:var(--mint-deep);font-size:11.5px;font-weight:600;display:grid;place-items:center;flex:none}
+.fail{text-align:center;max-width:520px;margin:30px auto 0}
+.fail .big{width:64px;height:64px;border-radius:20px;background:var(--bad-wash);color:var(--bad);display:grid;place-items:center;font-size:28px;margin:0 auto 14px}
+.fail h1{font-family:'Darker Grotesque';font-size:34px;font-weight:900;margin:0}
+.fail p{color:var(--ink-2);line-height:1.6}
+.corr{margin-top:16px;background:var(--warn-wash);border:1px solid var(--warn-line);border-radius:16px;padding:16px}
+.corr .lab{color:var(--warn-deep)}
+.toast{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;border-radius:12px;padding:10px 16px;font-size:13px;display:flex;gap:8px;align-items:center;box-shadow:0 10px 30px -10px #000}
+
+.devbar{top:56px;padding-top:0}
+#d1:checked~.devbar [for=d1],#d2:checked~.devbar [for=d2],#d3:checked~.devbar [for=d3]{background:#efe6f2;color:var(--bloom);border-color:#efe6f2}
+.show-port,.evbar{display:none}
+#d2:checked~.app,#d3:checked~.app{margin:0 auto 20px;grid-template-columns:76px minmax(0,1fr) 300px}
+#d2:checked~.app{width:1024px;height:768px}
+#d3:checked~.app{width:820px;height:1100px;grid-template-columns:76px minmax(0,1fr)}
+#d2:checked~.app .lbl,#d3:checked~.app .lbl{display:none}
+#d2:checked~.app .sb,#d3:checked~.app .sb{padding:16px 12px;align-items:center}
+#d2:checked~.app .brand,#d3:checked~.app .brand{padding:2px 0 14px}
+#d2:checked~.app .newc,#d3:checked~.app .newc{width:44px;height:44px;padding:0;font-size:20px}
+#d2:checked~.app .search,#d3:checked~.app .search{width:44px;height:40px;justify-content:center;padding:0}
+#d2:checked~.app .grp,#d3:checked~.app .grp{width:28px;height:1px;background:#ffffff30;margin:14px 0 8px;font-size:0}
+#d2:checked~.app .it,#d3:checked~.app .it{padding:6px}
+#d2:checked~.app .it .ic,#d3:checked~.app .it .ic{width:38px;height:38px;border-radius:11px}
+#d2:checked~.app .it.on,#d3:checked~.app .it.on{box-shadow:inset 0 0 0 2px var(--mint-2)}
+#d2:checked~.app .me,#d3:checked~.app .me{justify-content:center;padding:10px 0 0;width:100%}
+#d2:checked~.app .scroll{padding:22px 20px 30px}
+#d2:checked~.app .grid2{grid-template-columns:110px 1fr}
+#d2:checked~.app .panel{padding:16px 14px}
+#d3:checked~.app .panel{display:none!important}
+#d3:checked~.app .show-port{display:inline}#d3:checked~.app .hide-port{display:none}
+#d3:checked~.app .evbar{display:flex}
+#t1:checked~.app .evbar,#t2:checked~.app .evbar,#t6:checked~.app .evbar,#t7:checked~.app .evbar{display:none!important}
+.evbar{position:absolute;left:24px;right:24px;bottom:20px;align-items:center;gap:12px;background:#ffffffee;backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:18px;padding:12px 14px;box-shadow:var(--shadow);font-size:13px}
+.evbar small{display:block;color:var(--ink-3);font-size:12px}
+#d3:checked~.app .scroll{padding-bottom:110px}
+.mark::after{content:"";position:absolute;inset:-4px;border-radius:13px;border:2px solid var(--mint-2);animation:ring 2.4s ease-out infinite}
+@keyframes ring{0%{opacity:.7;transform:scale(.92)}100%{opacity:0;transform:scale(1.35)}}
+.flag{width:7px;height:7px;border-radius:50%;background:#f0a640;display:inline-block;margin-left:6px;vertical-align:middle;box-shadow:0 0 0 3px #f0a64033}
+.cl{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;opacity:.7;font-weight:600;margin-left:2px}
+.ref.x{background:var(--bad-wash);color:var(--bad-deep)}
+.strike{text-decoration:line-through;text-decoration-color:var(--bad);color:var(--ink-3)}
+.banner.ok{background:var(--ok-wash);border:1px solid #a8d9bf;color:var(--ok-deep)}.banner.ok .bic{background:#c6ead5}
+.sys{display:flex;gap:10px;align-items:center;background:#fff8dc;border-bottom:1px solid #f1df9a;color:#7a6512;font-size:13px;padding:9px 26px;position:relative}
+
+/* light sidebar (v2) */
+.sys.v{display:none!important}#t6:checked~.app .sys.v{display:flex!important}
+.live::after{inset:-3px!important;border-width:1.5px!important}
+.sb{background:linear-gradient(180deg,#ffffff 0%,#fbf8fc 100%)!important;color:var(--ink)!important;border-right:1px solid var(--line)}
+.sb::after{background:radial-gradient(circle,#15999e1f,transparent 70%)!important}
+.brand{flex-direction:column;align-items:flex-start;gap:6px;padding:4px 6px 18px}
+.logo{height:46px;width:auto;display:block}
+.rmark{display:none;height:38px;width:auto}
+.tagline{font-size:11px;color:var(--ink-3);display:flex;align-items:center;gap:7px;letter-spacing:.02em}
+.live{width:7px;height:7px;border-radius:50%;background:var(--mint);position:relative}
+.live::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--mint);animation:ring 2.4s ease-out infinite}
+.search{background:var(--bg)!important;border-color:var(--line)!important;color:var(--ink-3)!important}
+.search .kbd{border-color:var(--lilac-2)}
+.grp{color:var(--ink-3);opacity:1!important}
+.it{color:var(--ink)}
+.it .ic{background:var(--lilac)!important;color:var(--bloom)}
+.it small{color:var(--ink-3);opacity:1!important}
+.it:hover{background:#f6f2f8}
+.it.on{background:var(--mint-wash)!important;box-shadow:inset 3px 0 0 var(--mint)!important}
+.it.on .ic{background:#fff!important;color:var(--mint-deep)}
+.me{border-top-color:var(--line)!important}
+.me small{color:var(--ink-3);opacity:1!important}
+.av{color:#fff}
+.session-note{color:var(--ink-3);opacity:1!important}
+#d2:checked~.app .rmark,#d3:checked~.app .rmark{display:block}
+#d2:checked~.app .brand,#d3:checked~.app .brand{align-items:center}
+#d2:checked~.app .grp,#d3:checked~.app .grp{background:var(--line)!important}
+#d2:checked~.app .it.on,#d3:checked~.app .it.on{box-shadow:inset 0 0 0 2px var(--mint)!important}
+.icd{position:relative;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.icd .cp{opacity:.55;font-size:11px}
+.icd .tt{display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:3;white-space:nowrap;background:var(--ink);color:#fff;font-family:Outfit;font-size:12px;line-height:1.45;padding:8px 11px;border-radius:10px;box-shadow:0 10px 24px -10px #000}
+.icd .tt i{opacity:.65;font-style:normal;font-size:11px}
+.icd:hover .tt{display:block}
+#t4:checked~.app .v4 .icd .tt{display:block}
+.me .org{display:flex;align-items:center;gap:4px;color:var(--mint-deep)!important;font-weight:500;margin-top:1px}
+.me .more{margin-left:auto;color:var(--ink-3);font-size:16px}
+
+.authwrap{display:grid;grid-template-columns:1.05fr 1fr;height:860px;margin:0 20px 20px;border-radius:18px;overflow:hidden;background:#fff}
+.hero{position:relative;padding:40px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;
+  background:radial-gradient(520px 380px at 90% 0%,#15999e40,transparent 65%),radial-gradient(520px 420px at 0% 100%,#a8499e30,transparent 65%),linear-gradient(160deg,#f7f2f9,#e8f5f5)}
+.hero::before{content:"";position:absolute;inset:0;background-image:linear-gradient(#4603510d 1px,transparent 1px),linear-gradient(90deg,#4603510d 1px,transparent 1px);background-size:30px 30px;mask-image:radial-gradient(ellipse at 30% 40%,#000 20%,transparent 75%)}
+.hero>*{position:relative}
+.hero h1{font-family:'Darker Grotesque';font-size:58px;font-weight:900;line-height:.92;margin:0 0 14px;letter-spacing:-.01em;max-width:520px}
+.hero p{font-size:16px;color:var(--ink-2);max-width:440px;line-height:1.6;margin:0}
+.trust{display:flex;flex-direction:column;gap:10px;max-width:440px}
+.trust div{display:flex;gap:12px;align-items:center;background:#ffffffb8;backdrop-filter:blur(10px);border:1px solid #fff;border-radius:14px;padding:12px 14px;font-size:13.5px}
+.trust .ci{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;flex:none}
+.hero .ecgbg{position:absolute;left:0;right:0;top:46%;height:80px;opacity:.5}
+.hero .ecgbg path{stroke:var(--mint);stroke-width:2;fill:none;stroke-dasharray:900;animation:draw2 4s linear infinite}
+@keyframes draw2{from{stroke-dashoffset:900}to{stroke-dashoffset:0}}
+.form-side{display:flex;align-items:center;justify-content:center;padding:40px}
+.fbox{width:100%;max-width:400px}
+.fbox h2{font-family:'Darker Grotesque';font-size:40px;font-weight:900;margin:0;line-height:1}
+.fbox .sub{color:var(--ink-2);margin:8px 0 26px;font-size:15px}
+.sso{display:flex;align-items:center;justify-content:center;gap:10px;border:1px solid var(--lilac-2);border-radius:14px;padding:13px;font-weight:600;font-size:15px;background:#fff}
+.or{display:flex;align-items:center;gap:12px;color:var(--ink-3);font-size:12.5px;margin:20px 0}.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.fbox .lab{margin-top:14px}
+.full{width:100%;justify-content:center;margin-top:22px}
+.small{font-size:13px;color:var(--ink-3);margin-top:18px;text-align:center;line-height:1.5}
+.small a{color:var(--mint-deep);font-weight:600;text-decoration:none}
+.otp{display:flex;gap:10px;margin-top:6px}
+.otp span{width:52px;height:62px;border-radius:14px;border:1px solid var(--lilac-2);background:#fff;display:grid;place-items:center;font-family:'JetBrains Mono';font-size:26px;font-weight:600}
+.otp span.f{border-color:var(--mint);box-shadow:0 0 0 4px #15999e22}
+.otp .gap{width:10px;border:0;background:none}
+.check{display:flex;gap:9px;align-items:center;font-size:13.5px;color:var(--ink-2);margin-top:16px}
+.box{width:18px;height:18px;border-radius:6px;border:1.5px solid var(--mint);background:var(--mint);color:#fff;display:grid;place-items:center;font-size:11px}
+.err{display:flex;gap:10px;background:var(--bad-wash);border:1px solid var(--bad-line);color:var(--bad-deep);border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:6px}
+/* account popover */
+.pop{position:absolute;left:14px;bottom:78px;width:280px;background:#fff;border-radius:18px;box-shadow:0 30px 60px -20px #46035166,0 0 0 1px var(--line);padding:8px;z-index:4}
+.pop .hd{display:flex;gap:10px;align-items:center;padding:10px 10px 12px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.pop .hd small{display:block;color:var(--ink-3);font-size:12px}
+.pop .mi{display:flex;gap:10px;align-items:center;padding:10px;border-radius:10px;font-size:13.5px;color:var(--ink-2)}
+.pop .mi:hover,.pop .mi.on{background:var(--bg)}
+.pop .mi .k{margin-left:auto;font-family:'JetBrains Mono';font-size:10.5px;color:var(--ink-3)}
+.pop .mi.out{color:var(--bad);border-top:1px solid var(--line);border-radius:0 0 10px 10px;margin-top:6px}
+/* settings */
+.set{display:grid;grid-template-columns:200px 1fr;gap:26px;max-width:860px;margin:0 auto}
+.snav{display:flex;flex-direction:column;gap:2px;position:sticky;top:0}
+.snav span{padding:9px 12px;border-radius:10px;font-size:13.5px;color:var(--ink-2)}
+.snav span.on{background:#fff;color:var(--bloom);font-weight:600;box-shadow:0 4px 14px -8px #46035155}
+.sc{display:flex;flex-direction:column;gap:16px}
+.sc .card{padding:20px 22px}
+.sc h3{margin:0 0 4px;font-size:16px}.sc .d{color:var(--ink-3);font-size:13px;margin-bottom:14px}
+.prof{display:flex;gap:16px;align-items:center}
+.prof .av{width:64px;height:64px;font-size:20px;color:#fff}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px;margin-top:16px}
+.kv .inp{font-size:14px}
+.lock{font-size:11px;color:var(--ink-3);margin-left:6px}
+.srow{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line);font-size:14px}
+.srow:first-of-type{border-top:0}
+.srow small{display:block;color:var(--ink-3);font-size:12.5px}
+.srow .r{margin-left:auto;display:flex;gap:8px;align-items:center}
+.pill-ok{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--ok-wash);color:var(--ok-deep)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--mint);position:relative}.sw::after{content:"";position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff}
+.sw.off{background:var(--lilac-2)}.sw.off::after{right:auto;left:3px}
+.dev{width:36px;height:36px;border-radius:10px;background:var(--lilac);display:grid;place-items:center;color:var(--bloom);flex:none}
+.ghost{background:#fff;border:1px solid var(--line);color:var(--ink-2)}
+.danger{background:#fff;border:1px solid var(--bad-line);color:var(--bad)}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat3 div{background:var(--bg);border-radius:14px;padding:12px 14px}
+.stat3 b{font-family:'Darker Grotesque';font-size:30px;font-weight:900;display:block;line-height:1}
+.stat3 small{color:var(--ink-3);font-size:12px}
+#a1:checked~.tabbar [for=a1],#a2:checked~.tabbar [for=a2],#a3:checked~.tabbar [for=a3],#a4:checked~.tabbar [for=a4],#a5:checked~.tabbar [for=a5]{background:var(--mint);color:#fff;border-color:var(--mint)}
+.av-v{display:none}
+#a1:checked~.w1{display:grid}
+#a2:checked~.w2{display:grid}
+#a3:checked~.w3{display:grid}
+#a4:checked~.w4{display:grid}
+#a5:checked~.w5{display:grid}
+.ww{display:none!important}
+#a1:checked~.w1.ww{display:grid!important}
+#a2:checked~.w2.ww{display:grid!important}
+#a3:checked~.w3.ww{display:grid!important}
+#a4:checked~.w4.ww{display:grid!important}
+#a5:checked~.w5.ww{display:grid!important}
+.nn{display:none}
+#a1:checked~.nn1{display:block}
+#a2:checked~.nn2{display:block}
+#a3:checked~.nn3{display:block}
+#a4:checked~.nn4{display:block}
+#a5:checked~.nn5{display:block}</style></head><body>
+<input class="tabs-in" type="radio" name="a" id="a1" checked>
+<input class="tabs-in" type="radio" name="a" id="a2">
+<input class="tabs-in" type="radio" name="a" id="a3">
+<input class="tabs-in" type="radio" name="a" id="a4">
+<input class="tabs-in" type="radio" name="a" id="a5">
+<div class="tabbar"><span class="ttl">Account screens · v1</span><label for="a1">1 · Sign in</label><label for="a2">2 · Two-step code</label><label for="a3">3 · Sign-in error</label><label for="a4">4 · Account menu</label><label for="a5">5 · Profile & security</label></div>
+<div class="note nn nn1">Two ways in. "Continue with hospital account" (single sign-on via the hospital's identity provider) comes first, because most clinicians will use it. Email and password is the fallback. The left side says what the product is and why it's safe to use.</div>
+<div class="note nn nn2">Six boxes, auto-advance, and paste works. "Trust this device for 30 days" cuts down on repeat prompts on a ward's shared machine only if the hospital policy allows it.</div>
+<div class="note nn nn3">Errors say what happened and what to do next, without revealing whether the email exists. After 5 failed tries, the account is locked for 15 minutes, and the screen says so.</div>
+<div class="note nn nn4">Click your name at the bottom of the sidebar. Everything about "you" lives here: profile, security, feedback history, help, and sign out.</div>
+<div class="note nn nn5">Name, role and hospital come from the hospital's records, so they're shown locked, with a "request a change" link. Security shows two-step verification, password and active devices, with "sign out everywhere". Clinicians see their own feedback stats; admin tools are not here (admins use a separate admin app).</div>
+
+<div class="authwrap ww w1"><div class="hero"><img src="assets/mh-logo-t.png" alt="Measured Health" style="height:52px;width:auto;align-self:flex-start">
+  <svg class="ecgbg" viewBox="0 0 900 80" preserveAspectRatio="none"><path d="M0 40h300l20-26 26 52 22-66 26 76 18-36h488"/></svg>
+  <div><h1>Better, quicker answers at the bedside.</h1><p>Evidence-checked clinical decision support for every clinic, including the most resource-limited.</p></div>
+  <div class="trust"><div><span class="ci ok">⛨</span>Patient details are masked before any analysis</div><div><span class="ci ok">✓</span>Every claim is checked against clinical guidelines</div><div><span class="ci ok">◎</span>You stay in control: the final decision is always yours</div></div>
+</div>
+  <div class="form-side"><div class="fbox">
+    <h2>Welcome back</h2><div class="sub">Sign in to continue to MHAI.</div>
+    <div class="sso">⌂ Continue with hospital account</div>
+    <div class="or">or use email</div>
+    <div class="lab">Work email</div><div class="inp">a.reyes@havanahospital.org</div>
+    <div class="lab">Password <a style="color:var(--mint-deep);font-weight:600">Forgot?</a></div><div class="inp focus mono">••••••••••••</div>
+    <span class="go full">Sign in</span>
+    <div class="small">Access is for registered clinicians. New here? <a>Ask your hospital admin</a></div>
+  </div></div>
+</div>
+
+<div class="authwrap ww w2"><div class="hero"><img src="assets/mh-logo-t.png" alt="Measured Health" style="height:52px;width:auto;align-self:flex-start">
+  <svg class="ecgbg" viewBox="0 0 900 80" preserveAspectRatio="none"><path d="M0 40h300l20-26 26 52 22-66 26 76 18-36h488"/></svg>
+  <div><h1>Better, quicker answers at the bedside.</h1><p>Evidence-checked clinical decision support for every clinic, including the most resource-limited.</p></div>
+  <div class="trust"><div><span class="ci ok">⛨</span>Patient details are masked before any analysis</div><div><span class="ci ok">✓</span>Every claim is checked against clinical guidelines</div><div><span class="ci ok">◎</span>You stay in control: the final decision is always yours</div></div>
+</div>
+  <div class="form-side"><div class="fbox">
+    <span class="eyebrow">Two-step verification</span>
+    <h2 style="margin-top:6px">Enter your code</h2><div class="sub">Open your authenticator app and enter the 6-digit code for <b>MHAI</b>.</div>
+    <div class="otp"><span>4</span><span>8</span><span>2</span><span class="gap"></span><span class="f">1</span><span></span><span></span></div>
+    <div class="check"><span class="box">✓</span>Trust this device for 30 days</div>
+    <span class="go full">Verify</span>
+    <div class="small">Lost your phone? <a>Use a backup code</a> · <a>Back to sign in</a></div>
+  </div></div>
+</div>
+
+<div class="authwrap ww w3"><div class="hero"><img src="assets/mh-logo-t.png" alt="Measured Health" style="height:52px;width:auto;align-self:flex-start">
+  <svg class="ecgbg" viewBox="0 0 900 80" preserveAspectRatio="none"><path d="M0 40h300l20-26 26 52 22-66 26 76 18-36h488"/></svg>
+  <div><h1>Better, quicker answers at the bedside.</h1><p>Evidence-checked clinical decision support for every clinic, including the most resource-limited.</p></div>
+  <div class="trust"><div><span class="ci ok">⛨</span>Patient details are masked before any analysis</div><div><span class="ci ok">✓</span>Every claim is checked against clinical guidelines</div><div><span class="ci ok">◎</span>You stay in control: the final decision is always yours</div></div>
+</div>
+  <div class="form-side"><div class="fbox">
+    <h2>Welcome back</h2><div class="sub">Sign in to continue to MHAI.</div>
+    <div class="err"><b>!</b><div><b>That email and password don't match.</b><br>Check them and try again. 2 attempts left before a 15-minute lock.</div></div>
+    <div class="lab">Work email</div><div class="inp">a.reyes@havanahospital.org</div>
+    <div class="lab">Password</div><div class="inp mono" style="border-color:var(--bad);box-shadow:0 0 0 4px #a044381a">•••••••</div>
+    <span class="go full">Sign in</span>
+    <div class="small"><a>Reset your password</a> · <a>Use hospital account instead</a></div>
+  </div></div>
+</div>
+
+<div class="app ww w4" style="grid-template-columns:256px minmax(0,1fr) 0">
+  <aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="grp">Today</div>
+    <div class="it on"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="it"><div class="ic">◐</div><div class="lbl">Febrile child, 3 F<span class="flag" title="Flagged"></span><small><span class="sd" style="background:var(--warn)"></span>Use with caution · 1 h</small></div></div>
+    <div class="it"><div class="ic">⚗</div><div class="lbl">Low potassium<small><span class="sd" style="background:var(--bad)"></span>Needs review · 3 h</small></div></div>
+    <div class="grp">Yesterday</div>
+    <div class="it"><div class="ic">✚</div><div class="lbl">Post-op fever, day 2<small><span class="sd" style="background:var(--ok)"></span>High confidence</small></div></div>
+    <div class="it"><div class="ic">℞</div><div class="lbl">Warfarin interaction<small><span class="sd" style="background:var(--warn)"></span>Use with caution</small></div></div>
+    <div class="grp">Earlier</div>
+    <div class="it"><div class="ic">♡</div><div class="lbl">Palpitations, 31 F<small><span class="sd" style="background:var(--ok)"></span>High confidence · Mon</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside>
+  <main class="center"><div class="top"><div><h2>Chest pain, 54 M</h2><div class="sub mono">Completed 14:06</div></div></div><div class="scroll" style="opacity:.35"><div class="card" style="max-width:700px;margin:0 auto"><h1 class="dx">Unstable angina</h1><div class="prose">Presentation is consistent with acute coronary syndrome…</div></div></div></main>
+  <aside></aside>
+  <div class="pop">
+    <div class="hd"><div class="av" style="color:#fff">DR</div><div><b>Dr. Ana Reyes</b><small>a.reyes@havanahospital.org</small></div></div>
+    <div class="mi on">◉ Profile &amp; security</div>
+    <div class="mi">✎ My feedback &amp; corrections</div>
+    <div class="mi">⌨ Keyboard shortcuts<span class="k">?</span></div>
+    <div class="mi">? Help &amp; guide</div>
+    <div class="mi out">⏻ Sign out</div>
+  </div>
+</div>
+
+<div class="app ww w5" style="grid-template-columns:256px minmax(0,1fr) 0">
+  <aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="grp">Today</div>
+    <div class="it on"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="it"><div class="ic">◐</div><div class="lbl">Febrile child, 3 F<span class="flag" title="Flagged"></span><small><span class="sd" style="background:var(--warn)"></span>Use with caution · 1 h</small></div></div>
+    <div class="it"><div class="ic">⚗</div><div class="lbl">Low potassium<small><span class="sd" style="background:var(--bad)"></span>Needs review · 3 h</small></div></div>
+    <div class="grp">Yesterday</div>
+    <div class="it"><div class="ic">✚</div><div class="lbl">Post-op fever, day 2<small><span class="sd" style="background:var(--ok)"></span>High confidence</small></div></div>
+    <div class="it"><div class="ic">℞</div><div class="lbl">Warfarin interaction<small><span class="sd" style="background:var(--warn)"></span>Use with caution</small></div></div>
+    <div class="grp">Earlier</div>
+    <div class="it"><div class="ic">♡</div><div class="lbl">Palpitations, 31 F<small><span class="sd" style="background:var(--ok)"></span>High confidence · Mon</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside>
+  <main class="center"><div class="top"><div><h2>Profile &amp; security</h2><div class="sub">Your account</div></div><div class="tbtn"><span class="ib">✕ Close</span></div></div>
+  <div class="scroll"><div class="set">
+    <div class="snav"><span class="on">Profile</span><span>Security</span><span>Devices</span><span>My feedback</span><span>Preferences</span></div>
+    <div class="sc">
+      <div class="card"><div class="prof"><div class="av">DR</div><div><h3 style="font-family:'Darker Grotesque';font-size:28px;font-weight:900;margin:0">Dr. Ana Reyes</h3><div style="color:var(--ink-3);font-size:13.5px">a.reyes@havanahospital.org</div></div></div>
+        <div class="kv">
+          <div><div class="lab">Role<span class="lock">🔒 from hospital records</span></div><div class="inp">Attending physician</div></div>
+          <div><div class="lab">Specialty<span class="lock">🔒</span></div><div class="inp">Internal Medicine</div></div>
+          <div><div class="lab">Hospital<span class="lock">🔒</span></div><div class="inp">Havana Hospital</div></div>
+          <div><div class="lab">Display name</div><div class="inp">Dr. Reyes</div></div>
+        </div>
+        <div class="small" style="text-align:left">Something wrong? <a>Request a change from your admin</a></div>
+      </div>
+      <div class="card"><h3>Security</h3><div class="d">Protects patient data across every session.</div>
+        <div class="srow"><div>Two-step verification<small>Authenticator app · added 2 Oct 2026</small></div><div class="r"><span class="pill-ok">On</span><span class="btn ghost">Manage</span></div></div>
+        <div class="srow"><div>Password<small>Last changed 34 days ago</small></div><div class="r"><span class="btn ghost">Change</span></div></div>
+        <div class="srow"><div>Backup codes<small>8 of 10 left</small></div><div class="r"><span class="btn ghost">View</span></div></div>
+      </div>
+      <div class="card"><h3>Active devices</h3><div class="d">Sign out anything you don't recognise.</div>
+        <div class="srow"><span class="dev">▭</span><div>Chrome on Windows · Ward 4 PC<small>This device · Lagos · active now</small></div></div>
+        <div class="srow"><span class="dev">▯</span><div>Safari on iPhone<small>Lagos · 2 hours ago</small></div><div class="r"><span class="btn ghost">Sign out</span></div></div>
+        <div style="margin-top:12px"><span class="btn danger">Sign out everywhere</span></div>
+      </div>
+      <div class="card"><h3>My feedback</h3><div class="d">How your reviews help improve the system.</div>
+        <div class="stat3"><div><b>42</b><small>Results agreed</small></div><div><b>6</b><small>Corrections sent</small></div><div><b>4</b><small>Corrections approved</small></div></div>
+      </div>
+    </div>
+  </div></div></main>
+  <aside></aside>
+</div>
+</body></html>

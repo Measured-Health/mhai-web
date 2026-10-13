@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>MHAI · Mobile v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Darker+Grotesque:wght@700;800;900&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bloom:#460351;--orchid:#a8499e;--lilac:#f1ecf4;--lilac-2:#e8dfee;--bloom-tint:#6e3c6a;
+  --mint:#15999E;--mint-2:#43c1c5;--mint-deep:#15777c;--mint-wash:#e3f4f4;
+  --ink:#1c0d22;--ink-2:#4a3d50;--ink-3:#8a7f90;--line:#ece4ef;--bg:#f6f2f8;
+  --ok:#1b7a4a;--ok-wash:#e4f5ec;--ok-deep:#135a36;
+  --warn:#b5742a;--warn-wash:#fbf0e2;--warn-deep:#8c5a1f;--warn-line:#ecca8e;
+  --bad:#a04438;--bad-wash:#f8e8e5;--bad-deep:#7d3029;--bad-line:#e0b5ae;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#1a1320;font-family:Outfit,sans-serif;color:var(--ink)}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+header.h{color:#efe6f2;padding:18px 24px 4px}
+header.h b{font-size:17px}header.h p{color:#cbbfd3;font-size:13.5px;margin:6px 0 0;max-width:1100px;line-height:1.5}
+.row-ph{display:flex;gap:28px;padding:22px 24px 40px;overflow-x:auto;align-items:flex-start}
+.ph-wrap{flex:none}
+.ph-cap{color:#efe6f2;font-size:14px;font-weight:600;margin:12px 4px 2px}
+.ph-cap small{display:block;color:#a99cb3;font-weight:400;font-size:12.5px;margin-top:3px;max-width:330px;line-height:1.45}
+.phone{width:375px;height:780px;border-radius:44px;background:#0b0810;padding:10px;box-shadow:0 30px 60px -20px #000}
+.scr{width:100%;height:100%;border-radius:35px;overflow:hidden;position:relative;display:flex;flex-direction:column;
+  background:radial-gradient(400px 260px at 100% -5%,#15999e24,transparent 60%),radial-gradient(360px 260px at -10% 105%,#4603511a,transparent 60%),var(--bg)}
+.status{height:40px;display:flex;justify-content:space-between;align-items:center;padding:6px 26px 0;font-size:13px;font-weight:600;flex:none}
+.appbar{display:flex;align-items:center;gap:10px;padding:6px 14px 10px;flex:none}
+.icb{width:40px;height:40px;border-radius:12px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;font-size:17px;color:var(--ink-2);flex:none}
+.icb.p{background:var(--mint);border-color:var(--mint);color:#fff;font-size:20px}
+.at{flex:1;min-width:0}.at b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.at small{font-size:11.5px;color:var(--ink-3)}
+.urg{font-family:'JetBrains Mono';font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:999px;font-weight:600;background:var(--warn-wash);color:var(--warn-deep)}
+.body{flex:1;overflow:hidden;padding:4px 14px 0;position:relative}
+.card{position:relative;background:rgba(255,255,255,.88);border-radius:22px;padding:18px;box-shadow:0 20px 40px -26px rgba(70,3,81,.45)}
+.card::before{content:"";position:absolute;inset:0;border-radius:22px;padding:1px;background:linear-gradient(135deg,var(--mint),#46035133,transparent 60%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.eyebrow{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--mint);font-weight:600}
+h1{font-family:'Darker Grotesque';font-weight:900;line-height:.95;margin:6px 0 8px}
+.lab{font-size:12.5px;color:var(--ink-2);margin:12px 0 6px;display:flex;justify-content:space-between}.req{color:var(--bad)}
+.inp{background:#fff;border:1px solid var(--lilac-2);border-radius:12px;padding:11px 12px;font-size:15px;min-height:46px}
+.inp.focus{border-color:var(--mint);box-shadow:0 0 0 4px #15999e22}
+.seg{display:flex;background:var(--lilac);border-radius:12px;padding:4px;gap:4px}
+.seg span{flex:1;text-align:center;padding:9px 4px;border-radius:9px;font-size:14px;color:var(--ink-2)}
+.seg span.on{background:#fff;color:var(--bloom);font-weight:600;box-shadow:0 2px 8px -4px #46035155}
+.sd{width:7px;height:7px;border-radius:50%;display:inline-block}
+.tag2{font-size:13px;padding:5px 10px;border-radius:999px;background:var(--mint-wash);color:var(--mint-deep)}
+.sugg{display:flex;gap:6px;overflow:hidden;margin-top:8px}.sugg span{flex:none;font-size:12.5px;padding:5px 10px;border-radius:999px;background:#fff;border:1px dashed var(--lilac-2);color:var(--ink-2)}
+.fsl{display:flex;gap:8px;align-items:baseline;margin-top:4px}.fsl .n{font-family:'JetBrains Mono';font-size:11px;color:var(--mint);font-weight:600}.fsl b{font-size:14px}
+.dock{flex:none;padding:12px 14px 26px;background:linear-gradient(180deg,transparent,#f6f2f8 30%);display:flex;gap:8px;align-items:center}
+.go{flex:1;text-align:center;background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;border-radius:16px;padding:15px;font-weight:600;font-size:16px;box-shadow:0 14px 28px -12px var(--mint)}
+.btn{border-radius:16px;padding:14px 14px;font-weight:600;font-size:14.5px;text-align:center}
+.b-agree{flex:1;background:var(--bloom);color:#fff}.b-sugg{flex:1;background:var(--lilac);color:var(--bloom)}.b-ic{width:52px;background:#fff;border:1px solid var(--line);color:var(--ink-2)}
+.chip{font-family:'JetBrains Mono';font-size:10.5px;padding:4px 9px;border-radius:999px;background:var(--lilac);color:var(--bloom)}
+.conf{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:999px}
+.conf.ok{background:var(--ok-wash);color:var(--ok-deep)}
+.cl{font-size:9px;letter-spacing:.12em;text-transform:uppercase;opacity:.7}
+.bars{display:inline-flex;gap:2px;align-items:flex-end}.bars i{width:3.5px;border-radius:2px;display:block;background:currentColor}.bars i.off{opacity:.22}
+.prose{font-size:14.5px;line-height:1.65;color:var(--ink-2)}.prose ul{padding-left:18px;margin:4px 0}.prose li{margin:6px 0}
+.ref{font-size:11px;padding:2px 7px;border-radius:7px;white-space:nowrap}.ref.v{background:var(--ok-wash);color:var(--ok-deep)}.ref.u{background:var(--warn-wash);color:var(--warn-deep)}
+.sec h4{margin:14px 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.evpeek{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:11px 12px;margin-top:12px;font-size:13px}
+.evpeek small{display:block;color:var(--ink-3);font-size:11.5px}
+.ci{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;font-size:11px;flex:none}.ci.ok{background:var(--ok-wash);color:var(--ok)}.ci.w{background:var(--warn-wash);color:var(--warn)}.ci.b{background:var(--bad-wash);color:var(--bad)}
+.banner{display:flex;gap:10px;border-radius:16px;padding:12px 13px;margin-bottom:12px;font-size:13px;line-height:1.45}
+.banner b{display:block;font-size:13.5px}
+.banner.bad{background:var(--bad-wash);border:1px solid var(--bad-line);color:var(--bad-deep)}
+.bic{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;flex:none;font-weight:700;background:#efc9c3}
+/* processing */
+.ecg{width:100%;height:60px}.ecg path{stroke:var(--mint);stroke-width:2.6;fill:none;stroke-dasharray:400;animation:draw 2.2s linear infinite}
+@keyframes draw{from{stroke-dashoffset:400}to{stroke-dashoffset:0}}
+.st{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:14px;font-size:14px;background:#fff;border:1px solid var(--line);margin-top:6px}
+.st .d{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;flex:none;border:2px solid var(--lilac-2)}
+.st.done{background:var(--mint-wash);border-color:transparent;color:var(--mint-deep)}.st.done .d{background:var(--mint);border-color:var(--mint);color:#fff}
+.st.now{border-color:var(--mint);box-shadow:0 0 0 4px #15999e1a;font-weight:600}.st.now .d{border-color:var(--mint)}
+.st.now .d::after{content:"";width:7px;height:7px;border-radius:50%;background:var(--mint);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{transform:scale(1.6);opacity:.4}}
+.st.todo{color:var(--ink-3)}.st .tm{margin-left:auto;font-family:'JetBrains Mono';font-size:11px;opacity:.75}
+.pb{height:6px;background:var(--lilac);border-radius:9px;overflow:hidden;margin-top:16px}.pb i{display:block;height:100%;width:58%;background:linear-gradient(90deg,var(--mint),var(--mint-2))}
+/* sheet */
+.scrim{position:absolute;inset:0;background:#1c0d2259}
+.sheet{position:absolute;left:0;right:0;bottom:0;height:78%;background:#fff;border-radius:26px 26px 0 0;padding:10px 16px 20px;box-shadow:0 -20px 40px -20px #0006;overflow:hidden}
+.grab{width:42px;height:5px;border-radius:9px;background:var(--lilac-2);margin:0 auto 12px}
+.sh{display:flex;align-items:center;gap:9px;font-weight:600;font-size:16px;margin-bottom:6px}
+.sh .s{width:30px;height:30px;border-radius:9px;background:var(--mint-wash);display:grid;place-items:center;color:var(--mint-deep)}
+.segt{display:flex;gap:6px;margin:8px 0 12px}.segt span{font-size:13px;padding:7px 12px;border-radius:999px;background:var(--lilac);color:var(--ink-2)}.segt span.on{background:var(--ink);color:#fff}
+.pt{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin:10px 0 4px}
+.chk{display:flex;gap:10px;align-items:center;font-size:14px;padding:7px 0}.chk small{display:block;color:var(--ink-3);font-size:12px}
+.m{margin:9px 0}.mr{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;color:var(--ink-2)}
+.mt{height:7px;background:var(--lilac);border-radius:9px;overflow:hidden}.mt i{display:block;height:100%;background:linear-gradient(90deg,var(--mint),var(--mint-2))}.mt i.w{background:linear-gradient(90deg,var(--warn),#d4983c)}
+/* drawer */
+.drawer{position:absolute;top:0;bottom:0;left:0;width:84%;background:#fff;padding:52px 16px 20px;box-shadow:20px 0 40px -20px #0006;display:flex;flex-direction:column}
+.logo{height:40px;width:auto}
+.tagline{font-size:11px;color:var(--ink-3);display:flex;gap:7px;align-items:center;margin:4px 0 14px}
+.live{width:7px;height:7px;border-radius:50%;background:var(--mint)}
+.newc{background:var(--mint);color:#fff;border-radius:14px;padding:13px;text-align:center;font-weight:600}
+.search{margin-top:10px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px 12px;font-size:14px;color:var(--ink-3)}
+.grp{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:16px 6px 6px}
+.it{display:flex;gap:10px;padding:9px 8px;border-radius:12px;font-size:14px;line-height:1.3}
+.it .ic{width:34px;height:34px;border-radius:10px;background:var(--lilac);color:var(--bloom);display:grid;place-items:center;flex:none}
+.it small{display:flex;gap:5px;align-items:center;color:var(--ink-3);font-size:12px;margin-top:2px}
+.it.on{background:var(--mint-wash);box-shadow:inset 3px 0 0 var(--mint)}
+.flag{width:7px;height:7px;border-radius:50%;background:#f0a640;display:inline-block;margin-left:6px}
+.me{margin-top:auto;display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding-top:12px;font-size:14px}
+.av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--orchid),var(--bloom-tint));color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px}
+.me small{display:block;color:var(--ink-3);font-size:12px}
+.rmark{height:28px;width:auto}
+.me .org{display:flex;align-items:center;gap:4px;color:var(--mint-deep)!important;font-weight:500;margin-top:1px}
+.me .more{margin-left:auto;color:var(--ink-3);font-size:16px}
+
+.cmpm{border-radius:16px;padding:12px 14px;font-size:14px;line-height:1.55;margin-top:8px}
+.cmpm h4{margin:0 0 4px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase}
+.cmpm.a{background:#fff;border:1px solid var(--line);color:var(--ink-2)}.cmpm.a h4{color:var(--ink-3)}
+.cmpm.b{background:var(--mint-wash);border:1px solid #bfe3e3}.cmpm.b h4{color:var(--mint-deep)}
+del{background:var(--bad-wash);color:var(--bad-deep);border-radius:4px;padding:0 3px}
+ins{background:#c9ece4;color:var(--ok-deep);text-decoration:none;border-radius:4px;padding:0 3px}
+.pl{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:999px}
+.pl.w{background:var(--warn-wash);color:var(--warn-deep)}.pl.b{background:var(--bad-wash);color:var(--bad-deep)}.pl.n{background:var(--lilac);color:var(--bloom)}.pl.ok{background:var(--ok-wash);color:var(--ok-deep)}
+.qi{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:8px;font-size:13.5px}
+.qi .t1{display:flex;justify-content:space-between;font-weight:600;font-size:15px}.qi .t1 small{font-weight:400;color:var(--ink-3);font-size:12px}
+.qi p{margin:4px 0 8px;color:var(--ink-2);line-height:1.4}
+.qi .mt2{display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ink-3);align-items:center}
+.flt{display:flex;gap:6px;margin:4px 0 12px}.flt span{font-size:12.5px;padding:6px 12px;border-radius:999px;background:var(--lilac);color:var(--ink-2)}.flt span.on{background:var(--ink);color:#fff}
+.otp{display:flex;gap:7px;margin:8px 0}.otp span{flex:1;height:56px;border-radius:13px;border:1px solid var(--lilac-2);background:#fff;display:grid;place-items:center;font-family:'JetBrains Mono';font-size:24px;font-weight:600}.otp span.f{border-color:var(--mint);box-shadow:0 0 0 4px #15999e22}
+.sso{display:flex;justify-content:center;gap:8px;border:1px solid var(--lilac-2);border-radius:14px;padding:14px;font-weight:600;background:#fff;font-size:15px}
+.or{display:flex;gap:10px;align-items:center;color:var(--ink-3);font-size:12px;margin:16px 0 4px}.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.srow{display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid var(--line);font-size:14px}.srow:first-of-type{border-top:0}
+.srow small{display:block;color:var(--ink-3);font-size:12px}.srow .r{margin-left:auto;color:var(--ink-3)}
+.lock{font-size:11px;color:var(--ink-3)}
+.reasons{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}.reasons span{font-size:12.5px;padding:7px 11px;border-radius:999px;background:#fff;border:1px solid var(--bad-line);color:var(--bad-deep)}.reasons span.on{background:var(--bad);color:#fff;border-color:var(--bad)}
+.ap{flex:1;background:var(--ok);color:#fff}.rj{flex:1;background:#fff;border:1px solid var(--bad-line);color:var(--bad)}
+.badge{background:var(--warn);color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;margin-left:auto}
+</style></head><body>
+<header class="h"><b>MHAI · Mobile: account &amp; review (390 px)</b><p>The same patterns as the clinical mobile screens: actions in the thumb dock, sheets for secondary tasks, and no features dropped.</p></header>
+<div class="row-ph">
+<div class="ph-wrap"><div class="phone"><div class="scr"><div class="status"><span>9:41</span><span>●●● ▮</span></div><div class="body" style="padding:10px 20px">
+  <img src="assets/mh-logo-t.png" style="height:44px" alt="Measured Health">
+  <h1 style="font-size:40px;margin:26px 0 6px">Welcome back</h1><div style="color:var(--ink-2);font-size:15px;margin-bottom:22px">Sign in to continue to MHAI.</div>
+  <div class="sso">⌂ Continue with hospital account</div>
+  <div class="or">or use email</div>
+  <div class="lab">Work email</div><div class="inp">a.reyes@havanahospital.org</div>
+  <div class="lab">Password <span style="color:var(--mint-deep);font-weight:600">Forgot?</span></div><div class="inp focus mono">••••••••••</div>
+  <div style="display:flex;gap:10px;margin-top:22px;font-size:12.5px;color:var(--ink-3);align-items:center"><span class="ci ok">⛨</span>Patient details are masked before analysis</div>
+</div><div class="dock"><span class="go">Sign in</span></div></div></div><div class="ph-cap">A · Sign in<small>Single sign-on first, then email. The sign-in button sits in the thumb dock, and one trust line replaces the desktop hero.</small></div></div>
+<div class="ph-wrap"><div class="phone"><div class="scr"><div class="status"><span>9:41</span><span>●●● ▮</span></div><div class="appbar"><span class="icb">←</span></div><div class="body" style="padding:10px 20px">
+  <span class="eyebrow">Two-step verification</span><h1 style="font-size:38px;margin:8px 0 6px">Enter your code</h1>
+  <div style="color:var(--ink-2);font-size:14.5px;line-height:1.5">6-digit code from your authenticator app.</div>
+  <div class="otp"><span>4</span><span>8</span><span>2</span><span class="f">1</span><span></span><span></span></div>
+  <div style="display:flex;gap:9px;align-items:center;font-size:14px;color:var(--ink-2);margin-top:12px"><span style="width:20px;height:20px;border-radius:6px;background:var(--mint);color:#fff;display:grid;place-items:center;font-size:11px">✓</span>Trust this device for 30 days</div>
+  <div style="font-size:13px;color:var(--ink-3);margin-top:18px">Lost your phone? <b style="color:var(--mint-deep)">Use a backup code</b></div>
+</div><div class="dock"><span class="go">Verify</span></div></div></div><div class="ph-cap">B · Two-step code<small>Big boxes for thumbs. The numeric keypad opens automatically, and codes from SMS or the clipboard paste in.</small></div></div>
+<div class="ph-wrap"><div class="phone"><div class="scr"><div class="status"><span>9:41</span><span>●●● ▮</span></div><div class="appbar"><span class="icb">←</span><div class="at"><b>Profile &amp; security</b></div></div><div class="body" style="overflow:hidden">
+  <div class="card" style="display:flex;gap:12px;align-items:center"><div class="av" style="width:52px;height:52px;font-size:17px">DR</div><div><b style="font-family:'Darker Grotesque';font-size:24px;font-weight:900;line-height:1">Dr. Ana Reyes</b><div style="font-size:12.5px;color:var(--ink-3)">Attending · Internal Medicine</div><div style="font-size:12.5px;color:var(--mint-deep);font-weight:500">⌂ Havana Hospital</div></div></div>
+  <div class="pt" style="margin:16px 4px 6px">Security</div>
+  <div class="card" style="padding:6px 14px">
+    <div class="srow"><div>Two-step verification<small>Authenticator app</small></div><span class="r"><span class="pl ok">On</span> ›</span></div>
+    <div class="srow"><div>Password<small>Changed 34 days ago</small></div><span class="r">›</span></div>
+    <div class="srow"><div>Active devices<small>2 signed in</small></div><span class="r">›</span></div>
+  </div>
+  <div class="pt" style="margin:16px 4px 6px">Activity</div>
+  <div class="card" style="padding:6px 14px">
+    <div class="srow"><div>My feedback &amp; corrections<small>42 agreed · 6 corrections</small></div><span class="r">›</span></div>
+    <div class="srow"><div>Help &amp; guide</div><span class="r">›</span></div>
+  </div>
+  <div style="text-align:center;color:var(--bad);font-weight:600;margin-top:16px">⏻ Sign out</div>
+</div></div></div><div class="ph-cap">C · Profile &amp; security<small>Desktop sections become a grouped list. Each row opens its own page. Hospital-managed fields stay read-only.</small></div></div>
+<div class="ph-wrap"><div class="phone"><div class="scr"><div class="status"><span>9:41</span><span>●●● ▮</span></div><div class="appbar"><span class="icb">☰</span><div class="at"><b>Review corrections</b><small>Needs a second clinician</small></div></div><div class="body">
+  <div class="flt"><span class="on">Waiting · 3</span><span>My specialty</span><span>Done</span></div>
+  <div class="qi"><div class="t1">Dengue fever, likely<small>42 min</small></div><p>Admission should use warning signs, not a platelet cut-off.</p><div class="mt2"><span class="pl w">Use with caution</span><span class="pl n">Infectious disease</span>· Dr. Okafor</div></div>
+  <div class="qi"><div class="t1">Hypokalaemia<small>3 h</small></div><p>Replacement dose too high for a peripheral line.</p><div class="mt2"><span class="pl b">Needs review</span><span class="pl n">Internal medicine</span>· Dr. Bello</div></div>
+  <div class="qi" style="opacity:.75"><div class="t1">Paediatric dosing<small style="color:var(--bad);font-weight:700">5 h</small></div><p>Paracetamol should be weight-based.</p><div class="mt2"><span class="pl w">Use with caution</span>· 🔒 Your correction</div></div>
+</div></div></div><div class="ph-cap">D · Review queue<small>Cards instead of a split view. Your own corrections are marked, and overdue ones show red times. In the ☰ drawer, "Review corrections" carries the count badge.</small></div></div>
+<div class="ph-wrap"><div class="phone"><div class="scr"><div class="status"><span>9:41</span><span>●●● ▮</span></div><div class="appbar"><span class="icb">←</span><div class="at"><b>Dengue fever, likely</b><small>1 of 3 · 42 min ago</small></div></div><div class="body">
+  <div style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink-2)"><div class="av" style="width:28px;height:28px;font-size:10px">CO</div><b>Dr. Okafor</b>· Infectious disease</div>
+  <div class="cmpm a"><h4>What the system said</h4>Admit if <del>platelets fall below 100 × 10⁹/L</del>.</div>
+  <div class="cmpm b"><h4>✎ Suggested correction</h4>Admit if <ins>any warning sign is present: abdominal pain, vomiting, bleeding, lethargy</ins>.</div>
+  <div class="cmpm a"><h4>Why</h4>WHO 2024 uses clinical warning signs for admission.</div>
+  <div style="font-size:12.5px;color:var(--ink-3);margin-top:10px">Evidence: <span class="pl ok">Verified</span> WHO Dengue 2024 §3.2</div>
+</div><div class="dock"><span class="btn rj">✕ Reject</span><span class="btn ap">✓ Approve</span></div></div></div><div class="ph-cap">E · Compare<small>The side-by-side becomes stacked: before, then after, then why. Approve and Reject are docked. Swipe left or right for the next item.</small></div></div>
+<div class="ph-wrap"><div class="phone"><div class="scr"><div class="status"><span>9:41</span><span>●●● ▮</span></div><div class="appbar"><span class="icb">←</span><div class="at"><b>Dengue fever, likely</b></div></div><div class="body"><div class="cmpm b"><h4>✎ Suggested correction</h4>Admit if any warning sign is present…</div></div>
+<div class="scrim"></div><div class="sheet" style="height:62%">
+  <div class="grab"></div><div class="sh" style="color:var(--bad-deep)">Why reject this?</div>
+  <div class="reasons"><span>Not supported</span><span class="on">Needs rewording</span><span>Unsafe</span><span>Out of scope</span></div>
+  <div class="inp" style="min-height:90px;font-size:14px;line-height:1.5">Keep platelets &lt; 20 as an extra trigger (WHO §3.4).</div>
+  <div style="font-size:12px;color:var(--bad-deep);margin-top:8px">Dr. Okafor will see your reason.</div>
+  <div style="display:flex;gap:8px;margin-top:16px"><span class="btn" style="flex:1;background:var(--lilac);color:var(--ink-2)">Cancel</span><span class="btn" style="flex:2;background:var(--bad);color:#fff">Reject with reason</span></div>
+</div></div></div><div class="ph-cap">F · Reject sheet<small>A bottom sheet with reason chips and a short note. The keyboard pushes the sheet up, never covering the buttons.</small></div></div>
+</div></body></html>
