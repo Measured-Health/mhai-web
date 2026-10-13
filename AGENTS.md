@@ -16,6 +16,8 @@ model).
 
 ## Read first
 
+- [ARCHITECTURE.md](ARCHITECTURE.md): the clinical app, the planned admin
+  app, and how both talk to the API.
 - [CONTRIBUTING.md](CONTRIBUTING.md): conventions, the clinical UI rules,
   the rules for patient data in the browser, and the agent contribution
   workflow.
@@ -42,7 +44,7 @@ npm run build              # production build
 
 ## Rules of thumb
 
-- Match the approved mockup (`design/mhai-clinical-mockup-v2.html`), and use the plain-language clinical wording.
+- Follow design v3 (`design/v3/`, spec in `docs/specs/2026-10-13-ui-design-v3.md`), and use the plain-language clinical wording.
   No technical terms in the UI.
 - An escalated or degraded result always shows the review banner.
 - Never log, store or cache patient data in the browser. Use mock or
