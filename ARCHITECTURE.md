@@ -1,29 +1,42 @@
 # Architecture
 
-MHAI has **two frontend apps**. Both talk only to the MHAI API
-(`Measured-Health/mhai-multiagent`, base path `/api/v1`).
+MHAI has **two frontend apps** and **three kinds of user**. Both apps talk
+only to the MHAI API (`Measured-Health/mhai-multiagent`, base path
+`/api/v1`).
 
-| App              | Who uses it         | What it does                                                                                               | Status                                                                  |
-| ---------------- | ------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| **Clinical app** | Clinicians          | Ask clinical questions, read evidence-checked results, give feedback, review other clinicians' corrections | This repo, Phase 1                                                      |
-| **Admin app**    | Admins and auditors | Manage users, system health, failed jobs, legal holds, settings, audit log                                 | Planned ([ADR 0002](docs/adr/0002-separate-clinical-and-admin-apps.md)) |
+| App                    | Who uses it                                         | What it does                                                                                                                                                                     | Status                                                                  |
+| ---------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Clinical app**       | Clinicians, and hospital admins                     | **Clinical side:** ask questions, read evidence-checked results, give feedback, review corrections. **Hospital admin side:** manage the hospital's own staff, settings and usage | This repo, Phase 1                                                      |
+| **Platform admin app** | Measured Health staff: platform admins and auditors | Run the service: hospitals, system health, failed jobs, legal holds, platform settings, audit log                                                                                | Planned ([ADR 0002](docs/adr/0002-separate-clinical-and-admin-apps.md)) |
 
-The split follows the backend's security model. An admin account has **no
-clinical permissions**: it can't submit queries, see patient data or give
-feedback. A clinician has **no admin permissions**. The apps are kept
-apart so neither can reach the other's screens, code or session.
+The three kinds of user:
+
+- **Clinician:** works with patients' clinical questions.
+- **Hospital admin:** runs **one hospital** (for example a medical director
+  or the hospital's IT lead). They invite and manage staff, set hospital
+  rules, and see usage counts. A person can be both clinician and hospital
+  admin. The hospital admin role alone gives **no access to consultations
+  or patient data**.
+- **Platform admin / auditor:** Measured Health operations. They see
+  every hospital, but never clinical content. They have **no clinical
+  permissions**, which matches the backend's model, so they get their own
+  app on their own origin.
 
 ## 1. System context
 
 ```mermaid
 flowchart LR
     clin([Clinician])
-    adm([Admin])
+    hadm([Hospital admin])
+    padm([Platform admin])
     aud([Auditor])
 
     subgraph web["mhai-web (this repo)"]
-        capp["Clinical app<br/>app.&lt;domain&gt;"]
-        aapp["Admin app<br/>admin.&lt;domain&gt;<br/>(planned)"]
+        subgraph capp["Clinical app · app.&lt;domain&gt;"]
+            cside["Clinical side"]
+            hside["Hospital admin side"]
+        end
+        aapp["Platform admin app<br/>admin.&lt;domain&gt;<br/>(planned)"]
     end
 
     idp["Hospital identity provider<br/>(OIDC single sign-on)"]
@@ -35,13 +48,14 @@ flowchart LR
         db[("Postgres · Redis · object storage")]
     end
 
-    clin --> capp
-    adm --> aapp
+    clin --> cside
+    hadm --> hside
+    padm --> aapp
     aud --> aapp
-    capp -- "queries, results, feedback, corrections" --> gw
-    aapp -- "users, stats, DLQ, settings, audit" --> gw
+    cside -- "queries, results, feedback, corrections" --> gw
+    hside -- "staff, hospital settings, usage (one hospital)" --> gw
+    aapp -- "hospitals, health, DLQ, settings, audit" --> gw
     capp -. "sign in" .-> idp
-    aapp -. "sign in (MFA asserted)" .-> idp
     gw --> wk --> inf
     gw --> db
     wk --> db
@@ -50,57 +64,75 @@ flowchart LR
 The same picture as a sketch:
 
 ```text
-   Clinician                         Admin / Auditor
-       │                                    │
-       ▼                                    ▼
-┌──────────────────┐              ┌──────────────────┐
-│   CLINICAL APP   │              │    ADMIN APP     │
-│ app.<domain>     │              │ admin.<domain>   │
-│                  │              │ (VPN / allowlist)│
-│ ask · results ·  │              │ users · health · │
-│ feedback ·       │              │ DLQ · holds ·    │
-│ review queue     │              │ settings · audit │
-└────────┬─────────┘              └────────┬─────────┘
-         │  clinician token                │  admin/auditor token (MFA)
-         └───────────────┬─────────────────┘
-                         ▼
-               ┌───────────────────┐
-               │  MHAI API /api/v1 │  checks role on every route
-               └─────────┬─────────┘
-                         ▼
-          worker · inference services · data stores
+ Clinician      Hospital admin               Platform admin / Auditor
+     │                │                      (Measured Health staff)
+     ▼                ▼                                 │
+┌─────────────────────────────────┐                     ▼
+│          CLINICAL APP           │          ┌──────────────────────┐
+│          app.<domain>           │          │  PLATFORM ADMIN APP  │
+│ ┌──────────────┬──────────────┐ │          │   admin.<domain>     │
+│ │ CLINICAL     │ HOSPITAL     │ │          │  (VPN / allowlist)   │
+│ │ ask · result │ ADMIN        │ │          │ hospitals · health · │
+│ │ feedback ·   │ staff ·      │ │          │ DLQ · holds ·        │
+│ │ review queue │ settings ·   │ │          │ settings · audit     │
+│ │              │ usage        │ │          │                      │
+│ └──────────────┴──────────────┘ │          └──────────┬───────────┘
+│  one hospital only (tenant)     │                     │ MFA always
+└────────────────┬────────────────┘                     │
+                 └──────────────┬───────────────────────┘
+                                ▼
+                      ┌───────────────────┐
+                      │  MHAI API /api/v1 │  checks role + hospital
+                      └─────────┬─────────┘  on every route
+                                ▼
+                 worker · inference services · data stores
 ```
 
 ## 2. Who can do what
 
-This mirrors the API's RBAC matrix (mhai-multiagent spec §5.4). The UI
-hides what a role can't do, but **the API is the enforcement point**.
+The UI hides what a role can't do, but **the API is the enforcement
+point**. The hospital admin role and hospital scoping are backend
+additions (see the design spec §10).
 
 ```mermaid
 flowchart TB
-    subgraph C["Clinical app"]
+    subgraph C["Clinical app: clinical side"]
         c1[Ask a question]
         c2[Read result + evidence]
         c3[Agree / suggest correction]
         c4[Review others' corrections]
         c5[Profile & security]
     end
-    subgraph A["Admin app"]
-        a1[Users & roles]
-        a2[Usage stats]
+    subgraph H["Clinical app: hospital admin side"]
+        h1[Staff: invite, roles, specialty, deactivate]
+        h2[Reset a member's password / 2-step]
+        h3[Hospital settings: review rules, 2-step, timeout]
+        h4[Usage counts for the hospital]
+    end
+    subgraph A["Platform admin app"]
+        a0[Hospitals & SSO setup]
+        a1[Platform users & roles]
         a3[Agent status & DLQ]
         a4[Legal holds]
-        a5[Settings & retention]
+        a5[Platform settings & retention]
         a6[Audit log + verify]
     end
     clinician((clinician)) --> c1 & c2 & c3 & c4 & c5
-    admin((admin · MFA)) --> a1 & a2 & a3 & a4 & a5 & a6
+    hadmin((hospital admin · MFA)) --> h1 & h2 & h3 & h4
+    hadmin --> c5
+    admin((platform admin · MFA)) --> a0 & a1 & a3 & a4 & a5 & a6
     auditor((auditor · MFA)) --> a6
 ```
 
-- A **clinician** signing in to the admin app gets a 403 page, and an
-  **admin** signing in to the clinical app does too. Each 403 page links
-  to the right app.
+- **Roles combine in the clinical app:** a clinician who is also a
+  hospital admin sees both sides in one sidebar. The "Hospital admin"
+  group only appears with that role.
+- **Hospital admins are scoped to their hospital:** every staff and
+  usage call is filtered by the hospital in the session. The hospital
+  admin side never shows question text, results or patient details.
+- **Wrong-app 403s:** a platform admin signing in to the clinical app, or
+  a clinician or hospital admin signing in to the platform admin app, gets
+  a 403 page that links to the right app.
 - **Researcher** has no endpoints yet, so it has no app.
 
 ## 3. Repository layout
@@ -172,6 +204,11 @@ flowchart TD
     acct --> prof[Profile & security]
     acct --> mine[My corrections]
     acct --> help[Help & shortcuts]
+    home -->|hospital admin role| hstaff[Staff]
+    hstaff --> hinv[Invite staff]
+    hstaff --> hmem[Staff member panel]
+    home -->|hospital admin role| hset[Hospital settings]
+    home -->|hospital admin role| huse[Usage]
 ```
 
 Wireframe of the desktop layout:
@@ -325,9 +362,39 @@ sequenceDiagram
 Rejecting with a reason, withdrawing, and the "My corrections" list need
 new endpoints. They're listed in the design spec §10.
 
-## 5. Admin app (planned)
+### 4.7 Hospital admin side
 
-**Scope** comes from the backend's admin endpoints (API spec §4.1, §11).
+Designs: `design/v3/hospital-admin.html`.
+
+| Screen             | What it does                                                                                                                                                                       |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Staff              | Everyone at the hospital: roles, specialty, status, sign-in method, last active. Filters surface problems such as "2-step not set up"                                              |
+| Invite staff       | One person or a pasted list, with a role and a specialty. With hospital single sign-on they just sign in; otherwise they get an email invite (7 days) and go through first sign-in |
+| Staff member panel | Change roles and specialty, set who can review corrections, send a password reset, reset 2-step, deactivate. You can't remove your own admin role                                  |
+| Hospital settings  | Review turnaround and reviewer rules, 2-step policy for clinicians, idle timeout, "trust this device", and SSO status (read-only; Measured Health configures it)                   |
+| Usage              | Counts only: consultations, active clinicians, the confidence mix, agreement rate, review time and specialty breakdown. CSV export                                                 |
+
+```text
+┌────────────┬──────────────────────────────────────────────────────┐
+│ [M] logo   │ Staff · Havana Hospital                [＋ Invite]   │
+│ + New      ├──────────────────────────────────────────────────────┤
+│ ⇄ Review 3 │ ⌕ search   All 48 · Active 44 · Invited 2 · ⚠ 1      │
+│ HOSPITAL   │ NAME          ROLES             SPECIALTY  STATUS    │
+│ ADMIN      │ Dr. Reyes     Clinician·Admin   Int. Med   Active    │
+│ ☺ Staff    │ Dr. Mensah    Clinician         Cardiology ⚠ 2-step  │──► member panel
+│ ⚙ Settings │ Dr. Adeyemi   Clinician         Paeds      Invited   │
+│ ▤ Usage    │ …                                                    │
+│ TODAY …    │                                                      │
+│ DR Reyes   │                                                      │
+└────────────┴──────────────────────────────────────────────────────┘
+```
+
+Every hospital admin action is written to the audit log with the actor
+and the hospital.
+
+## 5. Platform admin app (planned)
+
+This app is for Measured Health staff. **Scope** comes from the backend's admin endpoints (API spec §4.1, §11).
 Every admin action is audited.
 
 | Area                              | Endpoints                                         | Who            |
@@ -370,8 +437,8 @@ Every admin action is audited.
 
 ```mermaid
 flowchart LR
-    u1([Clinicians]) --> cdn1["app.&lt;domain&gt;<br/>Clinical app"]
-    u2([Admins, auditors]) -->|VPN / allowlist| cdn2["admin.&lt;domain&gt;<br/>Admin app"]
+    u1([Clinicians, hospital admins]) --> cdn1["app.&lt;domain&gt;<br/>Clinical app"]
+    u2([Platform admins, auditors]) -->|VPN / allowlist| cdn2["admin.&lt;domain&gt;<br/>Platform admin app"]
     cdn1 --> api["api.&lt;domain&gt;/api/v1"]
     cdn2 --> api
 ```

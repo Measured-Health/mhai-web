@@ -1,4 +1,4 @@
-# 0002. Separate the clinical app and the admin app
+# 0002. Separate the clinical app and the platform admin app
 
 - **Status:** Proposed
 - **Date:** 2026-10-13
@@ -6,7 +6,7 @@
 
 ## Context
 
-The backend gives admins no clinical permissions and clinicians no admin
+The backend gives platform admins no clinical permissions and clinicians no admin
 permissions (mhai-multiagent API spec §5.4). Admin and auditor accounts
 need MFA. ADR 0001 expected an admin dashboard inside this app.
 
@@ -17,10 +17,20 @@ Putting both in one app would mean:
 - relying on route guards alone to keep each role out of the other's
   screens.
 
+There are two kinds of admin:
+
+- **Hospital admins** manage one hospital's staff and settings. They are
+  often clinicians themselves.
+- **Platform admins and auditors** are Measured Health staff who run the
+  service.
+
 ## Decision
 
-- Build the admin UI as a **separate Next.js app** in this repository.
-  It's deployed on its own origin (`admin.<domain>`), ideally behind a
+- **Hospital admin tools live in the clinical app,** as a sidebar section
+  shown only for the `hospital_admin` role. They're scoped to the user's
+  hospital and never show clinical content.
+- Build the **platform admin** UI as a **separate Next.js app** in this
+  repository. It's deployed on its own origin (`admin.<domain>`), ideally behind a
   VPN or IP allowlist.
 - When admin work starts, convert the repository to npm workspaces:
   `apps/clinical` (today's `app/`), `apps/admin`, and shared
