@@ -14,7 +14,7 @@ export const SOURCE_STATUS_TEXT: Record<SourceStatus, string> = {
 
 export interface ExportModel {
   /** Same wording as the screen banner (review and caution results). */
-  banner: string | null;
+  banner: { title: string; body: string } | null;
   title: string;
   icd10: string | null;
   /** Null for review results and when the API returned no score. */
@@ -33,7 +33,9 @@ export function toExportModel(
 ): ExportModel {
   const titles = view.sources.map((s) => s.title);
   return {
-    banner: view.banner?.title ?? null,
+    banner: view.banner
+      ? { title: view.banner.title, body: view.banner.body }
+      : null,
     title: view.title,
     icd10: view.icd10,
     confidence: view.kind === "review" ? null : view.confidence,

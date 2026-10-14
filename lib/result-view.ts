@@ -14,7 +14,8 @@ export interface ResultView {
   icd10: string | null;
   body: string;
   confidence: { label: string; bars: 1 | 2 | 3 | 4 | 5 } | null;
-  banner: { tone: "warn" | "bad"; title: string } | null;
+  /** Screen banner; exports reuse the same title and body. */
+  banner: { tone: "warn" | "bad"; title: string; body: string } | null;
   reducedAccuracy: boolean;
   claims: { verified: number; total: number };
   measures: { label: string; value: number }[]; // 0–1, only those the API returned
@@ -49,18 +50,32 @@ export function toResultView(r: ClinicalResultOut): ResultView {
         ? "caution"
         : "high";
 
+  const verified = r.citations.filter((c) => c.action === "PASS").length;
+  const open = r.citations.length - verified;
+
+  // Only ESCALATE says the evidence fell short. A degraded result needs review
+  // because checks ran in a reduced mode; that says nothing about the evidence.
   const banner: ResultView["banner"] =
     kind === "review"
       ? {
           tone: "bad",
           title:
             "This result needs clinician review before any clinical action is taken",
+          body:
+            r.decision === "ESCALATE"
+              ? "The evidence didn't support enough of this answer for the system to stand behind it."
+              : "Checks ran in a reduced mode, so this answer needs clinician review before use.",
         }
       : kind === "caution"
-        ? { tone: "warn", title: "Use with caution" }
+        ? {
+            tone: "warn",
+            title: "Use with caution",
+            body:
+              open > 0
+                ? `${open} recommendation${open === 1 ? "" : "s"} couldn't be matched to a guideline. Check before acting.`
+                : "Check this answer against your own judgement before acting.",
+          }
         : null;
-
-  const verified = r.citations.filter((c) => c.action === "PASS").length;
 
   const { l3_nli } = r.guardrail_details;
   const measures: ResultView["measures"] = [];

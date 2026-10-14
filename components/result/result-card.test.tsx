@@ -68,6 +68,20 @@ describe("ResultCard", () => {
     expect(screen.queryByRole("status", { name: /confidence/i })).toBeNull();
     expect(screen.queryByText(/High/)).toBeNull();
   });
+  it("degraded with all claims verified: the banner doesn't say the evidence failed", () => {
+    renderFor({ ...FIXTURES.high, degraded: true });
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Checks ran in a reduced mode, so this answer needs clinician review before use.",
+    );
+    expect(alert).not.toHaveTextContent(/evidence didn't support/);
+  });
+  it("escalated: keeps the evidence-failure copy", () => {
+    renderFor(FIXTURES.review);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The evidence didn't support enough of this answer",
+    );
+  });
   it("caution: shows the caution pill and banner", () => {
     renderFor(FIXTURES.caution);
     expect(

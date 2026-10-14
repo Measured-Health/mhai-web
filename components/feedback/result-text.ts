@@ -8,7 +8,7 @@ export function resultAsText(
 ): string {
   const m = toExportModel(view, parsed);
   const out: string[] = [];
-  if (m.banner) out.push(m.banner, "");
+  if (m.banner) out.push(m.banner.title, m.banner.body, "");
   out.push(m.icd10 ? `${m.title} (ICD-10 ${m.icd10})` : m.title);
   if (m.confidence) out.push(m.confidence.label);
   if (m.summary) out.push("", m.summary);

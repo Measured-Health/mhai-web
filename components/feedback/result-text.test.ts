@@ -24,6 +24,16 @@ describe("resultAsText", () => {
     expect(t).not.toContain("confidence");
     expect(t).toContain("[removed by safety checks]");
   });
+  it("uses the screen's banner copy: neutral for degraded, evidence-failure for escalated", () => {
+    const d = text({ ...FIXTURES.high, degraded: true });
+    expect(d).toContain(
+      "Checks ran in a reduced mode, so this answer needs clinician review before use.",
+    );
+    expect(d).not.toMatch(/evidence didn't support/);
+    expect(text(FIXTURES.review)).toContain(
+      "The evidence didn't support enough of this answer",
+    );
+  });
   it("keeps the caution banner when the score is null", () => {
     const t = text({ ...FIXTURES.caution, trust_score: null });
     expect(t).toContain("Use with caution");

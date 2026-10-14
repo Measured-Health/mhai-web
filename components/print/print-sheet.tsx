@@ -39,7 +39,10 @@ export function PrintSheet({
         </p>
       )}
       {m.banner && (
-        <p className="mt-3 border-2 border-black p-2 font-bold">{m.banner}</p>
+        <div className="mt-3 border-2 border-black p-2">
+          <p className="font-bold">{m.banner.title}</p>
+          <p>{m.banner.body}</p>
+        </div>
       )}
       <dl className="my-4 flex gap-6 text-xs">
         <div>

@@ -3,6 +3,11 @@ import type { ClinicalResultOut, Citation } from "./api/contract";
 import { FORBIDDEN_TERMS } from "./labels";
 import { toResultView } from "./result-view";
 
+const EVIDENCE_FAILED =
+  "The evidence didn't support enough of this answer for the system to stand behind it.";
+const REDUCED_MODE =
+  "Checks ran in a reduced mode, so this answer needs clinician review before use.";
+
 const cite = (
   action: Citation["action"],
   title = "AHA 2021 Chest Pain",
@@ -68,7 +73,47 @@ describe("toResultView", () => {
       tone: "bad",
       title:
         "This result needs clinician review before any clinical action is taken",
+      body: EVIDENCE_FAILED,
     });
+  });
+
+  it("degraded PASS: neutral review copy that doesn't claim the evidence failed", () => {
+    const v = toResultView(base({ degraded: true }));
+    expect(v.banner?.tone).toBe("bad");
+    expect(v.banner?.body).toBe(REDUCED_MODE);
+    expect(v.banner?.body).not.toMatch(/evidence/i);
+  });
+
+  it("degraded REGENERATE: needs review (not caution), no confidence, neutral copy", () => {
+    const v = toResultView(
+      base({ decision: "REGENERATE", degraded: true, trust_score: 0.42 }),
+    );
+    expect(v.kind).toBe("review");
+    expect(v.confidence).toBeNull();
+    expect(v.banner?.tone).toBe("bad");
+    expect(v.banner?.body).toBe(REDUCED_MODE);
+  });
+
+  it("ESCALATE + degraded: needs review, no confidence, evidence-failure copy", () => {
+    const v = toResultView(
+      base({ decision: "ESCALATE", degraded: true, trust_score: 0.9 }),
+    );
+    expect(v.kind).toBe("review");
+    expect(v.confidence).toBeNull();
+    expect(v.banner?.body).toBe(EVIDENCE_FAILED);
+  });
+
+  it("caution copy counts the unmatched recommendations", () => {
+    const one = toResultView(
+      base({ decision: "REGENERATE", citations: [cite("PASS"), cite("FLAG")] }),
+    );
+    expect(one.banner?.body).toBe(
+      "1 recommendation couldn't be matched to a guideline. Check before acting.",
+    );
+    const none = toResultView(base({ decision: "REGENERATE" }));
+    expect(none.banner?.body).toBe(
+      "Check this answer against your own judgement before acting.",
+    );
   });
 
   it("treats a degraded PASS as needs review (safety rule)", () => {
@@ -189,6 +234,7 @@ describe("toResultView", () => {
       .flatMap((v) => [
         v.title,
         v.banner?.title ?? "",
+        v.banner?.body ?? "",
         v.confidence?.label ?? "",
         ...v.measures.map((m) => m.label),
       ])

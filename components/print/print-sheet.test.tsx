@@ -46,6 +46,13 @@ describe("PrintSheet", () => {
     vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "false");
     expect(sheet(FIXTURES.high).container.textContent).not.toContain("Demo ·");
   });
+  it("prints the screen's banner copy: neutral for degraded results", () => {
+    const t = sheet({ ...FIXTURES.high, degraded: true }).container.textContent;
+    expect(t).toContain(
+      "Checks ran in a reduced mode, so this answer needs clinician review before use.",
+    );
+    expect(t).not.toMatch(/evidence didn't support/);
+  });
   it("keeps the caution banner when the score is null", () => {
     const t =
       sheet({ ...FIXTURES.caution, trust_score: null }).container.textContent ??
