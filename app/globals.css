@@ -135,3 +135,14 @@ body {
 .skeleton-shimmer {
   animation: sk calc(var(--t-story) * 2) linear infinite;
 }
+
+@keyframes ring {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
