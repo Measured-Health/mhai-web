@@ -1,6 +1,13 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type Ref,
+} from "react";
 import { ChevronDown, Copy, Hash, Printer } from "lucide-react";
 import { useEscape } from "@/lib/hooks/use-escape";
 import type { ResultView } from "@/lib/result-view";
@@ -9,14 +16,18 @@ import { Button } from "../ui/button";
 import { useToast } from "../ui/toast";
 import { resultAsText } from "./result-text";
 
+export type ExportMenuHandle = { copy(): void };
+
 export function ExportMenu({
   queryId,
   view,
   parsed,
+  ref: handle,
 }: {
   queryId: string;
   view: ResultView;
   parsed: ReturnType<typeof parseBody>;
+  ref?: Ref<ExportMenuHandle>;
 }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -61,6 +72,7 @@ export function ExportMenu({
       setCopied(true);
     close(open);
   };
+  useImperativeHandle(handle, () => ({ copy: () => void copyAll() }));
   const onMenuKey = (e: React.KeyboardEvent) => {
     const items = [
       ...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ??

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useCallback, useImperativeHandle, useState, type Ref } from "react";
 import { Check, PenLine } from "lucide-react";
 import { useFeedback } from "@/lib/queries";
 import type { ResultView } from "@/lib/result-view";
@@ -8,16 +8,20 @@ import { Banner } from "../ui/banner";
 import { Button } from "../ui/button";
 import { CorrectionForm } from "./correction-form";
 
+export type FeedbackBarHandle = { agree(): void; correct(): void };
+
 export function FeedbackBar({
   queryId,
   view,
   onDone,
   trailing,
+  ref,
 }: {
   queryId: string;
   view: ResultView;
   onDone?(k: "agree" | "correct"): void;
   trailing?: React.ReactNode;
+  ref?: Ref<FeedbackBarHandle>;
 }) {
   const fb = useFeedback();
   const session = useSession();
@@ -32,6 +36,36 @@ export function FeedbackBar({
       : sent === "agree" || sent === "reviewed"
         ? "agreed"
         : local;
+  const { mutate } = fb;
+  const { update } = session;
+  const agree = useCallback(() => {
+    mutate(
+      { query_id: queryId, action: "validate" },
+      {
+        onSuccess: () => {
+          update(queryId, {
+            agreedAt: Date.now(),
+            feedback: view.kind === "review" ? "reviewed" : "agree",
+          });
+          setMode("agreed");
+          onDone?.("agree");
+        },
+      },
+    );
+  }, [mutate, update, queryId, view.kind, onDone]);
+  const busy = fb.isPending;
+  useImperativeHandle(
+    ref,
+    () => ({
+      agree: () => {
+        if (mode === "idle" && !busy) agree();
+      },
+      correct: () => {
+        if (mode === "idle") setMode("correcting");
+      },
+    }),
+    [mode, busy, agree],
+  );
   const done = mode === "agreed" || mode === "corrected";
   const agreeLabel = view.kind === "review" ? "Mark as reviewed" : "I agree";
   return (
@@ -59,25 +93,7 @@ export function FeedbackBar({
           </Banner>
         </div>
       )}
-      <Button
-        variant="agree"
-        disabled={done || fb.isPending}
-        onClick={() =>
-          fb.mutate(
-            { query_id: queryId, action: "validate" },
-            {
-              onSuccess: () => {
-                session.update(queryId, {
-                  agreedAt: Date.now(),
-                  feedback: view.kind === "review" ? "reviewed" : "agree",
-                });
-                setMode("agreed");
-                onDone?.("agree");
-              },
-            },
-          )
-        }
-      >
+      <Button variant="agree" disabled={done || fb.isPending} onClick={agree}>
         <Check aria-hidden className="size-4" />
         {mode === "agreed" ? "Agreed" : agreeLabel}
       </Button>

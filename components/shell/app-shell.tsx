@@ -10,7 +10,10 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import { useShortcuts } from "@/lib/hooks/use-shortcuts";
 import { useSession } from "@/lib/session-store";
+import { CommandPalette } from "../utility/command-palette";
+import { ShortcutsDialog } from "../utility/shortcuts-dialog";
 import { DegradedStrip } from "../states/degraded-strip";
 import { OfflineStrip } from "../states/offline-strip";
 import { MobileDrawer } from "./mobile-drawer";
@@ -61,7 +64,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
     [router],
   );
-  const openSearch = useCallback(() => setSearchOpen(true), []);
+  // Close the mobile drawer first so two modals are never open together.
+  const openSearch = useCallback(() => {
+    setDrawer(false);
+    setSearchOpen(true);
+  }, []);
+  const [keysOpen, setKeysOpen] = useState(false);
+  useShortcuts({
+    "mod+k": openSearch,
+    "?": () => setKeysOpen(true),
+    n: () => navigate("/"),
+  });
   const ctx = useMemo<ShellCtx>(
     () => ({
       openDrawer: () => setDrawer(true),
@@ -99,6 +112,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         items={items}
         onOpenSearch={openSearch}
       />
+      <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <ShortcutsDialog open={keysOpen} onClose={() => setKeysOpen(false)} />
     </Ctx.Provider>
   );
 }

@@ -1,16 +1,17 @@
 "use client";
 import { notFound, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PanelRight } from "lucide-react";
 import type { Stage } from "@/lib/api/contract";
 import { HighlightProvider } from "@/lib/highlight";
 import { useNow } from "@/lib/hooks/use-now";
+import { useShortcuts } from "@/lib/hooks/use-shortcuts";
 import { useQueryStatus, useResult, useSubmitQuery } from "@/lib/queries";
 import { toResultView } from "@/lib/result-view";
 import { useSession } from "@/lib/session-store";
 import { EvidenceDock } from "../evidence/evidence-dock";
-import { ExportMenu } from "../feedback/export-menu";
-import { FeedbackBar } from "../feedback/feedback-bar";
+import { ExportMenu, type ExportMenuHandle } from "../feedback/export-menu";
+import { FeedbackBar, type FeedbackBarHandle } from "../feedback/feedback-bar";
 import { ProcessingView } from "../processing/processing-view";
 import { parseBody } from "../result/parse-body";
 import { ResultCard } from "../result/result-card";
@@ -48,6 +49,8 @@ export function ConsultationView({ id }: { id: string }) {
   const result = useResult(id, st.status === "completed");
   const resubmit = useSubmitQuery();
   const [panel, setPanel] = useState(true);
+  const fbRef = useRef<FeedbackBarHandle>(null);
+  const exRef = useRef<ExportMenuHandle>(null);
 
   const data = result.data;
   const view = useMemo(() => (data ? toResultView(data) : null), [data]);
@@ -58,6 +61,18 @@ export function ConsultationView({ id }: { id: string }) {
   const done = view !== null && parsed !== null;
   const failed = st.status === "failed" || st.stalled || result.isError;
   const diagnosis = data?.diagnosis ?? undefined;
+
+  useShortcuts(
+    done
+      ? {
+          e: () => setPanel((p) => !p),
+          a: () => fbRef.current?.agree(),
+          c: () => fbRef.current?.correct(),
+          "shift+c": () => exRef.current?.copy(),
+          "mod+p": () => router.push(`/print/${id}`),
+        }
+      : {},
+  );
 
   useEffect(() => {
     if (view)
@@ -125,10 +140,16 @@ export function ConsultationView({ id }: { id: string }) {
               parsed={parsed}
               actions={
                 <FeedbackBar
+                  ref={fbRef}
                   queryId={id}
                   view={view}
                   trailing={
-                    <ExportMenu queryId={id} view={view} parsed={parsed} />
+                    <ExportMenu
+                      ref={exRef}
+                      queryId={id}
+                      view={view}
+                      parsed={parsed}
+                    />
                   }
                 />
               }
