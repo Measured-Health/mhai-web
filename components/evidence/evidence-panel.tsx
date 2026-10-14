@@ -20,6 +20,7 @@ function Ci({ tone }: { tone: "ok" | "warn" | "bad" }) {
   return (
     <span
       aria-hidden
+      data-tone={tone}
       className={cn(
         "grid size-[22px] shrink-0 place-items-center rounded-[7px]",
         tone === "ok"
@@ -39,15 +40,15 @@ const H3 =
 
 export function SafetyChecks({ view }: { view: ResultView }) {
   const { verified, total } = view.claims;
-  // Nothing checked is not an all-clear.
+  // Nothing checked is not an all-clear, and neither is a review result.
   const tone =
     total === 0
       ? "warn"
-      : verified === total
-        ? "ok"
-        : verified / total >= 0.5
-          ? "warn"
-          : "bad";
+      : verified / total < 0.5
+        ? "bad"
+        : verified === total && view.kind !== "review"
+          ? "ok"
+          : "warn";
   const open = total - verified;
   return (
     <section aria-label="Safety checks">
@@ -56,10 +57,12 @@ export function SafetyChecks({ view }: { view: ResultView }) {
         <Ci tone="ok" />
         Patient data protected
       </p>
-      <p className="flex items-center gap-2.5 py-1.5 text-[13px]">
-        <Ci tone={view.kind === "review" ? "warn" : "ok"} />
-        Consistent reasoning
-      </p>
+      {view.stability !== null && (
+        <p className="flex items-center gap-2.5 py-1.5 text-[13px]">
+          <Ci tone={view.kind === "review" ? "warn" : "ok"} />
+          Consistent reasoning
+        </p>
+      )}
       <p className="flex items-center gap-2.5 py-1.5 text-[13px]">
         <Ci tone={tone} />
         <span>

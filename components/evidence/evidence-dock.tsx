@@ -33,7 +33,8 @@ export function EvidenceDock({
   const tab = tabs.includes(picked) ? picked : "Checks";
 
   const { verified, total } = view.claims;
-  const ok = total > 0 && verified === total;
+  // A review result never shows a green all-clear, even if every claim passed.
+  const ok = view.kind !== "review" && total > 0 && verified === total;
   const n = view.sources.length;
 
   const onKey = (e: KeyboardEvent, i: number) => {
@@ -70,6 +71,7 @@ export function EvidenceDock({
       >
         <span
           aria-hidden
+          data-tone={ok ? "ok" : "warn"}
           className={cn(
             "grid size-[26px] place-items-center rounded-lg",
             ok ? "bg-ok-wash text-ok" : "bg-warn-wash text-warn",

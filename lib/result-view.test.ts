@@ -89,6 +89,13 @@ describe("toResultView", () => {
     expect(v.title).toBe("Clinical assessment");
   });
 
+  it("exposes answer stability only when the API returned it", () => {
+    expect(toResultView(base()).stability).toBeNull();
+    const withStability = base();
+    withStability.guardrail_details.l2_entropy = { stability: 0.61 };
+    expect(toResultView(withStability).stability).toBe(0.61);
+  });
+
   it("only returns confidence bars the API provided", () => {
     const v = toResultView(base());
     expect(v.measures.map((m) => m.label)).toEqual(["Evidence match"]);

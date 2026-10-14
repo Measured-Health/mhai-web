@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ClinicalResultOut } from "@/lib/api/contract";
 import { FIXTURES } from "@/lib/api/fixtures";
 import { toResultView } from "@/lib/result-view";
@@ -17,6 +17,13 @@ const renderFor = (r: ClinicalResultOut) =>
       />
     </HighlightProvider>,
   );
+
+const realClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+afterEach(() => {
+  if (realClipboard)
+    Object.defineProperty(navigator, "clipboard", realClipboard);
+  else delete (navigator as { clipboard?: unknown }).clipboard;
+});
 
 describe("ResultCard", () => {
   it("high: pill, diagnosis, ICD chip, cited steps, time and disclaimer", () => {

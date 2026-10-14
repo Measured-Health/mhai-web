@@ -18,6 +18,7 @@ export interface ResultView {
   reducedAccuracy: boolean;
   claims: { verified: number; total: number };
   measures: { label: string; value: number }[]; // 0–1, only those the API returned
+  stability: number | null; // 0–1 answer stability, null when the API didn't return it
   sources: {
     title: string;
     status: SourceStatus;
@@ -102,6 +103,7 @@ export function toResultView(r: ClinicalResultOut): ResultView {
     reducedAccuracy: !r.guardrail_details.l3_nli.model_loaded,
     claims: { verified, total: r.citations.length },
     measures,
+    stability: r.guardrail_details.l2_entropy?.stability ?? null,
     sources: [...byTitle.values()],
     seconds: ((r.retrieval_ms + r.generation_ms) / 1000).toFixed(1),
   };

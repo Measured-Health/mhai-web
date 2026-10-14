@@ -43,6 +43,28 @@ describe("EvidencePanel", () => {
       screen.getByText("1 recommendation needs review"),
     ).toBeInTheDocument();
   });
+  it("omits 'Consistent reasoning' when the API returned no stability", () => {
+    panel(FIXTURES.high);
+    expect(screen.queryByText("Consistent reasoning")).toBeNull();
+  });
+  it("shows 'Consistent reasoning' when stability is present", () => {
+    panel({
+      ...FIXTURES.high,
+      guardrail_details: {
+        ...FIXTURES.high.guardrail_details,
+        l2_entropy: { stability: 0.8 },
+      },
+    });
+    expect(screen.getByText("Consistent reasoning")).toBeInTheDocument();
+  });
+  it("review with every claim verified: claims line is not green", () => {
+    panel({ ...FIXTURES.high, degraded: true });
+    const line = screen.getByText("4 of 4 claims verified").closest("p")!;
+    expect(line.querySelector("[data-tone]")).not.toHaveAttribute(
+      "data-tone",
+      "ok",
+    );
+  });
   it("renders every measure the API returned, and only those", () => {
     panel({
       ...FIXTURES.high,
@@ -140,6 +162,19 @@ describe("EvidenceDock", () => {
     fireEvent.keyDown(tabs[1], { key: "ArrowLeft" });
     fireEvent.keyDown(tabs[0], { key: "ArrowLeft" });
     expect(tabs[2]).toHaveAttribute("aria-selected", "true");
+  });
+  it("review with every claim verified: summary bar is not green", () => {
+    dock({ ...FIXTURES.high, degraded: true });
+    const bar = screen.getByRole("button", { name: /Evidence & safety/ });
+    expect(bar.querySelector("[data-tone]")).not.toHaveAttribute(
+      "data-tone",
+      "ok",
+    );
+  });
+  it("high with every claim verified: summary bar is green", () => {
+    dock(FIXTURES.high);
+    const bar = screen.getByRole("button", { name: /Evidence & safety/ });
+    expect(bar.querySelector("[data-tone]")).toHaveAttribute("data-tone", "ok");
   });
   it("review: no 'Why this confidence' tab", () => {
     dock(FIXTURES.review);
