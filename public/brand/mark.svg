@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 58 52" role="img" aria-label="Measured Health">
+  <defs>
+    <linearGradient id="mh-mark" x1="0" x2="1">
+      <stop offset=".5" stop-color="#15999E"/>
+      <stop offset=".75" stop-color="#5A3A78"/>
+      <stop offset="1" stop-color="#6B2A68"/>
+    </linearGradient>
+  </defs>
+  <path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mh-mark)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
