@@ -29,6 +29,7 @@ const STEP_OF: Record<keyof FormValues, 0 | 1 | 2> = {
   specialty: 2,
   history: 2,
 };
+const shakeCleanup = new WeakMap<HTMLElement, () => void>();
 const input =
   "w-full rounded-xl border bg-white px-3.5 py-2.5 text-[15px] outline-none transition-shadow duration-[var(--t-fast)] focus:border-mint focus:ring-4 focus:ring-mint/15";
 const bad = "border-bad ring-4 ring-bad/10";
@@ -121,15 +122,22 @@ export function ConsultationForm({
     for (const k of keys) {
       const el = formRef.current?.querySelector<HTMLElement>(`#f-${k}`);
       if (!el) continue;
+      shakeCleanup.get(el)?.(); // drop the previous replay's listener and timer
       el.classList.remove("shake-once");
       void el.offsetWidth; // reflow so the animation restarts
       el.classList.add("shake-once");
-      const done = (e: AnimationEvent) => {
-        if (e.animationName !== "shake") return;
+      const clear = () => {
         el.classList.remove("shake-once");
-        el.removeEventListener("animationend", done);
+        el.removeEventListener("animationend", onEnd);
+        clearTimeout(timer);
       };
-      el.addEventListener("animationend", done);
+      const onEnd = (e: AnimationEvent) => {
+        if (e.animationName === "shake") clear();
+      };
+      el.addEventListener("animationend", onEnd, { once: true });
+      // Fallback if animationend never fires (reduced motion, hidden step).
+      const timer = setTimeout(clear, 600);
+      shakeCleanup.set(el, clear);
     }
   };
 

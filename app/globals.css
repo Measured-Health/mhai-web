@@ -105,9 +105,18 @@ body {
   .reveal > * {
     animation: none;
   }
+  .shake-once {
+    animation: none;
+  }
   .draw-once path {
     animation: none;
     stroke-dashoffset: 0;
+  }
+  /* The blanket * rule does not reach the view-transition pseudo-elements. */
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }
 

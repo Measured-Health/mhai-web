@@ -27,10 +27,28 @@ const ALLOWED_LITERALS: { file: string; hit: string }[] = [
 ];
 
 const PATTERNS: RegExp[] = [
+  // Tailwind: animate-[name_<n>s], duration-<n>, delay-<n>, and arbitrary
+  // duration-[..] / delay-[..] unless they take a --t-* token.
   /animate-\[[^\]]*?_\d+(?:\.\d+)?m?s/g,
-  /duration-\d/g,
-  /(?:animation|transition)(?:-delay)?\s*:[^;{}]*?\d+(?:\.\d+)?m?s\b/g,
+  /(?<!\w)(?:duration|delay)-(?:\d|\[(?!var\(--t-))/g,
+  // CSS declarations with a literal time (shorthand, -duration and -delay).
+  /(?:animation|transition)(?:-duration|-delay)?\s*:[^;{}]*?\d+(?:\.\d+)?m?s\b/g,
+  // Inline styles in TSX that are not a var(...) token.
+  /(?:animationDuration|animationDelay|transitionDuration|transitionDelay)\s*:\s*(?!["'`]?var\()[^,}\s]+/g,
 ];
+
+/** The reduced-motion block legitimately uses 1ms; strip it before scanning. */
+function stripReduceBlock(text: string): string {
+  const start = text.indexOf("@media (prefers-reduced-motion: reduce)");
+  if (start < 0) return text;
+  let depth = 0;
+  for (let i = text.indexOf("{", start); i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    if (text[i] === "}" && --depth === 0)
+      return text.slice(0, start) + text.slice(i + 1);
+  }
+  return text;
+}
 
 describe("motion", () => {
   it("defines the motion classes in globals.css", () => {
@@ -64,6 +82,18 @@ describe("motion", () => {
     );
   });
 
+  it("turns off view transitions, shake and draw under reduced motion", () => {
+    const m = css.match(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/,
+    );
+    const block = m?.[0] ?? "";
+    expect(block).toMatch(
+      /::view-transition-group\(\*\),\s*::view-transition-old\(\*\),\s*::view-transition-new\(\*\)\s*\{\s*animation: none !important;/,
+    );
+    expect(block).toMatch(/\.shake-once\s*\{\s*animation: none/);
+    expect(block).toMatch(/\.draw-once path\s*\{\s*animation: none/);
+  });
+
   it("only fades whole blocks in .reveal, never text inside them", () => {
     expect(css).not.toMatch(/\.reveal\s+[a-z*.]/);
     expect(css).not.toMatch(/\.reveal\s*>\s*\*\s*[>\s]\s*[a-z*.]/);
@@ -83,7 +113,7 @@ describe("motion", () => {
   it("uses only the motion tokens for animation and transition durations", () => {
     const offenders: string[] = [];
     for (const f of SRC) {
-      const text = readFileSync(f, "utf8");
+      const text = stripReduceBlock(readFileSync(f, "utf8"));
       for (const re of PATTERNS)
         for (const m of text.matchAll(re)) {
           const hit = m[0];

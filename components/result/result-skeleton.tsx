@@ -12,6 +12,7 @@ export function ResultSkeleton() {
   if (!show) return null;
   return (
     <div
+      role="status"
       aria-busy="true"
       aria-label="Loading result"
       className="card-v3 mx-auto max-w-[700px] p-6"
