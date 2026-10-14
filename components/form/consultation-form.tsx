@@ -177,7 +177,9 @@ export function ConsultationForm({
       onKeyDown={(e) => {
         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
           e.preventDefault();
-          submit();
+          // Through the submit event, so a symptom committed in this same
+          // keydown (SymptomInput, flushSync) is read from the fresh state.
+          formRef.current?.requestSubmit();
         }
       }}
     >

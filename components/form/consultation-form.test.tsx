@@ -140,4 +140,48 @@ describe("ConsultationForm focus and symptom rules", () => {
       "shake-once",
     );
   });
+
+  async function fillValid(user: ReturnType<typeof userEvent.setup>) {
+    await fillStepZero(user);
+    await user.type(
+      screen.getByLabelText(/Presenting symptoms/),
+      "Chest pain{Enter}",
+    );
+    await user.type(
+      screen.getByLabelText(/Clinical question/),
+      "Chest pain 40 min, BP 150/95. Diagnosis?",
+    );
+  }
+
+  it("⌘/Ctrl+Enter commits a typed-but-not-added symptom before submitting", async () => {
+    const user = userEvent.setup({ delay: null });
+    const onSubmit = vi.fn();
+    render(<ConsultationForm onSubmit={onSubmit} />);
+    await fillValid(user);
+    const box = screen.getByLabelText(/Presenting symptoms/);
+    await user.click(box);
+    await user.keyboard("Haemoptysis");
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][0].patient_data.symptoms).toEqual([
+      "Chest pain",
+      "Haemoptysis",
+    ]);
+  });
+
+  it("⌘/Ctrl+Enter blocks submit and says why when the typed symptom can't be added", async () => {
+    const user = userEvent.setup({ delay: null });
+    const onSubmit = vi.fn();
+    render(<ConsultationForm onSubmit={onSubmit} />);
+    await fillValid(user);
+    const box = screen.getByLabelText(/Presenting symptoms/);
+    await user.click(box);
+    await user.paste("x".repeat(201));
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(box).toHaveValue("x".repeat(201));
+    expect(
+      screen.getByText("Keep each symptom to 200 characters or fewer"),
+    ).toBeInTheDocument();
+  });
 });

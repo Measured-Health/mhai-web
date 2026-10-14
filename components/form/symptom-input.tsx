@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 const SUGGEST = [
   "Shortness of breath",
@@ -27,19 +28,28 @@ export function SymptomInput({
   const [msg, setMsg] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   // Returns true when added. On failure the draft is kept and a message shown.
-  const add = (s: string, fromDraft: boolean) => {
+  const add = (s: string, fromDraft: boolean): boolean => {
     const t = s.trim();
     if (!t) {
       if (fromDraft) setDraft("");
-      return;
+      return false;
     }
-    if (t.length > 200)
-      return setMsg("Keep each symptom to 200 characters or fewer");
-    if (value.includes(t)) return setMsg("Already added");
-    if (value.length >= 20) return setMsg("Up to 20 symptoms");
+    if (t.length > 200) {
+      setMsg("Keep each symptom to 200 characters or fewer");
+      return false;
+    }
+    if (value.includes(t)) {
+      setMsg("Already added");
+      return false;
+    }
+    if (value.length >= 20) {
+      setMsg("Up to 20 symptoms");
+      return false;
+    }
     onChange([...value, t]);
     setMsg("");
     if (fromDraft) setDraft("");
+    return true;
   };
   return (
     <div>
@@ -80,6 +90,24 @@ export function SymptomInput({
             setMsg("");
           }}
           onKeyDown={(e) => {
+            // ⌘/Ctrl+Enter submits the form: commit the typed symptom first
+            // (synchronously, so the form submits with it). If it can't be
+            // added, the draft and its message stay and the submit is blocked.
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && draft.trim()) {
+              let added = false;
+              flushSync(() => {
+                added = value.includes(draft.trim()) || add(draft, true);
+                if (added) {
+                  setDraft("");
+                  setMsg("");
+                }
+              });
+              if (!added) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+              return;
+            }
             if (
               (e.key === "Enter" || e.key === ",") &&
               !e.metaKey &&
