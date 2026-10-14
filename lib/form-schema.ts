@@ -37,7 +37,7 @@ export const consultationSchema = z.object({
         .string()
         .trim()
         .min(1)
-        .max(200, "Keep each symptom under 200 characters"),
+        .max(200, "Keep each symptom to 200 characters or fewer"),
     )
     .min(1, "Add at least one symptom")
     .max(20, "Up to 20 symptoms"),

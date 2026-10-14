@@ -2,13 +2,17 @@ import { cn } from "../ui/cn";
 
 export function Segmented<T extends string>({
   name,
-  label,
+  labelledBy,
+  invalid,
+  describedBy,
   value,
   options,
   onChange,
 }: {
   name: string;
-  label: string;
+  labelledBy: string;
+  invalid?: boolean;
+  describedBy?: string;
   value: T | "";
   options: { value: T; label: string }[];
   onChange(v: T): void;
@@ -16,7 +20,9 @@ export function Segmented<T extends string>({
   return (
     <div
       role="radiogroup"
-      aria-label={label}
+      aria-labelledby={labelledBy}
+      aria-invalid={invalid || undefined}
+      aria-describedby={describedBy}
       className="flex gap-1 rounded-xl bg-lilac p-1"
     >
       {options.map((o) => (

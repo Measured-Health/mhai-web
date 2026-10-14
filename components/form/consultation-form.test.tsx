@@ -65,3 +65,58 @@ describe("ConsultationForm", () => {
     expect(onDirty).toHaveBeenLastCalledWith(true);
   });
 });
+
+describe("ConsultationForm focus and symptom rules", () => {
+  async function fillStepZero(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText(/Age/), "54");
+    await user.click(screen.getByRole("radio", { name: "Male" }));
+    await user.click(screen.getByRole("radio", { name: /Urgent/ }));
+  }
+
+  it("switches to the step of the first error and focuses it", async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<ConsultationForm onSubmit={vi.fn()} />);
+    await fillStepZero(user);
+    await user.click(screen.getByRole("button", { name: /Analyse/ }));
+    const symptoms = screen.getByLabelText(/Presenting symptoms/);
+    expect(symptoms).toHaveFocus();
+    expect(symptoms.closest("fieldset")).not.toHaveClass("max-md:hidden");
+    expect(symptoms).toHaveAttribute("aria-invalid", "true");
+    expect(symptoms).toHaveAttribute("aria-describedby", "e-symptoms");
+  });
+
+  it("moves focus when a summary link is activated", async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<ConsultationForm onSubmit={vi.fn()} />);
+    await user.type(screen.getByLabelText(/Age/), "154");
+    await user.click(screen.getByRole("button", { name: /Analyse/ }));
+    await user.click(screen.getByRole("link", { name: /Clinical question/ }));
+    const q = screen.getByLabelText(/Clinical question/);
+    expect(q).toHaveFocus();
+    expect(q.closest("fieldset")).not.toHaveClass("max-md:hidden");
+    await user.click(screen.getByRole("link", { name: /^Sex/ }));
+    expect(screen.getByRole("radio", { name: "Male" })).toHaveFocus();
+    expect(screen.getByRole("radiogroup", { name: "Sex" })).toBeInTheDocument();
+  });
+
+  it("keeps the draft and says why at 20 symptoms, duplicates, and 200+ chars", async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<ConsultationForm onSubmit={vi.fn()} />);
+    const box = screen.getByLabelText(/Presenting symptoms/);
+    await user.type(box, "Fever{Enter}Fever{Enter}");
+    expect(box).toHaveValue("Fever");
+    expect(screen.getByText("Already added")).toBeInTheDocument();
+    await user.clear(box);
+    await user.type(box, "x".repeat(201));
+    await user.keyboard("{Enter}");
+    expect(box).toHaveValue("x".repeat(201));
+    expect(
+      screen.getByText("Keep each symptom to 200 characters or fewer"),
+    ).toBeInTheDocument();
+    await user.clear(box);
+    for (let i = 0; i < 19; i++) await user.type(box, `s${i}{Enter}`);
+    await user.type(box, "extra{Enter}");
+    expect(box).toHaveValue("extra");
+    expect(screen.getByText("Up to 20 symptoms")).toBeInTheDocument();
+  });
+});

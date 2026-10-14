@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { Send } from "lucide-react";
 import type { QueryCreateIn } from "@/lib/api/contract";
 import { emptyForm, validate, type FormValues } from "@/lib/form-schema";
@@ -39,7 +40,9 @@ function Field({
   error,
   children,
   hint,
+  group,
 }: {
+  group?: boolean;
   id: string;
   label: string;
   required?: boolean;
@@ -50,7 +53,8 @@ function Field({
   return (
     <div id={`f-${id}`}>
       <label
-        htmlFor={id}
+        id={`l-${id}`}
+        htmlFor={group ? undefined : id}
         className="mb-1.5 flex justify-between text-[12.5px] text-ink-2"
       >
         <span>{label}</span>
@@ -62,7 +66,10 @@ function Field({
       </label>
       {children}
       {error && (
-        <p className="mt-1.5 animate-[fadeUp_var(--t-fast)_var(--e-out)_both] text-[12.5px] text-bad">
+        <p
+          id={`e-${id}`}
+          className="mt-1.5 animate-[fadeUp_var(--t-fast)_var(--e-out)_both] text-[12.5px] text-bad"
+        >
           ✕ {error}
         </p>
       )}
@@ -101,15 +108,26 @@ export function ConsultationForm({
       onSubmit(r.data);
       return;
     }
-    setErrors(r.errors);
     const first = (Object.keys(LABELS) as (keyof FormValues)[]).find(
       (k) => r.errors[k],
     )!;
-    setStep(STEP_OF[first]);
-    // Groups are hidden with CSS only, so the field is already in the DOM.
+    focusField(first, r.errors);
+  };
+
+  // Reveal the field's step synchronously, then focus it. Without flushSync
+  // the group would still be display:none (mobile) when focus() runs.
+  const focusField = (
+    k: keyof FormValues,
+    nextErrors: Partial<Record<keyof FormValues, string>> = errors,
+  ) => {
+    flushSync(() => {
+      setErrors(nextErrors);
+      setStep(STEP_OF[k]);
+      if (k === "history") setMoreOpen(true);
+    });
     formRef.current
       ?.querySelector<HTMLElement>(
-        `#${first}, #f-${first} [role=radio], #f-${first} button`,
+        `#${k}, #f-${k} [role=radio], #f-${k} button`,
       )
       ?.focus();
   };
@@ -147,7 +165,11 @@ export function ConsultationForm({
           />
         ))}
       </div>
-      <ErrorSummary errors={errors} labels={LABELS} />
+      <ErrorSummary
+        errors={errors}
+        labels={LABELS}
+        onSelect={(k) => focusField(k as keyof FormValues)}
+      />
 
       <fieldset className={group(0)}>
         <legend className="mb-3 flex items-baseline gap-2.5">
@@ -161,6 +183,8 @@ export function ConsultationForm({
             <input
               id="age"
               inputMode="numeric"
+              aria-invalid={errors.age ? true : undefined}
+              aria-describedby={errors.age ? "e-age" : undefined}
               value={v.age}
               onChange={(e) => set("age", e.target.value)}
               className={cn(
@@ -170,10 +194,12 @@ export function ConsultationForm({
               )}
             />
           </Field>
-          <Field id="sex" label="Sex" required error={errors.sex}>
+          <Field id="sex" label="Sex" required error={errors.sex} group>
             <Segmented
               name="sex"
-              label="Sex"
+              labelledBy="l-sex"
+              invalid={Boolean(errors.sex)}
+              describedBy={errors.sex ? "e-sex" : undefined}
               value={v.sex}
               onChange={(x) => set("sex", x)}
               options={[
@@ -186,8 +212,16 @@ export function ConsultationForm({
           </Field>
         </div>
         <div className="mt-3.5">
-          <Field id="urgency" label="Priority" required error={errors.urgency}>
+          <Field
+            id="urgency"
+            label="Priority"
+            required
+            error={errors.urgency}
+            group
+          >
             <PriorityPicker
+              invalid={Boolean(errors.urgency)}
+              describedBy={errors.urgency ? "e-urgency" : undefined}
               value={v.urgency}
               onChange={(x) => set("urgency", x)}
             />
@@ -213,6 +247,7 @@ export function ConsultationForm({
             value={v.symptoms}
             onChange={(x) => set("symptoms", x)}
             invalid={Boolean(errors.symptoms)}
+            describedBy={errors.symptoms ? "e-symptoms" : undefined}
           />
         </Field>
         <div className="mt-3.5">
@@ -238,6 +273,8 @@ export function ConsultationForm({
             <textarea
               id="question"
               rows={5}
+              aria-invalid={errors.question ? true : undefined}
+              aria-describedby={errors.question ? "e-question" : undefined}
               value={v.question}
               onChange={(e) => set("question", e.target.value)}
               className={cn(
@@ -287,6 +324,8 @@ export function ConsultationForm({
               <textarea
                 id="history"
                 rows={3}
+                aria-invalid={errors.history ? true : undefined}
+                aria-describedby={errors.history ? "e-history" : undefined}
                 value={v.history}
                 onChange={(e) => set("history", e.target.value)}
                 className={cn(input, "border-lilac-2")}

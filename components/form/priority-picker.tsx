@@ -10,14 +10,20 @@ const OPTS: { value: Urgency; label: string; hint: string; dot: string }[] = [
 export function PriorityPicker({
   value,
   onChange,
+  invalid,
+  describedBy,
 }: {
+  invalid?: boolean;
+  describedBy?: string;
   value: Urgency | "";
   onChange(v: Urgency): void;
 }) {
   return (
     <div
       role="radiogroup"
-      aria-label="Priority"
+      aria-labelledby="l-urgency"
+      aria-invalid={invalid || undefined}
+      aria-describedby={describedBy}
       className="grid grid-cols-3 gap-2"
     >
       {OPTS.map((o) => (

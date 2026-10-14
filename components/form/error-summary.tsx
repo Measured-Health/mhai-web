@@ -1,7 +1,9 @@
 export function ErrorSummary({
   errors,
   labels,
+  onSelect,
 }: {
+  onSelect(key: string): void;
   errors: Record<string, string | undefined>;
   labels: Record<string, string>;
 }) {
@@ -19,7 +21,14 @@ export function ErrorSummary({
       {keys.map((k, i) => (
         <span key={k}>
           {i > 0 && " · "}
-          <a href={`#f-${k}`} className="underline">
+          <a
+            href={`#f-${k}`}
+            className="inline-block py-1 underline"
+            onClick={(e) => {
+              e.preventDefault();
+              onSelect(k);
+            }}
+          >
             {labels[k]}: {errors[k]}
           </a>
         </span>
