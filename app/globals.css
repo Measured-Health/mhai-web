@@ -169,3 +169,13 @@ body {
     width: 0;
   }
 }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+  body {
+    background: #fff;
+  }
+}

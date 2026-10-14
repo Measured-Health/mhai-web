@@ -1,0 +1,77 @@
+import { render } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ClinicalResultOut, QueryCreateIn } from "@/lib/api/contract";
+import { FIXTURES } from "@/lib/api/fixtures";
+import { FORBIDDEN_TERMS } from "@/lib/labels";
+import { toResultView } from "@/lib/result-view";
+import { parseBody } from "../result/parse-body";
+import { PrintSheet } from "./print-sheet";
+
+const query = {
+  question: "q",
+  urgency: "routine",
+  patient_data: { age: 54, sex: "male", symptoms: ["chest pain"] },
+} as unknown as QueryCreateIn;
+
+const sheet = (r: ClinicalResultOut, agreedAt?: number) =>
+  render(
+    <PrintSheet
+      view={toResultView(r)}
+      parsed={parseBody(r.response_text, r.citations)}
+      query={query}
+      agreedAt={agreedAt}
+      printedAt="now"
+    />,
+  );
+
+afterEach(() => vi.unstubAllEnvs());
+
+describe("PrintSheet", () => {
+  it("adds no clinician name", () => {
+    const { container } = sheet(FIXTURES.high);
+    expect(container.textContent).not.toMatch(/Requested by|Reyes|Havana/);
+  });
+  it("shows the clinician-agreed footer only when agreedAt is set", () => {
+    expect(sheet(FIXTURES.high).container.textContent).not.toContain(
+      "Clinician agreed",
+    );
+    const { container } = sheet(FIXTURES.high, 1_700_000_000_000);
+    expect(container.textContent).toContain("Clinician agreed ·");
+  });
+  it("shows the demo line only while mock mode is on", () => {
+    vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "true");
+    expect(sheet(FIXTURES.high).container.textContent).toContain(
+      "Demo · sample data, not for clinical use",
+    );
+    vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "false");
+    expect(sheet(FIXTURES.high).container.textContent).not.toContain("Demo ·");
+  });
+  it("review: banner and no confidence; null score: no confidence; null icd: no ICD", () => {
+    const rev = sheet(FIXTURES.review).container.textContent ?? "";
+    expect(rev).toContain("NEEDS CLINICIAN REVIEW");
+    expect(rev).not.toMatch(/confidence/i);
+    const none =
+      sheet({ ...FIXTURES.high, trust_score: null, icd10_code: null }).container
+        .textContent ?? "";
+    expect(none).not.toMatch(/confidence/i);
+    expect(none).not.toContain("ICD-10");
+  });
+  it("shows consistent reasoning only with stability", () => {
+    expect(sheet(FIXTURES.high).container.textContent).not.toMatch(
+      /consistent reasoning/i,
+    );
+    const r: ClinicalResultOut = {
+      ...FIXTURES.high,
+      guardrail_details: {
+        ...FIXTURES.high.guardrail_details,
+        l2_entropy: { stability: 0.9 },
+      },
+    };
+    expect(sheet(r).container.textContent).toMatch(/consistent reasoning/i);
+  });
+  it.each(Object.entries(FIXTURES))("uses no forbidden words (%s)", (_k, r) => {
+    const t = sheet(r).container.textContent ?? "";
+    for (const term of FORBIDDEN_TERMS)
+      expect(t).not.toMatch(new RegExp(`\\b${term}\\b`, "i"));
+  });
+});

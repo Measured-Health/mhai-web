@@ -18,6 +18,8 @@ export interface SessionItem {
   createdAt: number;
   kind?: ResultKind | "failed";
   flagged?: boolean;
+  /** Epoch ms when the clinician agreed with (or reviewed) the result. */
+  agreedAt?: number;
   /** Primary diagnosis text, set once a result is loaded; searched by history. */
   diagnosis?: string;
   query: QueryCreateIn;
