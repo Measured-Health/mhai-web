@@ -12,11 +12,16 @@ const ORDER: Stage[] = [
   "decision",
 ];
 
+// Whole words only, so everyday clinical wording ("heart failure", "review
+// his medications") gets the normal demo result.
+const has = (t: string, ...words: string[]) =>
+  words.some((w) => new RegExp(`\\b${w}\\b`, "i").test(t));
+
 export function pickScenario(q: QueryCreateIn): Scenario {
-  const t = q.clinical_question.toLowerCase();
-  if (t.includes("fail")) return "failed";
-  if (t.includes("potassium") || t.includes("review")) return "review";
-  if (t.includes("fever") || t.includes("dengue")) return "caution";
+  const t = q.clinical_question;
+  if (has(t, "fail")) return "failed";
+  if (has(t, "potassium")) return "review";
+  if (has(t, "fever", "dengue")) return "caution";
   return "high";
 }
 

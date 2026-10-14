@@ -33,9 +33,12 @@ cp .env.example .env.local   # sets NEXT_PUBLIC_USE_MOCK=true
 npm run dev
 ```
 
-The question text picks the mock result: "fever" gives Use with caution,
-"potassium" gives Needs review, "fail" gives Couldn't complete, and
-anything else gives High confidence. A result arrives after about 9 seconds.
+The question text picks the mock result. Words match whole, in any case:
+"fever" or "dengue" gives Use with caution, "potassium" gives Needs
+review, "fail" (for example "Please fail this request") gives Couldn't
+complete, and anything else gives High confidence. "Heart failure" or
+"review his medications" get the normal High confidence result. A result
+arrives after about 9 seconds.
 
 ### Share the demo
 

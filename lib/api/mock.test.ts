@@ -18,6 +18,15 @@ describe("mock client", () => {
     expect(pickScenario(q("please fail"))).toBe("failed");
   });
 
+  it("matches whole words only, so everyday clinical wording stays high", () => {
+    expect(pickScenario(q("heart failure, worsening oedema"))).toBe("high");
+    expect(pickScenario(q("renal failure or failure to thrive?"))).toBe("high");
+    expect(pickScenario(q("review his medications"))).toBe("high");
+    expect(pickScenario(q("Please FAIL this request."))).toBe("failed");
+    expect(pickScenario(q("Potassium 2.9 on routine bloods"))).toBe("review");
+    expect(pickScenario(q("Fever for 3 days"))).toBe("caution");
+  });
+
   it("walks through stages, then completes with a result", async () => {
     let t = 0;
     const c = createMockClient({ stepMs: 10, now: () => t });
