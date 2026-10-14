@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -36,6 +37,15 @@ function Seed() {
   return null;
 }
 
+function Host({ r }: { r: typeof FIXTURES.high }) {
+  const [on, setOn] = useState(true);
+  return (
+    <>
+      <button onClick={() => setOn((o) => !o)}>toggle</button>
+      {on && <FeedbackBar queryId="q1" view={toResultView(r)} />}
+    </>
+  );
+}
 const ui = (r = FIXTURES.high) =>
   render(
     <QueryClientProvider client={new QueryClient()}>
@@ -102,6 +112,53 @@ describe("FeedbackBar", () => {
     expect(
       screen.getByRole("button", { name: /Mark as reviewed/ }),
     ).toBeInTheDocument();
+  });
+  it("stays disabled after the bar remounts (print round trip)", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SessionProvider>
+          <ToastProvider>
+            <Seed />
+            <Host r={FIXTURES.high} />
+          </ToastProvider>
+        </SessionProvider>
+      </QueryClientProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /I agree/ }));
+    await screen.findByText(/your agreement was recorded/);
+    await userEvent.click(screen.getByText("toggle"));
+    await userEvent.click(screen.getByText("toggle"));
+    expect(screen.getByRole("button", { name: /Agreed/ })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /Suggest correction/ }),
+    ).toBeDisabled();
+  });
+  it("stays disabled after a correction and a remount", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SessionProvider>
+          <ToastProvider>
+            <Seed />
+            <Host r={FIXTURES.caution} />
+          </ToastProvider>
+        </SessionProvider>
+      </QueryClientProvider>,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Suggest correction/ }),
+    );
+    await userEvent.type(
+      screen.getByLabelText(/What should the diagnosis/),
+      "Abc",
+    );
+    await userEvent.type(screen.getByLabelText(/Why\?/), "Because");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Submit correction" }),
+    );
+    await screen.findByText(/sent for review/);
+    await userEvent.click(screen.getByText("toggle"));
+    await userEvent.click(screen.getByText("toggle"));
+    expect(screen.getByRole("button", { name: /I agree/ })).toBeDisabled();
   });
   it("shows an error banner and stays retryable when feedback fails", async () => {
     send.mockRejectedValueOnce(new Error("network"));

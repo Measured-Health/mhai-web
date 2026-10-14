@@ -46,9 +46,33 @@ describe("PrintSheet", () => {
     vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "false");
     expect(sheet(FIXTURES.high).container.textContent).not.toContain("Demo ·");
   });
+  it("keeps the caution banner when the score is null", () => {
+    const t =
+      sheet({ ...FIXTURES.caution, trust_score: null }).container.textContent ??
+      "";
+    expect(t).toContain("Use with caution");
+  });
+  it("labels a review sign-off 'Clinician reviewed' and omits the line for corrections", () => {
+    const base = {
+      view: toResultView(FIXTURES.review),
+      parsed: parseBody(
+        FIXTURES.review.response_text,
+        FIXTURES.review.citations,
+      ),
+      query,
+      agreedAt: 1_700_000_000_000,
+      printedAt: "now",
+    };
+    const a = render(<PrintSheet {...base} feedback="reviewed" />);
+    expect(a.container.textContent).toContain("Clinician reviewed ·");
+    expect(a.container.textContent).not.toContain("Clinician agreed");
+    a.unmount();
+    const b = render(<PrintSheet {...base} feedback="correct" />);
+    expect(b.container.textContent).not.toMatch(/Clinician (agreed|reviewed)/);
+  });
   it("review: banner and no confidence; null score: no confidence; null icd: no ICD", () => {
     const rev = sheet(FIXTURES.review).container.textContent ?? "";
-    expect(rev).toContain("NEEDS CLINICIAN REVIEW");
+    expect(rev).toMatch(/needs clinician review/i);
     expect(rev).not.toMatch(/confidence/i);
     const none =
       sheet({ ...FIXTURES.high, trust_score: null, icd10_code: null }).container

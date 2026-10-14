@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ComponentProps } from "react";
 import { cn } from "./cn";
 
 const VARIANT = {
@@ -15,7 +15,7 @@ export function Button({
   size = "md",
   className,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
+}: ComponentProps<"button"> & {
   variant?: keyof typeof VARIANT;
   size?: "md" | "sm";
 }) {

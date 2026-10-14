@@ -2,8 +2,6 @@ import type { ResultView } from "@/lib/result-view";
 import { sourceStatus, type SourceStatus } from "@/lib/labels";
 import type { parseBody } from "../result/parse-body";
 
-export const REVIEW_BANNER =
-  "NEEDS CLINICIAN REVIEW before any clinical action is taken.";
 export const REDACTED_STEP = "[removed by safety checks]";
 export const DISCLAIMER =
   "Decision support only. Final clinical judgement rests with the treating clinician.";
@@ -15,8 +13,8 @@ export const SOURCE_STATUS_TEXT: Record<SourceStatus, string> = {
 };
 
 export interface ExportModel {
-  /** Present only on a review result. */
-  reviewBanner: string | null;
+  /** Same wording as the screen banner (review and caution results). */
+  banner: string | null;
   title: string;
   icd10: string | null;
   /** Null for review results and when the API returned no score. */
@@ -35,7 +33,7 @@ export function toExportModel(
 ): ExportModel {
   const titles = view.sources.map((s) => s.title);
   return {
-    reviewBanner: view.kind === "review" ? REVIEW_BANNER : null,
+    banner: view.banner?.title ?? null,
     title: view.title,
     icd10: view.icd10,
     confidence: view.kind === "review" ? null : view.confidence,

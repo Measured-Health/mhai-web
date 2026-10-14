@@ -20,6 +20,8 @@ export interface SessionItem {
   flagged?: boolean;
   /** Epoch ms when the clinician agreed with (or reviewed) the result. */
   agreedAt?: number;
+  /** Feedback already sent for this result; survives navigating away and back. */
+  feedback?: "agree" | "correct" | "reviewed";
   /** Primary diagnosis text, set once a result is loaded; searched by history. */
   diagnosis?: string;
   query: QueryCreateIn;

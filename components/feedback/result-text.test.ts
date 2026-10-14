@@ -20,9 +20,13 @@ describe("resultAsText", () => {
   });
   it("carries the review banner on a needs-review result and no confidence", () => {
     const t = text(FIXTURES.review);
-    expect(t).toContain("NEEDS CLINICIAN REVIEW");
+    expect(t).toMatch(/needs clinician review/i);
     expect(t).not.toContain("confidence");
     expect(t).toContain("[removed by safety checks]");
+  });
+  it("keeps the caution banner when the score is null", () => {
+    const t = text({ ...FIXTURES.caution, trust_score: null });
+    expect(t).toContain("Use with caution");
   });
   it("shows no confidence line when the score is null, and no ICD line without a code", () => {
     const t = text({ ...FIXTURES.high, trust_score: null, icd10_code: null });

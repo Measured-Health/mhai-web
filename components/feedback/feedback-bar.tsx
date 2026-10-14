@@ -21,9 +21,17 @@ export function FeedbackBar({
 }) {
   const fb = useFeedback();
   const session = useSession();
-  const [mode, setMode] = useState<
+  const sent = session.get(queryId)?.feedback;
+  const [local, setMode] = useState<
     "idle" | "correcting" | "agreed" | "corrected"
   >("idle");
+  // A stored marker wins, so a remount (print round trip) can't resend.
+  const mode =
+    sent === "correct"
+      ? "corrected"
+      : sent === "agree" || sent === "reviewed"
+        ? "agreed"
+        : local;
   const done = mode === "agreed" || mode === "corrected";
   const agreeLabel = view.kind === "review" ? "Mark as reviewed" : "I agree";
   return (
@@ -59,7 +67,10 @@ export function FeedbackBar({
             { query_id: queryId, action: "validate" },
             {
               onSuccess: () => {
-                session.update(queryId, { agreedAt: Date.now() });
+                session.update(queryId, {
+                  agreedAt: Date.now(),
+                  feedback: view.kind === "review" ? "reviewed" : "agree",
+                });
                 setMode("agreed");
                 onDone?.("agree");
               },
@@ -95,6 +106,7 @@ export function FeedbackBar({
                 { query_id: queryId, action: "correct", ...v },
                 {
                   onSuccess: () => {
+                    session.update(queryId, { feedback: "correct" });
                     setMode("corrected");
                     onDone?.("correct");
                   },

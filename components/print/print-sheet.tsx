@@ -9,6 +9,7 @@ export function PrintSheet({
   parsed,
   query,
   agreedAt,
+  feedback,
   printedAt,
 }: {
   view: ResultView;
@@ -16,6 +17,8 @@ export function PrintSheet({
   query: QueryCreateIn;
   /** Epoch ms of the clinician's agreement; the footer line shows only when set. */
   agreedAt?: number;
+  /** "reviewed" labels the footer "Clinician reviewed"; "correct" shows no footer line. */
+  feedback?: "agree" | "correct" | "reviewed";
   printedAt: string;
 }) {
   const m = toExportModel(view, parsed);
@@ -35,10 +38,8 @@ export function PrintSheet({
           Demo · sample data, not for clinical use
         </p>
       )}
-      {m.reviewBanner && (
-        <p className="mt-3 border-2 border-black p-2 font-bold">
-          {m.reviewBanner}
-        </p>
+      {m.banner && (
+        <p className="mt-3 border-2 border-black p-2 font-bold">{m.banner}</p>
       )}
       <dl className="my-4 flex gap-6 text-xs">
         <div>
@@ -96,9 +97,12 @@ export function PrintSheet({
       <footer className="mt-10 border-t border-neutral-300 pt-2.5 text-[10.5px] text-neutral-600">
         {m.disclaimer}
         <br />
-        {agreedAt !== undefined && (
+        {agreedAt !== undefined && feedback !== "correct" && (
           <>
-            Clinician agreed · {new Date(agreedAt).toLocaleString()}
+            {feedback === "reviewed"
+              ? "Clinician reviewed"
+              : "Clinician agreed"}{" "}
+            · {new Date(agreedAt).toLocaleString()}
             <br />
           </>
         )}
