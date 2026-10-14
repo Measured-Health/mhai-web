@@ -1,0 +1,136 @@
+import { describe, expect, it } from "vitest";
+import type { ClinicalResultOut, Citation } from "./api/contract";
+import { toResultView } from "./result-view";
+
+const cite = (
+  action: Citation["action"],
+  title = "AHA 2021 Chest Pain",
+): Citation => ({
+  chunk_id: `c-${action}-${title}`,
+  source_title: title,
+  excerpt: "…",
+  claim_text: "claim",
+  nli_label: "ENTAILMENT",
+  nli_confidence: 0.9,
+  action,
+  reason: "",
+});
+
+const base = (o: Partial<ClinicalResultOut> = {}): ClinicalResultOut => ({
+  query_id: "q1",
+  decision: "PASS",
+  verified: true,
+  degraded: false,
+  failed_agents: [],
+  response_available: true,
+  diagnosis: "Unstable angina",
+  icd10_code: "I20.0",
+  response_text: "Summary.",
+  trust_score: 0.82,
+  citations: [cite("PASS")],
+  guardrail_details: {
+    l1_persona: null,
+    l2_entropy: null,
+    l3_nli: { pass_rate: 0.92, claims_checked: 4, model_loaded: true },
+    l4_trust: { trust_score: 0.82, base_trust: 0.9, flag_penalty: 0.08 },
+    cascade_pass: true,
+  },
+  retrieval_ms: 2100,
+  generation_ms: 9700,
+  ...o,
+});
+
+describe("toResultView", () => {
+  it("maps PASS to high confidence with 4 bars", () => {
+    const v = toResultView(base());
+    expect(v.kind).toBe("high");
+    expect(v.confidence).toEqual({ label: "High confidence", bars: 4 });
+    expect(v.banner).toBeNull();
+  });
+
+  it("gives 5 bars to a very high trust score", () => {
+    expect(toResultView(base({ trust_score: 0.9 })).confidence?.bars).toBe(5);
+  });
+
+  it("maps REGENERATE to use with caution with an amber banner", () => {
+    const v = toResultView(base({ decision: "REGENERATE", trust_score: 0.42 }));
+    expect(v.kind).toBe("caution");
+    expect(v.confidence).toEqual({ label: "Use with caution", bars: 3 });
+    expect(v.banner?.tone).toBe("warn");
+  });
+
+  it("maps ESCALATE to needs review: red banner, no confidence", () => {
+    const v = toResultView(base({ decision: "ESCALATE", trust_score: 0.2 }));
+    expect(v.kind).toBe("review");
+    expect(v.confidence).toBeNull();
+    expect(v.banner).toEqual({
+      tone: "bad",
+      title:
+        "This result needs clinician review before any clinical action is taken",
+    });
+  });
+
+  it("treats a degraded PASS as needs review (safety rule)", () => {
+    const v = toResultView(base({ degraded: true, trust_score: null }));
+    expect(v.kind).toBe("review");
+    expect(v.confidence).toBeNull();
+  });
+
+  it("adds the reduced-accuracy notice when the evidence model is not loaded", () => {
+    const r = base();
+    r.guardrail_details.l3_nli.model_loaded = false;
+    expect(toResultView(r).reducedAccuracy).toBe(true);
+  });
+
+  it("hides the ICD-10 chip and diagnosis when missing", () => {
+    const v = toResultView(base({ icd10_code: null, diagnosis: null }));
+    expect(v.icd10).toBeNull();
+    expect(v.title).toBe("Clinical assessment");
+  });
+
+  it("only returns confidence bars the API provided", () => {
+    const v = toResultView(base());
+    expect(v.measures.map((m) => m.label)).toEqual(["Evidence match"]);
+    const withStability = base();
+    withStability.guardrail_details.l2_entropy = { stability: 0.61 };
+    expect(toResultView(withStability).measures.map((m) => m.label)).toEqual([
+      "Evidence match",
+      "Answer stability",
+    ]);
+  });
+
+  it("counts verified claims and groups sources with use counts", () => {
+    const v = toResultView(
+      base({
+        citations: [
+          cite("PASS"),
+          cite("PASS"),
+          cite("FLAG", "WHO Dengue 2024"),
+          cite("REDACT", "BNF"),
+        ],
+      }),
+    );
+    expect(v.claims).toEqual({ verified: 2, total: 4 });
+    expect(v.sources).toEqual([
+      {
+        title: "AHA 2021 Chest Pain",
+        status: "verified",
+        uses: 2,
+        excerpt: "…",
+      },
+      { title: "WHO Dengue 2024", status: "review", uses: 1, excerpt: "…" },
+      { title: "BNF", status: "removed", uses: 1, excerpt: "…" },
+    ]);
+  });
+
+  it("copes with no citations and empty text", () => {
+    const v = toResultView(base({ citations: [], response_text: "" }));
+    expect(v.claims).toEqual({ verified: 0, total: 0 });
+    expect(v.sources).toEqual([]);
+    expect(v.body).toBe("");
+  });
+
+  it("reports total time in seconds with one decimal", () => {
+    expect(toResultView(base()).seconds).toBe("11.8");
+  });
+});
