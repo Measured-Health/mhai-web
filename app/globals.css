@@ -101,6 +101,14 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
+  /* No stagger and no draw: everything is simply there. */
+  .reveal > * {
+    animation: none;
+  }
+  .draw-once path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
 }
 
 @keyframes sk {
@@ -167,6 +175,73 @@ body {
 @keyframes grow {
   from {
     width: 0;
+  }
+}
+
+@keyframes shake {
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/*
+ * Result reveal: whole blocks (banner, card, disclaimer) fade up in reading
+ * order, half --t-fast (80 ms) apart. Only direct children animate, never
+ * text, diagnosis or numbers inside them.
+ */
+.reveal > * {
+  animation: fadeUp var(--t-slow) var(--e-out) both;
+}
+.reveal > *:nth-child(2) {
+  animation-delay: calc(var(--t-fast) * 0.5);
+}
+.reveal > *:nth-child(3) {
+  animation-delay: var(--t-fast);
+}
+.reveal > *:nth-child(4) {
+  animation-delay: calc(var(--t-fast) * 1.5);
+}
+.shake-once {
+  animation: shake calc(var(--t-fast) * 2) var(--e-out);
+}
+/* Brand mark draws itself once; never longer than --t-story. */
+.draw-once path {
+  stroke-dasharray: 260;
+  stroke-dashoffset: 260;
+  animation: draw var(--t-story) var(--e-in-out) forwards;
+}
+
+/* Route changes: a short slide and cross-fade (React <ViewTransition>). */
+::view-transition-old(main-content) {
+  animation: var(--t-base) var(--e-out) both vt-out;
+}
+::view-transition-new(main-content) {
+  animation: var(--t-base) var(--e-out) both vt-in;
+}
+@keyframes vt-out {
+  to {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
   }
 }
 

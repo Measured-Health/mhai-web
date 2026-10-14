@@ -15,6 +15,7 @@ import { FeedbackBar, type FeedbackBarHandle } from "../feedback/feedback-bar";
 import { ProcessingView } from "../processing/processing-view";
 import { parseBody } from "../result/parse-body";
 import { ResultCard } from "../result/result-card";
+import { ResultSkeleton } from "../result/result-skeleton";
 import { useShell } from "../shell/app-shell";
 import { MenuButton } from "../shell/menu-button";
 import { TopBar } from "../shell/top-bar";
@@ -159,6 +160,9 @@ export function ConsultationView({ id }: { id: string }) {
                 />
               }
             />
+          ) : st.status === "completed" ? (
+            // Result is still being fetched (failure is handled above).
+            <ResultSkeleton />
           ) : (
             <Analysing
               stage={st.stage}

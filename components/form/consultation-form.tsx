@@ -112,6 +112,25 @@ export function ConsultationForm({
       (k) => r.errors[k],
     )!;
     focusField(first, r.errors);
+    replayShake(Object.keys(r.errors) as (keyof FormValues)[]);
+  };
+
+  // Replays .shake-once on each invalid field's wrapper without remounting
+  // anything (a key change would drop the focus focusField just set).
+  const replayShake = (keys: (keyof FormValues)[]) => {
+    for (const k of keys) {
+      const el = formRef.current?.querySelector<HTMLElement>(`#f-${k}`);
+      if (!el) continue;
+      el.classList.remove("shake-once");
+      void el.offsetWidth; // reflow so the animation restarts
+      el.classList.add("shake-once");
+      const done = (e: AnimationEvent) => {
+        if (e.animationName !== "shake") return;
+        el.classList.remove("shake-once");
+        el.removeEventListener("animationend", done);
+      };
+      el.addEventListener("animationend", done);
+    }
   };
 
   // Reveal the field's step synchronously, then focus it. Without flushSync

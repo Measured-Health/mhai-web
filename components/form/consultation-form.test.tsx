@@ -119,4 +119,25 @@ describe("ConsultationForm focus and symptom rules", () => {
     expect(box).toHaveValue("extra");
     expect(screen.getByText("Up to 20 symptoms")).toBeInTheDocument();
   });
+
+  it("keeps focus on the first invalid field across repeated failed submits and replays the shake", async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<ConsultationForm onSubmit={vi.fn()} />);
+    const age = screen.getByLabelText(/Age/);
+    await user.type(age, "154");
+    const analyse = screen.getByRole("button", { name: /Analyse/ });
+    await user.click(analyse);
+    expect(screen.getByLabelText(/Age/)).toBe(age);
+    expect(age).toHaveFocus();
+    const wrapper = document.getElementById("f-age")!;
+    expect(wrapper).toHaveClass("shake-once");
+    await user.click(analyse);
+    // Same element (never remounted by a key), still focused, shake replayed.
+    expect(screen.getByLabelText(/Age/)).toBe(age);
+    expect(age).toHaveFocus();
+    expect(wrapper).toHaveClass("shake-once");
+    expect(document.getElementById("f-specialty")).not.toHaveClass(
+      "shake-once",
+    );
+  });
 });

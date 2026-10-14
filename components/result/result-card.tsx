@@ -29,7 +29,7 @@ export function ResultCard({
   const hasBody = parsed.summary !== "" || parsed.steps.length > 0;
   const n = view.sources.length;
   return (
-    <div className="mx-auto max-w-[700px] motion-safe:[&>*]:animate-[fadeUp_var(--t-slow)_var(--e-out)_both]">
+    <div className="reveal mx-auto max-w-[700px]">
       <ResultBanner view={view} />
       {view.reducedAccuracy && (
         <div className="mb-3.5">
@@ -38,10 +38,7 @@ export function ResultCard({
           </Banner>
         </div>
       )}
-      <article
-        className="card-v3 px-5 py-6 md:px-[26px]"
-        style={{ animationDelay: "var(--t-instant)" }}
-      >
+      <article className="card-v3 px-5 py-6 md:px-[26px]">
         {(review || icd10 || confidence) && (
           <div className="flex flex-wrap items-center gap-2.5">
             {review && (

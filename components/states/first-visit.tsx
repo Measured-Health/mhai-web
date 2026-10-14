@@ -60,6 +60,27 @@ export function FirstVisit({
       <p className="text-[11px] font-semibold uppercase tracking-[.1em] text-mint">
         Welcome, {name}
       </p>
+      <svg
+        aria-hidden
+        viewBox="0 0 58 52"
+        className="draw-once mx-auto mb-2 h-14 w-auto"
+      >
+        <defs>
+          <linearGradient id="fv-m" x1="0" x2="1">
+            <stop offset=".5" stopColor="#15999E" />
+            <stop offset=".75" stopColor="#5a3a78" />
+            <stop offset="1" stopColor="#6b2a68" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45"
+          fill="none"
+          stroke="url(#fv-m)"
+          strokeWidth="2.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
       <h2 className="my-2.5 font-display text-5xl font-black leading-[.95]">
         Ask your first clinical question
       </h2>
