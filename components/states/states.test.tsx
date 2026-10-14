@@ -404,6 +404,48 @@ describe("SessionTimeout", () => {
     expect(screen.getByTestId("count")).toHaveTextContent("0");
   });
 
+  // Time jumps with no ticks and no wake event (stalled timers).
+  const jump = (ms: number) => vi.setSystemTime(Date.now() + ms);
+
+  it("a keydown after 15 minutes with no ticks signs out instead of restarting", () => {
+    vi.useFakeTimers();
+    mount({});
+    jump(16 * 60_000);
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "a" }));
+    });
+    expect(screen.getByTestId("count")).toHaveTextContent("0");
+    expect(push).toHaveBeenCalledWith("/");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("Stay signed in after the deadline passed (stale countdown) signs out", () => {
+    vi.useFakeTimers();
+    mount({});
+    wake(14 * 60_000);
+    expect(
+      screen.getByRole("dialog", { name: "Still there?" }),
+    ).toBeInTheDocument();
+    jump(2 * 60_000);
+    fireEvent.click(screen.getByRole("button", { name: "Stay signed in" }));
+    expect(screen.getByTestId("count")).toHaveTextContent("0");
+    expect(push).toHaveBeenCalledWith("/");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("Esc after the deadline passed also signs out", () => {
+    vi.useFakeTimers();
+    mount({});
+    wake(14 * 60_000);
+    jump(2 * 60_000);
+    fireEvent(
+      screen.getByRole("dialog", { name: "Still there?" }),
+      new Event("cancel", { cancelable: true }),
+    );
+    expect(screen.getByTestId("count")).toHaveTextContent("0");
+    expect(push).toHaveBeenCalledWith("/");
+  });
+
   it("covers every route: Providers (root layout, incl. /print) mounts the guard", () => {
     vi.useFakeTimers();
     render(

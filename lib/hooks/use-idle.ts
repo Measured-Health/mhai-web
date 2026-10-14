@@ -11,8 +11,10 @@ const WAKE = ["pageshow", "focus"];
 /**
  * Calls `onIdle(lastActivityAt)` once `ms` of wall-clock time pass with no
  * pointer, key, wheel, scroll or touch activity. Deadline based, so missed or
- * delayed timer ticks can't postpone it. Returns `reset()` to restart the
- * period (for example when the clinician confirms they are still there).
+ * delayed timer ticks can't postpone it. Activity checks the deadline first,
+ * so activity after a stalled clock fires `onIdle` instead of restarting the
+ * period (fail closed). Returns `reset()` to restart the period (for example
+ * when the clinician confirms they are still there).
  */
 export function useIdle(
   ms: number,
@@ -37,18 +39,25 @@ export function useIdle(
         fire(last.current);
       }
     };
+    // Never let activity restart a period whose deadline has already passed.
+    const onActivity = () => {
+      check();
+      if (!fired.current) reset();
+    };
     const opts = { passive: true, capture: true } as const;
-    WINDOW_ACTIVITY.forEach((e) => window.addEventListener(e, reset, opts));
-    document.addEventListener("scroll", reset, opts);
+    WINDOW_ACTIVITY.forEach((e) =>
+      window.addEventListener(e, onActivity, opts),
+    );
+    document.addEventListener("scroll", onActivity, opts);
     WAKE.forEach((e) => window.addEventListener(e, check));
     document.addEventListener("visibilitychange", check);
     const t = setInterval(check, tickMs);
     return () => {
       clearInterval(t);
       WINDOW_ACTIVITY.forEach((e) =>
-        window.removeEventListener(e, reset, opts),
+        window.removeEventListener(e, onActivity, opts),
       );
-      document.removeEventListener("scroll", reset, opts);
+      document.removeEventListener("scroll", onActivity, opts);
       WAKE.forEach((e) => window.removeEventListener(e, check));
       document.removeEventListener("visibilitychange", check);
     };

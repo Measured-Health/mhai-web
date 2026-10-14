@@ -78,4 +78,25 @@ describe("useIdle", () => {
     vi.advanceTimersByTime(1);
     expect(onIdle).toHaveBeenCalledTimes(2);
   });
+
+  it("activity after the deadline passed with no tick fires instead of resetting", () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+    renderHook(() => useIdle(60_000, onIdle));
+    const start = Date.now();
+    vi.setSystemTime(start + 5 * 60_000);
+    window.dispatchEvent(new Event("keydown"));
+    expect(onIdle).toHaveBeenCalledTimes(1);
+    expect(onIdle).toHaveBeenCalledWith(start);
+  });
+
+  it("activity before the deadline still restarts the period", () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+    renderHook(() => useIdle(60_000, onIdle));
+    vi.setSystemTime(Date.now() + 59_000);
+    window.dispatchEvent(new Event("pointerdown"));
+    vi.advanceTimersByTime(59_000);
+    expect(onIdle).not.toHaveBeenCalled();
+  });
 });

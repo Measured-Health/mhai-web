@@ -88,8 +88,14 @@ export function SessionTimeout({
     if (expired) signOut();
   }, [expired, deadline]);
 
-  // Stay, Esc and backdrop cancel all restart the idle period.
+  // Stay, Esc and backdrop cancel all restart the idle period, unless the
+  // deadline has already passed (stale countdown): then sign out instead.
   const stay = () => {
+    const t = Date.now();
+    if (deadline !== null && t >= deadline) {
+      setNow(t);
+      return;
+    }
     setDeadline(null);
     restart();
   };
