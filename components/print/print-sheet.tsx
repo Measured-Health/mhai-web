@@ -44,6 +44,11 @@ export function PrintSheet({
           <p>{m.banner.body}</p>
         </div>
       )}
+      {m.notice && (
+        <p className="mt-2 border border-black p-2 text-[11.5px]">
+          <b>{m.notice.title}.</b> {m.notice.body}
+        </p>
+      )}
       <dl className="my-4 flex gap-6 text-xs">
         <div>
           <dt className="font-bold">Patient</dt>
@@ -57,7 +62,7 @@ export function PrintSheet({
         </div>
       </dl>
       <p className="text-[11px] uppercase tracking-widest text-neutral-600">
-        Assessment
+        {m.eyebrow ?? "Assessment"}
       </p>
       <h1 className="font-display text-[34px] font-black leading-none">
         {m.title}{" "}

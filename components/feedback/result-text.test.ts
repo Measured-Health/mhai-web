@@ -34,6 +34,20 @@ describe("resultAsText", () => {
       "The evidence didn't support enough of this answer",
     );
   });
+  it("keeps the review eyebrow and the reduced-accuracy notice", () => {
+    const t = text(FIXTURES.review);
+    expect(t).toContain("Possible assessment · not verified");
+    expect(t).toContain(
+      "Reduced-accuracy mode: Evidence checking is running in reduced-accuracy mode.",
+    );
+    const h = text(FIXTURES.high);
+    expect(h).not.toContain("Possible assessment");
+    expect(h).not.toContain("Reduced-accuracy mode");
+  });
+  it("prints 'Use with caution' once on a caution result", () => {
+    const t = text(FIXTURES.caution);
+    expect(t.match(/Use with caution/g)).toHaveLength(1);
+  });
   it("keeps the caution banner when the score is null", () => {
     const t = text({ ...FIXTURES.caution, trust_score: null });
     expect(t).toContain("Use with caution");

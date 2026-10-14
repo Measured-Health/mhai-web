@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Copy } from "lucide-react";
 import { sourceStatus } from "@/lib/labels";
 import type { ResultView } from "@/lib/result-view";
+import { REDUCED_ACCURACY, REVIEW_EYEBROW } from "../feedback/export-model";
 import { Banner } from "../ui/banner";
 import { ConfidencePill } from "../ui/confidence-pill";
 import { useToast } from "../ui/toast";
@@ -33,8 +34,8 @@ export function ResultCard({
       <ResultBanner view={view} />
       {view.reducedAccuracy && (
         <div className="mb-3.5">
-          <Banner tone="info" title="Reduced-accuracy mode">
-            Evidence checking is running in reduced-accuracy mode.
+          <Banner tone="info" title={REDUCED_ACCURACY.title}>
+            {REDUCED_ACCURACY.body}
           </Banner>
         </div>
       )}
@@ -43,7 +44,7 @@ export function ResultCard({
           <div className="flex flex-wrap items-center gap-2.5">
             {review && (
               <span className="text-[11px] font-semibold uppercase tracking-[.1em] text-bad">
-                Possible assessment · not verified
+                {REVIEW_EYEBROW}
               </span>
             )}
             {icd10 && (

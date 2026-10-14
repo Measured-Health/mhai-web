@@ -9,8 +9,12 @@ export function resultAsText(
   const m = toExportModel(view, parsed);
   const out: string[] = [];
   if (m.banner) out.push(m.banner.title, m.banner.body, "");
+  if (m.notice) out.push(`${m.notice.title}: ${m.notice.body}`, "");
+  if (m.eyebrow) out.push(m.eyebrow);
   out.push(m.icd10 ? `${m.title} (ICD-10 ${m.icd10})` : m.title);
-  if (m.confidence) out.push(m.confidence.label);
+  // A caution banner already says "Use with caution": don't repeat it.
+  if (m.confidence && m.confidence.label !== m.banner?.title)
+    out.push(m.confidence.label);
   if (m.summary) out.push("", m.summary);
   if (m.steps.length) {
     out.push("", "Recommended next steps:");

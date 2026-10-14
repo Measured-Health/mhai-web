@@ -78,8 +78,9 @@ describe("Home", () => {
     await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
     await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/c/q2"));
     // Next keeps the page mounted, so the form must be fresh for next time.
-    await vi.waitFor(() =>
-      expect(screen.getByLabelText(/^Age/)).toHaveValue(""),
+    await vi.waitFor(
+      () => expect(screen.getByLabelText(/^Age/)).toHaveValue(""),
+      { timeout: 5000 }, // a transition; slow under a parallel full run
     );
     expect(createQuery).toHaveBeenCalledWith(
       expect.objectContaining({

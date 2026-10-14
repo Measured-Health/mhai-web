@@ -53,6 +53,16 @@ describe("PrintSheet", () => {
     );
     expect(t).not.toMatch(/evidence didn't support/);
   });
+  it("keeps the review eyebrow and the reduced-accuracy notice", () => {
+    const t = sheet(FIXTURES.review).container.textContent;
+    expect(t).toContain("Possible assessment · not verified");
+    expect(t).toContain(
+      "Evidence checking is running in reduced-accuracy mode.",
+    );
+    const h = sheet(FIXTURES.high).container.textContent;
+    expect(h).not.toContain("Possible assessment");
+    expect(h).not.toContain("reduced-accuracy");
+  });
   it("keeps the caution banner when the score is null", () => {
     const t =
       sheet({ ...FIXTURES.caution, trust_score: null }).container.textContent ??

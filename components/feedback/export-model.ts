@@ -6,6 +6,14 @@ export const REDACTED_STEP = "[removed by safety checks]";
 export const DISCLAIMER =
   "Decision support only. Final clinical judgement rests with the treating clinician.";
 
+/** Shown above the title of a Needs-review result (screen, text and print). */
+export const REVIEW_EYEBROW = "Possible assessment · not verified";
+/** The reduced-accuracy notice (screen, text and print). */
+export const REDUCED_ACCURACY = {
+  title: "Reduced-accuracy mode",
+  body: "Evidence checking is running in reduced-accuracy mode.",
+} as const;
+
 export const SOURCE_STATUS_TEXT: Record<SourceStatus, string> = {
   verified: "verified",
   review: "needs review",
@@ -15,6 +23,10 @@ export const SOURCE_STATUS_TEXT: Record<SourceStatus, string> = {
 export interface ExportModel {
   /** Same wording as the screen banner (review and caution results). */
   banner: { title: string; body: string } | null;
+  /** Same notice as the screen when evidence checking ran in reduced accuracy. */
+  notice: { title: string; body: string } | null;
+  /** "Possible assessment · not verified" for review results. */
+  eyebrow: string | null;
   title: string;
   icd10: string | null;
   /** Null for review results and when the API returned no score. */
@@ -36,6 +48,8 @@ export function toExportModel(
     banner: view.banner
       ? { title: view.banner.title, body: view.banner.body }
       : null,
+    notice: view.reducedAccuracy ? { ...REDUCED_ACCURACY } : null,
+    eyebrow: view.kind === "review" ? REVIEW_EYEBROW : null,
     title: view.title,
     icd10: view.icd10,
     confidence: view.kind === "review" ? null : view.confidence,
