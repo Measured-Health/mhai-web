@@ -24,9 +24,11 @@ export function useQueryStatus(
   id: string,
   { stallMs = 120_000 }: { stallMs?: number } = {},
 ) {
-  const [stalled, setStalled] = useState(false);
+  // Keyed by id so a reused hook instance never carries a stall to a new query.
+  const [stalledId, setStalledId] = useState<string | null>(null);
+  const stalled = stalledId === id;
   // Written only inside effects (react-hooks/purity and refs rules).
-  const last = useRef<{ p: number; at: number } | null>(null);
+  const last = useRef<{ id: string; p: number; at: number } | null>(null);
   const q = useQuery({
     queryKey: ["status", id],
     queryFn: () => getClient().getStatus(id),
@@ -39,8 +41,12 @@ export function useQueryStatus(
   const progress = q.data?.progress ?? 0;
   const status = q.data?.status;
   useEffect(() => {
-    if (last.current === null || progress !== last.current.p)
-      last.current = { p: progress, at: Date.now() };
+    if (
+      last.current === null ||
+      last.current.id !== id ||
+      progress !== last.current.p
+    )
+      last.current = { id, p: progress, at: Date.now() };
     const t = setInterval(() => {
       if (
         last.current &&
@@ -48,10 +54,10 @@ export function useQueryStatus(
         status !== "completed" &&
         status !== "failed"
       )
-        setStalled(true);
+        setStalledId(id);
     }, 1000);
     return () => clearInterval(t);
-  }, [progress, stallMs, status]);
+  }, [id, progress, stallMs, status]);
   return {
     status,
     progress,

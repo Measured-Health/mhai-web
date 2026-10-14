@@ -1,4 +1,5 @@
 "use client";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   useCallback,
@@ -33,6 +34,7 @@ const SessionCtx = createContext<Ctx | null>(null);
 
 /** Session-only history: React state, never storage (Build Guide; CONTRIBUTING). */
 export function SessionProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [items, setItems] = useState<SessionItem[]>([]);
   const add = useCallback(
     (i: SessionItem) => setItems((x) => [i, ...x.filter((y) => y.id !== i.id)]),
@@ -43,7 +45,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setItems((x) => x.map((y) => (y.id === id ? { ...y, ...p } : y))),
     [],
   );
-  const clear = useCallback(() => setItems([]), []);
+  // Sign-out: drop history AND cached clinical results held in memory.
+  const clear = useCallback(() => {
+    setItems([]);
+    queryClient.clear();
+  }, [queryClient]);
   const value = useMemo(
     () => ({
       items,
