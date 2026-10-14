@@ -71,6 +71,19 @@ describe("Toast", () => {
   });
 });
 
+describe("Toast placement", () => {
+  it("sits below the demo ribbon (offset by --demo-h, 0 without the ribbon)", () => {
+    const { container } = render(
+      <ToastProvider>
+        <p>x</p>
+      </ToastProvider>,
+    );
+    const stack = container.querySelector(".fixed")!;
+    expect(stack.className).toContain("top-[calc(var(--demo-h,0px)+1.25rem)]");
+    expect(stack.className).not.toMatch(/(^|\s)top-5(\s|$)/);
+  });
+});
+
 describe("Dialog (preflight R1, R2)", () => {
   it("gives each dialog its own accessible name and closes without throwing", () => {
     const { rerender } = render(

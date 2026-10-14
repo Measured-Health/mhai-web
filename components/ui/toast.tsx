@@ -30,7 +30,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{ show }}>
       {children}
-      <div className="pointer-events-none fixed right-5 top-5 z-50 flex w-[340px] flex-col gap-2">
+      <div className="pointer-events-none fixed right-5 top-[calc(var(--demo-h,0px)+1.25rem)] z-50 flex w-[340px] flex-col gap-2">
         {items.map((t) => (
           <div
             key={t.id}
