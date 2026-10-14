@@ -37,6 +37,21 @@ The question text picks the mock result: "fever" gives Use with caution,
 "potassium" gives Needs review, "fail" gives Couldn't complete, and
 anything else gives High confidence. A result arrives after about 9 seconds.
 
+### Share the demo
+
+The demo runs on sample data (`NEXT_PUBLIC_USE_MOCK=true`). A ribbon on
+every screen says so, and its **Give feedback** link opens a GitHub issue
+form. Feedback lands under the `design-feedback` label. The link carries
+only the page path (ids masked) and the screen size, never anything typed
+or shown.
+
+- **On your machine:** `npm run build && NEXT_PUBLIC_USE_MOCK=true npx next start`
+- **For the team:** a private preview deployment of this branch with
+  `NEXT_PUBLIC_USE_MOCK=true`. Keep previews behind access protection;
+  never make them public. The product owner approves the host first.
+- **One-time setup (maintainer):** create the label once with
+  `gh label create design-feedback --color 15999E --description "Feedback from the demo"`
+
 ### Tests
 
 ```bash
