@@ -18,6 +18,14 @@ export const STAGES: readonly { id: Stage; label: string }[] = [
   { id: "decision", label: "Finalising recommendation" },
 ];
 
+/** Zero-based index of the current step. Unknown or not-yet-started is the first step. */
+export function stageIndex(stage: Stage | null | undefined): number {
+  return Math.max(
+    0,
+    STAGES.findIndex((s) => s.id === stage),
+  );
+}
+
 export const FORBIDDEN_TERMS = [
   "trust score",
   "NLI",

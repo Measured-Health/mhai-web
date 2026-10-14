@@ -5,6 +5,7 @@ import {
   STAGES,
   citationTag,
   sourceStatus,
+  stageIndex,
 } from "./labels";
 
 describe("labels", () => {
@@ -35,5 +36,12 @@ describe("labels", () => {
     expect(sourceStatus("PASS")).toBe("verified");
     expect(sourceStatus("FLAG")).toBe("review");
     expect(sourceStatus("REDACT")).toBe("removed");
+  });
+  it("maps a stage to its zero-based index, defaulting to the first step", () => {
+    expect(stageIndex("pii_masking")).toBe(0);
+    expect(stageIndex("generation")).toBe(2);
+    expect(stageIndex("decision")).toBe(5);
+    expect(stageIndex(null)).toBe(0);
+    expect(stageIndex(undefined)).toBe(0);
   });
 });

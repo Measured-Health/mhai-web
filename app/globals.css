@@ -146,3 +146,20 @@ body {
     transform: scale(1.35);
   }
 }
+
+/* Continuous loop for the ECG line: exempt from the motion-token rule (spec S:115). */
+@keyframes ecg {
+  from {
+    stroke-dashoffset: 420;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+/* Live-dot pulse: loop exempt from the motion-token rule (spec S:127). */
+@keyframes pulse-dot {
+  50% {
+    transform: scale(1.6);
+    opacity: 0.4;
+  }
+}
