@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { correctionSchema, emptyForm, validate } from "./form-schema";
+import {
+  correctionSchema,
+  emptyForm,
+  fromQuery,
+  validate,
+} from "./form-schema";
 
 const good = {
   ...emptyForm,
@@ -56,5 +61,23 @@ describe("correctionSchema", () => {
       correctionSchema.safeParse({ corrected_diagnosis: "abc", reason: "abc" })
         .success,
     ).toBe(true);
+  });
+});
+
+describe("fromQuery", () => {
+  it("turns a submitted query back into form values (round trip)", () => {
+    const full = {
+      ...good,
+      specialty: "Emergency",
+      history: "Type 2 diabetes",
+    };
+    const r = validate(full);
+    if (!r.ok) throw new Error("expected a valid form");
+    expect(fromQuery(r.data)).toEqual(full);
+  });
+  it("fills optional fields with empty strings when absent", () => {
+    const r = validate(good);
+    if (!r.ok) throw new Error("expected a valid form");
+    expect(fromQuery(r.data)).toEqual(good);
   });
 });

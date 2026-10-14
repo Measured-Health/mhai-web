@@ -73,6 +73,19 @@ export function toQuery(v: FormValues): QueryCreateIn {
   };
 }
 
+/** The inverse of `toQuery`: refills the form from a submitted query (Edit question). */
+export function fromQuery(q: QueryCreateIn): FormValues {
+  return {
+    age: String(q.patient_data.age),
+    sex: q.patient_data.sex,
+    urgency: q.urgency,
+    symptoms: q.patient_data.symptoms,
+    question: q.clinical_question,
+    specialty: q.specialty ?? "",
+    history: q.patient_data.medical_history ?? "",
+  };
+}
+
 export function validate(
   v: FormValues,
 ):
