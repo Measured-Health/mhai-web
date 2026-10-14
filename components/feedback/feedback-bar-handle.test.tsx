@@ -14,6 +14,10 @@ const send = vi.fn(
       release = () => res({ status: "recorded" });
     }),
 );
+// FeedbackBar guards a correction draft through the shell's navigation.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
 vi.mock("@/lib/api/client", () => ({
   getClient: () => ({ sendFeedback: send }),
 }));

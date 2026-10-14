@@ -1,18 +1,25 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { correctionSchema } from "@/lib/form-schema";
 import { Button } from "../ui/button";
 
 export function CorrectionForm({
   onSubmit,
   onCancel,
+  onDirtyChange,
   busy,
 }: {
   onSubmit(v: { corrected_diagnosis: string; reason: string }): void;
   onCancel(): void;
+  /** True while either field has text (so leaving can ask first). */
+  onDirtyChange?(dirty: boolean): void;
   busy: boolean;
 }) {
   const [v, setV] = useState({ corrected_diagnosis: "", reason: "" });
+  const dirty = v.corrected_diagnosis !== "" || v.reason !== "";
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
   const [err, setErr] = useState<Partial<Record<keyof typeof v, string>>>({});
   const field =
     "w-full rounded-xl border border-lilac-2 bg-white px-3 py-2.5 text-sm outline-none focus:border-mint focus:ring-4 focus:ring-mint/15";

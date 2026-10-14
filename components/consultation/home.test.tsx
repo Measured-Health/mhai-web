@@ -185,6 +185,8 @@ describe("Home after an idle sign-out", () => {
     expect(screen.getByText(NOTICE)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
     await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/c/q2"));
-    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+    await vi.waitFor(() =>
+      expect(screen.queryByText(NOTICE)).not.toBeInTheDocument(),
+    );
   });
 });

@@ -108,7 +108,12 @@ function PaletteBody({ onClose }: { onClose(): void }) {
                 e.preventDefault();
                 setSel(Math.max(active - 1, 0));
               }
-              if (e.key === "Enter") run(rows[active]);
+              if (e.key === "Enter") {
+                // No keypress: focus may move to a guard prompt's button,
+                // which this Enter must not activate.
+                e.preventDefault();
+                run(rows[active]);
+              }
             }}
             className="flex-1 bg-transparent text-[17px] outline-none"
           />

@@ -53,6 +53,7 @@ vi.mock("@/lib/queries", async (orig) => ({
   useResult: () => result(),
 }));
 
+import { AppShell } from "../shell/app-shell";
 import { ConsultationView } from "./consultation-view";
 
 const QUERY: QueryCreateIn = {
@@ -92,6 +93,16 @@ class Boundary extends Component<{ children: ReactNode }, { err: boolean }> {
   }
 }
 
+const mountInShell = (id = "q1") =>
+  render(
+    <Providers>
+      <AppShell>
+        <Seeded>
+          <ConsultationView id={id} />
+        </Seeded>
+      </AppShell>
+    </Providers>,
+  );
 const mount = (id = "q1") =>
   render(
     <Providers>
@@ -356,13 +367,89 @@ describe("ConsultationView", () => {
         await userEvent.keyboard("{Control>}p{/Control}");
         expect(push).toHaveBeenCalledWith("/print/q1");
       });
-      it("mod+p does nothing while a correction is being typed", async () => {
-        mount();
+      it("mod+p with an open but empty correction form just goes to print", async () => {
+        mountInShell();
         await ready();
         await userEvent.keyboard("c");
         await userEvent.keyboard("{Control>}p{/Control}");
-        expect(push).not.toHaveBeenCalled();
+        expect(push).toHaveBeenCalledWith("/print/q1");
       });
+    });
+  });
+
+  describe("a correction being typed", () => {
+    beforeEach(() => {
+      status.mockReturnValue({
+        status: "completed",
+        progress: 1,
+        stage: null,
+        stalled: false,
+        error: null,
+      });
+      result.mockReturnValue({ data: FIXTURES.high, isError: false });
+    });
+    const DIALOG = { name: "Discard this draft?" };
+    const typeCorrection = async () => {
+      mountInShell();
+      await screen.findByRole("button", { name: /Evidence panel/ });
+      await userEvent.click(
+        screen.getByRole("button", { name: /Suggest correction/ }),
+      );
+      await userEvent.type(
+        screen.getByLabelText(/What should the diagnosis/),
+        "Pericarditis",
+      );
+    };
+    const expectKept = async () => {
+      expect(screen.getByRole("dialog", DIALOG)).toBeInTheDocument();
+      expect(push).not.toHaveBeenCalled();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Keep editing" }),
+      );
+      expect(screen.getByLabelText(/What should the diagnosis/)).toHaveValue(
+        "Pericarditis",
+      );
+    };
+
+    it("asks before the Export menu's Print link discards it", async () => {
+      const setItem = vi.spyOn(Storage.prototype, "setItem");
+      await typeCorrection();
+      await userEvent.click(
+        screen.getByRole("button", { name: "More export options" }),
+      );
+      await userEvent.click(
+        screen.getByRole("menuitem", { name: /Print or save as PDF/ }),
+      );
+      await expectKept();
+      expect(setItem).not.toHaveBeenCalled();
+    });
+
+    it("asks before a sidebar link discards it", async () => {
+      await typeCorrection();
+      await userEvent.click(
+        screen.getAllByRole("link", { name: /New consultation/ })[0],
+      );
+      await expectKept();
+    });
+
+    it("asks before the N shortcut and mod+p discard it; Discard then leaves", async () => {
+      await typeCorrection();
+      (document.activeElement as HTMLElement).blur();
+      await userEvent.keyboard("n");
+      await expectKept();
+      await userEvent.keyboard("{Control>}p{/Control}");
+      expect(screen.getByRole("dialog", DIALOG)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Discard" }));
+      expect(push).toHaveBeenCalledWith("/print/q1");
+    });
+
+    it("asks before a command palette row discards it", async () => {
+      await typeCorrection();
+      await userEvent.keyboard("{Control>}k{/Control}");
+      const search = await screen.findByRole("combobox");
+      await userEvent.type(search, "New consultation{Enter}");
+      expect(screen.getByRole("dialog", DIALOG)).toBeInTheDocument();
+      expect(push).not.toHaveBeenCalled();
     });
   });
 });

@@ -10,6 +10,7 @@ import { Check, PenLine } from "lucide-react";
 import { useFeedback } from "@/lib/queries";
 import type { ResultView } from "@/lib/result-view";
 import { useSession } from "@/lib/session-store";
+import { UnsavedGuard } from "../states/unsaved-guard";
 import { Banner } from "../ui/banner";
 import { Button } from "../ui/button";
 import { CorrectionForm } from "./correction-form";
@@ -46,6 +47,9 @@ export function FeedbackBar({
       : sent === "agree" || sent === "reviewed"
         ? "agreed"
         : local;
+  // A non-empty correction draft guards every route change (links, ⌘K, N,
+  // ⌘P, tab close) with the same prompt as an unsent consultation draft.
+  const [draftDirty, setDraftDirty] = useState(false);
   const { mutate } = fb;
   const { update } = session;
   // A ref, so two keydowns in the same tick can't both pass the pending check.
@@ -130,11 +134,16 @@ export function FeedbackBar({
         Suggest correction
       </Button>
       {trailing}
+      <UnsavedGuard
+        dirty={mode === "correcting" && draftDirty}
+        onDiscard={() => setMode("idle")}
+      />
       {mode === "correcting" && (
         <div className="w-full">
           <CorrectionForm
             busy={fb.isPending}
             onCancel={() => setMode("idle")}
+            onDirtyChange={setDraftDirty}
             onSubmit={(v) =>
               fb.mutate(
                 { query_id: queryId, action: "correct", ...v },

@@ -72,10 +72,8 @@ export function ConsultationView({ id }: { id: string }) {
           a: () => fbRef.current?.agree(),
           c: () => fbRef.current?.correct(),
           "shift+c": () => exRef.current?.copy(),
-          "mod+p": () => {
-            // Leaving would lose a correction being typed (in memory only).
-            if (!fbRef.current?.isCorrecting()) navigate(`/print/${id}`);
-          },
+          // Through the shell's guard: a correction being typed prompts first.
+          "mod+p": () => navigate(`/print/${id}`),
         }
       : {},
   );
