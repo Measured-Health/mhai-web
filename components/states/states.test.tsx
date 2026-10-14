@@ -72,7 +72,9 @@ describe("FailedView", () => {
     expect(
       screen.getByRole("heading", { name: "We couldn't complete this one" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Your answers are saved/)).toBeInTheDocument();
+    expect(screen.getByText(/Your answers are still here/)).toBeInTheDocument();
+    // Memory only (cleared at sign-out), so never claim they are "saved".
+    expect(screen.queryByText(/saved/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
     await userEvent.click(
       screen.getByRole("button", { name: /Edit question/ }),

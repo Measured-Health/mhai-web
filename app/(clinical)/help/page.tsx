@@ -18,7 +18,7 @@ const CARDS = [
   {
     icon: ShieldCheck,
     title: "Check the evidence",
-    body: "Every claim links to the guideline it came from.",
+    body: "Claims are matched to guideline sources where possible. Unmatched ones are marked for you to check.",
   },
 ];
 
@@ -99,13 +99,21 @@ export default function Help() {
                 Needs review
               </dt>
               <dd className="border-t border-line py-2.5 text-ink-2">
-                Not enough evidence. Don&apos;t act on it without review.
+                The system couldn&apos;t stand behind this answer, or its checks
+                ran in a reduced mode. Don&apos;t act on it without review.
               </dd>
               <dt className="border-t border-line py-2.5 font-semibold">
                 Evidence-backed claims
               </dt>
               <dd className="border-t border-line py-2.5 text-ink-2">
                 How many statements were matched to a source.
+              </dd>
+              <dt className="border-t border-line py-2.5 font-semibold">
+                Evidence match
+              </dt>
+              <dd className="border-t border-line py-2.5 text-ink-2">
+                The share of checked claims that the cited guidelines support.
+                Shown only when the claims were checked.
               </dd>
               <dt className="border-t border-line py-2.5 font-semibold">
                 Answer stability

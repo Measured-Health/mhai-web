@@ -32,7 +32,7 @@ export function FailedView({
         {stalled
           ? "The analysis is taking much longer than usual, so we stopped waiting."
           : "The analysis service didn't respond in time."}{" "}
-        Your answers are saved. Nothing was lost.
+        Your answers are still here. Nothing was lost.
       </p>
       {retryError && (
         <div className="mt-4 text-left">
