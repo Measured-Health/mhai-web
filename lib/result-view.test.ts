@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ClinicalResultOut, Citation } from "./api/contract";
+import { FORBIDDEN_TERMS } from "./labels";
 import { toResultView } from "./result-view";
 
 const cite = (
@@ -132,5 +133,61 @@ describe("toResultView", () => {
 
   it("reports total time in seconds with one decimal", () => {
     expect(toResultView(base()).seconds).toBe("11.8");
+  });
+
+  it("lets the worst status win when a source backs several claims", () => {
+    const v = toResultView(
+      base({ citations: [cite("PASS", "BNF"), cite("REDACT", "BNF")] }),
+    );
+    expect(v.sources).toHaveLength(1);
+    expect(v.sources[0]).toMatchObject({ status: "removed", uses: 2 });
+    const w = toResultView(
+      base({
+        citations: [cite("REDACT", "X"), cite("PASS", "X"), cite("FLAG", "X")],
+      }),
+    );
+    expect(w.sources[0].status).toBe("removed");
+  });
+
+  it("shows no confidence when trust is missing, keeping the kind", () => {
+    const pass = toResultView(base({ trust_score: null }));
+    expect(pass.kind).toBe("high");
+    expect(pass.confidence).toBeNull();
+    const regen = toResultView(
+      base({ decision: "REGENERATE", trust_score: null }),
+    );
+    expect(regen.kind).toBe("caution");
+    expect(regen.confidence).toBeNull();
+  });
+
+  it("omits Evidence match when the model is not loaded or nothing was checked", () => {
+    const off = base();
+    off.guardrail_details.l3_nli.model_loaded = false;
+    expect(toResultView(off).measures).toEqual([]);
+    const none = base();
+    none.guardrail_details.l3_nli.claims_checked = 0;
+    expect(toResultView(none).measures).toEqual([]);
+  });
+
+  it("never shows forbidden terms in any user-visible string", () => {
+    const withStab = base({ diagnosis: null });
+    withStab.guardrail_details.l2_entropy = { stability: 0.5 };
+    const views = [
+      withStab,
+      base({ decision: "REGENERATE" }),
+      base({ decision: "ESCALATE" }),
+      base({ degraded: true }),
+    ].map(toResultView);
+    const shown = views
+      .flatMap((v) => [
+        v.title,
+        v.banner?.title ?? "",
+        v.confidence?.label ?? "",
+        ...v.measures.map((m) => m.label),
+      ])
+      .join(" ")
+      .toLowerCase();
+    for (const term of FORBIDDEN_TERMS)
+      expect(shown).not.toContain(term.toLowerCase());
   });
 });

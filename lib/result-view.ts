@@ -27,6 +27,13 @@ export interface ResultView {
   seconds: string;
 }
 
+// Worst status wins when one source backs several claims.
+const STATUS_RANK: Record<SourceStatus, number> = {
+  verified: 0,
+  review: 1,
+  removed: 2,
+};
+
 function barsFor(score: number | null, kind: ResultKind): 1 | 2 | 3 | 4 | 5 {
   if (kind === "high") return score !== null && score >= 0.85 ? 5 : 4;
   return score !== null && score >= 0.42 ? 3 : 2;
@@ -54,9 +61,11 @@ export function toResultView(r: ClinicalResultOut): ResultView {
 
   const verified = r.citations.filter((c) => c.action === "PASS").length;
 
-  const measures: ResultView["measures"] = [
-    { label: "Evidence match", value: r.guardrail_details.l3_nli.pass_rate },
-  ];
+  const { l3_nli } = r.guardrail_details;
+  const measures: ResultView["measures"] = [];
+  if (l3_nli.model_loaded && l3_nli.claims_checked > 0) {
+    measures.push({ label: "Evidence match", value: l3_nli.pass_rate });
+  }
   if (r.guardrail_details.l2_entropy) {
     measures.push({
       label: "Answer stability",
@@ -68,8 +77,10 @@ export function toResultView(r: ClinicalResultOut): ResultView {
   for (const c of r.citations) {
     const status = sourceStatus(c.action);
     const seen = byTitle.get(c.source_title);
-    if (seen) seen.uses += 1;
-    else
+    if (seen) {
+      seen.uses += 1;
+      if (STATUS_RANK[status] > STATUS_RANK[seen.status]) seen.status = status;
+    } else
       byTitle.set(c.source_title, {
         title: c.source_title,
         status,
@@ -84,7 +95,7 @@ export function toResultView(r: ClinicalResultOut): ResultView {
     icd10: r.icd10_code,
     body: r.response_text,
     confidence:
-      kind === "review"
+      kind === "review" || r.trust_score === null
         ? null
         : { label: RESULT_LABEL[kind], bars: barsFor(r.trust_score, kind) },
     banner,
