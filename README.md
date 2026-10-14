@@ -48,7 +48,8 @@ form. Feedback lands under the `design-feedback` label. The link carries
 only the page path (ids masked) and the screen size, never anything typed
 or shown.
 
-- **On your machine:** `npm run build && NEXT_PUBLIC_USE_MOCK=true npx next start`
+- **On your machine:** `NEXT_PUBLIC_USE_MOCK=true npm run build && npx next start`
+  (the flag is read at build time, so it must be set for the build)
 - **For the team:** a private preview deployment of this branch with
   `NEXT_PUBLIC_USE_MOCK=true`. Keep previews behind access protection;
   never make them public. The product owner approves the host first.
