@@ -1,5 +1,9 @@
-import { renderHook } from "@testing-library/react";
+import { render, renderHook } from "@testing-library/react";
+import { createElement } from "react";
+import { MobileDrawer } from "@/components/shell/mobile-drawer";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 import { useShortcuts } from "./use-shortcuts";
 
 const press = (
@@ -113,5 +117,49 @@ describe("useShortcuts", () => {
     d.remove();
     press("n");
     expect(n).toHaveBeenCalledTimes(1);
+  });
+  describe("modal guard and hidden modals", () => {
+    const modalIn = (wrapperAttr: Record<string, string>) => {
+      const w = document.body.appendChild(document.createElement("div"));
+      for (const [k, v] of Object.entries(wrapperAttr)) w.setAttribute(k, v);
+      const m = w.appendChild(document.createElement("div"));
+      m.setAttribute("aria-modal", "true");
+      return w;
+    };
+    it.each([
+      ["inert", { inert: "" }],
+      ["aria-hidden", { "aria-hidden": "true" }],
+    ])("a modal inside an %s wrapper does not block plain keys", (_n, attr) => {
+      const f = vi.fn();
+      renderHook(() => useShortcuts({ n: f }));
+      modalIn(attr);
+      press("n");
+      expect(f).toHaveBeenCalledTimes(1);
+    });
+    it("a modal in a visible wrapper (an open drawer) blocks plain keys", () => {
+      const f = vi.fn();
+      renderHook(() => useShortcuts({ n: f }));
+      modalIn({});
+      press("n");
+      expect(f).not.toHaveBeenCalled();
+    });
+    it("a real open MobileDrawer blocks plain keys, a closed one does not", () => {
+      const f = vi.fn();
+      renderHook(() => useShortcuts({ n: f }));
+      const { rerender } = render(
+        createElement(MobileDrawer, {
+          open: false,
+          onClose() {},
+          items: [],
+        }),
+      );
+      press("n");
+      expect(f).toHaveBeenCalledTimes(1);
+      rerender(
+        createElement(MobileDrawer, { open: true, onClose() {}, items: [] }),
+      );
+      press("n");
+      expect(f).toHaveBeenCalledTimes(1);
+    });
   });
 });
