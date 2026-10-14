@@ -111,6 +111,7 @@ export function ConsultationView({ id }: { id: string }) {
             <FailedView
               stalled={st.stalled}
               retrying={resubmit.isPending}
+              retryError={resubmit.isError}
               onRetry={() =>
                 resubmit.mutate(item.query, {
                   onSuccess: ({ query_id }) => router.replace(`/c/${query_id}`),

@@ -1,6 +1,5 @@
 "use client";
 import {
-  Fragment,
   Suspense,
   createContext,
   useCallback,
@@ -14,7 +13,6 @@ import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/session-store";
 import { DegradedStrip } from "../states/degraded-strip";
 import { OfflineStrip } from "../states/offline-strip";
-import { SessionTimeout } from "../states/session-timeout";
 import { MobileDrawer } from "./mobile-drawer";
 import { Sidebar } from "./sidebar";
 
@@ -52,9 +50,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [drawer, setDrawer] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  // Bumped on sign-out so the page remounts and any open draft is dropped.
-  const [epoch, setEpoch] = useState(0);
-  const onSignOut = useCallback(() => setEpoch((n) => n + 1), []);
   const guard = useRef<NavigationGuard | null>(null);
   const setNavigationGuard = useCallback((g: NavigationGuard | null) => {
     guard.current = g;
@@ -95,7 +90,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main className="canvas-v3 relative flex min-w-0 flex-col overflow-hidden">
           <OfflineStrip />
           <DegradedStrip />
-          <Fragment key={epoch}>{children}</Fragment>
+          {children}
         </main>
       </div>
       <MobileDrawer
@@ -104,7 +99,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         items={items}
         onOpenSearch={openSearch}
       />
-      <SessionTimeout onSignOut={onSignOut} />
     </Ctx.Provider>
   );
 }

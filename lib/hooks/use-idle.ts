@@ -1,24 +1,58 @@
 "use client";
-import { useEffect, useEffectEvent } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 
-const ACTIVITY = ["pointerdown", "keydown", "scroll", "touchstart"] as const;
+// Activity restarts the idle period. `scroll` doesn't bubble, so it is caught
+// on document in the capture phase (scrolling inside any element counts).
+const WINDOW_ACTIVITY = ["pointerdown", "keydown", "wheel", "touchstart"];
+// After sleep, a frozen mobile page or a throttled background tab, check the
+// clock at once instead of waiting for the next tick.
+const WAKE = ["pageshow", "focus"];
 
-/** Calls `onIdle` once `ms` pass with no pointer, key, scroll or touch activity. */
-export function useIdle(ms: number, onIdle: () => void) {
-  // Always calls the latest `onIdle` without restarting the timer.
-  const fire = useEffectEvent(() => onIdle());
+/**
+ * Calls `onIdle(lastActivityAt)` once `ms` of wall-clock time pass with no
+ * pointer, key, wheel, scroll or touch activity. Deadline based, so missed or
+ * delayed timer ticks can't postpone it. Returns `reset()` to restart the
+ * period (for example when the clinician confirms they are still there).
+ */
+export function useIdle(
+  ms: number,
+  onIdle: (lastActivityAt: number) => void,
+  tickMs = 1000,
+): () => void {
+  // Written only in effects and event handlers, never during render.
+  const last = useRef(0);
+  const fired = useRef(false);
+  const fire = useEffectEvent((at: number) => onIdle(at));
+
+  const reset = useCallback(() => {
+    last.current = Date.now();
+    fired.current = false;
+  }, []);
+
   useEffect(() => {
-    let t = setTimeout(() => fire(), ms);
-    const reset = () => {
-      clearTimeout(t);
-      t = setTimeout(() => fire(), ms);
+    reset();
+    const check = () => {
+      if (!fired.current && Date.now() - last.current >= ms) {
+        fired.current = true;
+        fire(last.current);
+      }
     };
-    ACTIVITY.forEach((e) =>
-      window.addEventListener(e, reset, { passive: true }),
-    );
+    const opts = { passive: true, capture: true } as const;
+    WINDOW_ACTIVITY.forEach((e) => window.addEventListener(e, reset, opts));
+    document.addEventListener("scroll", reset, opts);
+    WAKE.forEach((e) => window.addEventListener(e, check));
+    document.addEventListener("visibilitychange", check);
+    const t = setInterval(check, tickMs);
     return () => {
-      clearTimeout(t);
-      ACTIVITY.forEach((e) => window.removeEventListener(e, reset));
+      clearInterval(t);
+      WINDOW_ACTIVITY.forEach((e) =>
+        window.removeEventListener(e, reset, opts),
+      );
+      document.removeEventListener("scroll", reset, opts);
+      WAKE.forEach((e) => window.removeEventListener(e, check));
+      document.removeEventListener("visibilitychange", check);
     };
-  }, [ms]);
+  }, [ms, tickMs, reset]);
+
+  return reset;
 }

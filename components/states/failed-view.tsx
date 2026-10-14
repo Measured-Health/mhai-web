@@ -1,4 +1,5 @@
 import { RotateCw } from "lucide-react";
+import { Banner } from "../ui/banner";
 import { Button } from "../ui/button";
 
 /** Couldn't complete: the inputs are kept; Try again is the main action. */
@@ -7,11 +8,14 @@ export function FailedView({
   onEdit,
   stalled,
   retrying,
+  retryError,
 }: {
   onRetry(): void;
   onEdit(): void;
   stalled?: boolean;
   retrying?: boolean;
+  /** The last Try again could not be sent. */
+  retryError?: boolean;
 }) {
   return (
     <section className="card-v3 mx-auto mt-8 max-w-[520px] p-7 text-center">
@@ -30,6 +34,13 @@ export function FailedView({
           : "The analysis service didn't respond in time."}{" "}
         Your answers are saved. Nothing was lost.
       </p>
+      {retryError && (
+        <div className="mt-4 text-left">
+          <Banner tone="bad" title="Couldn't send it again">
+            Try again, or edit the question.
+          </Banner>
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap justify-center gap-2.5">
         <Button onClick={onRetry} disabled={retrying}>
           <RotateCw aria-hidden className="size-4" />

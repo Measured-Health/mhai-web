@@ -1,11 +1,17 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useEffect } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect, useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Providers } from "@/app/providers";
 import type { QueryCreateIn, Readiness } from "@/lib/api/contract";
-import { useSession, type SessionItem } from "@/lib/session-store";
+import {
+  SessionProvider,
+  useSession,
+  type SessionItem,
+} from "@/lib/session-store";
 import { AppShell, useShell } from "../shell/app-shell";
+import { ToastProvider } from "../ui/toast";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -26,7 +32,7 @@ import { DegradedStrip } from "./degraded-strip";
 import { FailedView } from "./failed-view";
 import { FirstVisit } from "./first-visit";
 import { OfflineStrip } from "./offline-strip";
-import { SessionTimeout } from "./session-timeout";
+import { SessionGuard, SessionTimeout } from "./session-timeout";
 import { UnsavedGuard } from "./unsaved-guard";
 
 const ITEM: SessionItem = {
@@ -79,6 +85,15 @@ describe("FailedView", () => {
     expect(
       screen.getByText(/taking much longer than usual/),
     ).toBeInTheDocument();
+  });
+});
+
+describe("FailedView retry error", () => {
+  it("says so when Try again itself fails", () => {
+    render(<FailedView retryError onRetry={vi.fn()} onEdit={vi.fn()} />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /Couldn't send it again/,
+    );
   });
 });
 
@@ -261,24 +276,34 @@ describe("UnsavedGuard unmount", () => {
 });
 
 describe("SessionTimeout", () => {
-  const mount = (onSignOut = vi.fn()) =>
+  // Query cache, session and toasts, without the app-wide guard in Providers.
+  const Bare = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={new QueryClient()}>
+      <SessionProvider>
+        <ToastProvider>{children}</ToastProvider>
+      </SessionProvider>
+    </QueryClientProvider>
+  );
+  const mount = (props: { warnAfterMs?: number; signOutAfterMs?: number }) =>
     render(
-      <Providers>
+      <Bare>
         <Seed />
         <Count />
-        <SessionTimeout
-          warnAfterMs={1000}
-          signOutAfterMs={3000}
-          onSignOut={onSignOut}
-        />
-      </Providers>,
+        <SessionTimeout {...props} />
+      </Bare>,
     );
+  const short = { warnAfterMs: 1000, signOutAfterMs: 3000 };
   const tick = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+  const wake = (ms: number) =>
+    act(() => {
+      // Time passes with no timer ticks (sleep, frozen or throttled tab).
+      vi.setSystemTime(Date.now() + ms);
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
 
   it("warns with a countdown, then signs out and clears the session", () => {
     vi.useFakeTimers();
-    const onSignOut = vi.fn();
-    mount(onSignOut);
+    mount(short);
     expect(screen.getByTestId("count")).toHaveTextContent("1");
     tick(999);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -294,31 +319,140 @@ describe("SessionTimeout", () => {
     expect(screen.getByTestId("count")).toHaveTextContent("0");
     expect(push).toHaveBeenCalledTimes(1);
     expect(push).toHaveBeenCalledWith("/");
-    expect(onSignOut).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Signed out for privacy")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("keeps the session when the clinician stays signed in", () => {
+  it("Stay signed in restarts the idle period, so the warning comes back later", () => {
     vi.useFakeTimers();
-    mount();
+    mount(short);
     tick(1000);
     fireEvent.click(screen.getByRole("button", { name: "Stay signed in" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    tick(500);
+    tick(999);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
     expect(screen.getByTestId("count")).toHaveTextContent("1");
+    tick(1);
+    expect(
+      screen.getByRole("dialog", { name: "Still there?" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("0:02")).toBeInTheDocument();
+  });
+
+  it("closing the dialog with Esc (cancel) also restarts the idle period", () => {
+    vi.useFakeTimers();
+    mount(short);
+    tick(1000);
+    fireEvent(
+      screen.getByRole("dialog", { name: "Still there?" }),
+      new Event("cancel", { cancelable: true }),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Without a restart the old deadline (3 s) would sign out here.
+    tick(2000);
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByTestId("count")).toHaveTextContent("1");
+    expect(
+      screen.getByRole("dialog", { name: "Still there?" }),
+    ).toBeInTheDocument();
   });
 
   it("signs out at once from Sign out now", () => {
     vi.useFakeTimers();
-    mount();
+    mount(short);
     tick(1000);
     fireEvent.click(screen.getByRole("button", { name: "Sign out now" }));
     expect(screen.getByTestId("count")).toHaveTextContent("0");
     expect(push).toHaveBeenCalledTimes(1);
-    tick(5000);
+    tick(1500);
     expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it("signs out immediately on waking after 20 minutes with no ticks", () => {
+    vi.useFakeTimers();
+    mount({});
+    wake(20 * 60_000);
+    expect(screen.getByTestId("count")).toHaveTextContent("0");
+    expect(push).toHaveBeenCalledWith("/");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("signs out again when a later idle period also expires while asleep", () => {
+    vi.useFakeTimers();
+    mount({});
+    wake(20 * 60_000);
+    expect(push).toHaveBeenCalledTimes(1);
+    act(() => {
+      window.dispatchEvent(new Event("keydown"));
+    });
+    wake(20 * 60_000);
+    expect(push).toHaveBeenCalledTimes(2);
+  });
+
+  it("on waking after 14 minutes shows the warning with the real time left", () => {
+    vi.useFakeTimers();
+    mount({});
+    wake(14 * 60_000);
+    expect(
+      screen.getByRole("dialog", { name: "Still there?" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("1:00")).toBeInTheDocument();
+    expect(screen.getByTestId("count")).toHaveTextContent("1");
+    // The page was frozen past the deadline: the next wake signs out.
+    wake(61_000);
+    expect(screen.getByTestId("count")).toHaveTextContent("0");
+  });
+
+  it("covers every route: Providers (root layout, incl. /print) mounts the guard", () => {
+    vi.useFakeTimers();
+    render(
+      <Providers>
+        <Seed />
+        <Count />
+        <p>print sheet</p>
+      </Providers>,
+    );
+    wake(14 * 60_000);
+    expect(
+      screen.getByRole("dialog", { name: "Still there?" }),
+    ).toBeInTheDocument();
+    wake(2 * 60_000);
+    expect(push).toHaveBeenCalledWith("/");
+    expect(screen.getByText("Signed out for privacy")).toBeInTheDocument();
+  });
+});
+
+describe("SessionGuard", () => {
+  it("remounts the page on sign-out so an open draft is dropped", () => {
+    vi.useFakeTimers();
+    function Draft() {
+      const [v, setV] = useState("");
+      return (
+        <input
+          aria-label="draft"
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+        />
+      );
+    }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SessionProvider>
+          <ToastProvider>
+            <SessionGuard warnAfterMs={1000} signOutAfterMs={2000}>
+              <Draft />
+            </SessionGuard>
+          </ToastProvider>
+        </SessionProvider>
+      </QueryClientProvider>,
+    );
+    fireEvent.change(screen.getByLabelText("draft"), {
+      target: { value: "54 M chest pain" },
+    });
+    for (let i = 0; i < 3; i++) act(() => vi.advanceTimersByTime(1000));
+    expect(push).toHaveBeenCalledWith("/");
+    expect(screen.getByLabelText("draft")).toHaveValue("");
   });
 });
 

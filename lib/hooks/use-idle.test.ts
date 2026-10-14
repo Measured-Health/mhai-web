@@ -39,4 +39,43 @@ describe("useIdle", () => {
     vi.advanceTimersByTime(5000);
     expect(onIdle).not.toHaveBeenCalled();
   });
+
+  it("counts scrolling and wheel inside any element as activity", () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+    const box = document.createElement("div");
+    document.body.append(box);
+    renderHook(() => useIdle(1000, onIdle));
+    vi.advanceTimersByTime(900);
+    box.dispatchEvent(new Event("scroll")); // scroll does not bubble
+    vi.advanceTimersByTime(900);
+    box.dispatchEvent(new Event("wheel", { bubbles: true }));
+    vi.advanceTimersByTime(900);
+    expect(onIdle).not.toHaveBeenCalled();
+    box.remove();
+  });
+
+  it("uses wall-clock time: fires on wake even when no timer ticked", () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+    renderHook(() => useIdle(60_000, onIdle));
+    const start = Date.now();
+    vi.setSystemTime(start + 5 * 60_000);
+    window.dispatchEvent(new Event("pageshow"));
+    expect(onIdle).toHaveBeenCalledTimes(1);
+    expect(onIdle).toHaveBeenCalledWith(start);
+  });
+
+  it("restarts the idle period on reset()", () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+    const { result } = renderHook(() => useIdle(1000, onIdle));
+    vi.advanceTimersByTime(1000);
+    expect(onIdle).toHaveBeenCalledTimes(1);
+    result.current();
+    vi.advanceTimersByTime(999);
+    expect(onIdle).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    expect(onIdle).toHaveBeenCalledTimes(2);
+  });
 });

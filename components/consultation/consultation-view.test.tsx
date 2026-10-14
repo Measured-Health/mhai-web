@@ -18,7 +18,12 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
   notFound: () => notFound(),
 }));
-const createQuery = vi.fn(async () => ({ query_id: "q2" }));
+const createQuery = vi.fn(
+  async (q: QueryCreateIn): Promise<{ query_id: string }> => {
+    void q;
+    return { query_id: "q2" };
+  },
+);
 vi.mock("@/lib/api/client", () => ({
   getClient: () => ({ createQuery }),
 }));
@@ -219,5 +224,57 @@ describe("ConsultationView", () => {
     );
     expect(notFound).toHaveBeenCalled();
     expect(screen.getByText("not found page")).toBeInTheDocument();
+  });
+
+  it("tells the clinician when Try again fails, and keeps both actions", async () => {
+    createQuery.mockRejectedValueOnce(new Error("offline"));
+    status.mockReturnValue({
+      status: "failed",
+      progress: 0.5,
+      stage: null,
+      stalled: false,
+      error: null,
+    });
+    mount();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Try again/ }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Couldn't send it again/,
+    );
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Try again/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Edit question/ })).toBeEnabled();
+  });
+
+  it("shows the review banner and no confidence level for a needs-review result", async () => {
+    status.mockReturnValue({
+      status: "completed",
+      progress: 1,
+      stage: null,
+      stalled: false,
+      error: null,
+    });
+    result.mockReturnValue({
+      data: { ...FIXTURES.high, degraded: true },
+      isError: false,
+    });
+    mount();
+    const card = (
+      await screen.findByRole("heading", {
+        name: FIXTURES.high.diagnosis!,
+        level: 2,
+      })
+    ).closest("div.mx-auto")! as HTMLElement;
+    expect(
+      within(card).getByText(
+        "This result needs clinician review before any clinical action is taken",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(card).queryByRole("status", { name: /confidence/i }),
+    ).not.toBeInTheDocument();
+    expect(within(card).getByText(/Possible assessment/)).toBeInTheDocument();
+    expect(screen.getByTestId("item")).toHaveTextContent("|review|");
   });
 });
