@@ -13,19 +13,26 @@ export function ProcessingView({
   progress: number;
   elapsedMs: number;
 }) {
-  const pct = Math.round(progress * 100);
-  const step = stageIndex(stage) + 1;
+  const pct = Number.isFinite(progress)
+    ? Math.min(100, Math.max(0, Math.round(progress * 100)))
+    : 0;
+  const idx = stageIndex(stage);
+  const step = idx + 1;
+  const seconds = Number.isFinite(elapsedMs)
+    ? Math.max(0, elapsedMs) / 1000
+    : 0;
   return (
-    <section
-      aria-live="polite"
-      className="card-v3 mx-auto mt-5 max-w-[540px] p-6 text-center"
-    >
+    <section className="card-v3 mx-auto mt-5 max-w-[540px] p-6 text-center">
+      {/* Only the step change is announced; the ticking time and percent stay out of the live region. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        Step {step} of {STAGES.length}: {STAGES[idx].label}
+      </p>
       <EcgLine />
       <h2 className="font-display text-[34px] font-black leading-none">
         Analysing your question
       </h2>
       <p className="mb-[18px] mt-1 text-ink-2">
-        Running clinical safety checks. This usually takes 10–20 seconds.
+        Running clinical safety checks.
       </p>
       <StageList stage={stage} />
       <div
@@ -45,9 +52,7 @@ export function ProcessingView({
         <span>
           Step {step} of {STAGES.length}
         </span>
-        <span className="font-mono tabular">
-          {(elapsedMs / 1000).toFixed(1)} s
-        </span>
+        <span className="font-mono tabular">{seconds.toFixed(1)} s</span>
       </div>
     </section>
   );
