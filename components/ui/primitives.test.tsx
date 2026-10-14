@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ConfidencePill } from "./confidence-pill";
+import { Button } from "./button";
 import { Banner } from "./banner";
 import { Dialog } from "./dialog";
 import { Sheet } from "./sheet";
@@ -134,5 +135,19 @@ describe("Sheet (preflight R3)", () => {
         document.activeElement as HTMLElement,
       );
     }
+  });
+});
+
+describe("Button", () => {
+  it("defaults to type=button so it never submits a form, but can be overridden", () => {
+    const onSubmit = vi.fn((e) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <Button>Plain</Button>
+        <Button type="submit">Send</Button>
+      </form>,
+    );
+    expect(screen.getByText("Plain")).toHaveAttribute("type", "button");
+    expect(screen.getByText("Send")).toHaveAttribute("type", "submit");
   });
 });

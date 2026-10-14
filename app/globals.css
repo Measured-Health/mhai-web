@@ -131,3 +131,7 @@ body {
     transform: none;
   }
 }
+
+.skeleton-shimmer {
+  animation: sk calc(var(--t-story) * 2) linear infinite;
+}

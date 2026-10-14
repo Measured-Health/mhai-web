@@ -21,12 +21,15 @@ export function Button({
 }) {
   return (
     <button
+      type="button"
       {...props}
       className={cn(
         "inline-flex items-center justify-center gap-2 rounded-full font-semibold",
         "transition-[transform,filter] duration-[var(--t-instant)] ease-[var(--e-out)] active:scale-[.96] hover:brightness-105",
-        "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-mint/25 disabled:opacity-40 disabled:pointer-events-none",
-        size === "md" ? "min-h-11 px-5 text-sm" : "min-h-9 px-3.5 text-[13px]",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint-deep disabled:opacity-40 disabled:pointer-events-none",
+        size === "md"
+          ? "min-h-11 px-5 text-sm"
+          : "min-h-11 px-3.5 text-[13px] sm:min-h-9",
         VARIANT[variant],
         className,
       )}
