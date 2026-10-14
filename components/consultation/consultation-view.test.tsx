@@ -347,6 +347,20 @@ describe("ConsultationView", () => {
           await screen.findByText(/your agreement was recorded/),
         ).toBeInTheDocument();
       });
+      it("a does nothing on a needs-review result; Mark as reviewed needs the button", async () => {
+        result.mockReturnValue({ data: FIXTURES.review, isError: false });
+        mount();
+        await ready();
+        await userEvent.keyboard("a");
+        expect(sendFeedback).not.toHaveBeenCalled();
+        expect(
+          screen.queryByText(/your agreement was recorded/),
+        ).not.toBeInTheDocument();
+        await userEvent.click(
+          screen.getByRole("button", { name: /Mark as reviewed/ }),
+        );
+        expect(sendFeedback).toHaveBeenCalledTimes(1);
+      });
       it("c opens the correction form", async () => {
         mount();
         await ready();

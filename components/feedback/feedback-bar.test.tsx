@@ -25,7 +25,10 @@ import { FeedbackBar } from "./feedback-bar";
 function Probe() {
   const s = useSession();
   return (
-    <output data-testid="agreed">{s.get("q1")?.agreedAt ?? "none"}</output>
+    <>
+      <output data-testid="agreed">{s.get("q1")?.agreedAt ?? "none"}</output>
+      <output data-testid="feedback">{s.get("q1")?.feedback ?? "none"}</output>
+    </>
   );
 }
 function Seed() {
@@ -116,6 +119,16 @@ describe("FeedbackBar", () => {
     expect(
       screen.getByRole("button", { name: /Mark as reviewed/ }),
     ).toBeInTheDocument();
+  });
+  it("'Mark as reviewed' (the button) records a 'reviewed' sign-off", async () => {
+    ui(FIXTURES.review);
+    await userEvent.click(
+      screen.getByRole("button", { name: /Mark as reviewed/ }),
+    );
+    expect(send).toHaveBeenCalledWith({ query_id: "q1", action: "validate" });
+    await screen.findByText(/your agreement was recorded/);
+    expect(screen.getByTestId("feedback")).toHaveTextContent("reviewed");
+    expect(screen.getByTestId("agreed")).not.toHaveTextContent("none");
   });
   it("stays disabled after the bar remounts (print round trip)", async () => {
     render(

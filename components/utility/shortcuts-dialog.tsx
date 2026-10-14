@@ -15,7 +15,7 @@ export function ShortcutsDialog({
     ["New consultation", "N"],
     ["Submit form", `${mod} ↵`],
     ["Toggle evidence panel", "E"],
-    ["Agree with result", "A"],
+    ["Agree with result (not on Needs review)", "A"],
     ["Suggest correction", "C"],
     ["Copy result", "⇧ C"],
     ["Print / export", `${mod} P`],

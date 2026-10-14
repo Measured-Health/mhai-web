@@ -69,7 +69,11 @@ export function ConsultationView({ id }: { id: string }) {
     done
       ? {
           e: () => setPanel((p) => !p),
-          a: () => fbRef.current?.agree(),
+          // A one-key sign-off on a Needs-review result is too easy to
+          // trigger (and it prints): "Mark as reviewed" needs the button.
+          a: () => {
+            if (view.kind !== "review") fbRef.current?.agree();
+          },
           c: () => fbRef.current?.correct(),
           "shift+c": () => exRef.current?.copy(),
           // Through the shell's guard: a correction being typed prompts first.
