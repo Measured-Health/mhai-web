@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Darker_Grotesque, JetBrains_Mono, Outfit } from "next/font/google";
 import "./globals.css";
+import { Providers } from "./providers";
 
 const darker = Darker_Grotesque({
   variable: "--font-darker",
@@ -24,7 +25,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${darker.variable} ${outfit.variable} ${jetbrains.variable} h-full antialiased`}
     >
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
