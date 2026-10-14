@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { MobileDrawer } from "./mobile-drawer";
 
@@ -25,12 +26,29 @@ describe("MobileDrawer", () => {
     await userEvent.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalled();
   });
-  it("traps Tab inside the drawer", async () => {
-    render(<MobileDrawer {...base} open />);
-    const dialog = screen.getByRole("dialog", { name: "Menu" });
-    for (let i = 0; i < 30; i++) {
-      await userEvent.tab();
-      expect(dialog).toContainElement(document.activeElement as HTMLElement);
+  it("keeps Tab and Shift+Tab inside and restores focus to the trigger", async () => {
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>outside</button>
+          <MobileDrawer {...base} open={open} onClose={() => setOpen(false)} />
+        </>
+      );
     }
+    render(<Host />);
+    const outside = screen.getByRole("button", { name: "outside" });
+    outside.focus();
+    await userEvent.keyboard("{Enter}");
+    const dialog = screen.getByRole("dialog", { name: "Menu" });
+    for (const shift of [false, true]) {
+      for (let i = 0; i < 20; i++) {
+        await userEvent.tab({ shift });
+        expect(outside).not.toHaveFocus();
+        expect(dialog).toContainElement(document.activeElement as HTMLElement);
+      }
+    }
+    await userEvent.keyboard("{Escape}");
+    expect(outside).toHaveFocus();
   });
 });

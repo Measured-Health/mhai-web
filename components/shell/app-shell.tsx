@@ -25,15 +25,23 @@ type ShellCtx = {
   navigate(href: string): void;
   setNavigationGuard(guard: NavigationGuard | null): void;
 };
-const Ctx = createContext<ShellCtx>({
-  openDrawer() {},
-  openSearch() {},
-  searchOpen: false,
-  closeSearch() {},
-  navigate() {},
-  setNavigationGuard() {},
-});
-export const useShell = () => useContext(Ctx);
+const Ctx = createContext<ShellCtx | null>(null);
+
+/** Outside an AppShell the shell UI actions are no-ops, but `navigate` still routes. */
+export function useShell(): ShellCtx {
+  const ctx = useContext(Ctx);
+  const router = useRouter();
+  return (
+    ctx ?? {
+      openDrawer() {},
+      openSearch() {},
+      searchOpen: false,
+      closeSearch() {},
+      navigate: (href) => router.push(href),
+      setNavigationGuard() {},
+    }
+  );
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { items } = useSession();

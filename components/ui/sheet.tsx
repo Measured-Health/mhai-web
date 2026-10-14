@@ -1,10 +1,8 @@
 "use client";
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { useEscape } from "@/lib/hooks/use-escape";
+import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { cn } from "./cn";
-
-const FOCUSABLE =
-  'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function Sheet({
   open,
@@ -20,31 +18,7 @@ export function Sheet({
   const panel = useRef<HTMLElement>(null);
   useEscape(open, onClose);
 
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.activeElement as HTMLElement | null;
-    panel.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
-    return () => prev?.focus?.();
-  }, [open]);
-
-  function trap(e: KeyboardEvent) {
-    if (e.key !== "Tab" || !panel.current) return;
-    const items = [...panel.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
-    if (items.length === 0) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-    const active = document.activeElement;
-    if (e.shiftKey && active === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault();
-      first.focus();
-    } else if (!panel.current.contains(active)) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
+  useFocusTrap(open, panel);
 
   return (
     <div
@@ -64,7 +38,7 @@ export function Sheet({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        onKeyDown={trap}
+        tabIndex={-1}
         className={cn(
           "absolute inset-x-0 bottom-0 max-h-[80vh] overflow-auto rounded-t-[26px] bg-white px-4 pb-6 pt-2.5 shadow-2xl",
           "transition-transform duration-[var(--t-slow)] ease-[var(--e-spring)]",

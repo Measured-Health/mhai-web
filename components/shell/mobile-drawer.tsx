@@ -1,12 +1,10 @@
 "use client";
-import { Suspense, useEffect, useRef, type KeyboardEvent } from "react";
+import { Suspense, useRef } from "react";
 import type { SessionItem } from "@/lib/session-store";
 import { useEscape } from "@/lib/hooks/use-escape";
+import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { cn } from "../ui/cn";
 import { Sidebar } from "./sidebar";
-
-const FOCUSABLE =
-  'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function MobileDrawer({
   open,
@@ -22,31 +20,7 @@ export function MobileDrawer({
   const panel = useRef<HTMLDivElement>(null);
   useEscape(open, onClose);
 
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.activeElement as HTMLElement | null;
-    panel.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
-    return () => prev?.focus?.();
-  }, [open]);
-
-  function trap(e: KeyboardEvent) {
-    if (e.key !== "Tab" || !panel.current) return;
-    const els = [...panel.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
-    if (els.length === 0) return;
-    const first = els[0];
-    const last = els[els.length - 1];
-    const active = document.activeElement;
-    if (e.shiftKey && active === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault();
-      first.focus();
-    } else if (!panel.current.contains(active)) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
+  useFocusTrap(open, panel);
 
   return (
     <div
@@ -69,7 +43,7 @@ export function MobileDrawer({
         role="dialog"
         aria-modal="true"
         aria-label="Menu"
-        onKeyDown={trap}
+        tabIndex={-1}
         onClick={(e) => (e.target as HTMLElement).closest("a") && onClose()}
         className={cn(
           "absolute inset-y-0 left-0 w-[84%] max-w-80 transition-transform duration-[var(--t-slow)] ease-[var(--e-out)]",

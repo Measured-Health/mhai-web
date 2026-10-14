@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Providers } from "@/app/providers";
 import { AppShell, useShell } from "./app-shell";
@@ -51,5 +51,48 @@ describe("useShell().navigate", () => {
     await userEvent.click(screen.getByRole("button", { name: "go" }));
     expect(guard).toHaveBeenCalledWith("/c/q1");
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it("clears the guard when the component that set it unmounts", async () => {
+    const guard = vi.fn(() => false);
+    function Host() {
+      const [on, setOn] = useState(true);
+      return (
+        <>
+          <button onClick={() => setOn(false)}>unmount</button>
+          {on && <Probe guard={guard} />}
+          <Nav />
+        </>
+      );
+    }
+    function Nav() {
+      const { navigate } = useShell();
+      return <button onClick={() => navigate("/z")}>nav</button>;
+    }
+    render(
+      <Providers>
+        <AppShell>
+          <Host />
+        </AppShell>
+      </Providers>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "nav" }));
+    expect(push).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "unmount" }));
+    await userEvent.click(screen.getByRole("button", { name: "nav" }));
+    expect(push).toHaveBeenCalledWith("/z");
+  });
+});
+
+describe("useShell outside AppShell", () => {
+  it("still navigates via the router", async () => {
+    push.mockClear();
+    function Nav() {
+      const { navigate } = useShell();
+      return <button onClick={() => navigate("/y")}>nav</button>;
+    }
+    render(<Nav />);
+    await userEvent.click(screen.getByRole("button", { name: "nav" }));
+    expect(push).toHaveBeenCalledWith("/y");
   });
 });
