@@ -1,11 +1,14 @@
 "use client";
 import { useRouter } from "next/navigation";
 import {
+  createContext,
   Fragment,
   startTransition,
   useCallback,
+  useContext,
   useEffect,
   useEffectEvent,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -119,21 +122,43 @@ export function SessionTimeout({
   );
 }
 
+type SignedOut = {
+  /** Minutes of inactivity that caused the last sign-out; null if none. */
+  afterMin: number | null;
+  dismiss(): void;
+};
+const SignedOutCtx = createContext<SignedOut>({
+  afterMin: null,
+  dismiss() {},
+});
+/** Why the clinician was signed out, until dismissed. Memory only. */
+export const useSignedOutNotice = () => useContext(SignedOutCtx);
+
 /**
  * Mounted once in Providers (root layout), so every route, including
  * /print, has the idle sign-out. On sign-out it remounts the app below it,
- * dropping any in-memory page state such as an open draft.
+ * dropping any in-memory page state such as an open draft, and keeps an
+ * in-memory notice explaining why (never written to storage).
  */
 export function SessionGuard({
   children,
   ...timing
 }: Timing & { children: ReactNode }) {
   const [epoch, setEpoch] = useState(0);
-  const onSignOut = useCallback(() => setEpoch((n) => n + 1), []);
+  const [afterMin, setAfterMin] = useState<number | null>(null);
+  const minutes = Math.round((timing.signOutAfterMs ?? 900_000) / 60_000);
+  const onSignOut = useCallback(() => {
+    setEpoch((n) => n + 1);
+    setAfterMin(minutes);
+  }, [minutes]);
+  const notice = useMemo(
+    () => ({ afterMin, dismiss: () => setAfterMin(null) }),
+    [afterMin],
+  );
   return (
-    <>
+    <SignedOutCtx.Provider value={notice}>
       <Fragment key={epoch}>{children}</Fragment>
       <SessionTimeout {...timing} onSignOut={onSignOut} />
-    </>
+    </SignedOutCtx.Provider>
   );
 }

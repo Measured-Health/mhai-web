@@ -6,6 +6,8 @@ import { MenuButton } from "@/components/shell/menu-button";
 import { DEMO_USER } from "@/components/shell/sidebar";
 import { TopBar } from "@/components/shell/top-bar";
 import { FirstVisit } from "@/components/states/first-visit";
+import { useSignedOutNotice } from "@/components/states/session-timeout";
+import { SignedOutNotice } from "@/components/states/signed-out-notice";
 import { UnsavedGuard } from "@/components/states/unsaved-guard";
 import { Banner } from "@/components/ui/banner";
 import { emptyForm, fromQuery, type FormValues } from "@/lib/form-schema";
@@ -18,6 +20,7 @@ function Home({ editId }: { editId: string | null }) {
   const router = useRouter();
   const session = useSession();
   const submit = useSubmitQuery();
+  const signedOut = useSignedOutNotice();
   const editing = editId ? session.get(editId) : undefined;
   const [started, setStarted] = useState(
     session.items.length > 0 || Boolean(editing),
@@ -44,6 +47,7 @@ function Home({ editId }: { editId: string | null }) {
         leading={<MenuButton />}
       />
       <div className="flex-1 overflow-auto px-4 pb-10 pt-7 md:px-[26px]">
+        <SignedOutNotice />
         {!started ? (
           <FirstVisit
             name={DEMO_USER.name}
@@ -81,6 +85,8 @@ function Home({ editId }: { editId: string | null }) {
                     // Leaving on purpose: no prompt. Coming back finds a fresh
                     // form; one transition so it never flashes empty first.
                     startTransition(() => {
+                      // A new consultation started: the sign-out notice goes.
+                      signedOut.dismiss();
                       restart(emptyForm);
                       submit.reset();
                       router.push(`/c/${query_id}`);
