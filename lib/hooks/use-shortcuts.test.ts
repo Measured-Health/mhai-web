@@ -83,4 +83,35 @@ describe("useShortcuts", () => {
     expect(a).not.toHaveBeenCalled();
     expect(b).toHaveBeenCalledTimes(1);
   });
+  it("ignores auto-repeat and already-handled events", () => {
+    const f = vi.fn();
+    renderHook(() => useShortcuts({ n: f }));
+    press("n", { repeat: true });
+    press("n", { cancelable: true });
+    expect(f).toHaveBeenCalledTimes(1);
+    const h = (e: Event) => e.preventDefault();
+    window.addEventListener("keydown", h, true);
+    press("n", { cancelable: true });
+    window.removeEventListener("keydown", h, true);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+  it("disables plain keys behind a modal but keeps mod combos", () => {
+    const n = vi.fn();
+    const k = vi.fn();
+    renderHook(() => useShortcuts({ n, "mod+k": k }));
+    const m = document.body.appendChild(document.createElement("div"));
+    m.setAttribute("aria-modal", "true");
+    press("n");
+    press("k", { ctrlKey: true });
+    expect(n).not.toHaveBeenCalled();
+    expect(k).toHaveBeenCalledTimes(1);
+    m.remove();
+    const d = document.body.appendChild(document.createElement("dialog"));
+    d.setAttribute("open", "");
+    press("n");
+    expect(n).not.toHaveBeenCalled();
+    d.remove();
+    press("n");
+    expect(n).toHaveBeenCalledTimes(1);
+  });
 });

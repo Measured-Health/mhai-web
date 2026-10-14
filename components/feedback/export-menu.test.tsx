@@ -1,11 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FIXTURES } from "@/lib/api/fixtures";
 import { toResultView } from "@/lib/result-view";
 import { parseBody } from "../result/parse-body";
 import { ToastProvider } from "../ui/toast";
-import { ExportMenu } from "./export-menu";
+import { ExportMenu, type ExportMenuHandle } from "./export-menu";
 
 const r = FIXTURES.high;
 const ui = () =>
@@ -108,5 +109,22 @@ describe("ExportMenu", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: /ICD-10/ }));
     expect(await screen.findByText(/Couldn't copy/)).toBeInTheDocument();
     expect(screen.queryByText("ICD-10 code copied")).toBeNull();
+  });
+  it("copy() on the handle copies the result as text", async () => {
+    clipboard(false);
+    const h = createRef<ExportMenuHandle>();
+    render(
+      <ToastProvider>
+        <ExportMenu
+          ref={h}
+          queryId="q1"
+          view={toResultView(r)}
+          parsed={parseBody(r.response_text, r.citations)}
+        />
+      </ToastProvider>,
+    );
+    await act(async () => h.current?.copy());
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText.mock.calls[0][0]).toContain(toResultView(r).title);
   });
 });

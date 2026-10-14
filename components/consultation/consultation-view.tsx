@@ -15,6 +15,7 @@ import { FeedbackBar, type FeedbackBarHandle } from "../feedback/feedback-bar";
 import { ProcessingView } from "../processing/processing-view";
 import { parseBody } from "../result/parse-body";
 import { ResultCard } from "../result/result-card";
+import { useShell } from "../shell/app-shell";
 import { MenuButton } from "../shell/menu-button";
 import { TopBar } from "../shell/top-bar";
 import { FailedView } from "../states/failed-view";
@@ -43,6 +44,7 @@ function Analysing({
 export function ConsultationView({ id }: { id: string }) {
   // Every hook runs before the not-found exit below (rules of hooks).
   const router = useRouter();
+  const { navigate } = useShell();
   const { get, update } = useSession();
   const item = get(id);
   const st = useQueryStatus(id);
@@ -69,7 +71,10 @@ export function ConsultationView({ id }: { id: string }) {
           a: () => fbRef.current?.agree(),
           c: () => fbRef.current?.correct(),
           "shift+c": () => exRef.current?.copy(),
-          "mod+p": () => router.push(`/print/${id}`),
+          "mod+p": () => {
+            // Leaving would lose a correction being typed (in memory only).
+            if (!fbRef.current?.isCorrecting()) navigate(`/print/${id}`);
+          },
         }
       : {},
   );

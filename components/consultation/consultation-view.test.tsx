@@ -24,8 +24,9 @@ const createQuery = vi.fn(
     return { query_id: "q2" };
   },
 );
+const sendFeedback = vi.fn(async () => ({ status: "recorded" }));
 vi.mock("@/lib/api/client", () => ({
-  getClient: () => ({ createQuery }),
+  getClient: () => ({ createQuery, sendFeedback }),
 }));
 
 type Status = {
@@ -104,6 +105,7 @@ beforeEach(() => {
   push.mockClear();
   replace.mockClear();
   createQuery.mockClear();
+  sendFeedback.mockClear();
   notFound.mockClear();
   status.mockReset().mockReturnValue({
     status: "processing",
@@ -276,5 +278,91 @@ describe("ConsultationView", () => {
     ).not.toBeInTheDocument();
     expect(within(card).getByText(/Possible assessment/)).toBeInTheDocument();
     expect(screen.getByTestId("item")).toHaveTextContent("|review|");
+  });
+
+  describe("keyboard shortcuts", () => {
+    const writeText = vi.fn(async () => {});
+    beforeEach(() => {
+      writeText.mockClear();
+      Object.defineProperty(navigator, "clipboard", {
+        value: { writeText },
+        configurable: true,
+      });
+    });
+    const keys = async () => {
+      await userEvent.keyboard("a");
+      await userEvent.keyboard("c");
+      await userEvent.keyboard("e");
+      await userEvent.keyboard("{Shift>}c{/Shift}");
+      await userEvent.keyboard("{Control>}p{/Control}");
+    };
+
+    it("do nothing while analysing", async () => {
+      mount();
+      await screen.findByRole("heading", { name: "Analysing your question" });
+      await keys();
+      expect(sendFeedback).not.toHaveBeenCalled();
+      expect(writeText).not.toHaveBeenCalled();
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    describe("on a result", () => {
+      beforeEach(() => {
+        status.mockReturnValue({
+          status: "completed",
+          progress: 1,
+          stage: null,
+          stalled: false,
+          error: null,
+        });
+        result.mockReturnValue({ data: FIXTURES.high, isError: false });
+      });
+      const ready = () =>
+        screen.findByRole("button", { name: /Evidence panel/ });
+
+      it("e toggles the evidence panel", async () => {
+        mount();
+        const btn = await ready();
+        expect(btn).toHaveAttribute("aria-pressed", "true");
+        await userEvent.keyboard("e");
+        expect(btn).toHaveAttribute("aria-pressed", "false");
+      });
+      it("a agrees", async () => {
+        mount();
+        await ready();
+        await userEvent.keyboard("a");
+        expect(sendFeedback).toHaveBeenCalledTimes(1);
+        expect(
+          await screen.findByText(/your agreement was recorded/),
+        ).toBeInTheDocument();
+      });
+      it("c opens the correction form", async () => {
+        mount();
+        await ready();
+        await userEvent.keyboard("c");
+        expect(
+          screen.getByText(/A second clinician reviews every correction/),
+        ).toBeInTheDocument();
+      });
+      it("shift+c copies the result", async () => {
+        mount();
+        await ready();
+        await userEvent.keyboard("{Shift>}c{/Shift}");
+        expect(writeText).toHaveBeenCalledTimes(1);
+      });
+      it("mod+p goes to the print page through the navigation guard", async () => {
+        mount();
+        await ready();
+        await userEvent.keyboard("{Control>}p{/Control}");
+        expect(push).toHaveBeenCalledWith("/print/q1");
+      });
+      it("mod+p does nothing while a correction is being typed", async () => {
+        mount();
+        await ready();
+        await userEvent.keyboard("c");
+        await userEvent.keyboard("{Control>}p{/Control}");
+        expect(push).not.toHaveBeenCalled();
+      });
+    });
   });
 });

@@ -1,5 +1,11 @@
 "use client";
-import { useCallback, useImperativeHandle, useState, type Ref } from "react";
+import {
+  useCallback,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type Ref,
+} from "react";
 import { Check, PenLine } from "lucide-react";
 import { useFeedback } from "@/lib/queries";
 import type { ResultView } from "@/lib/result-view";
@@ -8,7 +14,11 @@ import { Banner } from "../ui/banner";
 import { Button } from "../ui/button";
 import { CorrectionForm } from "./correction-form";
 
-export type FeedbackBarHandle = { agree(): void; correct(): void };
+export type FeedbackBarHandle = {
+  agree(): void;
+  correct(): void;
+  isCorrecting(): boolean;
+};
 
 export function FeedbackBar({
   queryId,
@@ -38,7 +48,11 @@ export function FeedbackBar({
         : local;
   const { mutate } = fb;
   const { update } = session;
+  // A ref, so two keydowns in the same tick can't both pass the pending check.
+  const inflight = useRef(false);
   const agree = useCallback(() => {
+    if (inflight.current) return;
+    inflight.current = true;
     mutate(
       { query_id: queryId, action: "validate" },
       {
@@ -49,6 +63,9 @@ export function FeedbackBar({
           });
           setMode("agreed");
           onDone?.("agree");
+        },
+        onSettled: () => {
+          inflight.current = false;
         },
       },
     );
@@ -63,6 +80,7 @@ export function FeedbackBar({
       correct: () => {
         if (mode === "idle") setMode("correcting");
       },
+      isCorrecting: () => mode === "correcting",
     }),
     [mode, busy, agree],
   );

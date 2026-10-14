@@ -159,3 +159,30 @@ describe("shortcuts dialog", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("mobile drawer", () => {
+  it("closes when search opens", async () => {
+    function Open() {
+      const { openDrawer, openSearch } = useShell();
+      return (
+        <>
+          <button onClick={openDrawer}>drawer</button>
+          <button onClick={openSearch}>search</button>
+        </>
+      );
+    }
+    render(
+      <Providers>
+        <AppShell>
+          <Open />
+        </AppShell>
+      </Providers>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "drawer" }));
+    const menu = screen.getByRole("dialog", { name: "Menu" });
+    expect(menu.parentElement).not.toHaveAttribute("inert");
+    await userEvent.click(screen.getByRole("button", { name: "search" }));
+    expect(menu.parentElement).toHaveAttribute("inert");
+    expect(await screen.findByRole("combobox")).toBeInTheDocument();
+  });
+});
