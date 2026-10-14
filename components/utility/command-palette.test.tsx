@@ -13,6 +13,7 @@ const it1: SessionItem = {
   urgency: "urgent",
   createdAt: 0,
   kind: "caution",
+  confidenceLabel: "Use with caution",
   query: {
     patient_data: { age: 3, sex: "female", symptoms: ["Fever", "Rash"] },
     clinical_question: "x",
@@ -24,12 +25,14 @@ const it2: SessionItem = {
   id: "2",
   title: "Post-op fever, day 2",
   kind: "high",
+  confidenceLabel: "High confidence",
 };
 const it3: SessionItem = {
   ...it1,
   id: "3",
   title: "Chest pain, 54 M",
   kind: "high",
+  confidenceLabel: "High confidence",
   query: {
     ...it1.query,
     patient_data: { ...it1.query.patient_data, symptoms: ["Chest pain"] },
@@ -50,6 +53,11 @@ describe("searchItems", () => {
     const d = { ...it3, diagnosis: "Acute coronary syndrome" };
     expect(searchItems([it1, d], "coronary").map((i) => i.id)).toEqual(["3"]);
     expect(searchItems([it1, d], "chest").map((i) => i.id)).toEqual(["3"]);
+  });
+  it("matches 'Completed', not a confidence level, when none was shown", () => {
+    const none = { ...it3, confidenceLabel: null };
+    expect(searchItems([none], "high")).toEqual([]);
+    expect(searchItems([none], "completed").map((i) => i.id)).toEqual(["3"]);
   });
   it("returns everything for an empty query", () => {
     expect(searchItems([it1, it2], "  ")).toHaveLength(2);
@@ -184,5 +192,24 @@ describe("mobile drawer", () => {
     await userEvent.click(screen.getByRole("button", { name: "search" }));
     expect(menu.parentElement).toHaveAttribute("inert");
     expect(await screen.findByRole("combobox")).toBeInTheDocument();
+  });
+
+  it("labels a row 'Completed' when the result showed no confidence", async () => {
+    function SeedNone() {
+      const { add } = useSession();
+      useEffect(() => add({ ...it3, confidenceLabel: null }), [add]);
+      return null;
+    }
+    render(
+      <Providers>
+        <AppShell>
+          <SeedNone />
+        </AppShell>
+      </Providers>,
+    );
+    await userEvent.keyboard("{Control>}k{/Control}");
+    const row = await screen.findByRole("option", { name: /Chest pain/ });
+    expect(row).toHaveTextContent("Completed");
+    expect(row).not.toHaveTextContent("High confidence");
   });
 });

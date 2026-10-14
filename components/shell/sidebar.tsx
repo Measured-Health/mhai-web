@@ -9,8 +9,7 @@ import {
   Building2,
   CircleHelp,
 } from "lucide-react";
-import type { SessionItem } from "@/lib/session-store";
-import { RESULT_LABEL } from "@/lib/labels";
+import { historyStatus, type SessionItem } from "@/lib/session-store";
 import { useNow } from "@/lib/hooks/use-now";
 import { Logo, Mark } from "../ui/brand";
 import { cn } from "../ui/cn";
@@ -108,6 +107,7 @@ export function Sidebar({
             </h3>
             {g.items.map((i) => {
               const on = path === `/c/${i.id}`;
+              const status = historyStatus(i);
               return (
                 <Link
                   key={i.id}
@@ -139,14 +139,16 @@ export function Sidebar({
                       />
                     )}
                     <small className="mt-0.5 flex items-center gap-1.5 text-[11px] text-ink-3">
-                      {i.kind && (
+                      {status.dot && (
                         <span
                           aria-hidden
-                          className={cn("size-[7px] rounded-full", DOT[i.kind])}
+                          className={cn(
+                            "size-[7px] rounded-full",
+                            DOT[status.dot],
+                          )}
                         />
                       )}
-                      {i.kind ? RESULT_LABEL[i.kind] : "Analysing"} ·{" "}
-                      {ago(i.createdAt, now)}
+                      {status.label} · {ago(i.createdAt, now)}
                     </small>
                   </span>
                 </Link>

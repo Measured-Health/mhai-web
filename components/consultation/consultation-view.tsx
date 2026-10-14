@@ -86,6 +86,8 @@ export function ConsultationView({ id }: { id: string }) {
     if (view)
       update(id, {
         kind: view.kind,
+        // What the screen showed, so history never labels a level it hid.
+        confidenceLabel: view.confidence?.label ?? null,
         flagged: view.kind !== "high",
         // Without a diagnosis keep the symptom title rather than a generic one.
         ...(diagnosis ? { title: view.title, diagnosis } : {}),

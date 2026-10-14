@@ -3,8 +3,11 @@ import { useMemo, useRef, useState } from "react";
 import { HelpCircle, Plus, Search, Stethoscope } from "lucide-react";
 import { useEscape } from "@/lib/hooks/use-escape";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
-import { RESULT_LABEL } from "@/lib/labels";
-import { useSession, type SessionItem } from "@/lib/session-store";
+import {
+  historyStatus,
+  useSession,
+  type SessionItem,
+} from "@/lib/session-store";
 import { useShell } from "../shell/app-shell";
 import { cn } from "../ui/cn";
 
@@ -18,7 +21,7 @@ export function searchItems(items: SessionItem[], q: string) {
       i.diagnosis ?? "",
       ...i.query.patient_data.symptoms,
       i.query.specialty ?? "",
-      i.kind ? RESULT_LABEL[i.kind] : "",
+      i.kind ? historyStatus(i).label : "",
     ].some((f) => f.toLowerCase().includes(t)),
   );
 }
@@ -48,7 +51,7 @@ function PaletteBody({ onClose }: { onClose(): void }) {
         .map((i) => ({
           key: i.id,
           label: i.title,
-          sub: i.kind ? RESULT_LABEL[i.kind] : "Analysing",
+          sub: historyStatus(i).label,
           icon: Stethoscope,
           href: `/c/${i.id}`,
         })),

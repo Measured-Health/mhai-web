@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { QueryCreateIn, Urgency } from "./api/contract";
-import type { ResultKind } from "./labels";
+import { RESULT_LABEL, type ResultKind } from "./labels";
 
 export interface SessionItem {
   id: string;
@@ -24,7 +24,25 @@ export interface SessionItem {
   feedback?: "agree" | "correct" | "reviewed";
   /** Primary diagnosis text, set once a result is loaded; searched by history. */
   diagnosis?: string;
+  /** The confidence label the result screen showed; null when it showed none. */
+  confidenceLabel?: string | null;
   query: QueryCreateIn;
+}
+
+/**
+ * History status in plain language, matching what the result screen showed:
+ * "Completed" (no dot) when a completed result had no confidence level.
+ */
+export function historyStatus(i: SessionItem): {
+  label: string;
+  dot: ResultKind | "failed" | null;
+} {
+  if (!i.kind) return { label: "Analysing", dot: null };
+  if (i.kind === "review" || i.kind === "failed")
+    return { label: RESULT_LABEL[i.kind], dot: i.kind };
+  return i.confidenceLabel
+    ? { label: i.confidenceLabel, dot: i.kind }
+    : { label: "Completed", dot: null };
 }
 
 type Ctx = {

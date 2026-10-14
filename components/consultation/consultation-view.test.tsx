@@ -79,6 +79,7 @@ function Seeded({ children }: { children: ReactNode }) {
       <output data-testid="item">
         {[item.title, item.kind, item.diagnosis ?? "-"].join("|")}
       </output>
+      <output data-testid="label">{String(item.confidenceLabel)}</output>
       {children}
     </>
   ) : null;
@@ -224,6 +225,31 @@ describe("ConsultationView", () => {
         screen.getByRole("complementary", { name: "Evidence and safety" }),
       ).getAllByText(/Sources used/i).length,
     ).toBeGreaterThan(0);
+  });
+
+  it("records the confidence label the screen showed, or null when it showed none", async () => {
+    status.mockReturnValue({
+      status: "completed",
+      progress: 1,
+      stage: null,
+      stalled: false,
+      error: null,
+    });
+    result.mockReturnValue({ data: FIXTURES.high, isError: false });
+    const a = mount();
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("label")).toHaveTextContent("High confidence"),
+    );
+    a.unmount();
+    result.mockReturnValue({
+      data: { ...FIXTURES.high, trust_score: null },
+      isError: false,
+    });
+    mount();
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("item")).toHaveTextContent("|high|"),
+    );
+    expect(screen.getByTestId("label")).toHaveTextContent("null");
   });
 
   it("shows the 404 page for an unknown or ended consultation", () => {
