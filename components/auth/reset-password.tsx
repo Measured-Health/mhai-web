@@ -28,7 +28,7 @@ export function ResetPassword() {
 
   useEffect(() => {
     if (window.location.search)
-      window.history.replaceState(null, "", "/reset-password");
+      window.history.replaceState(window.history.state, "", "/reset-password");
   }, []);
 
   if (!token)
@@ -38,7 +38,10 @@ export function ResetPassword() {
           title="Reset your password"
           sub="This link is missing or incomplete."
         />
-        <Link href="/forgot-password" className="font-semibold text-mint-deep">
+        <Link
+          href="/forgot-password"
+          className="inline-flex min-h-11 items-center font-semibold text-mint-deep"
+        >
           Send a new link
         </Link>
         <BackToSignIn />
@@ -100,7 +103,7 @@ export function ResetPassword() {
           {error.code === "link_expired" && (
             <Link
               href="/forgot-password"
-              className="mt-1.5 inline-block font-semibold underline"
+              className="inline-flex min-h-11 items-center font-semibold underline"
             >
               Send a new link
             </Link>

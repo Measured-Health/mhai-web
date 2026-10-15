@@ -117,6 +117,9 @@ describe("ResetPassword", () => {
     expect(
       screen.getByRole("link", { name: "Send a new link" }),
     ).toHaveAttribute("href", "/forgot-password");
+    expect(screen.getByRole("link", { name: "Send a new link" })).toHaveClass(
+      "min-h-11",
+    );
   });
 
   it("handles a link with no token", () => {
