@@ -61,12 +61,13 @@ the product's audience (the brand panel says so). So the app must work on
 - adaptive polling that pauses while offline;
 - retries with backoff for network errors only;
 - retry-safe submits (`Idempotency-Key`);
-- "send when back online" for a finished form (memory only);
+- an encrypted offline outbox: questions and feedback made offline are
+  saved on the device and sync when the connection returns (Task 15);
 - a data-saver mode (no motion, slower polling);
 - gzip on the demo server;
 - an end-to-end test on a throttled "slow 3G" connection.
 
-The backend's side is listed as new spec §10 items (Task 15).
+The backend's side is listed as new spec §10 items (Task 16).
 
 **Tech Stack:** as Plan 1, plus:
 
@@ -160,8 +161,10 @@ counts down to a lock.
   - retry only network failures and 5xx, with exponential backoff and
     jitter, never 4xx;
   - every write that may be retried carries an `Idempotency-Key`;
-  - nothing queued for later is ever written to storage: memory only,
-    cleared on sign-out.
+  - the only patient data ever written to browser storage is Task 15's
+    outbox of unsent questions and feedback: AES-GCM with a
+    non-extractable device key, owner-bound, deleted on sync, on manual
+    sign-out and after 72 h. Never results or history.
 - **Commits:** imperative subject ≤72 characters, and **no AI
   attribution**. Work on branch `agent/plan-2-accounts`; humans merge.
 
@@ -8712,8 +8715,6 @@ git commit -m "Add the hospital sign-on return page"
 - Create:
   - `lib/network.ts`
   - `lib/network.test.ts`
-  - `lib/hooks/use-send-when-online.ts`
-  - `lib/hooks/use-send-when-online.test.tsx`
   - `components/states/network-effects.tsx`
   - `tests/e2e/network.spec.ts`
 - Modify:
@@ -8722,21 +8723,17 @@ git commit -m "Add the hospital sign-on return page"
   - `lib/queries.ts`: adaptive polling, offline-aware stall, retry-safe
     submit and feedback;
   - `app/providers.tsx`: the retry policy and `<NetworkEffects />`;
-  - `app/globals.css`: data-saver motion off;
-  - `app/(clinical)/page.tsx`: send when back online.
+  - `app/globals.css`: data-saver motion off.
 
 **Interfaces:**
 
 - Consumes: `ApiError` (Task 12); the Plan 1 hooks `useSubmitQuery`,
-  `useQueryStatus` and `useSendFeedback` (in `lib/queries.ts`); and the
-  home page's submit handler.
+  `useQueryStatus` and `useSendFeedback` (in `lib/queries.ts`).
 - Produces:
   - `useNetwork(): { online: boolean; saveData: boolean; slow: boolean }`;
   - `pollDelay(elapsedMs, { slow, saveData }): number`;
   - `shouldRetry(failures, error, max?): boolean`;
   - `retryDelay(attempt): number`;
-  - `useSendWhenOnline<T>(send: (v: T) => void): { pending: T | null;
-queue(v: T): void; cancel(): void }`;
   - `MhaiClient.createQuery(q, opts?: { idempotencyKey?: string })` and
     `MhaiClient.sendFeedback(f, opts?: { idempotencyKey?: string })`;
   - `NetworkEffects`.
@@ -8769,14 +8766,6 @@ queue(v: T): void; cancel(): void }`;
     across its retries;
   - the live client sends it as the `Idempotency-Key` header, and the mock
     ignores it.
-- **Send when back online:**
-  - pressing Analyse while offline doesn't submit. It keeps the form and
-    shows an info banner above the form: "You're offline" / "Your question
-    is ready. It will be sent as soon as you're back online.", with a "Don't
-    send" button;
-  - on reconnect it submits once, exactly as if Analyse had been pressed;
-  - the pending question lives in React state only, and is dropped on
-    "Don't send", on sign-out (remount) and on leaving the page.
 - **Data saver** (`saveData` or `slow`):
   - `NetworkEffects` sets `data-save-data` on `<html>`, and CSS turns off
     animations and transitions there, the same as reduced motion;
@@ -8855,44 +8844,6 @@ describe("useNetwork", () => {
 });
 ```
 
-`lib/hooks/use-send-when-online.test.tsx`:
-
-```tsx
-import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { useSendWhenOnline } from "./use-send-when-online";
-
-afterEach(() => vi.restoreAllMocks());
-
-describe("useSendWhenOnline", () => {
-  it("holds a value while offline and sends it once on reconnect", () => {
-    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    const send = vi.fn();
-    const { result } = renderHook(() => useSendWhenOnline(send));
-    act(() => result.current.queue({ q: 1 }));
-    expect(result.current.pending).toEqual({ q: 1 });
-    expect(send).not.toHaveBeenCalled();
-    onLine.mockReturnValue(true);
-    act(() => void window.dispatchEvent(new Event("online")));
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenCalledWith({ q: 1 });
-    expect(result.current.pending).toBeNull();
-    act(() => void window.dispatchEvent(new Event("online")));
-    expect(send).toHaveBeenCalledTimes(1);
-  });
-  it("drops the value on cancel", () => {
-    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    const send = vi.fn();
-    const { result } = renderHook(() => useSendWhenOnline(send));
-    act(() => result.current.queue("x"));
-    act(() => result.current.cancel());
-    onLine.mockReturnValue(true);
-    act(() => void window.dispatchEvent(new Event("online")));
-    expect(send).not.toHaveBeenCalled();
-  });
-});
-```
-
 Add to `lib/api/live.test.ts`:
 
 ```ts
@@ -8908,7 +8859,7 @@ it("sends the idempotency key on a retried submit", async () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `npx vitest run lib/network.test.ts lib/hooks/use-send-when-online.test.tsx lib/api/live.test.ts`
+Run: `npx vitest run lib/network.test.ts lib/api/live.test.ts`
 Expected: FAIL (modules not found, and the header missing).
 
 - [ ] **Step 3: Write the network helpers**
@@ -8985,33 +8936,6 @@ export function shouldRetry(failures: number, e: unknown, max = 3): boolean {
 
 export const retryDelay = (attempt: number) =>
   Math.min(30_000, 1_000 * 2 ** attempt) * (0.5 + Math.random() / 2);
-```
-
-`lib/hooks/use-send-when-online.ts`:
-
-```ts
-"use client";
-import { useEffect, useEffectEvent, useState } from "react";
-
-/** Holds one value while offline (memory only) and sends it once on reconnect. */
-export function useSendWhenOnline<T>(send: (v: T) => void) {
-  const [pending, setPending] = useState<T | null>(null);
-  const flush = useEffectEvent(() => {
-    if (pending === null) return;
-    setPending(null);
-    send(pending);
-  });
-  useEffect(() => {
-    const on = () => flush();
-    window.addEventListener("online", on);
-    return () => window.removeEventListener("online", on);
-  }, []);
-  return {
-    pending,
-    queue: (v: T) => setPending(() => v),
-    cancel: () => setPending(null),
-  };
-}
 ```
 
 - [ ] **Step 4: Wire it into the clients, queries and providers**
@@ -9121,41 +9045,11 @@ export function NetworkEffects() {
 }
 ```
 
-**Home page (`app/(clinical)/page.tsx`):** wrap the submit.
-
-- `const later = useSendWhenOnline<QueryCreateIn>((q) => send(q));`,
-  where `send` is the page's existing submit call.
-- In the Analyse handler, after validation passes: `if
-(!navigator.onLine) return later.queue(q);`.
-- Render `{later.pending && <Banner tone="info" title="You're
-offline">…</Banner>}` above the form, with the body "Your question is
-  ready. It will be sent as soon as you're back online." and a ghost
-  button "Don't send" calling `later.cancel()`.
-- While `later.pending`, the Analyse button reads "Waiting for
-  connection…" and is disabled.
-
-Add to `components/consultation/home.test.tsx`:
-
-```tsx
-it("holds the question while offline and sends it on reconnect", async () => {
-  const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-  await mount(<Page />);
-  await userEvent.click(screen.getByRole("button", { name: /Febrile child/ }));
-  await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
-  expect(await screen.findByText("You're offline")).toBeInTheDocument();
-  expect(createQuery).not.toHaveBeenCalled();
-  onLine.mockReturnValue(true);
-  await act(async () => void window.dispatchEvent(new Event("online")));
-  await vi.waitFor(() => expect(createQuery).toHaveBeenCalledTimes(1));
-  await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/c/q2"));
-});
-```
-
-In the existing "welcomes a first visit … then submits" test, the
+In `components/consultation/home.test.tsx`, in the existing "welcomes a first visit … then submits" test, the
 `createQuery` assertion becomes `toHaveBeenCalledWith(expect.objectContaining({…}),
 { idempotencyKey: expect.any(String) })`.
 
-- [ ] **Step 5: Write the slow-network and offline e2e tests**
+- [ ] **Step 5: Write the slow-network e2e test**
 
 `tests/e2e/network.spec.ts`:
 
@@ -9194,37 +9088,10 @@ test("the whole flow works on a slow 3G connection", async ({ page }) => {
     timeout: 120_000,
   });
 });
-
-test("a question asked offline is sent when the connection returns", async ({
-  page,
-  context,
-}) => {
-  await signIn(page);
-  await expect(page).toHaveURL(/\/$/);
-  await page.getByRole("button", { name: /Start a consultation/ }).click();
-  await page.getByLabel("Age").fill("54");
-  await page.getByRole("radio", { name: "Male", exact: true }).click();
-  await page.getByRole("radio", { name: /Urgent/ }).click();
-  if ((page.viewportSize()?.width ?? 1440) < 768)
-    await page.getByRole("button", { name: "Next" }).click();
-  await page.getByLabel("Presenting symptoms").fill("Chest pain");
-  await page.getByLabel("Presenting symptoms").press("Enter");
-  await page
-    .getByLabel("Clinical question")
-    .fill("Central chest pain for 40 minutes. Likely diagnosis?");
-  if ((page.viewportSize()?.width ?? 1440) < 768)
-    await page.getByRole("button", { name: "Next" }).click();
-  await context.setOffline(true);
-  await page.getByRole("button", { name: /Analyse/ }).click();
-  await expect(page.getByText("You're offline").first()).toBeVisible();
-  await context.setOffline(false);
-  await expect(page.getByText("Analysing your question")).toBeVisible();
-  await expect(page.getByText("You're back online")).toBeVisible();
-});
 ```
 
 These steps repeat `fillForm` from `clinical-flow.spec.ts` on purpose. If
-Task 15 has already moved `fillForm` into `helpers.ts`, import it
+Task 16 has already moved `fillForm` into `helpers.ts`, import it
 instead.
 
 - [ ] **Step 6: Run everything**
@@ -9237,12 +9104,1058 @@ Expected: PASS.
 ```bash
 npx prettier --write . && npm run lint && npm run typecheck
 git add -A
-git commit -m "Support weak networks: adaptive polling, safe retries, send when online"
+git commit -m "Support weak networks: adaptive polling and retry-safe writes"
+```
+
+> "Send when back online" is not in this task: Task 15's encrypted outbox
+> covers offline questions and feedback.
+
+---
+
+### Task 15: Offline outbox and sync (encrypted on the device)
+
+> **Privacy change.** This task changes the rule "never store PHI in
+> IndexedDB" (`CONTRIBUTING.md`). The product owner chose to let unsent
+> work survive a closed tab. The PR must carry the `clinical-review`
+> label and ask for clinical/privacy sign-off on the narrowed rule in
+> Step 7.
+
+**Files:**
+
+- Create:
+  - `lib/offline/db.ts`
+  - `lib/offline/crypto.ts`
+  - `lib/offline/outbox.ts`
+  - `lib/offline/outbox.test.ts`
+  - `lib/offline/outbox-context.tsx`
+  - `lib/offline/outbox-context.test.tsx`
+  - `components/states/outbox-indicator.tsx`
+  - `components/consultation/waiting-to-send.tsx`
+  - `tests/e2e/offline.spec.ts`
+- Modify:
+  - `lib/session-store.tsx`: `pending`, `remove`, `replaceId`, and the
+    history labels;
+  - `lib/queries.ts`: no polling for local ids, and feedback queues while
+    offline;
+  - `lib/api/contract.ts`: `FeedbackOut.status` gains `"queued"`, which
+    is frontend only;
+  - `app/providers.tsx`: `OutboxProvider`;
+  - `app/(clinical)/page.tsx`: queue while offline;
+  - `components/consultation/consultation-view.tsx`: the waiting state
+    and redirect on sync;
+  - `components/feedback/feedback-bar.tsx`: the queued toast;
+  - `components/shell/sidebar.tsx`: the indicator;
+  - `components/auth/sign-out.tsx`: warn before deleting unsent items;
+  - `tests/e2e/helpers.ts`: `expectNoStorage` allows an empty outbox;
+  - `CONTRIBUTING.md`, `ARCHITECTURE.md` §4.2,
+    `docs/specs/2026-10-13-ui-design-v3.md` §10;
+  - `package.json`: dev dependency `fake-indexeddb`.
+
+**Interfaces:**
+
+- Consumes:
+  - `useAuth` (`user`, `status`, `signOut`) (Task 3);
+  - `useNetwork`, `shouldRetry` (Task 14);
+  - `MhaiClient.createQuery(q, { idempotencyKey })` and
+    `sendFeedback(f, { idempotencyKey })` (Task 14);
+  - `ApiError` (Task 12);
+  - `useSession`, `titleFor` (Plan 1).
+- Produces:
+  - `createOutbox(opts?: { key?: Promise<CryptoKey>; now?: () => number
+})`, which returns `{ add, list, remove, markFailed, clearOwner }`;
+  - `OUTBOX_TTL_MS = 72 h`;
+  - `isLocalId(id: string): boolean`, true for the prefix `local-`;
+  - `OutboxProvider` and `useOutbox()`, which returns:
+
+    ```ts
+    {
+      items: OutboxItem[];
+      syncing: boolean;
+      resolved: Record<string, string>; // localId → real query id
+      queueQuery(q: QueryCreateIn): Promise<string>; // the localId
+      queueFeedback(f: FeedbackIn): Promise<void>;
+      discard(id: string): Promise<void>; // id is the item id or the localId
+      clearMine(): Promise<void>;
+    }
+    ```
+
+  - Session history: `SessionItem.pending?: "waiting" | "failed"`, plus
+    `remove(id)` and `replaceId(from, to)`.
+
+**How it works:**
+
+1. **Offline at Analyse:** the home page calls `queueQuery(q)`, adds a
+   history item with id `local-<uuid>` and `pending: "waiting"`, and opens
+   `/c/local-…`. There, `WaitingToSend` replaces the analysing screen:
+   - heading "Waiting to send";
+   - "You're offline. This question is saved securely on this device and
+     will be analysed as soon as you're back online.";
+   - "Edit question" (`/?edit=<localId>`, Plan 1's edit flow);
+   - "Delete" (`discard` then `remove`, then home).
+
+   No status polling runs for a `local-` id.
+
+2. **Offline feedback** (agree, reviewed or a correction on a result
+   already on screen): `useSendFeedback` queues it and resolves with `{
+status: "queued" }`. The feedback bar shows "Saved on this device. It
+   will be sent when you're back online." and records the feedback
+   locally, as for a sent one.
+3. **Storage:** each item is AES-GCM encrypted (a 12-byte IV per item)
+   with a **non-extractable** device key that's created once and kept in
+   IndexedDB.
+   - The database is `mhai-outbox`, with stores `keys` and `items`.
+   - The owner is stored as `sha256("mhai-outbox:" + username)`, so no
+     plain username is on disk.
+   - Nothing else is stored: no results and no history.
+4. **Sync:**
+   - It runs while signed in and `online`: on sign-in, on the `online`
+     event, right after queueing, and every 30 s while items wait.
+   - Items go one at a time, oldest first, each with its own
+     `Idempotency-Key`. A retry, a reload or two tabs can't duplicate
+     work.
+   - **A query** calls `createQuery`. On success it removes the item,
+     then calls `session.replaceId(localId, query_id)` (or `session.add(…)`
+     if the history item isn't in this session) and records
+     `resolved[localId] = query_id`. `ConsultationView` on `/c/<localId>`
+     sees that and calls `router.replace("/c/<query_id>")`.
+   - **Feedback** calls `sendFeedback`. On success it removes the item.
+   - **On error:**
+     - 401 stops the sync (auth signs out);
+     - a network failure or 5xx stops it until the next trigger;
+     - any other 4xx calls `markFailed(id, "rejected")` and moves on.
+
+     A failed item shows "Couldn't send" with Edit and Delete.
+5. **Lifetime:**
+   - Items are deleted on sync, by "Delete", and after 72 h (purged on
+     every `list`).
+   - **A manual sign-out** with items waiting first asks: "You have N
+     unsent items" / "Signing out deletes them from this device." The
+     options are "Stay signed in" and "Sign out and delete".
+   - **Idle and expired sign-outs** keep the items (encrypted and owner
+     bound). They sync at the same user's next online sign-in, and are
+     invisible to anyone else.
+   - While offline with items waiting, `beforeunload` asks the browser
+     to confirm leaving.
+6. **Quiet when unused:** the database is only created by the first
+   `add`. `list` checks `indexedDB.databases()` and returns `[]` without
+   opening when `mhai-outbox` doesn't exist. So the existing "no
+   storage" e2e checks still hold for anyone who never queued anything.
+7. **Indicator:**
+   - In the sidebar, under New consultation, a `role="status"` row shows
+     "N waiting to send" (or "Sending…" while syncing), with a cloud icon.
+     It's hidden when empty.
+   - History items show the labels "Waiting to send" and "Couldn't send"
+     through `historyStatus`.
+
+**Threat model** (write this as the comment at the top of
+`lib/offline/crypto.ts`):
+
+- The key can't be exported or read as bytes, so the stored items are
+  unreadable outside this site's code in this browser profile.
+- Someone who can run this site's code in the same browser profile could
+  still decrypt them. Owner binding hides items from other users in the
+  UI, and the 72 h TTL bounds how long anything sits on a shared ward PC.
+
+- [ ] **Step 1: Install the test IndexedDB**
+
+Run: `npm install -E -D fake-indexeddb`
+Expected: added to `devDependencies`.
+
+- [ ] **Step 2: Write the failing tests**
+
+`lib/offline/outbox.test.ts`:
+
+```ts
+import "fake-indexeddb/auto";
+import { beforeEach, describe, expect, it } from "vitest";
+import { OUTBOX_TTL_MS, createOutbox, isLocalId } from "./outbox";
+import { idbAll } from "./db";
+
+const Q = {
+  clinical_question: "Central chest pain for 40 minutes. Likely diagnosis?",
+  urgency: "urgent" as const,
+  patient_data: { age: 54, sex: "male" as const, symptoms: ["Chest pain"] },
+};
+const key = () =>
+  crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, [
+    "encrypt",
+    "decrypt",
+  ]);
+
+beforeEach(async () => {
+  await new Promise<void>((r) => {
+    const req = indexedDB.deleteDatabase("mhai-outbox");
+    req.onsuccess = req.onerror = req.onblocked = () => r();
+  });
+});
+
+describe("outbox", () => {
+  it("stores items encrypted, per owner, oldest first", async () => {
+    let t = 1;
+    const box = createOutbox({ key: key(), now: () => t++ });
+    await box.add("owner-a", "query", { q: Q, localId: "local-1" });
+    await box.add("owner-a", "feedback", {
+      f: { query_id: "q9", action: "validate" },
+    });
+    await box.add("owner-b", "query", { q: Q, localId: "local-2" });
+    const mine = await box.list("owner-a");
+    expect(mine.map((i) => i.kind)).toEqual(["query", "feedback"]);
+    expect(mine[0]!.payload).toEqual({ q: Q, localId: "local-1" });
+    expect(mine[0]!.idempotencyKey).not.toBe(mine[1]!.idempotencyKey);
+    const raw = JSON.stringify(await idbAll("items"), (_k, v) =>
+      v instanceof ArrayBuffer || ArrayBuffer.isView(v) ? "<bytes>" : v,
+    );
+    expect(raw).not.toContain("chest pain");
+    expect(raw).not.toContain("Chest pain");
+  });
+
+  it("removes, fails and clears items", async () => {
+    const box = createOutbox({ key: key() });
+    const a = await box.add("o", "query", { q: Q, localId: "local-1" });
+    const b = await box.add("o", "query", { q: Q, localId: "local-2" });
+    await box.markFailed(a.id, "rejected");
+    expect((await box.list("o")).find((i) => i.id === a.id)?.status).toBe(
+      "failed",
+    );
+    await box.remove(b.id);
+    expect(await box.list("o")).toHaveLength(1);
+    await box.clearOwner("o");
+    expect(await box.list("o")).toEqual([]);
+  });
+
+  it("forgets items older than 72 hours", async () => {
+    let t = 0;
+    const box = createOutbox({ key: key(), now: () => t });
+    await box.add("o", "query", { q: Q, localId: "local-1" });
+    t = OUTBOX_TTL_MS + 1;
+    expect(await box.list("o")).toEqual([]);
+    expect(await idbAll("items")).toEqual([]);
+  });
+
+  it("drops items it can't decrypt (another key)", async () => {
+    await createOutbox({ key: key() }).add("o", "query", {
+      q: Q,
+      localId: "local-1",
+    });
+    expect(await createOutbox({ key: key() }).list("o")).toEqual([]);
+  });
+
+  it("recognises local ids", () => {
+    expect(isLocalId("local-abc")).toBe(true);
+    expect(isLocalId("q-1")).toBe(false);
+  });
+});
+```
+
+`lib/offline/outbox-context.test.tsx`:
+
+```tsx
+import "fake-indexeddb/auto";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../api/errors";
+import { AuthTestProvider } from "@/tests/auth-wrapper";
+import { useSession } from "../session-store";
+import { OutboxProvider, useOutbox } from "./outbox-context";
+
+const createQuery = vi.fn();
+const sendFeedback = vi.fn();
+vi.mock("@/lib/api/client", () => ({
+  getClient: () => ({ createQuery, sendFeedback }),
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
+
+const Q = {
+  clinical_question: "Central chest pain for 40 minutes. Likely diagnosis?",
+  urgency: "urgent" as const,
+  patient_data: { age: 54, sex: "male" as const, symptoms: ["Chest pain"] },
+};
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <AuthTestProvider>
+    <OutboxProvider>{children}</OutboxProvider>
+  </AuthTestProvider>
+);
+const use = () => ({ box: useOutbox(), session: useSession() });
+let onLine: ReturnType<typeof vi.spyOn>;
+
+beforeEach(async () => {
+  createQuery.mockReset();
+  sendFeedback.mockReset();
+  onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  await new Promise<void>((r) => {
+    const req = indexedDB.deleteDatabase("mhai-outbox");
+    req.onsuccess = req.onerror = req.onblocked = () => r();
+  });
+});
+afterEach(() => vi.restoreAllMocks());
+
+describe("OutboxProvider", () => {
+  it("queues offline, then syncs once online, in order, with each key", async () => {
+    createQuery.mockResolvedValue({ query_id: "q-real" });
+    sendFeedback.mockResolvedValue({ status: "recorded" });
+    const { result } = renderHook(use, { wrapper });
+    let localId = "";
+    await act(async () => {
+      localId = await result.current.box.queueQuery(Q);
+      result.current.session.add({
+        id: localId,
+        title: "Chest pain, 54 M",
+        urgency: "urgent",
+        createdAt: 1,
+        query: Q,
+        pending: "waiting",
+      });
+      await result.current.box.queueFeedback({
+        query_id: "q-old",
+        action: "validate",
+      });
+    });
+    expect(result.current.box.items).toHaveLength(2);
+    expect(createQuery).not.toHaveBeenCalled();
+
+    onLine.mockReturnValue(true);
+    await act(async () => void window.dispatchEvent(new Event("online")));
+    await waitFor(() => expect(result.current.box.items).toHaveLength(0));
+    expect(createQuery).toHaveBeenCalledWith(Q, {
+      idempotencyKey: expect.any(String),
+    });
+    expect(sendFeedback).toHaveBeenCalledWith(
+      { query_id: "q-old", action: "validate" },
+      { idempotencyKey: expect.any(String) },
+    );
+    expect(createQuery.mock.invocationCallOrder[0]).toBeLessThan(
+      sendFeedback.mock.invocationCallOrder[0]!,
+    );
+    expect(result.current.box.resolved[localId]).toBe("q-real");
+    expect(result.current.session.get("q-real")?.pending).toBeUndefined();
+    expect(result.current.session.get(localId)).toBeUndefined();
+  });
+
+  it("keeps items after a network failure, and marks a rejected one", async () => {
+    createQuery
+      .mockRejectedValueOnce(new ApiError(0, "network"))
+      .mockRejectedValueOnce(new ApiError(422, "validation_failed"));
+    const { result } = renderHook(use, { wrapper });
+    await act(async () => void (await result.current.box.queueQuery(Q)));
+    onLine.mockReturnValue(true);
+    await act(async () => void window.dispatchEvent(new Event("online")));
+    await waitFor(() => expect(createQuery).toHaveBeenCalledTimes(1));
+    expect(result.current.box.items[0]?.status).toBe("waiting");
+    await act(async () => void window.dispatchEvent(new Event("online")));
+    await waitFor(() =>
+      expect(result.current.box.items[0]?.status).toBe("failed"),
+    );
+  });
+
+  it("deletes everything of mine on request", async () => {
+    const { result } = renderHook(use, { wrapper });
+    await act(async () => void (await result.current.box.queueQuery(Q)));
+    await act(() => result.current.box.clearMine());
+    expect(result.current.box.items).toEqual([]);
+  });
+});
+```
+
+- [ ] **Step 3: Run the tests to verify they fail**
+
+Run: `npx vitest run lib/offline`
+Expected: FAIL (modules not found).
+
+- [ ] **Step 4: Write storage, crypto and the outbox**
+
+`lib/offline/db.ts`:
+
+```ts
+const DB = "mhai-outbox";
+type Store = "keys" | "items";
+
+/** True if the outbox database exists (so reading never creates it). */
+export async function outboxExists(): Promise<boolean> {
+  if (!indexedDB.databases) return true; // can't tell: open it
+  return (await indexedDB.databases()).some((d) => d.name === DB);
+}
+
+function open(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore("keys");
+      req.result.createObjectStore("items", { keyPath: "id" });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function run<T>(
+  store: Store,
+  mode: IDBTransactionMode,
+  fn: (s: IDBObjectStore) => IDBRequest,
+): Promise<T> {
+  const db = await open();
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      const tx = db.transaction(store, mode);
+      const req = fn(tx.objectStore(store));
+      tx.oncomplete = () => resolve(req.result as T);
+      tx.onerror = tx.onabort = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+export const idbGet = <T>(store: Store, key: IDBValidKey) =>
+  run<T | undefined>(store, "readonly", (s) => s.get(key));
+export const idbAll = <T = unknown>(store: Store) =>
+  run<T[]>(store, "readonly", (s) => s.getAll());
+export const idbPut = async (
+  store: Store,
+  value: unknown,
+  key?: IDBValidKey,
+) => {
+  await run(store, "readwrite", (s) => s.put(value, key));
+};
+export const idbDelete = async (store: Store, key: IDBValidKey) => {
+  await run(store, "readwrite", (s) => s.delete(key));
+};
+```
+
+`lib/offline/crypto.ts`: begin with the threat-model comment above, then:
+
+```ts
+import { idbGet, idbPut } from "./db";
+
+const KEY_ID = "device-key-v1";
+
+/** A non-extractable AES-GCM key, created once and kept in IndexedDB. */
+export async function deviceKey(): Promise<CryptoKey> {
+  const found = await idbGet<CryptoKey>("keys", KEY_ID);
+  if (found) return found;
+  const key = await crypto.subtle.generateKey(
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+  await idbPut("keys", key, KEY_ID);
+  return key;
+}
+
+export interface Sealed {
+  iv: Uint8Array;
+  data: ArrayBuffer;
+}
+
+export async function encrypt(value: unknown, key: CryptoKey): Promise<Sealed> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(JSON.stringify(value)),
+  );
+  return { iv, data };
+}
+
+export async function decrypt<T>(s: Sealed, key: CryptoKey): Promise<T> {
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: s.iv },
+    key,
+    s.data,
+  );
+  return JSON.parse(new TextDecoder().decode(plain)) as T;
+}
+
+/** The owner as a hash, so no plain username is written to disk. */
+export async function ownerId(username: string): Promise<string> {
+  const h = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`mhai-outbox:${username}`),
+  );
+  return [...new Uint8Array(h)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+```
+
+`lib/offline/outbox.ts`:
+
+```ts
+import type { FeedbackIn, QueryCreateIn } from "../api/contract";
+import { decrypt, deviceKey, encrypt, type Sealed } from "./crypto";
+import { idbAll, idbDelete, idbPut, outboxExists } from "./db";
+
+export const OUTBOX_TTL_MS = 72 * 3_600_000;
+export const isLocalId = (id: string) => id.startsWith("local-");
+
+export interface OutboxPayload {
+  query: { q: QueryCreateIn; localId: string };
+  feedback: { f: FeedbackIn };
+}
+export type OutboxKind = keyof OutboxPayload;
+type Status = "waiting" | "failed";
+interface Entry {
+  id: string;
+  owner: string;
+  kind: OutboxKind;
+  createdAt: number;
+  idempotencyKey: string;
+  status: Status;
+  error?: string;
+  sealed: Sealed;
+}
+export type OutboxItem = {
+  [K in OutboxKind]: Omit<Entry, "owner" | "sealed" | "kind"> & {
+    kind: K;
+    payload: OutboxPayload[K];
+  };
+}[OutboxKind];
+
+export function createOutbox({
+  key,
+  now = () => Date.now(),
+}: { key?: Promise<CryptoKey>; now?: () => number } = {}) {
+  let k: Promise<CryptoKey> | undefined = key;
+  const getKey = () => (k ??= deviceKey());
+
+  return {
+    async add<K extends OutboxKind>(
+      owner: string,
+      kind: K,
+      payload: OutboxPayload[K],
+    ) {
+      const entry: Entry = {
+        id: crypto.randomUUID(),
+        owner,
+        kind,
+        createdAt: now(),
+        idempotencyKey: crypto.randomUUID(),
+        status: "waiting",
+        sealed: await encrypt(payload, await getKey()),
+      };
+      await idbPut("items", entry);
+      const { sealed: _s, owner: _o, ...rest } = entry;
+      return { ...rest, payload } as OutboxItem;
+    },
+
+    async list(owner: string): Promise<OutboxItem[]> {
+      if (!(await outboxExists())) return [];
+      const out: OutboxItem[] = [];
+      const entries = (await idbAll<Entry>("items")).sort(
+        (a, b) => a.createdAt - b.createdAt,
+      );
+      for (const e of entries) {
+        if (now() - e.createdAt > OUTBOX_TTL_MS) {
+          await idbDelete("items", e.id);
+          continue;
+        }
+        if (e.owner !== owner) continue;
+        try {
+          const payload = await decrypt<OutboxPayload[typeof e.kind]>(
+            e.sealed,
+            await getKey(),
+          );
+          const { sealed: _s, owner: _o, ...rest } = e;
+          out.push({ ...rest, payload } as OutboxItem);
+        } catch {
+          await idbDelete("items", e.id); // unreadable (key gone): useless, so delete
+        }
+      }
+      return out;
+    },
+
+    remove: (id: string) => idbDelete("items", id),
+
+    async markFailed(id: string, error: string) {
+      const e = (await idbAll<Entry>("items")).find((x) => x.id === id);
+      if (e) await idbPut("items", { ...e, status: "failed", error });
+    },
+
+    async clearOwner(owner: string) {
+      if (!(await outboxExists())) return;
+      for (const e of await idbAll<Entry>("items"))
+        if (e.owner === owner) await idbDelete("items", e.id);
+    },
+  };
+}
+```
+
+`fake-indexeddb` clones values with `structuredClone`, and Node 24 can
+clone a `CryptoKey`. If a test fails cloning the key, the fallback is
+already built in: tests pass their own `key` promise, and only
+`deviceKey()` stores one.
+
+- [ ] **Step 5: Write the provider, the waiting screen and the indicator**
+
+`lib/offline/outbox-context.tsx`:
+
+```tsx
+"use client";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { getClient } from "../api/client";
+import type { FeedbackIn, QueryCreateIn } from "../api/contract";
+import { ApiError } from "../api/errors";
+import { useAuth } from "../auth/auth-context";
+import { useNetwork, shouldRetry } from "../network";
+import { titleFor, useSession } from "../session-store";
+import { ownerId } from "./crypto";
+import { createOutbox, type OutboxItem } from "./outbox";
+
+type Ctx = {
+  items: OutboxItem[];
+  syncing: boolean;
+  resolved: Record<string, string>;
+  queueQuery(q: QueryCreateIn): Promise<string>;
+  queueFeedback(f: FeedbackIn): Promise<void>;
+  discard(id: string): Promise<void>;
+  clearMine(): Promise<void>;
+};
+const OutboxCtx = createContext<Ctx | null>(null);
+const box = createOutbox();
+
+/** Unsent questions and feedback, encrypted on this device, synced when online. */
+export function OutboxProvider({ children }: { children: ReactNode }) {
+  const { user, status } = useAuth();
+  const session = useSession();
+  const { online } = useNetwork();
+  const [owner, setOwner] = useState<string | null>(null);
+  const [items, setItems] = useState<OutboxItem[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [resolved, setResolved] = useState<Record<string, string>>({});
+  // Bumped after queueing: effects (not event handlers) start a sync.
+  const [kick, setKick] = useState(0);
+  const running = useRef(false);
+
+  useEffect(() => {
+    let on = true;
+    if (status !== "signed_in" || !user) {
+      setOwner(null);
+      setItems([]);
+      return;
+    }
+    void ownerId(user.username).then(async (o) => {
+      if (!on) return;
+      setOwner(o);
+      setItems(await box.list(o));
+    });
+    return () => {
+      on = false;
+    };
+  }, [status, user]);
+
+  const refresh = useCallback(async () => {
+    if (owner) setItems(await box.list(owner));
+  }, [owner]);
+
+  const sync = useEffectEvent(async () => {
+    if (running.current || !owner || !navigator.onLine) return;
+    running.current = true;
+    setSyncing(true);
+    try {
+      for (const item of await box.list(owner)) {
+        if (item.status === "failed") continue;
+        try {
+          if (item.kind === "query") {
+            const { query_id } = await getClient().createQuery(item.payload.q, {
+              idempotencyKey: item.idempotencyKey,
+            });
+            await box.remove(item.id);
+            const local = session.get(item.payload.localId);
+            if (local) session.replaceId(item.payload.localId, query_id);
+            else
+              session.add({
+                id: query_id,
+                title: titleFor(item.payload.q),
+                urgency: item.payload.q.urgency,
+                createdAt: item.createdAt,
+                query: item.payload.q,
+              });
+            setResolved((r) => ({ ...r, [item.payload.localId]: query_id }));
+          } else {
+            await getClient().sendFeedback(item.payload.f, {
+              idempotencyKey: item.idempotencyKey,
+            });
+            await box.remove(item.id);
+          }
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 401) break; // auth signs out
+          if (shouldRetry(0, e)) break; // network or 5xx: try again later
+          await box.markFailed(item.id, "rejected");
+        }
+      }
+    } finally {
+      running.current = false;
+      setSyncing(false);
+      await refresh();
+    }
+  });
+
+  // Triggers: sign-in (owner known), reconnect, a new item, and every 30 s while waiting.
+  useEffect(() => {
+    if (owner && online) void sync();
+  }, [owner, online, kick]);
+  const waiting = items.some((i) => i.status === "waiting");
+  useEffect(() => {
+    if (!waiting || !online) return;
+    const t = setInterval(() => void sync(), 30_000);
+    return () => clearInterval(t);
+  }, [waiting, online]);
+  // Leaving while offline would strand nothing (it's stored), but say so.
+  useEffect(() => {
+    if (!waiting || online) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [waiting, online]);
+
+  const value = useMemo<Ctx>(
+    () => ({
+      items,
+      syncing,
+      resolved,
+      async queueQuery(q) {
+        if (!owner) throw new Error("Not signed in");
+        const localId = `local-${crypto.randomUUID()}`;
+        await box.add(owner, "query", { q, localId });
+        await refresh();
+        setKick((n) => n + 1);
+        return localId;
+      },
+      async queueFeedback(f) {
+        if (!owner) throw new Error("Not signed in");
+        await box.add(owner, "feedback", { f });
+        await refresh();
+        setKick((n) => n + 1);
+      },
+      async discard(id) {
+        const item = items.find(
+          (i) =>
+            i.id === id || (i.kind === "query" && i.payload.localId === id),
+        );
+        if (item) await box.remove(item.id);
+        await refresh();
+      },
+      async clearMine() {
+        if (owner) await box.clearOwner(owner);
+        setItems([]);
+      },
+    }),
+    [items, syncing, resolved, owner, refresh],
+  );
+  return <OutboxCtx.Provider value={value}>{children}</OutboxCtx.Provider>;
+}
+
+export function useOutbox(): Ctx {
+  const c = useContext(OutboxCtx);
+  if (!c) throw new Error("useOutbox outside OutboxProvider");
+  return c;
+}
+```
+
+`components/consultation/waiting-to-send.tsx`:
+
+```tsx
+"use client";
+import { CloudUpload } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useOutbox } from "@/lib/offline/outbox-context";
+import { useSession, type SessionItem } from "@/lib/session-store";
+import { Button } from "../ui/button";
+
+/** /c/local-…: a question saved offline, before it reaches the server. */
+export function WaitingToSend({ item }: { item: SessionItem }) {
+  const { discard } = useOutbox();
+  const { remove } = useSession();
+  const router = useRouter();
+  const failed = item.pending === "failed";
+  return (
+    <div className="mx-auto mt-10 max-w-[560px] text-center" role="status">
+      <div
+        aria-hidden
+        className="mx-auto mb-4 grid size-16 place-items-center rounded-3xl bg-lilac text-bloom"
+      >
+        <CloudUpload className="size-7" />
+      </div>
+      <h2 className="font-display text-[36px] font-black leading-none">
+        {failed ? "Couldn't send" : "Waiting to send"}
+      </h2>
+      <p className="mx-auto my-3 max-w-[460px] leading-relaxed text-ink-2">
+        {failed
+          ? "The server didn't accept this question. Check it, then send it again."
+          : "You're offline. This question is saved securely on this device and will be analysed as soon as you're back online."}
+      </p>
+      <div className="flex justify-center gap-2">
+        <Button
+          variant="ghost"
+          onClick={() => router.push(`/?edit=${item.id}`)}
+        >
+          Edit question
+        </Button>
+        <Button
+          variant="danger"
+          onClick={async () => {
+            await discard(item.id);
+            remove(item.id);
+            router.push("/");
+          }}
+        >
+          Delete
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+`components/states/outbox-indicator.tsx`:
+
+```tsx
+"use client";
+import { CloudUpload } from "lucide-react";
+import { useOutbox } from "@/lib/offline/outbox-context";
+
+export function OutboxIndicator({ rail }: { rail: boolean }) {
+  const { items, syncing } = useOutbox();
+  const waiting = items.filter((i) => i.status === "waiting").length;
+  if (!items.length) return null;
+  const text = syncing
+    ? "Sending…"
+    : `${waiting || items.length} waiting to send`;
+  return (
+    <p
+      role="status"
+      title={text}
+      className="flex min-h-9 items-center gap-2 px-2.5 text-[12.5px] font-medium text-bloom"
+    >
+      <CloudUpload aria-hidden className="size-4" />
+      <span className={rail ? "sr-only" : undefined}>{text}</span>
+    </p>
+  );
+}
+```
+
+- [ ] **Step 6: Wire it into the app**
+
+- **`lib/session-store.tsx`:**
+  - `SessionItem` gains `pending?: "waiting" | "failed"`;
+  - add `remove(id)` (filter it out);
+  - add `replaceId(from, to)`, which renames the item and clears
+    `pending`;
+  - `historyStatus` returns `{label: "Waiting to send", dot: null}` for
+    `pending: "waiting"` and `{label: "Couldn't send", dot: "failed"}` for
+    `"failed"`, before its other checks.
+- **`app/providers.tsx`:** mount `<OutboxProvider>` inside `AuthProvider`
+  and around `SessionGuard`.
+- **`lib/queries.ts`:**
+  - `useQueryStatus` and `useResult` set `enabled: !isLocalId(id)`, plus
+    their existing conditions.
+  - `useSendFeedback`'s `mutationFn`: `if (!navigator.onLine) { await
+outbox.queueFeedback(f); return { status: "queued" } as FeedbackOut;
+}`, where `outbox = useOutbox()`.
+- **`lib/api/contract.ts`:** `FeedbackOut.status` becomes `"recorded" |
+"pending_review" | "queued"`, with the comment "`queued` is
+  frontend-only: saved for sync".
+- **`components/feedback/feedback-bar.tsx`:** where it shows the success
+  toast, use title "Saved on this device" and body "It will be sent when
+  you're back online." for `status === "queued"`. Otherwise its behaviour
+  (local agreed/reviewed/corrected state) is unchanged.
+- **`app/(clinical)/page.tsx`:** in the Analyse handler, after validation:
+
+  ```ts
+  if (!navigator.onLine) {
+    const localId = await outbox.queueQuery(q);
+    session.add({
+      id: localId,
+      title: titleFor(q),
+      urgency: q.urgency,
+      createdAt: Date.now(),
+      query: q,
+      pending: "waiting",
+    });
+    resetForm(); // whatever the page does after a successful submit
+    return router.push(`/c/${localId}`);
+  }
+  ```
+
+  Use the page's existing post-submit reset. On `/?edit=<localId>`,
+  editing a queued question and pressing Analyse first calls
+  `outbox.discard(localId)` and `session.remove(localId)`, then submits
+  or queues the edited version as new.
+
+- **`components/consultation/consultation-view.tsx`**, before the
+  not-found check:
+  - `const real = useOutbox().resolved[id]`, and an effect that does
+    `router.replace(`/c/${real}`)` when `real` is set, rendering `null`
+    meanwhile;
+  - if `item?.pending`, return `<WaitingToSend item={item} />` inside the
+    usual `TopBar`.
+  - Keep all hooks above these returns (rules of hooks).
+- **`components/shell/sidebar.tsx`:** `<OutboxIndicator rail={rail} />`
+  directly under the New consultation link.
+- **`components/auth/sign-out.tsx`:**
+  - when `useOutbox().items.length > 0`, render a `Dialog` titled "You
+    have {n} unsent item(s)" with "Signing out deletes them from this
+    device.";
+  - "Stay signed in" calls `router.back()`;
+  - "Sign out and delete" calls `clearMine()`, then `signOut("manual")`;
+  - otherwise it signs out as before.
+- **`tests/e2e/helpers.ts`:** `expectNoStorage` keeps its other checks.
+  It allows exactly one IndexedDB database named `mhai-outbox`, and only
+  if its `items` store is empty. Open it in `page.evaluate` and count
+  `items`.
+
+Add to `components/consultation/consultation-view.test.tsx`: render
+`ConsultationView` for an item `{ id: "local-1", pending: "waiting", … }`
+inside `OutboxProvider`. Expect "Waiting to send", and expect the mocked
+`getClient().getStatus` not to have been called.
+
+- [ ] **Step 7: Write the e2e test and the policy changes**
+
+`tests/e2e/offline.spec.ts`:
+
+```ts
+import { expect, test } from "@playwright/test";
+import { expectNoStorage, fillForm, signIn } from "./helpers";
+
+test("a question asked offline waits on the device, then syncs and is analysed", async ({
+  page,
+  context,
+}) => {
+  await signIn(page);
+  await expect(page).toHaveURL(/\/$/);
+  await fillForm(page, "Central chest pain for 40 minutes. Likely diagnosis?");
+  await context.setOffline(true);
+  await page.getByRole("button", { name: /Analyse/ }).click();
+  await expect(page).toHaveURL(/\/c\/local-/);
+  await expect(
+    page.getByRole("heading", { name: "Waiting to send" }),
+  ).toBeVisible();
+  await expect(page.getByText("1 waiting to send").first()).toBeAttached();
+  // Stored, but not as readable text.
+  const raw = await page.evaluate(
+    () =>
+      new Promise<string>((resolve) => {
+        const open = indexedDB.open("mhai-outbox");
+        open.onsuccess = () => {
+          const req = open.result
+            .transaction("items")
+            .objectStore("items")
+            .getAll();
+          req.onsuccess = () => resolve(JSON.stringify(req.result));
+        };
+      }),
+  );
+  expect(raw).not.toMatch(/chest pain/i);
+  await context.setOffline(false);
+  await expect(page).not.toHaveURL(/local-/, { timeout: 30_000 });
+  await expect(
+    page.getByText(/High confidence|Use with caution|Needs review/).first(),
+  ).toBeVisible({
+    timeout: 60_000,
+  });
+  await expectNoStorage(page);
+});
+
+test("unsent work survives closing the tab, and syncs at the next sign-in", async ({
+  page,
+  context,
+}) => {
+  await signIn(page);
+  await expect(page).toHaveURL(/\/$/);
+  await fillForm(page, "Central chest pain for 40 minutes. Likely diagnosis?");
+  await context.setOffline(true);
+  await page.getByRole("button", { name: /Analyse/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Waiting to send" }),
+  ).toBeVisible();
+  page.on("dialog", (d) => void d.accept()); // beforeunload while offline
+  await page.close({ runBeforeUnload: true });
+  await context.setOffline(false);
+  const again = await context.newPage();
+  await signIn(again);
+  await expect(again).toHaveURL(/\/$/);
+  await expect(
+    again.getByRole("link", { name: /Chest pain, 54 M/ }).first(),
+  ).toBeAttached({
+    timeout: 30_000,
+  });
+  await expectNoStorage(again);
+});
+```
+
+`fillForm(page, question)` is Task 16's shared helper. If Task 16 hasn't
+run yet, add `fillForm` to `tests/e2e/helpers.ts` now, by moving it out
+of `clinical-flow.spec.ts` (it navigates nowhere; `signIn` lands home
+first), and note that in your report.
+
+**The policy change, in three places:**
+
+`CONTRIBUTING.md`: replace the bullet "**Never store PHI** in
+`localStorage`, `sessionStorage`, IndexedDB or service-worker caches."
+with:
+
+```markdown
+- **Never store PHI** in `localStorage`, `sessionStorage`, IndexedDB or
+  service-worker caches, **with one exception: the offline outbox**
+  (`lib/offline/`). It holds only questions and feedback that couldn't be
+  sent yet:
+  - encrypted with AES-GCM under a non-extractable device key;
+  - bound to the signed-in user (hashed);
+  - deleted once synced, when the user deletes it or signs out, and after
+    72 hours.
+
+  Nothing else (results, history, drafts) is ever stored. Any change to
+  the outbox needs `clinical-review`.
+```
+
+`ARCHITECTURE.md` §4.2, the "No patient data in storage" bullet: append
+"…except the encrypted offline outbox of unsent questions and feedback
+(see CONTRIBUTING)".
+
+Spec §10: append (numbered after the items Task 16 adds; if Task 16
+hasn't run, number from 14 and Task 16 renumbers):
+
+```markdown
+- **Offline sync.** The frontend may send a query or feedback hours after
+  it was written (offline outbox, up to 72 h):
+  - keep `Idempotency-Key` results for at least 72 h;
+  - accept an optional `client_created_at` (ISO 8601) on `POST /queries`
+    and `POST /feedback`, so the record shows when the clinician actually
+    asked.
+```
+
+(The frontend doesn't send `client_created_at` yet. Add it when the
+backend accepts it, since `extra="forbid"` would reject it today.)
+
+- [ ] **Step 8: Run everything**
+
+Run: `npx vitest run && npx playwright test`
+Expected: PASS, including `offline.spec.ts`, and every other e2e test's
+`expectNoStorage`.
+
+- [ ] **Step 9: Commit**
+
+```bash
+npx prettier --write . && npm run lint && npm run typecheck
+git add -A
+git commit -m "Add the encrypted offline outbox that syncs when back online"
 ```
 
 ---
 
-### Task 15: End-to-end acceptance, docs and the changelog
+### Task 16: End-to-end acceptance, docs and the changelog
 
 **Files:**
 
@@ -9624,7 +10537,7 @@ once back online, and a data-saver mode."
   mode against the assumed contract (plan header). Hospital sign-on
   returns through Task 13; devices, password reset, trust this device,
   terms and backup codes go through the Task 11 additions.
-- **Weak networks:** Task 14 covers the frontend and Task 15 the backend
+- **Weak networks:** Task 14 covers the frontend and Task 16 the backend
   asks (spec §10 items 14–18), plus a slow-3G end-to-end test.
 
 - **Spec coverage (§5.5 Account):**
