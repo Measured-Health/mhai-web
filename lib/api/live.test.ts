@@ -24,6 +24,18 @@ describe("live clinical client", () => {
     expect(String(init.body)).not.toMatch(/user_id|clinician_id/);
   });
 
+  it("sends the idempotency key on a retried submit", async () => {
+    const fetchImpl = reply(202, { query_id: "q1" });
+    await createLiveClient({ fetchImpl }).createQuery({} as never, {
+      idempotencyKey: "k-1",
+    });
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(init.headers).toMatchObject({ "Idempotency-Key": "k-1" });
+  });
+
   it("encodes ids", async () => {
     const fetchImpl = reply(200, {});
     await createLiveClient({ fetchImpl }).getResult("a/b");

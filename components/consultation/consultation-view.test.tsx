@@ -4,6 +4,7 @@ import { Component, useEffect, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Providers } from "@/app/providers";
 import type { ClinicalResultOut, QueryCreateIn } from "@/lib/api/contract";
+import { ApiError } from "@/lib/api/errors";
 import { FIXTURES } from "@/lib/api/fixtures";
 import { useSession, type SessionItem } from "@/lib/session-store";
 
@@ -196,7 +197,9 @@ describe("ConsultationView", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /Try again/ }),
     );
-    expect(createQuery).toHaveBeenCalledWith(QUERY);
+    expect(createQuery).toHaveBeenCalledWith(QUERY, {
+      idempotencyKey: expect.any(String),
+    });
     await vi.waitFor(() => expect(replace).toHaveBeenCalledWith("/c/q2"));
   });
 
@@ -266,7 +269,7 @@ describe("ConsultationView", () => {
   });
 
   it("tells the clinician when Try again fails, and keeps both actions", async () => {
-    createQuery.mockRejectedValueOnce(new Error("offline"));
+    createQuery.mockRejectedValueOnce(new ApiError(422, "validation_failed"));
     status.mockReturnValue({
       status: "failed",
       progress: 0.5,

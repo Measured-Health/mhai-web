@@ -120,6 +120,14 @@ body {
   }
 }
 
+/* Data saver or 2G: no motion, the same as reduced motion. */
+[data-save-data] *,
+[data-save-data] *::before,
+[data-save-data] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
 @keyframes sk {
   from {
     background-position: 100% 0;

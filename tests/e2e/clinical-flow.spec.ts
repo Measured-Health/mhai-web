@@ -1,41 +1,18 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { FORBIDDEN_TERMS } from "../../lib/labels";
 import { FEEDBACK_LOG } from "../../playwright.config";
-
-// Whole-word match. Upper-case terms (NLI, PASS, KB...) are case-sensitive so
-// ordinary words such as "online" or "passed" do not trip them.
-const FORBIDDEN = new RegExp(
-  FORBIDDEN_TERMS.map((t) =>
-    t === t.toUpperCase() ? `\\b${t}\\b` : `(?i:\\b${t}\\b)`,
-  ).join("|"),
-);
-
-const isMobile = (page: Page) => (page.viewportSize()?.width ?? 1440) < 768;
-const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
-
-async function signIn(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByLabel("Work email").fill("a.reyes@havanahospital.org");
-  await page.getByLabel("Password").fill("demo-password");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/$/);
-}
-
-async function fillForm(page: Page, question: string) {
-  await signIn(page);
-  await page.getByRole("button", { name: /Start a consultation/ }).click();
-  await page.getByLabel("Age").fill("54");
-  await page.getByRole("radio", { name: "Male", exact: true }).click();
-  await page.getByRole("radio", { name: /Urgent/ }).click();
-  if (isMobile(page)) await page.getByRole("button", { name: "Next" }).click();
-  await page.getByLabel("Presenting symptoms").fill("Chest pain");
-  await page.getByLabel("Presenting symptoms").press("Enter");
-  await page.getByLabel("Clinical question").fill(question);
-  if (isMobile(page)) await page.getByRole("button", { name: "Next" }).click();
-}
+import {
+  expectNoForbiddenWords,
+  expectNoStorage,
+  fillForm,
+  isDesktop,
+  isMobile,
+  signIn,
+} from "./helpers";
 
 async function ask(page: Page, question: string) {
+  await signIn(page);
+  await expect(page).toHaveURL(/\/$/);
   await fillForm(page, question);
   await page.getByRole("button", { name: /Analyse/ }).click();
   await expect(page.getByText("Analysing your question")).toBeVisible();
@@ -44,26 +21,6 @@ async function ask(page: Page, question: string) {
 /** The alert that carries the result banner, not Next's route announcer. */
 const resultAlert = (page: Page) =>
   page.getByRole("alert").filter({ hasText: /caution|review/i });
-
-async function expectNoForbiddenWords(page: Page) {
-  const visible = await page.locator("body").innerText();
-  expect(visible).not.toMatch(FORBIDDEN);
-  const names = await page.locator("body").ariaSnapshot();
-  expect(names).not.toMatch(FORBIDDEN);
-}
-
-async function expectNoStorage(page: Page) {
-  const state = await page.evaluate(async () => {
-    const dbs = indexedDB.databases ? await indexedDB.databases() : [];
-    return {
-      local: localStorage.length,
-      session: sessionStorage.length,
-      idb: dbs.length,
-      cookie: document.cookie,
-    };
-  });
-  expect(state).toEqual({ local: 0, session: 0, idb: 0, cookie: "" });
-}
 
 test.afterEach(async ({ page }) => {
   // No patient data in browser storage, ever.
@@ -137,6 +94,7 @@ test("couldn't complete keeps the question for editing", async ({ page }) => {
 
 test("form errors are explained and nothing is lost", async ({ page }) => {
   await signIn(page);
+  await expect(page).toHaveURL(/\/$/);
   await page.getByRole("button", { name: /Start a consultation/ }).click();
   await page.getByLabel("Age").fill("154");
   await page

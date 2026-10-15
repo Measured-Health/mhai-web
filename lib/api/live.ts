@@ -7,20 +7,23 @@ import { ApiError } from "./errors";
 export function createLiveClient({
   fetchImpl = (...a: Parameters<typeof fetch>) => fetch(...a),
 }: { fetchImpl?: typeof fetch } = {}): MhaiClient {
-  async function call(path: string, method = "GET", body?: unknown) {
+  async function call(
+    path: string,
+    method = "GET",
+    body?: unknown,
+    extra?: Record<string, string>,
+  ) {
     let res: Response;
     try {
       res = await fetchImpl(`/api/v1${path}`, {
         method,
         credentials: "same-origin",
         cache: "no-store",
-        headers:
-          body === undefined
-            ? { Accept: "application/json" }
-            : {
-                Accept: "application/json",
-                "Content-Type": "application/json",
-              },
+        headers: {
+          Accept: "application/json",
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+          ...extra,
+        },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch {
@@ -40,8 +43,9 @@ export function createLiveClient({
     path: string,
     method = "GET",
     body?: unknown,
+    extra?: Record<string, string>,
   ): Promise<T> {
-    const { res, data } = await call(path, method, body);
+    const { res, data } = await call(path, method, body, extra);
     if (!res.ok)
       throw new ApiError(
         res.status,
@@ -50,14 +54,23 @@ export function createLiveClient({
     return data as T;
   }
   const id = encodeURIComponent;
+  const keyHeader = (opts?: { idempotencyKey?: string }) =>
+    opts?.idempotencyKey
+      ? { "Idempotency-Key": opts.idempotencyKey }
+      : undefined;
   return {
-    async createQuery(q) {
-      const r = await ok<{ query_id: string }>("/queries", "POST", q);
+    async createQuery(q, opts) {
+      const r = await ok<{ query_id: string }>(
+        "/queries",
+        "POST",
+        q,
+        keyHeader(opts),
+      );
       return { query_id: r.query_id };
     },
     getStatus: (q) => ok<QueryStatusOut>(`/queries/${id(q)}`),
     getResult: (q) => ok<ClinicalResultOut>(`/queries/${id(q)}/result`),
-    sendFeedback: (f) => ok("/feedback", "POST", f),
+    sendFeedback: (f, opts) => ok("/feedback", "POST", f, keyHeader(opts)),
     async getReadiness(): Promise<Readiness> {
       const { res, data } = await call("/readyz");
       if (res.ok) return { ok: true, degraded_services: [] };

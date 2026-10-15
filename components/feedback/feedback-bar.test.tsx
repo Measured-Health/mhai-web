@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api/errors";
 import { FIXTURES } from "@/lib/api/fixtures";
 import { toResultView } from "@/lib/result-view";
 import { SessionProvider, useSession } from "@/lib/session-store";
@@ -75,7 +76,10 @@ describe("FeedbackBar", () => {
     ui();
     expect(screen.getByTestId("agreed")).toHaveTextContent("none");
     await userEvent.click(screen.getByRole("button", { name: /I agree/ }));
-    expect(send).toHaveBeenCalledWith({ query_id: "q1", action: "validate" });
+    expect(send).toHaveBeenCalledWith(
+      { query_id: "q1", action: "validate" },
+      { idempotencyKey: expect.any(String) },
+    );
     expect(
       await screen.findByText(/your agreement was recorded/),
     ).toBeInTheDocument();
@@ -105,12 +109,15 @@ describe("FeedbackBar", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Submit correction" }),
     );
-    expect(send).toHaveBeenLastCalledWith({
-      query_id: "q1",
-      action: "correct",
-      corrected_diagnosis: "Warning signs",
-      reason: "WHO 2024",
-    });
+    expect(send).toHaveBeenLastCalledWith(
+      {
+        query_id: "q1",
+        action: "correct",
+        corrected_diagnosis: "Warning signs",
+        reason: "WHO 2024",
+      },
+      { idempotencyKey: expect.any(String) },
+    );
     expect(await screen.findByText(/sent for review/)).toBeInTheDocument();
     expect(screen.getByTestId("agreed")).toHaveTextContent("none");
   });
@@ -125,7 +132,10 @@ describe("FeedbackBar", () => {
     await userEvent.click(
       screen.getByRole("button", { name: /Mark as reviewed/ }),
     );
-    expect(send).toHaveBeenCalledWith({ query_id: "q1", action: "validate" });
+    expect(send).toHaveBeenCalledWith(
+      { query_id: "q1", action: "validate" },
+      { idempotencyKey: expect.any(String) },
+    );
     await screen.findByText(/your agreement was recorded/);
     expect(screen.getByTestId("feedback")).toHaveTextContent("reviewed");
     expect(screen.getByTestId("agreed")).not.toHaveTextContent("none");
@@ -178,7 +188,7 @@ describe("FeedbackBar", () => {
     expect(screen.getByRole("button", { name: /I agree/ })).toBeDisabled();
   });
   it("shows an error banner and stays retryable when feedback fails", async () => {
-    send.mockRejectedValueOnce(new Error("network"));
+    send.mockRejectedValueOnce(new ApiError(422, "validation_failed"));
     ui();
     await userEvent.click(screen.getByRole("button", { name: /I agree/ }));
     expect(

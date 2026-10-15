@@ -1,11 +1,12 @@
 "use client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { NetworkEffects } from "@/components/states/network-effects";
 import { SessionGuard } from "@/components/states/session-timeout";
 import { ToastProvider } from "@/components/ui/toast";
-import { ApiError } from "@/lib/api/errors";
 import { AuthProvider } from "@/lib/auth/auth-context";
 import type { AuthClient, User } from "@/lib/auth/types";
+import { retryDelay, shouldRetry } from "@/lib/network";
 import { SessionProvider } from "@/lib/session-store";
 
 export function Providers({
@@ -23,9 +24,8 @@ export function Providers({
         defaultOptions: {
           queries: {
             // A 4xx won't change on retry (and a 401 has already signed out).
-            retry: (n, e) =>
-              !(e instanceof ApiError && e.status >= 400 && e.status < 500) &&
-              n < 1,
+            retry: (n, e) => shouldRetry(n, e),
+            retryDelay,
             refetchOnWindowFocus: false,
           },
         },
@@ -35,6 +35,7 @@ export function Providers({
     <QueryClientProvider client={qc}>
       <SessionProvider>
         <ToastProvider>
+          <NetworkEffects />
           <AuthProvider client={auth?.client} initialUser={auth?.initialUser}>
             {/* Idle sign-out on every route, including /print, while signed in. */}
             <SessionGuard>{children}</SessionGuard>

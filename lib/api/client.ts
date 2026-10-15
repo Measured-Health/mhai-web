@@ -10,10 +10,16 @@ import { createLiveClient } from "./live";
 import { createMockClient } from "./mock";
 
 export interface MhaiClient {
-  createQuery(q: QueryCreateIn): Promise<{ query_id: string }>;
+  createQuery(
+    q: QueryCreateIn,
+    opts?: { idempotencyKey?: string },
+  ): Promise<{ query_id: string }>;
   getStatus(id: string): Promise<QueryStatusOut>;
   getResult(id: string): Promise<ClinicalResultOut>;
-  sendFeedback(f: FeedbackIn): Promise<FeedbackOut>;
+  sendFeedback(
+    f: FeedbackIn,
+    opts?: { idempotencyKey?: string },
+  ): Promise<FeedbackOut>;
   getReadiness(): Promise<Readiness>;
 }
 

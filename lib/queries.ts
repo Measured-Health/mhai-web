@@ -3,13 +3,18 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { getClient } from "./api/client";
 import type { FeedbackIn, QueryCreateIn } from "./api/contract";
+import { pollDelay, retryDelay, shouldRetry, useNetwork } from "./network";
 import { titleFor, useSession } from "./session-store";
 
 export function useSubmitQuery() {
   const session = useSession();
-  return useMutation({
-    mutationFn: (q: QueryCreateIn) => getClient().createQuery(q),
-    onSuccess: ({ query_id }, q) =>
+  const m = useMutation({
+    mutationFn: ({ q, key }: { q: QueryCreateIn; key: string }) =>
+      getClient().createQuery(q, { idempotencyKey: key }),
+    // Same key on every retry: the API answers a repeat with the first result.
+    retry: (n, e) => shouldRetry(n, e),
+    retryDelay,
+    onSuccess: ({ query_id }, { q }) =>
       session.add({
         id: query_id,
         title: titleFor(q),
@@ -18,6 +23,15 @@ export function useSubmitQuery() {
         query: q,
       }),
   });
+  return {
+    ...m,
+    mutate: (q: QueryCreateIn, options?: Parameters<typeof m.mutate>[1]) =>
+      m.mutate({ q, key: crypto.randomUUID() }, options),
+    mutateAsync: (
+      q: QueryCreateIn,
+      options?: Parameters<typeof m.mutateAsync>[1],
+    ) => m.mutateAsync({ q, key: crypto.randomUUID() }, options),
+  };
 }
 
 export function useQueryStatus(
@@ -29,15 +43,28 @@ export function useQueryStatus(
   const stalled = stalledId === id;
   // Written only inside effects (react-hooks/purity and refs rules).
   const last = useRef<{ id: string; p: number; at: number } | null>(null);
+  const startedAt = useRef<number | null>(null);
+  const net = useNetwork();
   const q = useQuery({
     queryKey: ["status", id],
     queryFn: () => getClient().getStatus(id),
     refetchInterval: (query) => {
       const s = query.state.data?.status;
-      return s === "completed" || s === "failed" || stalled ? false : 2000;
+      if (s === "completed" || s === "failed" || stalled || !net.online)
+        return false;
+      return pollDelay(Date.now() - (startedAt.current ?? Date.now()), net);
     },
+    retry: (n, e) => shouldRetry(n, e),
+    retryDelay,
     gcTime: 0,
   });
+  useEffect(() => {
+    startedAt.current = Date.now();
+  }, [id]);
+  // Time spent offline never counts towards the stall.
+  useEffect(() => {
+    if (net.online && last.current) last.current.at = Date.now();
+  }, [net.online]);
   const progress = q.data?.progress ?? 0;
   const status = q.data?.status;
   useEffect(() => {
@@ -78,7 +105,19 @@ export function useResult(id: string, enabled: boolean) {
 }
 
 export function useFeedback() {
-  return useMutation({
-    mutationFn: (f: FeedbackIn) => getClient().sendFeedback(f),
+  const m = useMutation({
+    mutationFn: ({ f, key }: { f: FeedbackIn; key: string }) =>
+      getClient().sendFeedback(f, { idempotencyKey: key }),
+    retry: (n, e) => shouldRetry(n, e),
+    retryDelay,
   });
+  return {
+    ...m,
+    mutate: (f: FeedbackIn, options?: Parameters<typeof m.mutate>[1]) =>
+      m.mutate({ f, key: crypto.randomUUID() }, options),
+    mutateAsync: (
+      f: FeedbackIn,
+      options?: Parameters<typeof m.mutateAsync>[1],
+    ) => m.mutateAsync({ f, key: crypto.randomUUID() }, options),
+  };
 }

@@ -86,6 +86,7 @@ describe("Home", () => {
       expect.objectContaining({
         patient_data: expect.objectContaining({ age: 3, sex: "female" }),
       }),
+      { idempotencyKey: expect.any(String) },
     );
     expect(setItem).not.toHaveBeenCalled();
   });
