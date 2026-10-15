@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Demo feedback form: the ribbon's **Give feedback** opens a short form, and
+  the server saves each message to a file on the instance for the team to
+  review. Testers need no account. Replaces the GitHub issue link, which
+  failed for anyone outside the organisation.
 - Automatic deploys of the sample-data demo to
   `demo.measured-health.org` (Docker image, GHCR, nginx site on the
   preview instance).

@@ -50,3 +50,6 @@ test-results/
 
 # Wrangler local state
 .wrangler
+
+# Demo feedback saved locally in development
+.feedback
