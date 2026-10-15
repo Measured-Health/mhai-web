@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `netlify.toml` for the demo on Netlify: Node 24, sample data, and kept
+  out of search engines.
 - Clinical flow on mock data (Plan 1, design v3): consultation form,
   analysing view, the four result states, evidence panel and mobile sheet,
   feedback and corrections, export and print, first visit, failure,

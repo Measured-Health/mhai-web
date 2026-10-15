@@ -1,0 +1,19 @@
+# Netlify builds the demo on sample data. Its Next.js adapter is applied
+# automatically, so no plugin is listed here.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  # Matches .nvmrc.
+  NODE_VERSION = "24"
+  # Read at build time. Every deploy (main, branches, PR previews) is the
+  # sample-data demo until the live backend lands in Plan 2.
+  NEXT_PUBLIC_USE_MOCK = "true"
+
+# Keep the demo out of search engines, even if access protection is ever off.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
