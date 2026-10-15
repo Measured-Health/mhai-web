@@ -1,0 +1,115 @@
+name: Deploy demo
+
+# After CI passes on main: build the arm64 image in GitHub, push it to GHCR,
+# then have the preview instance pull it and restart the demo container.
+# Building on the instance is avoided on purpose: it is small and also runs
+# the EMR stack.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    # Only a green CI run for a push to this repository's main. The branch
+    # filter above matches by name alone, so a fork's PR from a branch called
+    # "main" would otherwise build (and deploy) untrusted code.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    # The instance is Graviton (aarch64), so build natively on arm64.
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: preview
+    # Set the repo variable DEPLOY_ENABLED=true once the instance is set up
+    # (deploy/README.md). Until then this workflow only publishes the image.
+    if: vars.DEPLOY_ENABLED == 'true'
+    steps:
+      - name: Pull and restart on the instance
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        env:
+          # Short-lived and scoped to this repo's package; expires with the job.
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        with:
+          envs: GHCR_TOKEN,GHCR_USER
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -euo pipefail
+            cd /srv/mhai-web
+
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+            docker compose pull web
+            docker compose up -d web
+
+            # Straight to the container, past nginx's password: the home page
+            # must load, and a dead consultation link must be a real 404.
+            ok=0
+            for _ in $(seq 1 24); do
+              home=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/ || echo 000)
+              gone=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/c/x || echo 000)
+              if [ "$home" = 200 ] && [ "$gone" = 404 ]; then ok=1; break; fi
+              sleep 5
+            done
+            if [ "$ok" != 1 ]; then
+              echo "Demo unhealthy (home=$home, /c/x=$gone). Recent logs:"
+              docker compose logs --tail=120 web
+              exit 1
+            fi
+
+            echo "Demo healthy."
+            docker image prune -f
