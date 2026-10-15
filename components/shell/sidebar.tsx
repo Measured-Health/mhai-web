@@ -9,24 +9,27 @@ import {
   Building2,
   CircleHelp,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth/auth-context";
 import { historyStatus, type SessionItem } from "@/lib/session-store";
 import { useNow } from "@/lib/hooks/use-now";
 import { Logo, Mark } from "../ui/brand";
 import { cn } from "../ui/cn";
 import { groupHistory } from "./group-history";
 
-export const DEMO_USER = {
-  initials: "DR",
-  name: "Dr. Reyes",
-  role: "Attending · Internal Medicine",
-  hospital: "Havana Hospital",
-};
 const DOT = {
   high: "bg-ok",
   caution: "bg-warn",
   review: "bg-bad",
   failed: "bg-ink-3",
 } as const;
+const initials = (name: string) =>
+  name
+    .replace(/^(Dr|Prof|Mr|Mrs|Ms)\.?\s+/i, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
 const ago = (t: number, now: number) => {
   const m = Math.max(0, Math.round((now - t) / 60000));
   return m < 60 ? `${m} min` : `${Math.round(m / 60)} h`;
@@ -43,8 +46,12 @@ export function Sidebar({
   onOpenSearch?: () => void;
 }) {
   const path = usePathname();
+  const { user } = useAuth();
   const now = useNow(60_000);
   const label = rail ? "sr-only" : "";
+  const roleLine = user
+    ? [user.roleTitle, user.specialty].filter(Boolean).join(" · ")
+    : "";
   return (
     <nav
       aria-label="Consultations"
@@ -176,33 +183,39 @@ export function Sidebar({
         <CircleHelp aria-hidden className="size-4" />
         <span className={label}>Help</span>
       </Link>
-      <div
-        className={cn(
-          "flex items-center gap-2.5 border-t border-line pt-2.5 text-[13px]",
-          rail ? "justify-center" : "px-1.5",
-        )}
-        title={`${DEMO_USER.name} · ${DEMO_USER.role} · ${DEMO_USER.hospital}`}
-      >
-        <span
-          aria-hidden
-          className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-orchid to-[#6e3c6a] text-xs font-bold text-white"
+      {user && (
+        <div
+          className={cn(
+            "flex items-center gap-2.5 border-t border-line pt-2.5 text-[13px]",
+            rail ? "justify-center" : "px-1.5",
+          )}
+          title={[user.displayName, roleLine, user.hospital]
+            .filter(Boolean)
+            .join(" · ")}
         >
-          {DEMO_USER.initials}
-        </span>
-        <span className={label}>
-          {DEMO_USER.name}
-          <small className="block text-[11px] text-ink-3">
-            {DEMO_USER.role}
-          </small>
-          <small className="flex items-center gap-1 text-[11px] font-medium text-mint-deep">
-            <Building2 aria-hidden className="size-3" />
-            {DEMO_USER.hospital}
-          </small>
-        </span>
-        {!rail && (
-          <MoreHorizontal aria-hidden className="ml-auto size-4 text-ink-3" />
-        )}
-      </div>
+          <span
+            aria-hidden
+            className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-orchid to-[#6e3c6a] text-xs font-bold text-white"
+          >
+            {initials(user.displayName)}
+          </span>
+          <span className={label}>
+            {user.displayName}
+            {roleLine && (
+              <small className="block text-[11px] text-ink-3">{roleLine}</small>
+            )}
+            {user.hospital && (
+              <small className="flex items-center gap-1 text-[11px] font-medium text-mint-deep">
+                <Building2 aria-hidden className="size-3" />
+                {user.hospital}
+              </small>
+            )}
+          </span>
+          {!rail && (
+            <MoreHorizontal aria-hidden className="ml-auto size-4 text-ink-3" />
+          )}
+        </div>
+      )}
     </nav>
   );
 }

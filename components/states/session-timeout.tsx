@@ -1,19 +1,14 @@
 "use client";
-import { useRouter } from "next/navigation";
 import {
-  createContext,
   Fragment,
-  startTransition,
   useCallback,
-  useContext,
   useEffect,
   useEffectEvent,
-  useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { useAuth } from "@/lib/auth/auth-context";
 import { useIdle } from "@/lib/hooks/use-idle";
-import { useSession } from "@/lib/session-store";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { useToast } from "../ui/toast";
@@ -25,23 +20,22 @@ type Timing = { warnAfterMs?: number; signOutAfterMs?: number };
  * lastActivity + `signOutAfterMs` (15 min). Both are wall-clock deadlines,
  * re-checked on every tick and on wake (visibilitychange, pageshow, focus),
  * so sleep or a throttled tab can't keep a session open past its deadline.
- * Plan 1 sign-out clears the session history and the query cache
- * (`session.clear()`), goes to `/`, and says why. Plan 2 swaps in real auth.
+ * Sign-out is handed to `onSignOut` (SessionGuard passes
+ * `useAuth().signOut("idle")`, which clears the history and cache and goes to
+ * sign-in); this component only shows the warning and the toast.
  */
 export function SessionTimeout({
   warnAfterMs = 780_000,
   signOutAfterMs = 900_000,
   onSignOut,
 }: Timing & {
-  /** Lets the app drop in-memory page state (an open draft) on sign-out. */
-  onSignOut?(): void;
+  /** Does the actual sign-out (and drops in-memory page state). */
+  onSignOut(): void;
 }) {
   // Sign-out deadline while the warning is showing; null otherwise.
   const [deadline, setDeadline] = useState<number | null>(null);
   // "Now" for the countdown, set by ticks and wake events (no Date.now() in render).
   const [now, setNow] = useState(0);
-  const { clear } = useSession();
-  const router = useRouter();
   const { show } = useToast();
 
   const expired = deadline !== null && now >= deadline;
@@ -72,13 +66,7 @@ export function SessionTimeout({
   // Leaves `deadline` in the past (dialog closed) until the next idle period.
   const signOut = useEffectEvent(() => {
     restart();
-    // One transition, so the cleared history and the new route land together
-    // (a result page never renders with its session item gone).
-    startTransition(() => {
-      clear();
-      onSignOut?.();
-      router.push("/");
-    });
+    onSignOut();
     show({
       title: "Signed out for privacy",
       body: "Your session was cleared after inactivity.",
@@ -122,43 +110,28 @@ export function SessionTimeout({
   );
 }
 
-type SignedOut = {
-  /** Minutes of inactivity that caused the last sign-out; null if none. */
-  afterMin: number | null;
-  dismiss(): void;
-};
-const SignedOutCtx = createContext<SignedOut>({
-  afterMin: null,
-  dismiss() {},
-});
-/** Why the clinician was signed out, until dismissed. Memory only. */
-export const useSignedOutNotice = () => useContext(SignedOutCtx);
-
 /**
  * Mounted once in Providers (root layout), so every route, including
- * /print, has the idle sign-out. On sign-out it remounts the app below it,
- * dropping any in-memory page state such as an open draft, and keeps an
- * in-memory notice explaining why (never written to storage).
+ * /print, has the idle sign-out while someone is signed in. On sign-out it
+ * remounts the app below it, dropping in-memory page state such as an open
+ * draft. Why they were signed out is kept by AuthProvider (memory only).
  */
 export function SessionGuard({
   children,
   ...timing
 }: Timing & { children: ReactNode }) {
   const [epoch, setEpoch] = useState(0);
-  const [afterMin, setAfterMin] = useState<number | null>(null);
-  const minutes = Math.round((timing.signOutAfterMs ?? 900_000) / 60_000);
+  const { status, signOut } = useAuth();
   const onSignOut = useCallback(() => {
     setEpoch((n) => n + 1);
-    setAfterMin(minutes);
-  }, [minutes]);
-  const notice = useMemo(
-    () => ({ afterMin, dismiss: () => setAfterMin(null) }),
-    [afterMin],
-  );
+    void signOut("idle");
+  }, [signOut]);
   return (
-    <SignedOutCtx.Provider value={notice}>
+    <>
       <Fragment key={epoch}>{children}</Fragment>
-      <SessionTimeout {...timing} onSignOut={onSignOut} />
-    </SignedOutCtx.Provider>
+      {status === "signed_in" && (
+        <SessionTimeout {...timing} onSignOut={onSignOut} />
+      )}
+    </>
   );
 }

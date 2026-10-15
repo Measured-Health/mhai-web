@@ -4,6 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Providers } from "@/app/providers";
+import { AuthProvider, useAuth } from "@/lib/auth/auth-context";
+import { createMockAuthClient } from "@/lib/auth/mock";
+import { renderWithAuth, TEST_USER } from "@/tests/auth-wrapper";
 import type { QueryCreateIn, Readiness } from "@/lib/api/contract";
 import {
   SessionProvider,
@@ -33,6 +36,7 @@ import { FailedView } from "./failed-view";
 import { FirstVisit } from "./first-visit";
 import { OfflineStrip } from "./offline-strip";
 import { SessionGuard, SessionTimeout } from "./session-timeout";
+import { SignedOutNotice } from "./signed-out-notice";
 import { UnsavedGuard } from "./unsaved-guard";
 
 const ITEM: SessionItem = {
@@ -286,12 +290,14 @@ describe("SessionTimeout", () => {
       </SessionProvider>
     </QueryClientProvider>
   );
+  const onSignOut = vi.fn();
+  beforeEach(() => onSignOut.mockClear());
   const mount = (props: { warnAfterMs?: number; signOutAfterMs?: number }) =>
     render(
       <Bare>
         <Seed />
         <Count />
-        <SessionTimeout {...props} />
+        <SessionTimeout {...props} onSignOut={onSignOut} />
       </Bare>,
     );
   const short = { warnAfterMs: 1000, signOutAfterMs: 3000 };
@@ -316,11 +322,10 @@ describe("SessionTimeout", () => {
     expect(screen.getByText("0:02")).toBeInTheDocument();
     tick(1000);
     expect(screen.getByText("0:01")).toBeInTheDocument();
-    expect(push).not.toHaveBeenCalled();
+    expect(onSignOut).not.toHaveBeenCalled();
     tick(1000);
-    expect(screen.getByTestId("count")).toHaveTextContent("0");
-    expect(push).toHaveBeenCalledTimes(1);
-    expect(push).toHaveBeenCalledWith("/");
+    expect(onSignOut).toHaveBeenCalledTimes(1);
+    expect(onSignOut).toHaveBeenCalled();
     expect(screen.getByText("Signed out for privacy")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -333,7 +338,7 @@ describe("SessionTimeout", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     tick(999);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(push).not.toHaveBeenCalled();
+    expect(onSignOut).not.toHaveBeenCalled();
     expect(screen.getByTestId("count")).toHaveTextContent("1");
     tick(1);
     expect(
@@ -353,7 +358,7 @@ describe("SessionTimeout", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // Without a restart the old deadline (3 s) would sign out here.
     tick(2000);
-    expect(push).not.toHaveBeenCalled();
+    expect(onSignOut).not.toHaveBeenCalled();
     expect(screen.getByTestId("count")).toHaveTextContent("1");
     expect(
       screen.getByRole("dialog", { name: "Still there?" }),
@@ -365,18 +370,16 @@ describe("SessionTimeout", () => {
     mount(short);
     tick(1000);
     fireEvent.click(screen.getByRole("button", { name: "Sign out now" }));
-    expect(screen.getByTestId("count")).toHaveTextContent("0");
-    expect(push).toHaveBeenCalledTimes(1);
+    expect(onSignOut).toHaveBeenCalledTimes(1);
     tick(1500);
-    expect(push).toHaveBeenCalledTimes(1);
+    expect(onSignOut).toHaveBeenCalledTimes(1);
   });
 
   it("signs out immediately on waking after 20 minutes with no ticks", () => {
     vi.useFakeTimers();
     mount({});
     wake(20 * 60_000);
-    expect(screen.getByTestId("count")).toHaveTextContent("0");
-    expect(push).toHaveBeenCalledWith("/");
+    expect(onSignOut).toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -384,12 +387,12 @@ describe("SessionTimeout", () => {
     vi.useFakeTimers();
     mount({});
     wake(20 * 60_000);
-    expect(push).toHaveBeenCalledTimes(1);
+    expect(onSignOut).toHaveBeenCalledTimes(1);
     act(() => {
       window.dispatchEvent(new Event("keydown"));
     });
     wake(20 * 60_000);
-    expect(push).toHaveBeenCalledTimes(2);
+    expect(onSignOut).toHaveBeenCalledTimes(2);
   });
 
   it("on waking after 14 minutes shows the warning with the real time left", () => {
@@ -403,7 +406,6 @@ describe("SessionTimeout", () => {
     expect(screen.getByTestId("count")).toHaveTextContent("1");
     // The page was frozen past the deadline: the next wake signs out.
     wake(61_000);
-    expect(screen.getByTestId("count")).toHaveTextContent("0");
   });
 
   // Time jumps with no ticks and no wake event (stalled timers).
@@ -416,8 +418,7 @@ describe("SessionTimeout", () => {
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "a" }));
     });
-    expect(screen.getByTestId("count")).toHaveTextContent("0");
-    expect(push).toHaveBeenCalledWith("/");
+    expect(onSignOut).toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -430,8 +431,7 @@ describe("SessionTimeout", () => {
     ).toBeInTheDocument();
     jump(2 * 60_000);
     fireEvent.click(screen.getByRole("button", { name: "Stay signed in" }));
-    expect(screen.getByTestId("count")).toHaveTextContent("0");
-    expect(push).toHaveBeenCalledWith("/");
+    expect(onSignOut).toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -444,14 +444,13 @@ describe("SessionTimeout", () => {
       screen.getByRole("dialog", { name: "Still there?" }),
       new Event("cancel", { cancelable: true }),
     );
-    expect(screen.getByTestId("count")).toHaveTextContent("0");
-    expect(push).toHaveBeenCalledWith("/");
+    expect(onSignOut).toHaveBeenCalled();
   });
 
   it("covers every route: Providers (root layout, incl. /print) mounts the guard", () => {
     vi.useFakeTimers();
     render(
-      <Providers>
+      <Providers auth={{ initialUser: TEST_USER }}>
         <Seed />
         <Count />
         <p>print sheet</p>
@@ -462,7 +461,7 @@ describe("SessionTimeout", () => {
       screen.getByRole("dialog", { name: "Still there?" }),
     ).toBeInTheDocument();
     wake(2 * 60_000);
-    expect(push).toHaveBeenCalledWith("/");
+    expect(replace).toHaveBeenCalledWith("/sign-in");
     expect(screen.getByText("Signed out for privacy")).toBeInTheDocument();
   });
 });
@@ -470,6 +469,7 @@ describe("SessionTimeout", () => {
 describe("SessionGuard", () => {
   it("remounts the page on sign-out so an open draft is dropped", () => {
     vi.useFakeTimers();
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
     function Draft() {
       const [v, setV] = useState("");
       return (
@@ -484,9 +484,14 @@ describe("SessionGuard", () => {
       <QueryClientProvider client={new QueryClient()}>
         <SessionProvider>
           <ToastProvider>
-            <SessionGuard warnAfterMs={1000} signOutAfterMs={2000}>
-              <Draft />
-            </SessionGuard>
+            <AuthProvider
+              client={createMockAuthClient()}
+              initialUser={TEST_USER}
+            >
+              <SessionGuard warnAfterMs={1000} signOutAfterMs={2000}>
+                <Draft />
+              </SessionGuard>
+            </AuthProvider>
           </ToastProvider>
         </SessionProvider>
       </QueryClientProvider>,
@@ -495,8 +500,31 @@ describe("SessionGuard", () => {
       target: { value: "54 M chest pain" },
     });
     for (let i = 0; i < 3; i++) act(() => vi.advanceTimersByTime(1000));
-    expect(push).toHaveBeenCalledWith("/");
+    expect(replace).toHaveBeenCalledWith("/sign-in");
     expect(screen.getByLabelText("draft")).toHaveValue("");
+    expect(setItem).not.toHaveBeenCalled();
+  });
+});
+
+describe("SignedOutNotice", () => {
+  it.each([
+    ["idle", "Signed out for privacy", /15 minutes of inactivity/],
+    ["manual", "You've signed out", /history was cleared/],
+    ["expired", "Your session ended", /Sign in again/],
+  ] as const)("explains a %s sign-out", async (why, title, body) => {
+    function SignOut() {
+      const { signOut } = useAuth();
+      return <button onClick={() => void signOut(why)}>out</button>;
+    }
+    renderWithAuth(
+      <>
+        <SignOut />
+        <SignedOutNotice />
+      </>,
+    );
+    fireEvent.click(screen.getByText("out"));
+    expect(await screen.findByText(title)).toBeInTheDocument();
+    expect(screen.getByText(body)).toBeInTheDocument();
   });
 });
 

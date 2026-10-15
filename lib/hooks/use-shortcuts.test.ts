@@ -1,9 +1,13 @@
 import { render, renderHook } from "@testing-library/react";
 import { createElement } from "react";
 import { MobileDrawer } from "@/components/shell/mobile-drawer";
+import { AuthTestProvider } from "@/tests/auth-wrapper";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
 import { useShortcuts } from "./use-shortcuts";
 
 const press = (
@@ -152,6 +156,7 @@ describe("useShortcuts", () => {
           onClose() {},
           items: [],
         }),
+        { wrapper: AuthTestProvider },
       );
       press("n");
       expect(f).toHaveBeenCalledTimes(1);

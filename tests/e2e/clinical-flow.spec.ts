@@ -14,8 +14,16 @@ const FORBIDDEN = new RegExp(
 const isMobile = (page: Page) => (page.viewportSize()?.width ?? 1440) < 768;
 const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
+async function signIn(page: Page) {
+  await page.goto("/sign-in");
+  await page.getByLabel("Work email").fill("a.reyes@havanahospital.org");
+  await page.getByLabel("Password").fill("demo-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+}
+
 async function fillForm(page: Page, question: string) {
-  await page.goto("/");
+  await signIn(page);
   await page.getByRole("button", { name: /Start a consultation/ }).click();
   await page.getByLabel("Age").fill("54");
   await page.getByRole("radio", { name: "Male", exact: true }).click();
@@ -128,7 +136,7 @@ test("couldn't complete keeps the question for editing", async ({ page }) => {
 });
 
 test("form errors are explained and nothing is lost", async ({ page }) => {
-  await page.goto("/");
+  await signIn(page);
   await page.getByRole("button", { name: /Start a consultation/ }).click();
   await page.getByLabel("Age").fill("154");
   await page

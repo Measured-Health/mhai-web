@@ -1,22 +1,28 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { renderWithAuth } from "@/tests/auth-wrapper";
 import { MobileDrawer } from "./mobile-drawer";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
 
 const base = { items: [], onClose() {}, onOpenSearch() {} };
 
 describe("MobileDrawer", () => {
   it("is inert and hidden from assistive tech while closed", () => {
-    const { container } = render(<MobileDrawer {...base} open={false} />);
+    const { container } = renderWithAuth(
+      <MobileDrawer {...base} open={false} />,
+    );
     expect(container.firstElementChild).toHaveAttribute("inert");
     expect(container.firstElementChild).toHaveAttribute("aria-hidden", "true");
   });
   it("is interactive when open, focuses inside, and closes on Escape", async () => {
     const onClose = vi.fn();
-    const { container } = render(
+    const { container } = renderWithAuth(
       <MobileDrawer {...base} onClose={onClose} open />,
     );
     expect(container.firstElementChild).not.toHaveAttribute("inert");
@@ -36,7 +42,7 @@ describe("MobileDrawer", () => {
         </>
       );
     }
-    render(<Host />);
+    renderWithAuth(<Host />);
     const outside = screen.getByRole("button", { name: "outside" });
     outside.focus();
     await userEvent.keyboard("{Enter}");
