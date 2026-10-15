@@ -133,6 +133,7 @@ each state:
 
    Expected: only the first six digits are used, and Verify stays
    disabled until there are six. Tested in Task 5.
+
 3. **Reloading or deep-linking `/sign-in/code` or `/welcome` with nothing
    pending.** Expected: redirect to `/sign-in` (or `/` if already fully
    signed in), with no crash and no blank page. Tested in Tasks 5 and 6.
@@ -198,29 +199,29 @@ tests/e2e/account.spec.ts
 - Consumes: nothing.
 - Produces:
   - **Types:** `Role`, `User`, `FirstStep`, `Session` (`{ user: User;
-    steps: FirstStep[] }`), `SignInResult`, `Capabilities`,
+steps: FirstStep[] }`), `SignInResult`, `Capabilities`,
     `AuthErrorCode`, `class AuthError`, `Device`, `MfaSetup`, `interface
-    AuthClient`. `getSession()` resolves to `Session | null`.
+AuthClient`. `getSession()` resolves to `Session | null`.
   - **Helpers:** `initials(name: string): string` and
     `isClinical(user: User | null): boolean`.
   - **Mock:** `createMockAuthClient(opts?: { now?: () => number }):
-    AuthClient`, plus the constants `MOCK_CODE`, `MOCK_RESET_TOKEN` and
+AuthClient`, plus the constants `MOCK_CODE`, `MOCK_RESET_TOKEN` and
     `MOCK_BACKUP_CODES`.
   - **Client:** `getAuthClient(): AuthClient`.
 
 **Mock rules.** The trigger is the first word of the login before `@`,
 split on `.`, `_`, `+` or `-`:
 
-| Input | Result |
-|---|---|
-| password `wrong` | `invalid_credentials`, counting down `attemptsLeft` from 4. The 5th try locks the login for 15 minutes (`locked`). |
-| trigger `locked` | `locked` |
-| trigger `mfa` | `mfa_required`. Then code `123456`, or one of the backup codes once each. |
-| trigger `new` | signed in with `steps: ["terms", "password", "mfa"]` and `mfaEnabled: false` |
-| trigger `admin` or `auditor` | signed in with that role (the 403 path) |
-| anything else | a signed-in clinician with two-step on |
-| reset token `demo` | accepted; any other token gives `link_expired` |
-| new passwords under 12 characters | `weak_password` |
+| Input                             | Result                                                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| password `wrong`                  | `invalid_credentials`, counting down `attemptsLeft` from 4. The 5th try locks the login for 15 minutes (`locked`). |
+| trigger `locked`                  | `locked`                                                                                                           |
+| trigger `mfa`                     | `mfa_required`. Then code `123456`, or one of the backup codes once each.                                          |
+| trigger `new`                     | signed in with `steps: ["terms", "password", "mfa"]` and `mfaEnabled: false`                                       |
+| trigger `admin` or `auditor`      | signed in with that role (the 403 path)                                                                            |
+| anything else                     | a signed-in clinician with two-step on                                                                             |
+| reset token `demo`                | accepted; any other token gives `link_expired`                                                                     |
+| new passwords under 12 characters | `weak_password`                                                                                                    |
 
 - [ ] **Step 1: Write the failing test**
 
@@ -284,7 +285,10 @@ describe("mock auth client", () => {
     expect(
       await fail(c.verifyCode("000000", { backup: false, trustDevice: false })),
     ).toMatchObject({ code: "mfa_invalid" });
-    const r = await c.verifyCode(MOCK_CODE, { backup: false, trustDevice: true });
+    const r = await c.verifyCode(MOCK_CODE, {
+      backup: false,
+      trustDevice: true,
+    });
     expect(r.status).toBe("signed_in");
 
     await c.signOut();
@@ -297,7 +301,10 @@ describe("mock auth client", () => {
     await c.signIn("mfa@h.org", "pw");
     expect(
       await fail(
-        c.verifyCode(MOCK_BACKUP_CODES[0]!, { backup: true, trustDevice: false }),
+        c.verifyCode(MOCK_BACKUP_CODES[0]!, {
+          backup: true,
+          trustDevice: false,
+        }),
       ),
     ).toMatchObject({ code: "mfa_invalid" });
   });
@@ -305,7 +312,9 @@ describe("mock auth client", () => {
   it("says the code step expired when nothing is pending", async () => {
     const c = createMockAuthClient();
     expect(
-      await fail(c.verifyCode(MOCK_CODE, { backup: false, trustDevice: false })),
+      await fail(
+        c.verifyCode(MOCK_CODE, { backup: false, trustDevice: false }),
+      ),
     ).toMatchObject({ code: "mfa_expired" });
   });
 
@@ -546,9 +555,15 @@ const LOCK_MS = 15 * 60_000;
 const MAX_TRIES = 5;
 
 const trigger = (login: string) =>
-  login.toLowerCase().split("@")[0]!.split(/[._+-]/)[0] ?? "";
+  login
+    .toLowerCase()
+    .split("@")[0]!
+    .split(/[._+-]/)[0] ?? "";
 const normalizeBackup = (c: string) =>
-  c.toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^(.{4})(.{4})$/, "$1-$2");
+  c
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .replace(/^(.{4})(.{4})$/, "$1-$2");
 
 function userFor(login: string, role: Role, mfaEnabled: boolean): User {
   const clinician = role === "clinician";
@@ -652,7 +667,11 @@ export function createMockAuthClient({
         return { status: "signed_in", user: u, steps: [...owed] };
       }
       const role: Role =
-        word === "admin" ? "admin" : word === "auditor" ? "auditor" : "clinician";
+        word === "admin"
+          ? "admin"
+          : word === "auditor"
+            ? "auditor"
+            : "clinician";
       const u = userFor(key, role, true);
       startSession(u);
       return { status: "signed_in", user: u, steps: [] };
@@ -756,7 +775,9 @@ let client: AuthClient | undefined;
 /** Task 1 ships mock mode only. Task 12 adds the live client behind the BFF. */
 export function getAuthClient(): AuthClient {
   if (process.env.NEXT_PUBLIC_USE_MOCK !== "true") {
-    throw new Error("Live sign-in arrives in Task 12. Set NEXT_PUBLIC_USE_MOCK=true.");
+    throw new Error(
+      "Live sign-in arrives in Task 12. Set NEXT_PUBLIC_USE_MOCK=true.",
+    );
   }
   return (client ??= createMockAuthClient());
 }
@@ -791,12 +812,12 @@ git commit -m "Add auth types and the memory-only mock auth client"
 - Produces:
   - `passwordRules(pw: string, identity: string | null): PasswordRule[]`,
     where `PasswordRule` is `{ id: "length" | "common" | "identity";
-    label: string; ok: boolean }`;
+label: string; ok: boolean }`;
   - `passwordError(next: string, confirm: string, identity: string |
-    null): string | null`;
+null): string | null`;
   - `COMMON_PASSWORDS: ReadonlySet<string>`;
   - `<PasswordFields next confirm onNext onConfirm identity showErrors
-    />`, which renders the new-password field, the confirm field and the
+/>`, which renders the new-password field, the confirm field and the
     live rule ticks.
 
 **Rules (design 8c):**
@@ -848,7 +869,9 @@ describe("passwordError", () => {
     expect(passwordError("tram-lantern-okra", "tram-lantern-okr", null)).toBe(
       "The passwords don't match.",
     );
-    expect(passwordError("tram-lantern-okra", "tram-lantern-okra", null)).toBeNull();
+    expect(
+      passwordError("tram-lantern-okra", "tram-lantern-okra", null),
+    ).toBeNull();
   });
 });
 ```
@@ -880,15 +903,22 @@ function Harness({ showErrors = false }: { showErrors?: boolean }) {
 describe("PasswordFields", () => {
   it("ticks rules as you type, in words not just colour", async () => {
     render(<Harness />);
-    const rule = () => screen.getByText("At least 12 characters").closest("li")!;
+    const rule = () =>
+      screen.getByText("At least 12 characters").closest("li")!;
     expect(rule()).toHaveAccessibleName(/not met/);
-    await userEvent.type(screen.getByLabelText("New password"), "tram-lantern-okra");
+    await userEvent.type(
+      screen.getByLabelText("New password"),
+      "tram-lantern-okra",
+    );
     expect(rule()).toHaveAccessibleName(/met/);
     expect(rule()).not.toHaveAccessibleName(/not met/);
   });
   it("shows the mismatch only once errors are on", async () => {
     const { rerender } = render(<Harness />);
-    await userEvent.type(screen.getByLabelText("New password"), "tram-lantern-okra");
+    await userEvent.type(
+      screen.getByLabelText("New password"),
+      "tram-lantern-okra",
+    );
     await userEvent.type(screen.getByLabelText("Confirm password"), "tram");
     expect(screen.queryByText("The passwords don't match.")).toBeNull();
     rerender(<Harness showErrors />);
@@ -922,15 +952,42 @@ Expected: FAIL (modules not found).
 ```ts
 /** A short list of the most common passwords. The server checks leaked lists. */
 export const COMMON_PASSWORDS: ReadonlySet<string> = new Set([
-  "123456789012", "1234567890123", "password1234", "password12345",
-  "passwordpassword", "qwertyuiop12", "qwertyuiopas", "iloveyou1234",
-  "welcome12345", "letmein12345", "administrator", "changeme1234",
-  "abcdefghijkl", "abc123456789", "111111111111", "000000000000",
-  "trustno1trustno1", "football1234", "baseball1234", "sunshine1234",
-  "princess1234", "monkey123456", "dragon123456", "superman1234",
-  "hospital1234", "doctor123456", "nurse1234567", "medicine1234",
-  "passw0rd1234", "p@ssw0rd1234", "p@ssword1234", "qwerty123456",
-  "1q2w3e4r5t6y", "zaq12wsxcde3", "asdfghjkl123", "mhai12345678",
+  "123456789012",
+  "1234567890123",
+  "password1234",
+  "password12345",
+  "passwordpassword",
+  "qwertyuiop12",
+  "qwertyuiopas",
+  "iloveyou1234",
+  "welcome12345",
+  "letmein12345",
+  "administrator",
+  "changeme1234",
+  "abcdefghijkl",
+  "abc123456789",
+  "111111111111",
+  "000000000000",
+  "trustno1trustno1",
+  "football1234",
+  "baseball1234",
+  "sunshine1234",
+  "princess1234",
+  "monkey123456",
+  "dragon123456",
+  "superman1234",
+  "hospital1234",
+  "doctor123456",
+  "nurse1234567",
+  "medicine1234",
+  "passw0rd1234",
+  "p@ssw0rd1234",
+  "p@ssword1234",
+  "qwerty123456",
+  "1q2w3e4r5t6y",
+  "zaq12wsxcde3",
+  "asdfghjkl123",
+  "mhai12345678",
 ]);
 
 export interface PasswordRule {
@@ -1009,7 +1066,10 @@ export function PasswordFields({
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <label htmlFor={`${id}-new`} className="mb-1.5 block text-[13px] font-semibold">
+        <label
+          htmlFor={`${id}-new`}
+          className="mb-1.5 block text-[13px] font-semibold"
+        >
           New password
         </label>
         <input
@@ -1043,7 +1103,10 @@ export function PasswordFields({
         ))}
       </ul>
       <div>
-        <label htmlFor={`${id}-confirm`} className="mb-1.5 block text-[13px] font-semibold">
+        <label
+          htmlFor={`${id}-confirm`}
+          className="mb-1.5 block text-[13px] font-semibold"
+        >
           Confirm password
         </label>
         <input
@@ -1164,6 +1227,7 @@ git commit -m "Add password rules and the new-password fields"
   - `homeFor(...)` otherwise.
 
   Nothing clinical mounts before the check, so no clinical query runs.
+
 - **`signOut(reason)`** is idempotent: it does nothing if already signed
   out with nothing pending. In one transition it:
   - clears the session history and query cache (`session.clear()`);
@@ -1171,6 +1235,7 @@ git commit -m "Add password rules and the new-password fields"
   - calls `router.replace("/sign-in")`.
 
   Then it calls `client.signOut()` as a best effort.
+
 - **The notice** on the sign-in page (placed in Task 4) says why the
   person was signed out:
   - **idle:** "Signed out for privacy". "You were signed out after 15
@@ -1505,7 +1570,9 @@ export function AuthProvider({
       .then((s) => {
         if (on)
           setState(
-            s ? { status: "signed_in", user: s.user, steps: s.steps } : SIGNED_OUT,
+            s
+              ? { status: "signed_in", user: s.user, steps: s.steps }
+              : SIGNED_OUT,
           );
       })
       .catch(() => on && setState(SIGNED_OUT));
@@ -1658,15 +1725,15 @@ export function Providers({
 - replace the `signOut` effect event with:
 
 ```tsx
-  // Leaves `deadline` in the past (dialog closed) until the next idle period.
-  const signOut = useEffectEvent(() => {
-    restart();
-    onSignOut();
-    show({
-      title: "Signed out for privacy",
-      body: "Your session was cleared after inactivity.",
-    });
+// Leaves `deadline` in the past (dialog closed) until the next idle period.
+const signOut = useEffectEvent(() => {
+  restart();
+  onSignOut();
+  show({
+    title: "Signed out for privacy",
+    body: "Your session was cleared after inactivity.",
   });
+});
 ```
 
 Update its doc comment: sign-out is handed to `onSignOut`, and
@@ -1805,10 +1872,10 @@ git mv "app/(clinical)/ended" app/ended
 Add one test:
 
 ```tsx
-  it("hides the account footer when nobody is signed in", () => {
-    renderWithAuth(<Sidebar items={[]} />, null);
-    expect(screen.queryByText("Havana Hospital")).not.toBeInTheDocument();
-  });
+it("hides the account footer when nobody is signed in", () => {
+  renderWithAuth(<Sidebar items={[]} />, null);
+  expect(screen.queryByText("Havana Hospital")).not.toBeInTheDocument();
+});
 ```
 
 `components/states/states.test.tsx`:
@@ -1830,7 +1897,7 @@ Add one test:
   since the toast still says it.
 - In the `SessionGuard` describe, wrap the tree's `SessionProvider`
   children in `<AuthProvider client={createMockAuthClient()}
-  initialUser={TEST_USER}>`, and assert
+initialUser={TEST_USER}>`, and assert
   `expect(replace).toHaveBeenCalledWith("/sign-in")` in place of
   `push("/")`.
 - Delete any test of `useSignedOutNotice` or of `SignedOutNotice` on the
@@ -1935,6 +2002,7 @@ git commit -m "Gate the clinical app behind sign-in and say why you were signed 
   - "You stay in control: the final decision is always yours".
 
   Then the partner line.
+
 - **Form:**
   - heading "Welcome back", with "Sign in to continue to MHAI.";
   - an SSO button "Continue with hospital account", then "or use email";
@@ -1945,15 +2013,16 @@ git commit -m "Gate the clinical app behind sign-in and say why you were signed 
     hospital admin".
 - **Errors** (a red banner, which also moves focus to it):
 
-  | Code | Title | Body |
-  |---|---|---|
-  | `invalid_credentials` | "That email and password don't match." (or "username") | "Check them and try again." plus " N attempts left before a 15-minute lock." **only when `attemptsLeft` is known** |
-  | `locked` | "Your account is locked for 15 minutes." | "Too many tries. Wait, then try again, or reset your password." |
-  | `rate_limited` | "Too many tries right now." | "Wait a minute, then try again." |
-  | `unavailable`, or any unexpected error | "We can't reach MHAI right now." | "Check your connection and try again in a moment." |
+  | Code                                   | Title                                                  | Body                                                                                                               |
+  | -------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+  | `invalid_credentials`                  | "That email and password don't match." (or "username") | "Check them and try again." plus " N attempts left before a 15-minute lock." **only when `attemptsLeft` is known** |
+  | `locked`                               | "Your account is locked for 15 minutes."               | "Too many tries. Wait, then try again, or reset your password."                                                    |
+  | `rate_limited`                         | "Too many tries right now."                            | "Wait a minute, then try again."                                                                                   |
+  | `unavailable`, or any unexpected error | "We can't reach MHAI right now."                       | "Check your connection and try again in a moment."                                                                 |
 
   Under the banner, show the links "Reset your password" (if
   `passwordReset`) and "Use hospital account instead" (if `sso`).
+
 - **Empty fields** show inline errors and send nothing: "Enter your work
   email." (or "Enter your username.") and "Enter your password."
 
@@ -1991,7 +2060,9 @@ async function signIn(login: string, password: string) {
   const user = userEvent.setup();
   if (login) await user.type(screen.getByLabelText("Work email"), login);
   if (password) await user.type(screen.getByLabelText("Password"), password);
-  await user.click(screen.getByRole("button", { name: "Sign in", exact: true }));
+  await user.click(
+    screen.getByRole("button", { name: "Sign in", exact: true }),
+  );
 }
 
 describe("SignInForm", () => {
@@ -2023,10 +2094,9 @@ describe("SignInForm", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("That email and password don't match.");
     expect(alert).toHaveTextContent("4 attempts left before a 15-minute lock.");
-    expect(screen.getByRole("link", { name: "Reset your password" })).toHaveAttribute(
-      "href",
-      "/forgot-password",
-    );
+    expect(
+      screen.getByRole("link", { name: "Reset your password" }),
+    ).toHaveAttribute("href", "/forgot-password");
   });
 
   it("never guesses attempts the backend didn't send", async () => {
@@ -2036,7 +2106,9 @@ describe("SignInForm", () => {
     );
     page(client);
     await signIn("x@h.org", "pw");
-    expect(await screen.findByRole("alert")).not.toHaveTextContent(/attempts? left/);
+    expect(await screen.findByRole("alert")).not.toHaveTextContent(
+      /attempts? left/,
+    );
   });
 
   it("tells a locked account to wait", async () => {
@@ -2070,7 +2142,9 @@ describe("SignInForm", () => {
     });
     page(client);
     expect(screen.getByLabelText("Username")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /hospital account/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /hospital account/ }),
+    ).toBeNull();
     expect(screen.queryByRole("link", { name: "Forgot?" })).toBeNull();
   });
 
@@ -2100,7 +2174,10 @@ import { Logo, PartnerLine } from "../ui/brand";
 
 const TRUST = [
   { Icon: ShieldCheck, text: "Patient details are masked before any analysis" },
-  { Icon: BadgeCheck, text: "Every claim is checked against clinical guidelines" },
+  {
+    Icon: BadgeCheck,
+    text: "Every claim is checked against clinical guidelines",
+  },
   {
     Icon: Target,
     text: "You stay in control: the final decision is always yours",
@@ -2163,7 +2240,9 @@ export function AuthHeading({
           {eyebrow}
         </p>
       )}
-      <h1 className="font-display text-[40px] font-black leading-none">{title}</h1>
+      <h1 className="font-display text-[40px] font-black leading-none">
+        {title}
+      </h1>
       {sub && <p className="mt-2 text-[14.5px] text-ink-2">{sub}</p>}
     </header>
   );
@@ -2204,8 +2283,8 @@ export function DemoHint() {
     >
       <b className="block text-ink">Demo sign-in</b>
       Any email and password works. The two-step code is{" "}
-      <code className="font-mono">123456</code>. To see other screens, start
-      the email with <code className="font-mono">mfa</code>,{" "}
+      <code className="font-mono">123456</code>. To see other screens, start the
+      email with <code className="font-mono">mfa</code>,{" "}
       <code className="font-mono">new</code>,{" "}
       <code className="font-mono">admin</code> or{" "}
       <code className="font-mono">locked</code>, or use the password{" "}
@@ -2237,7 +2316,10 @@ import { inputClass } from "./password-fields";
 /** Shared wording for sign-in and code errors. */
 export function authErrorCopy(
   code: AuthErrorCode,
-  { noun = "email", attemptsLeft }: { noun?: string; attemptsLeft?: number } = {},
+  {
+    noun = "email",
+    attemptsLeft,
+  }: { noun?: string; attemptsLeft?: number } = {},
 ): { title: string; body: string } {
   switch (code) {
     case "invalid_credentials":
@@ -2331,7 +2413,10 @@ export function SignInForm() {
             <p>{copy.body}</p>
             <p className="mt-1.5 flex flex-wrap gap-x-3">
               {can.passwordReset && (
-                <Link className="font-semibold underline" href="/forgot-password">
+                <Link
+                  className="font-semibold underline"
+                  href="/forgot-password"
+                >
                   Reset your password
                 </Link>
               )}
@@ -2368,7 +2453,10 @@ export function SignInForm() {
       )}
       <form onSubmit={submit} noValidate className="flex flex-col gap-4">
         <div>
-          <label htmlFor={`${id}-login`} className="mb-1.5 block text-[13px] font-semibold">
+          <label
+            htmlFor={`${id}-login`}
+            className="mb-1.5 block text-[13px] font-semibold"
+          >
             {can.emailLogin ? "Work email" : "Username"}
           </label>
           <input
@@ -2386,7 +2474,9 @@ export function SignInForm() {
           />
           {missing.login && (
             <p id={`${id}-login-err`} className="mt-1 text-[13px] text-bad">
-              {can.emailLogin ? "Enter your work email." : "Enter your username."}
+              {can.emailLogin
+                ? "Enter your work email."
+                : "Enter your username."}
             </p>
           )}
         </div>
@@ -2396,7 +2486,10 @@ export function SignInForm() {
               Password
             </label>
             {can.passwordReset && (
-              <Link href="/forgot-password" className="text-[13px] text-mint-deep">
+              <Link
+                href="/forgot-password"
+                className="text-[13px] text-mint-deep"
+              >
                 Forgot?
               </Link>
             )}
@@ -2503,7 +2596,7 @@ git commit -m "Add the sign-in page with generic errors and the demo hint"
   - `normalizeCode(s: string): string`, which keeps digits only and the
     first six;
   - `CodeInput({ value, onChange, label, disabled?, invalid?,
-    focusKey? })`, six boxes;
+focusKey? })`, six boxes;
   - `CodeForm`.
 
 **Behaviour (design `account.html` 2):**
@@ -2589,7 +2682,9 @@ describe("CodeInput", () => {
   });
   it("is a labelled group with one-time-code autocomplete", () => {
     render(<Harness />);
-    expect(screen.getByRole("group", { name: "Code from your app" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: "Code from your app" }),
+    ).toBeInTheDocument();
     expect(box(1)).toHaveAttribute("autocomplete", "one-time-code");
     expect(box(2)).toHaveAttribute("inputmode", "numeric");
   });
@@ -2657,15 +2752,22 @@ describe("CodeForm", () => {
 
   it("accepts a backup code instead", async () => {
     await pending();
-    await userEvent.click(screen.getByRole("button", { name: "Use a backup code" }));
-    await userEvent.type(screen.getByLabelText("Backup code"), MOCK_BACKUP_CODES[1]!);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Use a backup code" }),
+    );
+    await userEvent.type(
+      screen.getByLabelText("Backup code"),
+      MOCK_BACKUP_CODES[1]!,
+    );
     await userEvent.click(screen.getByRole("button", { name: "Verify" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
   });
 
   it("offers to trust the device only when supported", async () => {
     await pending();
-    expect(screen.getByLabelText("Trust this device for 30 days")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Trust this device for 30 days"),
+    ).toBeInTheDocument();
   });
 
   it("sends a deep link with nothing pending back to sign-in", async () => {
@@ -2675,7 +2777,9 @@ describe("CodeForm", () => {
 
   it("goes back to sign-in on request", async () => {
     await pending();
-    await userEvent.click(screen.getByRole("button", { name: "Back to sign in" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Back to sign in" }),
+    );
     expect(auth.mfaPending).toBe(false);
     expect(replace).toHaveBeenCalledWith("/sign-in");
   });
@@ -2721,7 +2825,8 @@ export function CodeInput({
   focusKey?: number;
 }) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
-  const focus = (i: number) => refs.current[Math.max(0, Math.min(5, i))]?.focus();
+  const focus = (i: number) =>
+    refs.current[Math.max(0, Math.min(5, i))]?.focus();
   useEffect(() => {
     if (focusKey) refs.current[0]?.focus();
   }, [focusKey]);
@@ -2811,7 +2916,8 @@ import { CodeInput, normalizeCode } from "./code-input";
 import { inputClass } from "./password-fields";
 import { authErrorCopy, errorCode } from "./sign-in-form";
 
-const normalizeBackup = (s: string) => s.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+const normalizeBackup = (s: string) =>
+  s.toUpperCase().replace(/[^A-Z0-9-]/g, "");
 
 export function CodeForm() {
   const auth = useAuth();
@@ -2836,7 +2942,9 @@ export function CodeForm() {
   }, [target, router]);
   if (auth.status === "loading" || target) return null;
 
-  const ready = backup ? code.replace(/-/g, "").length === 8 : code.length === 6;
+  const ready = backup
+    ? code.replace(/-/g, "").length === 8
+    : code.length === 6;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!ready || busy) return;
@@ -2881,7 +2989,10 @@ export function CodeForm() {
           <Banner tone="bad" title={copy.title}>
             <p>{copy.body}</p>
             {error?.code === "mfa_expired" && (
-              <Link className="mt-1.5 inline-block font-semibold underline" href="/sign-in">
+              <Link
+                className="mt-1.5 inline-block font-semibold underline"
+                href="/sign-in"
+              >
                 Sign in again
               </Link>
             )}
@@ -2890,7 +3001,10 @@ export function CodeForm() {
       )}
       {backup ? (
         <div>
-          <label htmlFor={`${id}-backup`} className="mb-1.5 block text-[13px] font-semibold">
+          <label
+            htmlFor={`${id}-backup`}
+            className="mb-1.5 block text-[13px] font-semibold"
+          >
             Backup code
           </label>
           <input
@@ -3046,6 +3160,7 @@ git commit -m "Add the two-step code step with paste, backup codes and trust"
   - codes: "Just in case".
 
   The plan of steps is fixed at mount, so "n of N" doesn't jump.
+
 - **Terms:**
   - heading "Before you start", with "Please read and confirm. This takes
     30 seconds.";
@@ -3126,7 +3241,8 @@ describe("BackupCodes", () => {
   it("shows every code and finishes only once saved", async () => {
     const onFinish = vi.fn();
     mount(onFinish);
-    for (const c of MOCK_BACKUP_CODES) expect(screen.getByText(c)).toBeInTheDocument();
+    for (const c of MOCK_BACKUP_CODES)
+      expect(screen.getByText(c)).toBeInTheDocument();
     const finish = screen.getByRole("button", { name: "Finish setup" });
     expect(finish).toBeDisabled();
     await userEvent.click(
@@ -3139,7 +3255,9 @@ describe("BackupCodes", () => {
   it("says Copied only when the clipboard write worked", async () => {
     const user = userEvent.setup();
     mount();
-    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValueOnce(new Error("denied"));
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValueOnce(
+      new Error("denied"),
+    );
     await user.click(screen.getByRole("button", { name: /Copy/ }));
     expect(await screen.findByText(/Couldn't copy/)).toBeInTheDocument();
     expect(screen.queryByText("Copied")).toBeNull();
@@ -3151,7 +3269,9 @@ describe("BackupCodes", () => {
     const create = vi.fn(() => "blob:codes");
     const revoke = vi.fn();
     Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke });
-    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
     mount();
     await userEvent.click(screen.getByRole("button", { name: /Download/ }));
     expect(create).toHaveBeenCalledTimes(1);
@@ -3200,27 +3320,44 @@ describe("WelcomeFlow", () => {
     expect(screen.getByText("Step 1 of 4 · First sign-in")).toBeInTheDocument();
     const go = screen.getByRole("button", { name: "Continue" });
     expect(go).toBeDisabled();
-    await user.click(screen.getByLabelText("I understand and agree to use MHAI this way"));
+    await user.click(
+      screen.getByLabelText("I understand and agree to use MHAI this way"),
+    );
     await user.click(go);
 
-    expect(await screen.findByText("Step 2 of 4 · Your password")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Step 2 of 4 · Your password"),
+    ).toBeInTheDocument();
     await user.type(screen.getByLabelText("New password"), "tram-lantern-okra");
-    await user.type(screen.getByLabelText("Confirm password"), "tram-lantern-okra");
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "tram-lantern-okra",
+    );
     await user.click(screen.getByRole("button", { name: "Save password" }));
 
-    expect(await screen.findByText("Step 3 of 4 · Protect your account")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Step 3 of 4 · Protect your account"),
+    ).toBeInTheDocument();
     expect(
       await screen.findByRole("img", { name: /QR code/ }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Can't scan? Show key" }));
+    await user.click(
+      screen.getByRole("button", { name: "Can't scan? Show key" }),
+    );
     expect(screen.getByText("JBSW Y3DP EHPK 3PXP")).toBeInTheDocument();
     await user.click(screen.getByLabelText("Digit 1 of 6"));
     await user.keyboard("123456");
-    await user.click(screen.getByRole("button", { name: "Verify and continue" }));
+    await user.click(
+      screen.getByRole("button", { name: "Verify and continue" }),
+    );
 
-    expect(await screen.findByText("Step 4 of 4 · Just in case")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Step 4 of 4 · Just in case"),
+    ).toBeInTheDocument();
     expect(auth.user?.mfaEnabled).toBe(true);
-    await user.click(screen.getByLabelText("I've saved these codes somewhere safe"));
+    await user.click(
+      screen.getByLabelText("I've saved these codes somewhere safe"),
+    );
     await user.click(screen.getByRole("button", { name: "Finish setup" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
   });
@@ -3243,8 +3380,12 @@ describe("WelcomeFlow", () => {
     ).toBeInTheDocument();
     await user.click(await screen.findByLabelText("Digit 1 of 6"));
     await user.keyboard("000000");
-    await user.click(screen.getByRole("button", { name: "Verify and continue" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("That code didn't work.");
+    await user.click(
+      screen.getByRole("button", { name: "Verify and continue" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That code didn't work.",
+    );
   });
 
   it("sends a signed-out visitor to sign in", async () => {
@@ -3490,7 +3631,11 @@ export function MfaSetup({
         <div className="mb-4">
           <Banner tone="bad" title="We couldn't start the setup.">
             <p>Check your connection and try again.</p>
-            <Button variant="ghost" className="mt-2" onClick={() => void setup.refetch()}>
+            <Button
+              variant="ghost"
+              className="mt-2"
+              onClick={() => void setup.refetch()}
+            >
               Try again
             </Button>
           </Banner>
@@ -3503,7 +3648,10 @@ export function MfaSetup({
       </ol>
       {setup.data && (
         <div className="mb-4 flex flex-col items-start gap-2">
-          <QrCode text={setup.data.otpauthUri} label="QR code for your authenticator app" />
+          <QrCode
+            text={setup.data.otpauthUri}
+            label="QR code for your authenticator app"
+          />
           <button
             type="button"
             aria-expanded={showKey}
@@ -3554,8 +3702,14 @@ import { AuthHeading } from "./auth-layout";
 import { authErrorCopy, errorCode } from "./sign-in-form";
 
 const POINTS = [
-  ["Decision support, not a decision.", "You remain responsible for every clinical action."],
-  ["Check flagged items.", "Amber and red results need your review before acting."],
+  [
+    "Decision support, not a decision.",
+    "You remain responsible for every clinical action.",
+  ],
+  [
+    "Check flagged items.",
+    "Amber and red results need your review before acting.",
+  ],
   [
     "Patient privacy.",
     "Don't enter names, phone numbers or ID numbers. Details are masked, but entering less is safer.",
@@ -3563,7 +3717,13 @@ const POINTS = [
   ["Feedback helps.", "Your agreements and corrections improve the system."],
 ] as const;
 
-export function TermsStep({ eyebrow, onDone }: { eyebrow: string; onDone(): void }) {
+export function TermsStep({
+  eyebrow,
+  onDone,
+}: {
+  eyebrow: string;
+  onDone(): void;
+}) {
   const { client, signOut } = useAuth();
   const id = useId();
   const [agreed, setAgreed] = useState(false);
@@ -3605,7 +3765,10 @@ export function TermsStep({ eyebrow, onDone }: { eyebrow: string; onDone(): void
           </li>
         ))}
       </ul>
-      <label htmlFor={id} className="mt-5 flex min-h-11 items-center gap-2.5 text-[13.5px]">
+      <label
+        htmlFor={id}
+        className="mt-5 flex min-h-11 items-center gap-2.5 text-[13.5px]"
+      >
         <input
           id={id}
           type="checkbox"
@@ -3615,7 +3778,11 @@ export function TermsStep({ eyebrow, onDone }: { eyebrow: string; onDone(): void
         />
         I understand and agree to use MHAI this way
       </label>
-      <Button className="mt-3 w-full" disabled={!agreed || busy} onClick={() => void go()}>
+      <Button
+        className="mt-3 w-full"
+        disabled={!agreed || busy}
+        onClick={() => void go()}
+      >
         Continue
       </Button>
     </div>
@@ -3642,7 +3809,13 @@ export const WEAK_COPY = {
   body: "That one is too common or has appeared in a leak. Try another.",
 };
 
-export function NewPasswordStep({ eyebrow, onDone }: { eyebrow: string; onDone(): void }) {
+export function NewPasswordStep({
+  eyebrow,
+  onDone,
+}: {
+  eyebrow: string;
+  onDone(): void;
+}) {
   const { client, user, signOut } = useAuth();
   const identity = user?.email ?? user?.username ?? null;
   const [next, setNext] = useState("");
@@ -3730,7 +3903,9 @@ export function WelcomeFlow() {
   const [plan, setPlan] = useState<Shown[] | null>(null);
   if (plan === null && auth.status === "signed_in" && auth.steps.length)
     setPlan(
-      auth.steps.flatMap((s): Shown[] => (s === "mfa" ? ["mfa", "codes"] : [s])),
+      auth.steps.flatMap((s): Shown[] =>
+        s === "mfa" ? ["mfa", "codes"] : [s],
+      ),
     );
 
   const target =
@@ -3749,7 +3924,12 @@ export function WelcomeFlow() {
     `Step ${plan.indexOf(s) + 1} of ${plan.length} · ${LABEL[s]}`;
 
   if (current === "terms")
-    return <TermsStep eyebrow={eyebrow("terms")} onDone={() => auth.completeStep("terms")} />;
+    return (
+      <TermsStep
+        eyebrow={eyebrow("terms")}
+        onDone={() => auth.completeStep("terms")}
+      />
+    );
   if (current === "password")
     return (
       <NewPasswordStep
@@ -3878,9 +4058,13 @@ describe("ForgotPassword", () => {
     const spy = vi.spyOn(client, "requestPasswordReset");
     renderWithAuth(<ForgotPassword />, null, client);
     await userEvent.type(screen.getByLabelText("Work email"), "who@ever.org");
-    await userEvent.click(screen.getByRole("button", { name: "Send reset link" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Send reset link" }),
+    );
     expect(await screen.findByText("Check your email")).toBeInTheDocument();
-    expect(screen.getByText(/If an account exists for/)).toHaveTextContent("who@ever.org");
+    expect(screen.getByText(/If an account exists for/)).toHaveTextContent(
+      "who@ever.org",
+    );
     expect(spy).toHaveBeenCalledWith("who@ever.org");
     expect(window.location.search).not.toMatch(/who/);
   });
@@ -3903,8 +4087,12 @@ describe("ForgotPassword", () => {
     const spy = vi.spyOn(client, "requestPasswordReset");
     renderWithAuth(<ForgotPassword />, null, client);
     await userEvent.type(screen.getByLabelText("Work email"), "not-an-email");
-    await userEvent.click(screen.getByRole("button", { name: "Send reset link" }));
-    expect(screen.getByText("Enter a work email, like name@hospital.org.")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Send reset link" }),
+    );
+    expect(
+      screen.getByText("Enter a work email, like name@hospital.org."),
+    ).toBeInTheDocument();
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -3914,41 +4102,64 @@ describe("ForgotPassword", () => {
       capabilities: { ...client.capabilities, passwordReset: false },
     });
     renderWithAuth(<ForgotPassword />, null, client);
-    expect(screen.getByText("Ask your hospital admin to reset your password.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Ask your hospital admin to reset your password."),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText("Work email")).toBeNull();
   });
 });
 
 describe("ResetPassword", () => {
   it("strips the token from the address bar, then saves the new password", async () => {
-    window.history.replaceState(null, "", `/reset-password?token=${MOCK_RESET_TOKEN}`);
+    window.history.replaceState(
+      null,
+      "",
+      `/reset-password?token=${MOCK_RESET_TOKEN}`,
+    );
     search = new URLSearchParams({ token: MOCK_RESET_TOKEN });
     renderWithAuth(<ResetPassword />, null);
     expect(window.location.search).toBe("");
-    await userEvent.type(screen.getByLabelText("New password"), "tram-lantern-okra");
-    await userEvent.type(screen.getByLabelText("Confirm password"), "tram-lantern-okra");
-    await userEvent.click(screen.getByRole("button", { name: "Save new password" }));
+    await userEvent.type(
+      screen.getByLabelText("New password"),
+      "tram-lantern-okra",
+    );
+    await userEvent.type(
+      screen.getByLabelText("Confirm password"),
+      "tram-lantern-okra",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save new password" }),
+    );
     expect(await screen.findByText("Password updated")).toBeInTheDocument();
   });
 
   it("explains an expired link", async () => {
     search = new URLSearchParams({ token: "old" });
     renderWithAuth(<ResetPassword />, null);
-    await userEvent.type(screen.getByLabelText("New password"), "tram-lantern-okra");
-    await userEvent.type(screen.getByLabelText("Confirm password"), "tram-lantern-okra");
-    await userEvent.click(screen.getByRole("button", { name: "Save new password" }));
+    await userEvent.type(
+      screen.getByLabelText("New password"),
+      "tram-lantern-okra",
+    );
+    await userEvent.type(
+      screen.getByLabelText("Confirm password"),
+      "tram-lantern-okra",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save new password" }),
+    );
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "This link has expired or was already used.",
     );
-    expect(screen.getByRole("link", { name: "Send a new link" })).toHaveAttribute(
-      "href",
-      "/forgot-password",
-    );
+    expect(
+      screen.getByRole("link", { name: "Send a new link" }),
+    ).toHaveAttribute("href", "/forgot-password");
   });
 
   it("handles a link with no token", () => {
     renderWithAuth(<ResetPassword />, null);
-    expect(screen.getByText("This link is missing or incomplete.")).toBeInTheDocument();
+    expect(
+      screen.getByText("This link is missing or incomplete."),
+    ).toBeInTheDocument();
   });
 });
 ```
@@ -3977,11 +4188,15 @@ import { authErrorCopy, errorCode } from "./sign-in-form";
 
 const COOLDOWN_S = 60;
 const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-const mss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+const mss = (s: number) =>
+  `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 export const BackToSignIn = () => (
   <p className="mt-6 text-center text-[13px]">
-    <Link href="/sign-in" className="inline-flex min-h-11 items-center text-mint-deep">
+    <Link
+      href="/sign-in"
+      className="inline-flex min-h-11 items-center text-mint-deep"
+    >
       ← Back to sign in
     </Link>
   </p>
@@ -4045,7 +4260,10 @@ export function ForgotPassword() {
   if (sentTo)
     return (
       <>
-        <div aria-hidden className="mb-4 grid size-14 place-items-center rounded-2xl bg-lilac text-bloom">
+        <div
+          aria-hidden
+          className="mb-4 grid size-14 place-items-center rounded-2xl bg-lilac text-bloom"
+        >
           <Mail className="size-6" />
         </div>
         <AuthHeading
@@ -4064,7 +4282,8 @@ export function ForgotPassword() {
           disabled={left > 0 || busy}
           onClick={() => void send(sentTo)}
         >
-          Resend link{left > 0 && <span className="font-mono tabular">{mss(left)}</span>}
+          Resend link
+          {left > 0 && <span className="font-mono tabular">{mss(left)}</span>}
         </Button>
         <p className="mt-4 text-center text-[13px] text-ink-3">
           Didn&apos;t get it? Check spam, or contact your hospital admin.
@@ -4146,7 +4365,8 @@ export function ResetPassword() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    if (window.location.search) window.history.replaceState(null, "", "/reset-password");
+    if (window.location.search)
+      window.history.replaceState(null, "", "/reset-password");
   }, []);
 
   if (!token)
@@ -4166,7 +4386,10 @@ export function ResetPassword() {
   if (done)
     return (
       <>
-        <div aria-hidden className="mb-4 grid size-14 place-items-center rounded-2xl bg-ok-wash text-ok-deep">
+        <div
+          aria-hidden
+          className="mb-4 grid size-14 place-items-center rounded-2xl bg-ok-wash text-ok-deep"
+        >
           <CheckCircle2 className="size-6" />
         </div>
         <AuthHeading
@@ -4216,7 +4439,10 @@ export function ResetPassword() {
           <Banner tone="bad" title={copy.title}>
             <p>{copy.body}</p>
             {error?.code === "link_expired" && (
-              <Link href="/forgot-password" className="mt-1.5 inline-block font-semibold underline">
+              <Link
+                href="/forgot-password"
+                className="mt-1.5 inline-block font-semibold underline"
+              >
                 Send a new link
               </Link>
             )}
@@ -4349,7 +4575,9 @@ const ADMIN = { ...TEST_USER, role: "admin" as const };
 describe("NoAccess", () => {
   it("explains the 403 and offers sign out", async () => {
     renderWithAuth(<NoAccess />, ADMIN);
-    expect(screen.getByRole("heading", { name: "You don't have access" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "You don't have access" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Error 403")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Go to admin app" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
@@ -4358,10 +4586,9 @@ describe("NoAccess", () => {
   it("links to the admin app when its address is set", () => {
     vi.stubEnv("NEXT_PUBLIC_ADMIN_APP_URL", "https://admin.example.org");
     renderWithAuth(<NoAccess />, ADMIN);
-    expect(screen.getByRole("link", { name: "Go to admin app" })).toHaveAttribute(
-      "href",
-      "https://admin.example.org",
-    );
+    expect(
+      screen.getByRole("link", { name: "Go to admin app" }),
+    ).toHaveAttribute("href", "https://admin.example.org");
   });
   it("sends a clinician home and a visitor to sign in", async () => {
     const { unmount } = renderWithAuth(<NoAccess />, TEST_USER);
@@ -4516,7 +4743,7 @@ git commit -m "Add the 403 page for accounts that aren't clinicians"
     (avatar, name, role line, hospital, `⋯`; avatar only in the rail). It
     opens a menu above it.
   - The menu has a header (`fullName ?? displayName`, then `email ??
-    username`) and these items:
+username`) and these items:
     - "Profile & security" → `/account`;
     - "Keyboard shortcuts" → the shell's shortcuts dialog;
     - "Help & guide" → `/help`;
@@ -4620,7 +4847,9 @@ describe("AccountMenu", () => {
     const user = userEvent.setup();
     renderWithAuth(<AccountMenu rail={false} />);
     await user.click(screen.getByRole("button", { name: /Account/ }));
-    await user.click(screen.getByRole("menuitem", { name: "Keyboard shortcuts" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Keyboard shortcuts" }),
+    );
     expect(openShortcuts).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: /Account/ }));
     await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
@@ -4697,9 +4926,13 @@ describe("AccountView", () => {
     await signedIn({ ...TEST_USER, specialty: null });
     const profile = screen.getByRole("region", { name: "Profile" });
     expect(within(profile).getByText("Dr. Ana Reyes")).toBeInTheDocument();
-    expect(within(profile).getByText("Attending physician")).toBeInTheDocument();
+    expect(
+      within(profile).getByText("Attending physician"),
+    ).toBeInTheDocument();
     expect(within(profile).queryByText("Specialty")).toBeNull();
-    expect(within(profile).getAllByText("from hospital records").length).toBe(2);
+    expect(within(profile).getAllByText("from hospital records").length).toBe(
+      2,
+    );
   });
 
   it("changes the password, and explains a wrong current password", async () => {
@@ -4708,13 +4941,25 @@ describe("AccountView", () => {
     await user.click(screen.getByRole("button", { name: "Change password" }));
     const dialog = screen.getByRole("dialog", { name: "Change your password" });
     await user.type(within(dialog).getByLabelText("Current password"), "wrong");
-    await user.type(within(dialog).getByLabelText("New password"), "tram-lantern-okra");
-    await user.type(within(dialog).getByLabelText("Confirm password"), "tram-lantern-okra");
-    await user.click(within(dialog).getByRole("button", { name: "Save password" }));
-    expect(await within(dialog).findByText("That isn't your current password.")).toBeInTheDocument();
+    await user.type(
+      within(dialog).getByLabelText("New password"),
+      "tram-lantern-okra",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Confirm password"),
+      "tram-lantern-okra",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save password" }),
+    );
+    expect(
+      await within(dialog).findByText("That isn't your current password."),
+    ).toBeInTheDocument();
     await user.clear(within(dialog).getByLabelText("Current password"));
     await user.type(within(dialog).getByLabelText("Current password"), "pw");
-    await user.click(within(dialog).getByRole("button", { name: "Save password" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save password" }),
+    );
     expect(await screen.findByText("Password changed")).toBeInTheDocument();
   });
 
@@ -4722,8 +4967,14 @@ describe("AccountView", () => {
     await signedIn({ ...TEST_USER, mfaEnabled: false });
     const security = screen.getByRole("region", { name: "Security" });
     expect(within(security).getByText("Off")).toBeInTheDocument();
-    await userEvent.click(within(security).getByRole("button", { name: "Set up two-step verification" }));
-    expect(screen.getByRole("dialog", { name: "Two-step verification" })).toBeInTheDocument();
+    await userEvent.click(
+      within(security).getByRole("button", {
+        name: "Set up two-step verification",
+      }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Two-step verification" }),
+    ).toBeInTheDocument();
   });
 
   it("lists devices, signs one out, and confirms sign out everywhere", async () => {
@@ -4731,11 +4982,23 @@ describe("AccountView", () => {
     await signedIn();
     const devices = await screen.findByRole("region", { name: "Devices" });
     expect(await within(devices).findByText("This device")).toBeInTheDocument();
-    await user.click(within(devices).getByRole("button", { name: "Sign out Safari on iPhone" }));
-    await waitFor(() => expect(within(devices).queryByText("Safari on iPhone")).toBeNull());
-    await user.click(within(devices).getByRole("button", { name: "Sign out everywhere" }));
-    const confirm = screen.getByRole("dialog", { name: "Sign out everywhere?" });
-    await user.click(within(confirm).getByRole("button", { name: "Sign out everywhere" }));
+    await user.click(
+      within(devices).getByRole("button", {
+        name: "Sign out Safari on iPhone",
+      }),
+    );
+    await waitFor(() =>
+      expect(within(devices).queryByText("Safari on iPhone")).toBeNull(),
+    );
+    await user.click(
+      within(devices).getByRole("button", { name: "Sign out everywhere" }),
+    );
+    const confirm = screen.getByRole("dialog", {
+      name: "Sign out everywhere?",
+    });
+    await user.click(
+      within(confirm).getByRole("button", { name: "Sign out everywhere" }),
+    );
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
   });
 
@@ -4786,14 +5049,26 @@ import {
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { initials } from "@/lib/auth/types";
 import { useEscape } from "@/lib/hooks/use-escape";
 import { cn } from "../ui/cn";
 import { useShell } from "./app-shell";
 
-export function Avatar({ name, className }: { name: string; className?: string }) {
+export function Avatar({
+  name,
+  className,
+}: {
+  name: string;
+  className?: string;
+}) {
   return (
     <span
       aria-hidden
@@ -4837,7 +5112,10 @@ export function AccountMenu({ rail }: { rail: boolean }) {
   const role = [user.roleTitle, user.specialty].filter(Boolean).join(" · ");
 
   const onMenuKey = (e: KeyboardEvent) => {
-    const items = [...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    const items = [
+      ...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ??
+        []),
+    ];
     const at = items.indexOf(document.activeElement as HTMLElement);
     const to = {
       ArrowDown: (at + 1) % items.length,
@@ -4869,7 +5147,11 @@ export function AccountMenu({ rail }: { rail: boolean }) {
           <>
             <span className="min-w-0">
               <span className="block truncate">{user.displayName}</span>
-              {role && <small className="block truncate text-[11px] text-ink-3">{role}</small>}
+              {role && (
+                <small className="block truncate text-[11px] text-ink-3">
+                  {role}
+                </small>
+              )}
               {user.hospital && (
                 <small className="flex items-center gap-1 text-[11px] font-medium text-mint-deep">
                   <Building2 aria-hidden className="size-3" />
@@ -4877,7 +5159,10 @@ export function AccountMenu({ rail }: { rail: boolean }) {
                 </small>
               )}
             </span>
-            <MoreHorizontal aria-hidden className="ml-auto size-4 shrink-0 text-ink-3" />
+            <MoreHorizontal
+              aria-hidden
+              className="ml-auto size-4 shrink-0 text-ink-3"
+            />
           </>
         )}
       </button>
@@ -4891,11 +5176,20 @@ export function AccountMenu({ rail }: { rail: boolean }) {
           <div className="flex items-center gap-2.5 px-2.5 py-2">
             <Avatar name={user.displayName} />
             <span className="min-w-0 text-[13px]">
-              <b className="block truncate">{user.fullName ?? user.displayName}</b>
-              <small className="block truncate text-ink-3">{user.email ?? user.username}</small>
+              <b className="block truncate">
+                {user.fullName ?? user.displayName}
+              </b>
+              <small className="block truncate text-ink-3">
+                {user.email ?? user.username}
+              </small>
             </span>
           </div>
-          <Link role="menuitem" href="/account" className={ITEM} onClick={() => close(false)}>
+          <Link
+            role="menuitem"
+            href="/account"
+            className={ITEM}
+            onClick={() => close(false)}
+          >
             <UserRound aria-hidden className="size-4" />
             Profile &amp; security
           </Link>
@@ -4911,7 +5205,12 @@ export function AccountMenu({ rail }: { rail: boolean }) {
             <Keyboard aria-hidden className="size-4" />
             Keyboard shortcuts
           </button>
-          <Link role="menuitem" href="/help" className={ITEM} onClick={() => close(false)}>
+          <Link
+            role="menuitem"
+            href="/help"
+            className={ITEM}
+            onClick={() => close(false)}
+          >
             <CircleHelp aria-hidden className="size-4" />
             Help &amp; guide
           </Link>
@@ -4993,7 +5292,13 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { useToast } from "../ui/toast";
 
-export function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose(): void }) {
+export function ChangePasswordDialog({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose(): void;
+}) {
   const { client, user, signOut } = useAuth();
   const toast = useToast();
   const id = useId();
@@ -5033,7 +5338,11 @@ export function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose
   };
   const wrong = error?.code === "wrong_password";
   const copy =
-    !error || wrong ? null : error.code === "weak_password" ? WEAK_COPY : authErrorCopy(error.code);
+    !error || wrong
+      ? null
+      : error.code === "weak_password"
+        ? WEAK_COPY
+        : authErrorCopy(error.code);
 
   return (
     <Dialog open={open} onClose={close} title="Change your password">
@@ -5044,7 +5353,10 @@ export function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose
           </Banner>
         )}
         <div>
-          <label htmlFor={id} className="mb-1.5 block text-[13px] font-semibold">
+          <label
+            htmlFor={id}
+            className="mb-1.5 block text-[13px] font-semibold"
+          >
             Current password
           </label>
           <input
@@ -5108,7 +5420,10 @@ export function DevicesSection() {
   const { client, signOut } = useAuth();
   const qc = useQueryClient();
   const now = useNow();
-  const devices = useQuery({ queryKey: ["devices"], queryFn: () => client.listDevices() });
+  const devices = useQuery({
+    queryKey: ["devices"],
+    queryFn: () => client.listDevices(),
+  });
   const [confirm, setConfirm] = useState(false);
 
   const signOutOne = async (id: string) => {
@@ -5123,46 +5438,65 @@ export function DevicesSection() {
 
   return (
     <>
-    <section aria-labelledby="devices-h" className="rounded-3xl bg-white p-5 ring-1 ring-line">
-      <h2 id="devices-h" className="font-display text-[26px] font-black leading-none">
-        Devices
-      </h2>
-      <p className="mb-3 mt-1 text-[13.5px] text-ink-2">Sign out anything you don&apos;t recognise.</p>
-      <ul className="flex flex-col divide-y divide-line">
-        {devices.data?.map((d) => (
-          <li key={d.id} className="flex min-h-14 items-center gap-3 py-2">
-            <Monitor aria-hidden className="size-5 text-ink-3" />
-            <span className="min-w-0 flex-1 text-[13.5px]">
-              <span className="block truncate">{d.label}</span>
-              <small className="text-ink-3">
-                {[d.place, d.current ? "active now" : ago(d.lastActiveAt, now)]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </small>
-            </span>
-            {d.current ? (
-              <span className="rounded-full bg-lilac px-2.5 py-1 text-[11px] font-semibold text-bloom">
-                This device
+      <section
+        aria-labelledby="devices-h"
+        className="rounded-3xl bg-white p-5 ring-1 ring-line"
+      >
+        <h2
+          id="devices-h"
+          className="font-display text-[26px] font-black leading-none"
+        >
+          Devices
+        </h2>
+        <p className="mb-3 mt-1 text-[13.5px] text-ink-2">
+          Sign out anything you don&apos;t recognise.
+        </p>
+        <ul className="flex flex-col divide-y divide-line">
+          {devices.data?.map((d) => (
+            <li key={d.id} className="flex min-h-14 items-center gap-3 py-2">
+              <Monitor aria-hidden className="size-5 text-ink-3" />
+              <span className="min-w-0 flex-1 text-[13.5px]">
+                <span className="block truncate">{d.label}</span>
+                <small className="text-ink-3">
+                  {[
+                    d.place,
+                    d.current ? "active now" : ago(d.lastActiveAt, now),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </small>
               </span>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label={`Sign out ${d.label}`}
-                onClick={() => void signOutOne(d.id)}
-              >
-                Sign out
-              </Button>
-            )}
-          </li>
-        ))}
-      </ul>
-      <Button variant="danger" className="mt-3" onClick={() => setConfirm(true)}>
-        Sign out everywhere
-      </Button>
-    </section>
-    {/* Outside the section, so the region holds one "Sign out everywhere". */}
-    <Dialog open={confirm} onClose={() => setConfirm(false)} title="Sign out everywhere?">
+              {d.current ? (
+                <span className="rounded-full bg-lilac px-2.5 py-1 text-[11px] font-semibold text-bloom">
+                  This device
+                </span>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Sign out ${d.label}`}
+                  onClick={() => void signOutOne(d.id)}
+                >
+                  Sign out
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+        <Button
+          variant="danger"
+          className="mt-3"
+          onClick={() => setConfirm(true)}
+        >
+          Sign out everywhere
+        </Button>
+      </section>
+      {/* Outside the section, so the region holds one "Sign out everywhere". */}
+      <Dialog
+        open={confirm}
+        onClose={() => setConfirm(false)}
+        title="Sign out everywhere?"
+      >
         <p className="mb-[18px] text-[14.5px] text-ink-2">
           You&apos;ll be signed out on every device, including this one.
         </p>
@@ -5224,13 +5558,20 @@ export function AccountView() {
             <div className="mb-4 flex items-center gap-3">
               <Avatar name={user.displayName} className="size-12 text-base" />
               <span>
-                <b className="block text-[16px]">{user.fullName ?? user.displayName}</b>
-                <small className="text-[13px] text-ink-3">{user.email ?? user.username}</small>
+                <b className="block text-[16px]">
+                  {user.fullName ?? user.displayName}
+                </b>
+                <small className="text-[13px] text-ink-3">
+                  {user.email ?? user.username}
+                </small>
               </span>
             </div>
             <dl className="divide-y divide-line">
               {rows.map(([label, value]) => (
-                <div key={label} className="flex min-h-12 items-center gap-3 py-2 text-[13.5px]">
+                <div
+                  key={label}
+                  className="flex min-h-12 items-center gap-3 py-2 text-[13.5px]"
+                >
                   <dt className="w-28 text-ink-3">{label}</dt>
                   <dd className="flex-1">{value}</dd>
                   <dd className="flex items-center gap-1 text-[11.5px] text-ink-3">
@@ -5257,7 +5598,9 @@ export function AccountView() {
                 Two-step verification
                 <small className="block text-ink-3">Authenticator app</small>
               </span>
-              <b className={user.mfaEnabled ? "text-ok-deep" : "text-warn-deep"}>
+              <b
+                className={user.mfaEnabled ? "text-ok-deep" : "text-warn-deep"}
+              >
                 {user.mfaEnabled ? "On" : "Off"}
               </b>
               {!user.mfaEnabled && (
@@ -5287,7 +5630,11 @@ export function AccountView() {
         </div>
       </div>
       <ChangePasswordDialog open={pwOpen} onClose={() => setPwOpen(false)} />
-      <Dialog open={mfaOpen} onClose={() => setMfaOpen(false)} title="Two-step verification">
+      <Dialog
+        open={mfaOpen}
+        onClose={() => setMfaOpen(false)}
+        title="Two-step verification"
+      >
         {mfaOpen && (
           <MfaSetup
             onDone={() => {
@@ -5358,24 +5705,24 @@ git commit -m "Add the account menu, guarded sign-out and the profile page"
     - `SESSION_COOKIE = "mhai_session"`, `MFA_COOKIE = "mhai_mfa"`,
       `MFA_TTL_S = 300`;
     - `interface ServerSession { token: string; expiresAt: number; user:
-      User; steps: FirstStep[] }`;
+User; steps: FirstStep[] }`;
     - `seal(value: unknown): string` and `unseal<T>(s: string |
-      undefined): T | null`;
+undefined): T | null`;
     - `cookieOptions(maxAgeS: number)`;
     - `readSession(now?)`, `writeSession(s, now?)`, `clearSession()`,
       `readMfa(now?)`, `writeMfa(mfaToken, now?)`;
     - `startSession(r: ApiLoginOk, now?)`, which returns `{ status:
-      "signed_in"; user; steps }`.
+"signed_in"; user; steps }`.
   - **`api.ts`:**
     - `class UpstreamError { status: number; code: string }`;
     - `apiBase(): string`;
     - `api<T>(path, { method?, body?, token?, timeoutMs?, fetchImpl?
-      }): Promise<T>`.
+}): Promise<T>`.
   - **`map-user.ts`:** `ApiUser`, `ApiLoginOk`, `ApiMfaRequired`,
     `toUser(u: ApiUser): User`, `stepsFor(u: ApiUser): FirstStep[]`.
   - **`http.ts`:** `json(status, body?)`, `sameOrigin(req): boolean`,
     `forbidden()`, `authCode(e, ctx): { status: number; code:
-    AuthErrorCode }`.
+AuthErrorCode }`.
 
 **Rules:**
 
@@ -5393,9 +5740,9 @@ git commit -m "Add the account menu, guarded sign-out and the profile page"
     body, and `Authorization: Bearer` only when there's a token;
   - `cache: "no-store"` and a 15 s timeout;
   - a network error or timeout becomes `UpstreamError(503,
-    "unavailable")`;
+"unavailable")`;
   - a non-OK response becomes `UpstreamError(status, problem.code ??
-    "error")`, and the upstream `detail` is never kept;
+"error")`, and the upstream `detail` is never kept;
   - 204 returns `undefined`;
   - a missing `MHAI_API_URL` throws (not "unavailable").
 - **`toUser`:**
@@ -5411,18 +5758,18 @@ git commit -m "Add the account menu, guarded sign-out and the profile page"
     everyone");
   - `mfa_enabled` missing means no MFA step, because we don't guess.
 - **`authCode(e, ctx)`**, where `ctx` is `"login" | "mfa" | "current" |
-  "other"`:
+"other"`:
 
-  | Upstream error | Result |
-  |---|---|
-  | anything that isn't an `UpstreamError` | 503 `unavailable` |
-  | `login_locked` | 429 `locked` |
-  | `rate_limited` | 429 `rate_limited` |
-  | `mfa_invalid` | 401 `mfa_invalid` |
-  | `validation_failed` | 422: `invalid_credentials` for login, otherwise `weak_password` |
-  | `unauthenticated` | 401: `invalid_credentials` for login, `mfa_expired` for mfa, `wrong_password` for current, otherwise `session_expired` |
-  | `token_expired` | 401: `mfa_expired` for mfa, otherwise `session_expired` |
-  | anything else | 503 `unavailable` |
+  | Upstream error                         | Result                                                                                                                 |
+  | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+  | anything that isn't an `UpstreamError` | 503 `unavailable`                                                                                                      |
+  | `login_locked`                         | 429 `locked`                                                                                                           |
+  | `rate_limited`                         | 429 `rate_limited`                                                                                                     |
+  | `mfa_invalid`                          | 401 `mfa_invalid`                                                                                                      |
+  | `validation_failed`                    | 422: `invalid_credentials` for login, otherwise `weak_password`                                                        |
+  | `unauthenticated`                      | 401: `invalid_credentials` for login, `mfa_expired` for mfa, `wrong_password` for current, otherwise `session_expired` |
+  | `token_expired`                        | 401: `mfa_expired` for mfa, otherwise `session_expired`                                                                |
+  | anything else                          | 503 `unavailable`                                                                                                      |
 
 - **`sameOrigin`:** the `Origin` host must equal `X-Forwarded-Host` or
   `Host`. A missing `Origin` header fails.
@@ -5440,7 +5787,8 @@ const jar = vi.hoisted(() => {
   return {
     values,
     options,
-    get: (n: string) => (values.has(n) ? { name: n, value: values.get(n)! } : undefined),
+    get: (n: string) =>
+      values.has(n) ? { name: n, value: values.get(n)! } : undefined,
     set: (n: string, v: string, o: Record<string, unknown>) => {
       values.set(n, v);
       options.set(n, o);
@@ -5503,7 +5851,11 @@ describe("seal / unseal", () => {
 describe("session cookies", () => {
   it("starts a session in a sealed, httpOnly, strict cookie for the token's life", async () => {
     const r = await startSession(LOGIN, 1_000);
-    expect(r).toMatchObject({ status: "signed_in", user: { role: "clinician" }, steps: [] });
+    expect(r).toMatchObject({
+      status: "signed_in",
+      user: { role: "clinician" },
+      steps: [],
+    });
     const raw = jar.values.get(SESSION_COOKIE)!;
     expect(raw).not.toContain("tok");
     expect(jar.options.get(SESSION_COOKIE)).toMatchObject({
@@ -5512,7 +5864,10 @@ describe("session cookies", () => {
       path: "/",
       maxAge: 900,
     });
-    expect(await readSession(1_000)).toMatchObject({ token: "tok", expiresAt: 901_000 });
+    expect(await readSession(1_000)).toMatchObject({
+      token: "tok",
+      expiresAt: 901_000,
+    });
   });
   it("treats an expired session as none", async () => {
     await startSession(LOGIN, 0);
@@ -5520,7 +5875,10 @@ describe("session cookies", () => {
   });
   it("keeps the MFA step token for 5 minutes, and clears both cookies", async () => {
     await writeMfa("mfa-tok", 0);
-    expect(jar.options.get(MFA_COOKIE)).toMatchObject({ maxAge: 300, httpOnly: true });
+    expect(jar.options.get(MFA_COOKIE)).toMatchObject({
+      maxAge: 300,
+      httpOnly: true,
+    });
     expect(await readMfa(299_000)).toMatchObject({ mfaToken: "mfa-tok" });
     expect(await readMfa(300_001)).toBeNull();
     await startSession(LOGIN);
@@ -5543,9 +5901,17 @@ describe("api", () => {
   it("calls /api/v1 with the bearer token and JSON body", async () => {
     const fetchImpl = vi.fn(async () => Response.json({ ok: 1 }));
     expect(
-      await api("/auth/logout", { method: "POST", token: "t", body: { a: 1 }, fetchImpl }),
+      await api("/auth/logout", {
+        method: "POST",
+        token: "t",
+        body: { a: 1 },
+        fetchImpl,
+      }),
     ).toEqual({ ok: 1 });
-    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
     expect(url).toBe("http://api.test/api/v1/auth/logout");
     expect(init.headers).toMatchObject({
       Authorization: "Bearer t",
@@ -5561,7 +5927,9 @@ describe("api", () => {
         { status: 429 },
       ),
     );
-    const e = (await api("/auth/login", { fetchImpl }).catch((x) => x)) as UpstreamError;
+    const e = (await api("/auth/login", { fetchImpl }).catch(
+      (x) => x,
+    )) as UpstreamError;
     expect(e).toBeInstanceOf(UpstreamError);
     expect(e).toMatchObject({ status: 429, code: "login_locked" });
     expect(JSON.stringify(e)).not.toContain("secret detail");
@@ -5581,7 +5949,9 @@ describe("api", () => {
   });
   it("throws loudly when the API address isn't set", async () => {
     vi.stubEnv("MHAI_API_URL", "");
-    await expect(api("/x", { fetchImpl: vi.fn() })).rejects.toThrow(/MHAI_API_URL/);
+    await expect(api("/x", { fetchImpl: vi.fn() })).rejects.toThrow(
+      /MHAI_API_URL/,
+    );
   });
 });
 ```
@@ -5606,7 +5976,8 @@ describe("toUser", () => {
       mfaEnabled: false,
     });
     expect(
-      toUser({ username: "u", role: "clinician", full_name: "Dr. Ana Reyes" }).displayName,
+      toUser({ username: "u", role: "clinician", full_name: "Dr. Ana Reyes" })
+        .displayName,
     ).toBe("Dr. Ana Reyes");
   });
   it("treats an unknown role as non-clinical", () => {
@@ -5618,9 +5989,16 @@ describe("stepsFor", () => {
   it("derives first sign-in steps without guessing", () => {
     expect(stepsFor({ username: "u", role: "clinician" })).toEqual([]);
     expect(
-      stepsFor({ username: "u", role: "clinician", must_change_password: true, mfa_enabled: false }),
+      stepsFor({
+        username: "u",
+        role: "clinician",
+        must_change_password: true,
+        mfa_enabled: false,
+      }),
     ).toEqual(["terms", "password", "mfa"]);
-    expect(stepsFor({ username: "u", role: "clinician", mfa_enabled: true })).toEqual([]);
+    expect(
+      stepsFor({ username: "u", role: "clinician", mfa_enabled: true }),
+    ).toEqual([]);
   });
 });
 ```
@@ -5633,15 +6011,28 @@ import { UpstreamError } from "./api";
 import { authCode, json, sameOrigin } from "./http";
 
 const req = (h: Record<string, string>) =>
-  new Request("http://demo.test/api/auth/login", { method: "POST", headers: h });
+  new Request("http://demo.test/api/auth/login", {
+    method: "POST",
+    headers: h,
+  });
 
 describe("sameOrigin", () => {
   it("accepts a matching Origin and rejects others or none", () => {
-    expect(sameOrigin(req({ origin: "https://demo.test", host: "demo.test" }))).toBe(true);
     expect(
-      sameOrigin(req({ origin: "https://demo.test", host: "127.0.0.1:8080", "x-forwarded-host": "demo.test" })),
+      sameOrigin(req({ origin: "https://demo.test", host: "demo.test" })),
     ).toBe(true);
-    expect(sameOrigin(req({ origin: "https://evil.test", host: "demo.test" }))).toBe(false);
+    expect(
+      sameOrigin(
+        req({
+          origin: "https://demo.test",
+          host: "127.0.0.1:8080",
+          "x-forwarded-host": "demo.test",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      sameOrigin(req({ origin: "https://evil.test", host: "demo.test" })),
+    ).toBe(false);
     expect(sameOrigin(req({ host: "demo.test" }))).toBe(false);
   });
 });
@@ -5806,7 +6197,12 @@ export async function api<T>(
 `lib/server/session.ts`:
 
 ```ts
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from "node:crypto";
 import { cookies } from "next/headers";
 import type { FirstStep, SignInResult, User } from "../auth/types";
 import { stepsFor, toUser, type ApiLoginOk } from "./map-user";
@@ -5836,7 +6232,10 @@ function key(): Buffer {
 export function seal(value: unknown): string {
   const iv = randomBytes(12);
   const c = createCipheriv("aes-256-gcm", key(), iv);
-  const body = Buffer.concat([c.update(JSON.stringify(value), "utf8"), c.final()]);
+  const body = Buffer.concat([
+    c.update(JSON.stringify(value), "utf8"),
+    c.final(),
+  ]);
   return Buffer.concat([iv, c.getAuthTag(), body]).toString("base64url");
 }
 
@@ -5847,7 +6246,10 @@ export function unseal<T>(sealed: string | undefined): T | null {
     const raw = Buffer.from(sealed, "base64url");
     const d = createDecipheriv("aes-256-gcm", k, raw.subarray(0, 12));
     d.setAuthTag(raw.subarray(12, 28));
-    const text = Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString("utf8");
+    const text = Buffer.concat([
+      d.update(raw.subarray(28)),
+      d.final(),
+    ]).toString("utf8");
     return JSON.parse(text) as T;
   } catch {
     return null;
@@ -5862,13 +6264,19 @@ export const cookieOptions = (maxAgeS: number) => ({
   maxAge: Math.max(1, Math.floor(maxAgeS)),
 });
 
-export async function readSession(now = Date.now()): Promise<ServerSession | null> {
+export async function readSession(
+  now = Date.now(),
+): Promise<ServerSession | null> {
   const s = unseal<ServerSession>((await cookies()).get(SESSION_COOKIE)?.value);
   return s && s.expiresAt > now ? s : null;
 }
 
 export async function writeSession(s: ServerSession, now = Date.now()) {
-  (await cookies()).set(SESSION_COOKIE, seal(s), cookieOptions((s.expiresAt - now) / 1000));
+  (await cookies()).set(
+    SESSION_COOKIE,
+    seal(s),
+    cookieOptions((s.expiresAt - now) / 1000),
+  );
 }
 
 export async function clearSession() {
@@ -5937,7 +6345,8 @@ export function authCode(
   e: unknown,
   ctx: "login" | "mfa" | "current" | "other",
 ): { status: number; code: AuthErrorCode } {
-  if (!(e instanceof UpstreamError)) return { status: 503, code: "unavailable" };
+  if (!(e instanceof UpstreamError))
+    return { status: 503, code: "unavailable" };
   switch (e.code) {
     case "login_locked":
       return { status: 429, code: "locked" };
@@ -5946,7 +6355,10 @@ export function authCode(
     case "mfa_invalid":
       return { status: 401, code: "mfa_invalid" };
     case "validation_failed":
-      return { status: 422, code: ctx === "login" ? "invalid_credentials" : "weak_password" };
+      return {
+        status: 422,
+        code: ctx === "login" ? "invalid_credentials" : "weak_password",
+      };
     case "unauthenticated":
       return {
         status: 401,
@@ -5960,7 +6372,10 @@ export function authCode(
                 : "session_expired",
       };
     case "token_expired":
-      return { status: 401, code: ctx === "mfa" ? "mfa_expired" : "session_expired" };
+      return {
+        status: 401,
+        code: ctx === "mfa" ? "mfa_expired" : "session_expired",
+      };
     default:
       return { status: 503, code: "unavailable" };
   }
@@ -6023,16 +6438,16 @@ git commit -m "Add the BFF core: sealed session cookies and the MHAI API helper"
   every endpoint returns `{code: AuthErrorCode}` with the mapped status,
   and every `POST` checks `sameOrigin` first (403 `{code:"forbidden"}`).
 
-| Endpoint | Body in | Upstream | Out |
-|---|---|---|---|
-| `POST /api/auth/login` | `{login, password}` | `POST /auth/login {username, password}` | `{status:"signed_in", user, steps}` or `{status:"mfa_required"}` (sets `mhai_mfa`) |
-| `POST /api/auth/mfa` | `{code, backup, trustDevice}` | `POST /auth/mfa/challenge {mfa_token, code}` | `{status:"signed_in", user, steps}`. No `mhai_mfa` → 401 `mfa_expired`. |
-| `GET /api/auth/session` | none | none | `{user, steps}`, or 401 `session_expired` (and clears cookies) |
-| `POST /api/auth/logout` | none | `POST /auth/logout` (best effort) | 204, cookies cleared |
-| `POST /api/auth/password` | `{current: string \| null, next}` | `POST /auth/password {current_password, new_password}` | 204; removes the `password` step from the session |
-| `POST /api/auth/terms` | none | none (backend §10 item 8 isn't built) | 204; removes the `terms` step |
-| `POST /api/auth/mfa/setup` | none | `POST /auth/mfa/enroll` | `{otpauthUri, secret, backupCodes}`; `secret` is read from the URI |
-| `POST /api/auth/mfa/setup/confirm` | `{code}` | `POST /auth/mfa/verify {code}` | 204; sets `user.mfaEnabled`, removes the `mfa` step |
+| Endpoint                           | Body in                           | Upstream                                               | Out                                                                                |
+| ---------------------------------- | --------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `POST /api/auth/login`             | `{login, password}`               | `POST /auth/login {username, password}`                | `{status:"signed_in", user, steps}` or `{status:"mfa_required"}` (sets `mhai_mfa`) |
+| `POST /api/auth/mfa`               | `{code, backup, trustDevice}`     | `POST /auth/mfa/challenge {mfa_token, code}`           | `{status:"signed_in", user, steps}`. No `mhai_mfa` → 401 `mfa_expired`.            |
+| `GET /api/auth/session`            | none                              | none                                                   | `{user, steps}`, or 401 `session_expired` (and clears cookies)                     |
+| `POST /api/auth/logout`            | none                              | `POST /auth/logout` (best effort)                      | 204, cookies cleared                                                               |
+| `POST /api/auth/password`          | `{current: string \| null, next}` | `POST /auth/password {current_password, new_password}` | 204; removes the `password` step from the session                                  |
+| `POST /api/auth/terms`             | none                              | none (backend §10 item 8 isn't built)                  | 204; removes the `terms` step                                                      |
+| `POST /api/auth/mfa/setup`         | none                              | `POST /auth/mfa/enroll`                                | `{otpauthUri, secret, backupCodes}`; `secret` is read from the URI                 |
+| `POST /api/auth/mfa/setup/confirm` | `{code}`                          | `POST /auth/mfa/verify {code}`                         | 204; sets `user.mfaEnabled`, removes the `mfa` step                                |
 
 Routes needing a session return 401 `session_expired` without one. The
 `/auth/password` body field names are this plan's assumption: the
@@ -6050,7 +6465,8 @@ const jar = vi.hoisted(() => {
   const values = new Map<string, string>();
   return {
     values,
-    get: (n: string) => (values.has(n) ? { name: n, value: values.get(n)! } : undefined),
+    get: (n: string) =>
+      values.has(n) ? { name: n, value: values.get(n)! } : undefined,
     set: (n: string, v: string) => void values.set(n, v),
     delete: (n: string) => void values.delete(n),
   };
@@ -6093,7 +6509,10 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 async function signedIn(extra: Partial<typeof LOGIN_OK.user> = {}) {
-  upstream.mockResolvedValueOnce({ ...LOGIN_OK, user: { ...LOGIN_OK.user, ...extra } });
+  upstream.mockResolvedValueOnce({
+    ...LOGIN_OK,
+    user: { ...LOGIN_OK.user, ...extra },
+  });
   await login(post({ login: "a.reyes", password: "pw" }));
 }
 
@@ -6103,7 +6522,11 @@ describe("login", () => {
     const res = await login(post({ login: " a.reyes ", password: "pw" }));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toMatchObject({ status: "signed_in", user: { username: "a.reyes" }, steps: [] });
+    expect(body).toMatchObject({
+      status: "signed_in",
+      user: { username: "a.reyes" },
+      steps: [],
+    });
     expect(JSON.stringify(body)).not.toContain("tok");
     expect(upstream).toHaveBeenCalledWith("/auth/login", {
       method: "POST",
@@ -6130,7 +6553,9 @@ describe("login", () => {
     expect(await res.json()).toEqual({ code });
   });
   it("refuses another site's form", async () => {
-    const res = await login(post({ login: "a", password: "pw" }, "https://evil.test"));
+    const res = await login(
+      post({ login: "a", password: "pw" }, "https://evil.test"),
+    );
     expect(res.status).toBe(403);
     expect(upstream).not.toHaveBeenCalled();
   });
@@ -6141,7 +6566,9 @@ describe("mfa", () => {
     upstream.mockResolvedValueOnce({ mfa_required: true, mfa_token: "m" });
     await login(post({ login: "a", password: "pw" }));
     upstream.mockResolvedValueOnce(LOGIN_OK);
-    const res = await mfa(post({ code: "123456", backup: false, trustDevice: false }));
+    const res = await mfa(
+      post({ code: "123456", backup: false, trustDevice: false }),
+    );
     expect(res.status).toBe(200);
     expect(upstream).toHaveBeenLastCalledWith("/auth/mfa/challenge", {
       method: "POST",
@@ -6150,7 +6577,9 @@ describe("mfa", () => {
     expect(jar.values.get(MFA_COOKIE)).toBeUndefined();
   });
   it("says the step expired when nothing is held", async () => {
-    const res = await mfa(post({ code: "123456", backup: false, trustDevice: false }));
+    const res = await mfa(
+      post({ code: "123456", backup: false, trustDevice: false }),
+    );
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ code: "mfa_expired" });
   });
@@ -6167,7 +6596,10 @@ describe("session, terms, password, logout", () => {
     await signedIn({ must_change_password: true });
     expect((await terms(post())).status).toBe(204);
     upstream.mockResolvedValueOnce(undefined);
-    expect((await password(post({ current: null, next: "tram-lantern-okra" }))).status).toBe(204);
+    expect(
+      (await password(post({ current: null, next: "tram-lantern-okra" })))
+        .status,
+    ).toBe(204);
     expect(upstream).toHaveBeenLastCalledWith("/auth/password", {
       method: "POST",
       token: "tok",
@@ -6178,7 +6610,9 @@ describe("session, terms, password, logout", () => {
   it("calls a wrong current password what it is", async () => {
     await signedIn();
     upstream.mockRejectedValueOnce(new UpstreamError(401, "unauthenticated"));
-    const res = await password(post({ current: "nope", next: "tram-lantern-okra" }));
+    const res = await password(
+      post({ current: "nope", next: "tram-lantern-okra" }),
+    );
     expect(await res.json()).toEqual({ code: "wrong_password" });
   });
   it("needs a session for account changes", async () => {
@@ -6190,7 +6624,10 @@ describe("session, terms, password, logout", () => {
     await signedIn();
     upstream.mockResolvedValueOnce(undefined);
     expect((await logout(post())).status).toBe(204);
-    expect(upstream).toHaveBeenLastCalledWith("/auth/logout", { method: "POST", token: "tok" });
+    expect(upstream).toHaveBeenLastCalledWith("/auth/logout", {
+      method: "POST",
+      token: "tok",
+    });
     expect(jar.values.size).toBe(0);
   });
   it("still clears cookies when the upstream sign-out fails", async () => {
@@ -6205,7 +6642,8 @@ describe("two-step setup", () => {
   it("returns the QR URI, its secret and the codes, then confirms", async () => {
     await signedIn({ mfa_enabled: false });
     upstream.mockResolvedValueOnce({
-      otpauth_uri: "otpauth://totp/MHAI:a.reyes?secret=ABCDEF234567&issuer=MHAI",
+      otpauth_uri:
+        "otpauth://totp/MHAI:a.reyes?secret=ABCDEF234567&issuer=MHAI",
       recovery_codes: ["AAAA-1111"],
     });
     const res = await setup(post());
@@ -6216,7 +6654,10 @@ describe("two-step setup", () => {
     });
     upstream.mockResolvedValueOnce(undefined);
     expect((await confirm(post({ code: "123456" }))).status).toBe(204);
-    expect(await readSession()).toMatchObject({ user: { mfaEnabled: true }, steps: [] });
+    expect(await readSession()).toMatchObject({
+      user: { mfaEnabled: true },
+      steps: [],
+    });
   });
 });
 ```
@@ -6324,7 +6765,10 @@ import { clearSession, readSession } from "@/lib/server/session";
 export async function POST(req: Request) {
   if (!sameOrigin(req)) return forbidden();
   const s = await readSession();
-  if (s) await api("/auth/logout", { method: "POST", token: s.token }).catch(() => {});
+  if (s)
+    await api("/auth/logout", { method: "POST", token: s.token }).catch(
+      () => {},
+    );
   await clearSession();
   return json(204);
 }
@@ -6354,10 +6798,16 @@ export async function POST(req: Request) {
     await api("/auth/password", {
       method: "POST",
       token: s.token,
-      body: { current_password: body.data.current, new_password: body.data.next },
+      body: {
+        current_password: body.data.current,
+        new_password: body.data.next,
+      },
     });
   } catch (e) {
-    const { status, code } = authCode(e, body.data.current === null ? "other" : "current");
+    const { status, code } = authCode(
+      e,
+      body.data.current === null ? "other" : "current",
+    );
     return json(status, { code });
   }
   await writeSession({ ...s, steps: s.steps.filter((x) => x !== "password") });
@@ -6426,7 +6876,11 @@ export async function POST(req: Request) {
   const s = await readSession();
   if (!s) return json(401, { code: "session_expired" });
   try {
-    await api("/auth/mfa/verify", { method: "POST", token: s.token, body: { code: body.data.code } });
+    await api("/auth/mfa/verify", {
+      method: "POST",
+      token: s.token,
+      body: { code: body.data.code },
+    });
   } catch (e) {
     const { status, code } = authCode(e, "other");
     return json(status, { code });
@@ -6519,10 +6973,10 @@ git commit -m "Add the BFF auth routes: login, two-step, session, password, logo
 - `getReadiness` → `GET /readyz`:
   - 200 → `{ok: true, degraded_services: []}`;
   - 503 with a JSON body → `{ok: false, degraded_services: <keys whose
-    value is false>}`.
+value is false>}`.
 - Ids are encoded with `encodeURIComponent`.
 - A 401 calls `reportUnauthorized()` and throws `ApiError(401,
-  "session_expired")`.
+"session_expired")`.
 - Other non-OK responses throw `ApiError(status, body.code ?? "error")`,
   and a network failure throws `ApiError(0, "network")`.
 
@@ -6554,14 +7008,19 @@ const jar = vi.hoisted(() => {
   const values = new Map<string, string>();
   return {
     values,
-    get: (n: string) => (values.has(n) ? { name: n, value: values.get(n)! } : undefined),
+    get: (n: string) =>
+      values.has(n) ? { name: n, value: values.get(n)! } : undefined,
     set: (n: string, v: string) => void values.set(n, v),
     delete: (n: string) => void values.delete(n),
   };
 });
 vi.mock("next/headers", () => ({ cookies: async () => jar }));
 
-import { SESSION_COOKIE, readSession, writeSession } from "@/lib/server/session";
+import {
+  SESSION_COOKIE,
+  readSession,
+  writeSession,
+} from "@/lib/server/session";
 import { TEST_USER } from "@/tests/auth-wrapper";
 import { GET, POST } from "./[...path]/route";
 
@@ -6588,26 +7047,41 @@ const post = (body: string, origin = "http://demo.test") =>
     body,
   });
 const session = (expiresInMs = 10 * 60_000) =>
-  writeSession({ token: "tok", expiresAt: Date.now() + expiresInMs, user: TEST_USER, steps: [] });
+  writeSession({
+    token: "tok",
+    expiresAt: Date.now() + expiresInMs,
+    user: TEST_USER,
+    steps: [],
+  });
 
 describe("clinical API proxy", () => {
   it("forwards with the bearer token only, and never caches", async () => {
     await session();
     fetchMock.mockResolvedValueOnce(Response.json({ status: "processing" }));
-    const res = await GET(get("http://demo.test/api/v1/queries/q1?x=1"), ctx("queries", "q1"));
+    const res = await GET(
+      get("http://demo.test/api/v1/queries/q1?x=1"),
+      ctx("queries", "q1"),
+    );
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://api.test/api/v1/queries/q1?x=1");
-    expect(init.headers).toEqual({ Accept: "application/json", Authorization: "Bearer tok" });
+    expect(init.headers).toEqual({
+      Accept: "application/json",
+      Authorization: "Bearer tok",
+    });
   });
 
   it("posts the body through", async () => {
     await session();
-    fetchMock.mockResolvedValueOnce(Response.json({ query_id: "q2" }, { status: 202 }));
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ query_id: "q2" }, { status: 202 }),
+    );
     const res = await POST(post('{"a":1}'), ctx("queries"));
     expect(res.status).toBe(202);
-    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].body).toBe('{"a":1}');
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].body).toBe(
+      '{"a":1}',
+    );
   });
 
   it.each([
@@ -6630,7 +7104,9 @@ describe("clinical API proxy", () => {
 
   it("clears the session when the API rejects the token", async () => {
     await session();
-    fetchMock.mockResolvedValueOnce(Response.json({ code: "token_expired" }, { status: 401 }));
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ code: "token_expired" }, { status: 401 }),
+    );
     const res = await GET(get(), ctx("queries", "q1"));
     expect(await res.json()).toEqual({ code: "session_expired" });
     expect(jar.values.get(SESSION_COOKIE)).toBeUndefined();
@@ -6639,11 +7115,17 @@ describe("clinical API proxy", () => {
   it("refreshes a token close to expiry", async () => {
     await session(60_000);
     fetchMock
-      .mockResolvedValueOnce(Response.json({ access_token: "tok2", expires_in: 900 }))
+      .mockResolvedValueOnce(
+        Response.json({ access_token: "tok2", expires_in: 900 }),
+      )
       .mockResolvedValueOnce(Response.json({}));
     await GET(get(), ctx("queries", "q1"));
-    expect((fetchMock.mock.calls[0] as [string])[0]).toBe("http://api.test/api/v1/auth/refresh");
-    expect((fetchMock.mock.calls[1] as [string, RequestInit])[1].headers).toMatchObject({
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(
+      "http://api.test/api/v1/auth/refresh",
+    );
+    expect(
+      (fetchMock.mock.calls[1] as [string, RequestInit])[1].headers,
+    ).toMatchObject({
       Authorization: "Bearer tok2",
     });
     expect((await readSession())?.token).toBe("tok2");
@@ -6651,8 +7133,12 @@ describe("clinical API proxy", () => {
 
   it("guards writes and their size", async () => {
     await session();
-    expect((await POST(post("{}", "https://evil.test"), ctx("queries"))).status).toBe(403);
-    expect((await POST(post("x".repeat(64 * 1024 + 1)), ctx("queries"))).status).toBe(413);
+    expect(
+      (await POST(post("{}", "https://evil.test"), ctx("queries"))).status,
+    ).toBe(403);
+    expect(
+      (await POST(post("x".repeat(64 * 1024 + 1)), ctx("queries"))).status,
+    ).toBe(413);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -6675,7 +7161,9 @@ import { createLiveClient } from "./live";
 
 const reply = (status: number, body?: unknown) =>
   vi.fn(async () =>
-    body === undefined ? new Response(null, { status }) : Response.json(body, { status }),
+    body === undefined
+      ? new Response(null, { status })
+      : Response.json(body, { status }),
   );
 
 describe("live clinical client", () => {
@@ -6683,7 +7171,10 @@ describe("live clinical client", () => {
     const fetchImpl = reply(202, { query_id: "q1", status: "queued" });
     const c = createLiveClient({ fetchImpl });
     expect(await c.createQuery({} as never)).toEqual({ query_id: "q1" });
-    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
     expect(url).toBe("/api/v1/queries");
     expect(init).toMatchObject({ method: "POST", credentials: "same-origin" });
     expect(String(init.body)).not.toMatch(/user_id|clinician_id/);
@@ -6692,27 +7183,40 @@ describe("live clinical client", () => {
   it("encodes ids", async () => {
     const fetchImpl = reply(200, {});
     await createLiveClient({ fetchImpl }).getResult("a/b");
-    expect((fetchImpl.mock.calls[0] as unknown as [string])[0]).toBe("/api/v1/queries/a%2Fb/result");
+    expect((fetchImpl.mock.calls[0] as unknown as [string])[0]).toBe(
+      "/api/v1/queries/a%2Fb/result",
+    );
   });
 
   it("reports a 401 once per call and throws session_expired", async () => {
     const seen = vi.fn();
     const off = onUnauthorized(seen);
-    const c = createLiveClient({ fetchImpl: reply(401, { code: "session_expired" }) });
-    await expect(c.getStatus("q1")).rejects.toMatchObject({ status: 401, code: "session_expired" });
+    const c = createLiveClient({
+      fetchImpl: reply(401, { code: "session_expired" }),
+    });
+    await expect(c.getStatus("q1")).rejects.toMatchObject({
+      status: 401,
+      code: "session_expired",
+    });
     expect(seen).toHaveBeenCalledTimes(1);
     off();
   });
 
   it("keeps the API's error code", async () => {
-    const c = createLiveClient({ fetchImpl: reply(409, { code: "result_not_ready" }) });
+    const c = createLiveClient({
+      fetchImpl: reply(409, { code: "result_not_ready" }),
+    });
     const e = await c.getResult("q1").catch((x) => x);
     expect(e).toBeInstanceOf(ApiError);
     expect(e).toMatchObject({ status: 409, code: "result_not_ready" });
   });
 
   it("reads readiness, naming what's down", async () => {
-    expect(await createLiveClient({ fetchImpl: reply(200, { db: true }) }).getReadiness()).toEqual({
+    expect(
+      await createLiveClient({
+        fetchImpl: reply(200, { db: true }),
+      }).getReadiness(),
+    ).toEqual({
       ok: true,
       degraded_services: [],
     });
@@ -6731,7 +7235,10 @@ describe("live clinical client", () => {
         throw new TypeError("offline");
       }),
     });
-    await expect(c.getStatus("q1")).rejects.toMatchObject({ status: 0, code: "network" });
+    await expect(c.getStatus("q1")).rejects.toMatchObject({
+      status: 0,
+      code: "network",
+    });
   });
 });
 ```
@@ -6744,7 +7251,9 @@ import { LIVE_CAPABILITIES, createLiveAuthClient } from "./live";
 
 const reply = (status: number, body?: unknown) =>
   vi.fn(async () =>
-    body === undefined ? new Response(null, { status }) : Response.json(body, { status }),
+    body === undefined
+      ? new Response(null, { status })
+      : Response.json(body, { status }),
   );
 
 describe("live auth client", () => {
@@ -6761,16 +7270,26 @@ describe("live auth client", () => {
     const fetchImpl = reply(200, { status: "mfa_required" });
     const c = createLiveAuthClient({ fetchImpl });
     expect(await c.signIn("a.reyes", "pw")).toEqual({ status: "mfa_required" });
-    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
     expect(url).toBe("/api/auth/login");
-    expect(JSON.parse(String(init.body))).toEqual({ login: "a.reyes", password: "pw" });
+    expect(JSON.parse(String(init.body))).toEqual({
+      login: "a.reyes",
+      password: "pw",
+    });
   });
   it("passes known error codes through and hides unknown ones", async () => {
     await expect(
-      createLiveAuthClient({ fetchImpl: reply(429, { code: "locked" }) }).signIn("a", "b"),
+      createLiveAuthClient({
+        fetchImpl: reply(429, { code: "locked" }),
+      }).signIn("a", "b"),
     ).rejects.toMatchObject({ code: "locked" });
     await expect(
-      createLiveAuthClient({ fetchImpl: reply(500, { code: "kaboom" }) }).signIn("a", "b"),
+      createLiveAuthClient({
+        fetchImpl: reply(500, { code: "kaboom" }),
+      }).signIn("a", "b"),
     ).rejects.toMatchObject({ code: "unavailable" });
     await expect(
       createLiveAuthClient({
@@ -6781,14 +7300,24 @@ describe("live auth client", () => {
     ).rejects.toMatchObject({ code: "unavailable" });
   });
   it("reads the session, or none", async () => {
-    expect(await createLiveAuthClient({ fetchImpl: reply(401, { code: "session_expired" }) }).getSession()).toBeNull();
+    expect(
+      await createLiveAuthClient({
+        fetchImpl: reply(401, { code: "session_expired" }),
+      }).getSession(),
+    ).toBeNull();
     const s = { user: { username: "a" }, steps: [] };
-    expect(await createLiveAuthClient({ fetchImpl: reply(200, s) }).getSession()).toEqual(s);
+    expect(
+      await createLiveAuthClient({ fetchImpl: reply(200, s) }).getSession(),
+    ).toEqual(s);
   });
   it("refuses what isn't supported yet", async () => {
     const c = createLiveAuthClient({ fetchImpl: vi.fn() });
-    await expect(c.listDevices()).rejects.toMatchObject({ code: "unavailable" });
-    await expect(c.requestPasswordReset("a@b.c")).rejects.toMatchObject({ code: "unavailable" });
+    await expect(c.listDevices()).rejects.toMatchObject({
+      code: "unavailable",
+    });
+    await expect(c.requestPasswordReset("a@b.c")).rejects.toMatchObject({
+      code: "unavailable",
+    });
   });
   it("signs out even if the server call fails", async () => {
     const c = createLiveAuthClient({ fetchImpl: reply(503) });
@@ -6852,11 +7381,18 @@ const MAX_BODY = 64 * 1024;
 
 async function refresh(s: ServerSession): Promise<ServerSession> {
   try {
-    const r = await api<{ access_token: string; expires_in: number }>("/auth/refresh", {
-      method: "POST",
-      token: s.token,
-    });
-    const next = { ...s, token: r.access_token, expiresAt: Date.now() + r.expires_in * 1000 };
+    const r = await api<{ access_token: string; expires_in: number }>(
+      "/auth/refresh",
+      {
+        method: "POST",
+        token: s.token,
+      },
+    );
+    const next = {
+      ...s,
+      token: r.access_token,
+      expiresAt: Date.now() + r.expires_in * 1000,
+    };
     await writeSession(next);
     return next;
   } catch {
@@ -6867,7 +7403,10 @@ async function refresh(s: ServerSession): Promise<ServerSession> {
 /** Same-origin proxy for clinical calls: adds the token the browser never sees. */
 async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   const { path } = await ctx.params;
-  if (!ALLOWED.has(path[0] ?? "") || path.some((p) => p === "" || p === "." || p === ".."))
+  if (
+    !ALLOWED.has(path[0] ?? "") ||
+    path.some((p) => p === "" || p === "." || p === "..")
+  )
     return json(404, { code: "not_found" });
   if (req.method !== "GET" && !sameOrigin(req)) return forbidden();
 
@@ -6879,7 +7418,8 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
 
   const body = req.method === "GET" ? undefined : await req.text();
-  if (body && Buffer.byteLength(body) > MAX_BODY) return json(413, { code: "too_large" });
+  if (body && Buffer.byteLength(body) > MAX_BODY)
+    return json(413, { code: "too_large" });
 
   const url = `${apiBase()}/${path.map(encodeURIComponent).join("/")}${new URL(req.url).search}`;
   let res: Response;
@@ -6915,7 +7455,7 @@ export const GET = handle;
 export const POST = handle;
 ```
 
-The first test expects the forwarded headers to *equal* `{Accept,
+The first test expects the forwarded headers to _equal_ `{Accept,
 Authorization}` for a GET. That's why `Content-Type` is only spread in
 when there's a body.
 
@@ -6973,9 +7513,13 @@ export function createLiveClient({
         method,
         credentials: "same-origin",
         cache: "no-store",
-        headers: body === undefined
-          ? { Accept: "application/json" }
-          : { Accept: "application/json", "Content-Type": "application/json" },
+        headers:
+          body === undefined
+            ? { Accept: "application/json" }
+            : {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+              },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch {
@@ -6985,12 +7529,23 @@ export function createLiveClient({
       reportUnauthorized();
       throw new ApiError(401, "session_expired");
     }
-    const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    const data = (await res.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
     return { res, data };
   }
-  async function ok<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  async function ok<T>(
+    path: string,
+    method = "GET",
+    body?: unknown,
+  ): Promise<T> {
     const { res, data } = await call(path, method, body);
-    if (!res.ok) throw new ApiError(res.status, typeof data?.code === "string" ? data.code : "error");
+    if (!res.ok)
+      throw new ApiError(
+        res.status,
+        typeof data?.code === "string" ? data.code : "error",
+      );
     return data as T;
   }
   const id = encodeURIComponent;
@@ -7021,7 +7576,12 @@ export function createLiveClient({
 `lib/auth/live.ts`:
 
 ```ts
-import { AuthError, type AuthClient, type AuthErrorCode, type Capabilities } from "./types";
+import {
+  AuthError,
+  type AuthClient,
+  type AuthErrorCode,
+  type Capabilities,
+} from "./types";
 
 /** Everything the backend design (gateway spec §4) doesn't include yet is off. */
 export const LIVE_CAPABILITIES: Capabilities = {
@@ -7051,22 +7611,35 @@ const unsupported = async (): Promise<never> => {
 export function createLiveAuthClient({
   fetchImpl = (...a: Parameters<typeof fetch>) => fetch(...a),
 }: { fetchImpl?: typeof fetch } = {}): AuthClient {
-  async function call<T>(path: string, body?: unknown, method = "POST"): Promise<T> {
+  async function call<T>(
+    path: string,
+    body?: unknown,
+    method = "POST",
+  ): Promise<T> {
     let res: Response;
     try {
       res = await fetchImpl(`/api/auth${path}`, {
         method,
         credentials: "same-origin",
         cache: "no-store",
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch {
       throw new AuthError("unavailable");
     }
     if (res.ok) return (res.status === 204 ? undefined : await res.json()) as T;
-    const data = (await res.json().catch(() => null)) as { code?: string } | null;
-    throw new AuthError(KNOWN.has(data?.code as AuthErrorCode) ? (data!.code as AuthErrorCode) : "unavailable");
+    const data = (await res.json().catch(() => null)) as {
+      code?: string;
+    } | null;
+    throw new AuthError(
+      KNOWN.has(data?.code as AuthErrorCode)
+        ? (data!.code as AuthErrorCode)
+        : "unavailable",
+    );
   }
 
   return {
@@ -7081,7 +7654,8 @@ export function createLiveAuthClient({
     },
     signIn: (login, password) => call("/login", { login, password }),
     signInWithHospital: unsupported,
-    verifyCode: (code, { backup, trustDevice }) => call("/mfa", { code, backup, trustDevice }),
+    verifyCode: (code, { backup, trustDevice }) =>
+      call("/mfa", { code, backup, trustDevice }),
     async signOut() {
       await call("/logout").catch(() => {});
     },
@@ -7106,7 +7680,9 @@ export function createLiveAuthClient({
 /** Mock data when NEXT_PUBLIC_USE_MOCK=true; otherwise the live API via the BFF. */
 export function getClient(): MhaiClient {
   return (client ??=
-    process.env.NEXT_PUBLIC_USE_MOCK === "true" ? createMockClient() : createLiveClient());
+    process.env.NEXT_PUBLIC_USE_MOCK === "true"
+      ? createMockClient()
+      : createLiveClient());
 }
 ```
 
@@ -7124,7 +7700,9 @@ let client: AuthClient | undefined;
 /** The demo's sign-in when NEXT_PUBLIC_USE_MOCK=true; otherwise the BFF. */
 export function getAuthClient(): AuthClient {
   return (client ??=
-    process.env.NEXT_PUBLIC_USE_MOCK === "true" ? createMockAuthClient() : createLiveAuthClient());
+    process.env.NEXT_PUBLIC_USE_MOCK === "true"
+      ? createMockAuthClient()
+      : createLiveAuthClient());
 }
 ```
 
@@ -7132,8 +7710,8 @@ export function getAuthClient(): AuthClient {
 add this after the `signOut` callback:
 
 ```tsx
-  // A live call found the session gone: sign out once, saying why.
-  useEffect(() => onUnauthorized(() => void signOut("expired")), [signOut]);
+// A live call found the session gone: sign out once, saying why.
+useEffect(() => onUnauthorized(() => void signOut("expired")), [signOut]);
 ```
 
 `app/providers.tsx`: import `ApiError` from `@/lib/api/errors`, and set:
@@ -7152,13 +7730,19 @@ add this after the `signOut` callback:
 throw `/Plan 2/` outside mock mode. Replace that test's body with:
 
 ```ts
-    vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "false");
-    vi.resetModules();
-    const { getClient: fresh } = await import("./client");
-    const c = fresh();
-    for (const m of ["createQuery", "getStatus", "getResult", "sendFeedback", "getReadiness"])
-      expect(typeof (c as unknown as Record<string, unknown>)[m]).toBe("function");
-    vi.unstubAllEnvs();
+vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "false");
+vi.resetModules();
+const { getClient: fresh } = await import("./client");
+const c = fresh();
+for (const m of [
+  "createQuery",
+  "getStatus",
+  "getResult",
+  "sendFeedback",
+  "getReadiness",
+])
+  expect(typeof (c as unknown as Record<string, unknown>)[m]).toBe("function");
+vi.unstubAllEnvs();
 ```
 
 Make the `it` callback `async`, and rename it to "uses the live client
@@ -7229,7 +7813,8 @@ export async function signIn(page: Page, email = "a.reyes@havanahospital.org") {
 }
 
 export async function openAccountMenu(page: Page) {
-  if (isMobile(page)) await page.getByRole("button", { name: "Open menu" }).click();
+  if (isMobile(page))
+    await page.getByRole("button", { name: "Open menu" }).click();
   await page.getByRole("button", { name: /^Account:/ }).click();
 }
 ```
@@ -7260,11 +7845,15 @@ test.afterEach(async ({ page }) => {
 test("clinical pages need sign-in", async ({ page }) => {
   await page.goto("/help");
   await expect(page).toHaveURL(/\/sign-in$/);
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Welcome back" }),
+  ).toBeVisible();
   await expect(page.getByLabel("Demo sign-in")).toBeVisible();
 });
 
-test("sign in, see your name, sign out from the account menu", async ({ page }) => {
+test("sign in, see your name, sign out from the account menu", async ({
+  page,
+}) => {
   await signIn(page);
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByText(/welcome, dr\. reyes/i)).toBeVisible();
@@ -7287,12 +7876,16 @@ test("two-step code, including a wrong one first", async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
 });
 
-test("a deep link to the code step with nothing pending goes to sign-in", async ({ page }) => {
+test("a deep link to the code step with nothing pending goes to sign-in", async ({
+  page,
+}) => {
   await page.goto("/sign-in/code");
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
-test("first sign-in: terms, password, two-step, backup codes", async ({ page }) => {
+test("first sign-in: terms, password, two-step, backup codes", async ({
+  page,
+}) => {
   await signIn(page, "new.nurse@havanahospital.org");
   await expect(page).toHaveURL(/\/welcome$/);
   await page.getByLabel("I understand and agree to use MHAI this way").check();
@@ -7310,17 +7903,25 @@ test("first sign-in: terms, password, two-step, backup codes", async ({ page }) 
   await expect(page).toHaveURL(/\/$/);
 });
 
-test("an admin account sees the 403 page, never the clinical app", async ({ page }) => {
+test("an admin account sees the 403 page, never the clinical app", async ({
+  page,
+}) => {
   await signIn(page, "admin@havanahospital.org");
   await expect(page).toHaveURL(/\/no-access$/);
-  await expect(page.getByRole("heading", { name: "You don't have access" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "You don't have access" }),
+  ).toBeVisible();
   await expect(page.getByText("Error 403")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Start a consultation/ })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /Start a consultation/ }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
-test("wrong passwords count down, and the message never confirms the account", async ({ page }) => {
+test("wrong passwords count down, and the message never confirms the account", async ({
+  page,
+}) => {
   await page.goto("/sign-in");
   await page.getByLabel("Work email").fill("x@havanahospital.org");
   await page.getByLabel("Password").fill("wrong");
@@ -7335,7 +7936,9 @@ test("forgot password sends the same reply for any email", async ({ page }) => {
   await page.getByRole("link", { name: "Forgot?" }).click();
   await page.getByLabel("Work email").fill("anyone@anywhere.org");
   await page.getByRole("button", { name: "Send reset link" }).click();
-  await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Check your email" }),
+  ).toBeVisible();
   await expect(page).not.toHaveURL(/anyone/);
 });
 
@@ -7370,8 +7973,7 @@ test("signing out mid-draft asks first", async ({ page }) => {
 - [ ] **Step 3: Run the e2e suite**
 
 Run: `npx playwright test`
-Expected: all clinical-flow and account tests PASS, on desktop and Pixel
-7. If "signing out mid-draft" doesn't show the unsaved-draft dialog,
+Expected: all clinical-flow and account tests PASS, on desktop and Pixel 7. If "signing out mid-draft" doesn't show the unsaved-draft dialog,
 check that the account menu calls the shell's `navigate("/sign-out")`
 (Task 9), not `router.push`.
 
