@@ -176,7 +176,8 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
   }, [username, status, load]);
 
   const sync = useEffectEvent(async () => {
-    if (!cur) return;
+    // Offline: nothing to try (and no "Sending…" flash).
+    if (!cur || !navigator.onLine) return;
     if (running.current) {
       again.current = true;
       return;

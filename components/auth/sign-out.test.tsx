@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, useRef } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/lib/auth/auth-context";
 import { OutboxProvider, useOutbox } from "@/lib/offline/outbox-context";
 import { AuthTestProvider, renderWithAuth } from "@/tests/auth-wrapper";
@@ -20,6 +20,8 @@ beforeEach(async () => {
     req.onsuccess = req.onerror = req.onblocked = () => r();
   });
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 const Q = {
   clinical_question: "Central chest pain for 40 minutes. Likely diagnosis?",
@@ -41,8 +43,10 @@ function QueueThenSignOut() {
 function Status() {
   return <output data-testid="auth">{useAuth().status}</output>;
 }
+// Offline, so the queued item stays unsent (online it would sync away).
 const mountWithUnsent = () =>
   act(async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     render(
       <AuthTestProvider>
         <OutboxProvider>
