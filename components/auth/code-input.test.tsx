@@ -48,6 +48,26 @@ describe("CodeInput", () => {
     expect(box(2)).toHaveValue("");
     expect(box(3)).toHaveValue("2");
   });
+  it("clears the previous box on Backspace in an empty one", async () => {
+    render(<Harness />);
+    const user = userEvent.setup();
+    await user.click(box(1));
+    await user.keyboard("482");
+    await user.click(box(2));
+    await user.keyboard("{Backspace}{Backspace}");
+    expect(box(1)).toHaveValue("");
+    expect(box(2)).toHaveValue("");
+    expect(box(3)).toHaveValue("2");
+    expect(box(1)).toHaveFocus();
+  });
+  it("does nothing on Backspace in an empty first box", async () => {
+    render(<Harness />);
+    const user = userEvent.setup();
+    await user.click(box(1));
+    await user.keyboard("{Backspace}");
+    expect(box(1)).toHaveFocus();
+    expect(screen.getByTestId("v")).toHaveTextContent("");
+  });
   it("fills from a messy paste, first six digits only", () => {
     render(<Harness />);
     fireEvent.paste(box(3), {

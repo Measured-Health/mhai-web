@@ -40,8 +40,9 @@ export function CodeInput({
   };
 
   const onKey = (i: number, e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace" && !value[i]) {
+    if (e.key === "Backspace" && !value[i]?.trim()) {
       e.preventDefault();
+      if (i === 0) return;
       setAt(i - 1, "");
       focus(i - 1);
     } else if (e.key === "ArrowLeft") {
