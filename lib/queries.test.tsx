@@ -13,18 +13,32 @@ import {
 import { SessionProvider, useSession } from "./session-store";
 
 const status = vi.fn();
+const result = vi.fn();
+const feedback = vi.fn();
 const create = vi.fn() as Mock<
   (q?: unknown, o?: { idempotencyKey?: string }) => Promise<unknown>
 >;
 create.mockResolvedValue({ query_id: "q1" });
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
 vi.mock("./api/client", () => ({
   getClient: () => ({
     getStatus: status,
+    getResult: result,
     createQuery: create,
+    sendFeedback: feedback,
   }),
 }));
 import { ApiError } from "./api/errors";
-import { useQueryStatus, useSubmitQuery } from "./queries";
+import {
+  useFeedback,
+  useQueryStatus,
+  useResult,
+  useSubmitQuery,
+} from "./queries";
+import { AuthTestProvider } from "@/tests/auth-wrapper";
+import { OutboxProvider, useOutbox } from "./offline/outbox-context";
 
 const makeClient = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -257,5 +271,58 @@ describe("offline time and retried writes", () => {
     const keys = create.mock.calls.map((c) => c[1]?.idempotencyKey);
     expect(new Set(keys).size).toBe(1);
     expect(keys[0]).toEqual(expect.any(String));
+  });
+});
+
+describe("questions and feedback saved offline", () => {
+  afterEach(() => {
+    status.mockReset();
+    result.mockReset();
+    feedback.mockReset();
+    vi.restoreAllMocks();
+  });
+
+  it("never asks the server about a local id", async () => {
+    const { result: r } = renderHook(
+      () => ({
+        st: useQueryStatus("local-1"),
+        res: useResult("local-1", true),
+      }),
+      { wrapper: wrap },
+    );
+    await act(async () => {
+      await new Promise((t) => setTimeout(t, 50));
+    });
+    expect(status).not.toHaveBeenCalled();
+    expect(result).not.toHaveBeenCalled();
+    expect(r.current.st.status).toBeUndefined();
+  });
+
+  it("queues feedback while offline and reports it as queued", async () => {
+    await new Promise<void>((r) => {
+      const req = indexedDB.deleteDatabase("mhai-outbox");
+      req.onsuccess = req.onerror = req.onblocked = () => r();
+    });
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    const { result: r } = renderHook(
+      () => ({ fb: useFeedback(), box: useOutbox() }),
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <AuthTestProvider>
+            <OutboxProvider>{children}</OutboxProvider>
+          </AuthTestProvider>
+        ),
+      },
+    );
+    let out: unknown;
+    await act(async () => {
+      out = await r.current.fb.mutateAsync({
+        query_id: "q1",
+        action: "validate",
+      });
+    });
+    expect(out).toEqual({ status: "queued" });
+    expect(feedback).not.toHaveBeenCalled();
+    await waitFor(() => expect(r.current.box.items).toHaveLength(1));
   });
 });

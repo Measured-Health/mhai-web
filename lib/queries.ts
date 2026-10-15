@@ -2,8 +2,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { getClient } from "./api/client";
-import type { FeedbackIn, QueryCreateIn } from "./api/contract";
+import type { FeedbackIn, FeedbackOut, QueryCreateIn } from "./api/contract";
 import { pollDelay, retryDelay, shouldRetry, useNetwork } from "./network";
+import { useOutbox } from "./offline/outbox-context";
+import { isLocalId } from "./offline/outbox";
 import { titleFor, useSession } from "./session-store";
 
 export function useSubmitQuery() {
@@ -48,6 +50,8 @@ export function useQueryStatus(
   const q = useQuery({
     queryKey: ["status", id],
     queryFn: () => getClient().getStatus(id),
+    // A question saved offline isn't on the server yet.
+    enabled: !isLocalId(id),
     refetchInterval: (query) => {
       const s = query.state.data?.status;
       if (s === "completed" || s === "failed" || stalled || !net.online)
@@ -103,16 +107,29 @@ export function useResult(id: string, enabled: boolean) {
   return useQuery({
     queryKey: ["result", id],
     queryFn: () => getClient().getResult(id),
-    enabled,
+    enabled: enabled && !isLocalId(id),
     staleTime: Infinity,
     gcTime: 30 * 60_000,
   });
 }
 
 export function useFeedback() {
+  const outbox = useOutbox();
   const m = useMutation({
-    mutationFn: ({ f, key }: { f: FeedbackIn; key: string }) =>
-      getClient().sendFeedback(f, { idempotencyKey: key }),
+    mutationFn: async ({
+      f,
+      key,
+    }: {
+      f: FeedbackIn;
+      key: string;
+    }): Promise<FeedbackOut> => {
+      // Offline: saved on this device (encrypted) and sent once back online.
+      if (!navigator.onLine) {
+        await outbox.queueFeedback(f);
+        return { status: "queued" };
+      }
+      return getClient().sendFeedback(f, { idempotencyKey: key });
+    },
     retry: (n, e) => shouldRetry(n, e),
     retryDelay,
   });
