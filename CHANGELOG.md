@@ -28,3 +28,11 @@ All notable changes to this project are documented here. The format follows
   - Prettier, Node version pin, Dependabot, CODEOWNERS;
   - PR and issue templates, `SECURITY.md`, `CONTRIBUTING.md`, ADRs and an
     agent guide.
+
+### Fixed
+
+- Missing pages say what was missing: an unknown address reads "This page
+  doesn't exist", and an unknown or ended consultation keeps its own message.
+  The printout uses the same not-found page instead of a bare line.
+- Opening a consultation or printout link directly now returns a real 404
+  status, not 200.

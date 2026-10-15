@@ -6,6 +6,8 @@ import type { QueryCreateIn } from "@/lib/api/contract";
 import { FIXTURES } from "@/lib/api/fixtures";
 import { SessionProvider, useSession } from "@/lib/session-store";
 
+const notFound = vi.fn();
+vi.mock("next/navigation", () => ({ notFound: () => notFound() }));
 vi.mock("@/lib/api/client", () => ({
   getClient: () => ({ getResult: async () => FIXTURES.high }),
 }));
@@ -29,22 +31,22 @@ function Seed() {
   }, []);
   return null;
 }
-const mount = () =>
+const mount = (id = "q1") =>
   render(
     <QueryClientProvider client={new QueryClient()}>
       <SessionProvider>
         <Seed />
         <Suspense fallback={null}>
-          <PrintBody params={Promise.resolve({ id: "q1" })} />
+          <PrintBody params={Promise.resolve({ id })} />
         </Suspense>
       </SessionProvider>
     </QueryClientProvider>,
   );
 
-const ui = async () => {
+const ui = async (id?: string) => {
   let r!: ReturnType<typeof mount>;
   await act(async () => {
-    r = mount();
+    r = mount(id);
   });
   return r;
 };
@@ -52,11 +54,17 @@ const ui = async () => {
 const print = vi.fn();
 beforeEach(() => {
   print.mockClear();
+  notFound.mockClear();
   window.print = print;
 });
 afterEach(() => vi.useRealTimers());
 
 describe("PrintBody", () => {
+  it("shows the not-found page for a consultation not in this session", async () => {
+    await ui("gone");
+    expect(notFound).toHaveBeenCalled();
+    expect(print).not.toHaveBeenCalled();
+  });
   it("links back to the result in the same tab", async () => {
     await ui();
     const back = await screen.findByRole("link", { name: /Back to result/ });

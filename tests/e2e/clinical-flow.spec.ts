@@ -149,3 +149,38 @@ test("storage stays empty after a full flow and a reload", async ({ page }) => {
   await page.reload();
   await expectNoStorage(page);
 });
+
+test("missing pages answer 404 and say what was missing", async ({ page }) => {
+  for (const path of ["/c/not-a-real-id", "/print/not-a-real-id"]) {
+    const res = await page.goto(path);
+    expect(res?.status()).toBe(404);
+    await expect(
+      page.getByText(/This consultation doesn.t exist/),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Back to home" }),
+    ).toBeVisible();
+  }
+  const res = await page.goto("/no-such-page");
+  expect(res?.status()).toBe(404);
+  await expect(page.getByText(/This page doesn.t exist/)).toBeVisible();
+});
+
+test("in-app navigation still reaches the printout", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.print = () => {};
+  });
+  await ask(page, "Fever 3 days and rash, dengue area. Admit?");
+  await expect(resultAlert(page)).toContainText("Use with caution");
+  await page.getByRole("button", { name: "More export options" }).click();
+  // Keyboard, as the menu supports it: focus starts on "Copy as text".
+  const printItem = page.getByRole("menuitem", {
+    name: /Print or save as PDF/,
+  });
+  await page.keyboard.press("ArrowDown");
+  await expect(printItem).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("link", { name: /Back to result/ }),
+  ).toBeVisible();
+});
