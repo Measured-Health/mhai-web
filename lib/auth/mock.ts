@@ -1,4 +1,5 @@
 import { normalizeBackupCode } from "./codes";
+import { verifyTotp } from "./totp";
 import {
   AuthError,
   type AuthClient,
@@ -28,7 +29,8 @@ export const MOCK_NEW_BACKUP_CODES = MOCK_BACKUP_CODES.map((c) =>
   c.split("").reverse().join(""),
 );
 
-const SECRET = "JBSWY3DPEHPK3PXP";
+/** The demo's authenticator secret: scan the QR code and real app codes work too. */
+export const MOCK_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
 const LOCK_MS = 15 * 60_000;
 const MAX_TRIES = 5;
 
@@ -154,6 +156,13 @@ export function createMockAuthClient({
   const strong = (pw: string) => {
     if (pw.length < 12) throw new AuthError("weak_password");
   };
+  const codeOk = async (code: string) => {
+    const digits = code.replace(/\D/g, "");
+    return (
+      digits === MOCK_CODE ||
+      (await verifyTotp(MOCK_TOTP_SECRET, digits, now()))
+    );
+  };
   const done = (step: FirstStep) => {
     steps = steps.filter((s) => s !== step);
   };
@@ -220,7 +229,7 @@ export function createMockAuthClient({
         const c = normalizeBackupCode(code);
         if (!backupLeft.has(c)) throw new AuthError("mfa_invalid");
         backupLeft.delete(c);
-      } else if (code.replace(/\D/g, "") !== MOCK_CODE) {
+      } else if (!(await codeOk(code))) {
         throw new AuthError("mfa_invalid");
       }
       const u = backup
@@ -263,16 +272,15 @@ export function createMockAuthClient({
       const u = requireSession();
       backupLeft = new Set(MOCK_BACKUP_CODES);
       return {
-        otpauthUri: `otpauth://totp/MHAI:${encodeURIComponent(u.username)}?secret=${SECRET}&issuer=MHAI`,
-        secret: SECRET,
+        otpauthUri: `otpauth://totp/MHAI:${encodeURIComponent(u.username)}?secret=${MOCK_TOTP_SECRET}&issuer=MHAI`,
+        secret: MOCK_TOTP_SECRET,
         backupCodes: [...MOCK_BACKUP_CODES],
       };
     },
 
     async confirmMfaSetup(code) {
       const u = requireSession();
-      if (code.replace(/\D/g, "") !== MOCK_CODE)
-        throw new AuthError("mfa_invalid");
+      if (!(await codeOk(code))) throw new AuthError("mfa_invalid");
       session = { ...u, mfaEnabled: true, backupCodesLeft: 10 };
       done("mfa");
     },

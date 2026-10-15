@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { totp } from "./totp";
 import { AuthError, initials, isClinical } from "./types";
 import {
   MOCK_BACKUP_CODES,
@@ -6,6 +7,7 @@ import {
   MOCK_NEW_BACKUP_CODES,
   MOCK_RESET_TOKEN,
   MOCK_SSO_CODE,
+  MOCK_TOTP_SECRET,
   SAMPLE_ACCOUNTS,
   createMockAuthClient,
 } from "./mock";
@@ -201,5 +203,32 @@ describe("mock auth client", () => {
     expect((await c.getSession())?.user.backupCodesLeft).toBe(7);
     expect(await c.regenerateBackupCodes()).toEqual(MOCK_NEW_BACKUP_CODES);
     expect((await c.getSession())?.user.backupCodesLeft).toBe(10);
+  });
+
+  it("accepts a real authenticator code and rejects a wrong one", async () => {
+    const at = 1_700_000_000_000;
+    const c = createMockAuthClient({ now: () => at });
+    await c.signIn("mfa.okafor@havanahospital.org", "pw");
+    const good = await totp(MOCK_TOTP_SECRET, at);
+    const bad = good === "000000" ? "000001" : "000000";
+    expect(
+      (await fail(c.verifyCode(bad, { backup: false, trustDevice: false })))
+        .code,
+    ).toBe("mfa_invalid");
+    await c.signIn("mfa.okafor@havanahospital.org", "pw");
+    expect(
+      await c.verifyCode(good, { backup: false, trustDevice: false }),
+    ).toMatchObject({ status: "signed_in" });
+  });
+
+  it("confirms two-step setup with a real authenticator code", async () => {
+    const at = 1_700_000_000_000;
+    const c = createMockAuthClient({ now: () => at });
+    await c.signIn("new.bello@havanahospital.org", "temp");
+    await expect(c.confirmMfaSetup("999999")).rejects.toMatchObject({
+      code: "mfa_invalid",
+    });
+    await c.confirmMfaSetup(await totp(MOCK_TOTP_SECRET, at));
+    expect((await c.getSession())?.steps).not.toContain("mfa");
   });
 });
