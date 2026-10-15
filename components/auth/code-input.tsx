@@ -36,7 +36,7 @@ export function CodeInput({
   const setAt = (i: number, digit: string) => {
     const chars = value.padEnd(6, " ").split("");
     chars[i] = digit || " ";
-    onChange(normalizeCode(chars.join("").replace(/ /g, "")));
+    onChange(chars.join("").trimEnd());
   };
 
   const onKey = (i: number, e: KeyboardEvent<HTMLInputElement>) => {
@@ -74,7 +74,7 @@ export function CodeInput({
           autoComplete={i === 0 ? "one-time-code" : "off"}
           maxLength={1}
           disabled={disabled}
-          value={value[i] ?? ""}
+          value={value[i]?.trim() ?? ""}
           onChange={(e) => {
             const raw = e.target.value;
             const d = raw.replace(/\D/g, "").slice(-1);

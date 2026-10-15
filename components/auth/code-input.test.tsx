@@ -35,6 +35,18 @@ describe("CodeInput", () => {
     expect(box(4)).toHaveFocus();
     await user.keyboard("{Backspace}");
     expect(box(3)).toHaveFocus();
+    expect(screen.getByTestId("v")).toHaveTextContent("48");
+  });
+  it("clears only a filled middle box on Backspace", async () => {
+    render(<Harness />);
+    const user = userEvent.setup();
+    await user.click(box(1));
+    await user.keyboard("482");
+    await user.click(box(2));
+    await user.keyboard("{Backspace}");
+    expect(box(1)).toHaveValue("4");
+    expect(box(2)).toHaveValue("");
+    expect(box(3)).toHaveValue("2");
   });
   it("fills from a messy paste, first six digits only", () => {
     render(<Harness />);

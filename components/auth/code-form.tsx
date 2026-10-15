@@ -39,14 +39,17 @@ export function CodeForm() {
   useRedirect(target);
   if (auth.status === "loading" || target) return null;
 
-  const ready = backup ? code.length === 9 : code.length === 6;
+  const ready = backup ? code.length === 9 : normalizeCode(code).length === 6;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!ready || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await auth.verifyCode(code, { backup, trustDevice: trust });
+      await auth.verifyCode(backup ? code : normalizeCode(code), {
+        backup,
+        trustDevice: trust,
+      });
     } catch (err) {
       const ae = errorCode(err);
       setError(ae);
@@ -111,7 +114,7 @@ export function CodeForm() {
       ) : (
         <CodeInput
           value={code}
-          onChange={(v) => setCode(normalizeCode(v))}
+          onChange={setCode}
           label="Code from your app"
           disabled={busy}
           invalid={error?.code === "mfa_invalid"}
