@@ -57,6 +57,19 @@ describe("seal / unseal", () => {
     expect(unseal("not-a-cookie")).toBeNull();
     expect(unseal(undefined)).toBeNull();
   });
+  it("treats a truncated value as none, without a warning", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const a = seal({ n: 1 });
+    // IV + a short tag and no ciphertext: shorter than 29 bytes.
+    const short = Buffer.from(a, "base64url").subarray(0, 20);
+    expect(unseal(short.toString("base64url"))).toBeNull();
+    // A forged 4-byte tag (no authTagLength pin) must not be accepted.
+    const raw = Buffer.from(a, "base64url");
+    const forged = Buffer.concat([raw.subarray(0, 16), raw.subarray(28)]);
+    expect(unseal(forged.toString("base64url"))).toBeNull();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
   it("rejects a value sealed with another secret", () => {
     const a = seal({ n: 1 });
     vi.stubEnv("SESSION_SECRET", "y".repeat(32));

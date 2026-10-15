@@ -11,7 +11,8 @@ export const forbidden = () => json(403, { code: "forbidden" });
 /** Writes must come from this app's own pages (SameSite=Strict plus this). */
 export function sameOrigin(req: Request): boolean {
   const origin = req.headers.get("origin");
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  // Host only: X-Forwarded-Host can be supplied by the client.
+  const host = req.headers.get("host");
   if (!origin || !host) return false;
   try {
     return new URL(origin).host === host;

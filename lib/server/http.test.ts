@@ -13,6 +13,16 @@ describe("sameOrigin", () => {
     expect(
       sameOrigin(req({ origin: "https://demo.test", host: "demo.test" })),
     ).toBe(true);
+    // A client-supplied X-Forwarded-Host is never trusted.
+    expect(
+      sameOrigin(
+        req({
+          origin: "https://evil.test",
+          host: "demo.test",
+          "x-forwarded-host": "evil.test",
+        }),
+      ),
+    ).toBe(false);
     expect(
       sameOrigin(
         req({
@@ -21,7 +31,7 @@ describe("sameOrigin", () => {
           "x-forwarded-host": "demo.test",
         }),
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       sameOrigin(req({ origin: "https://evil.test", host: "demo.test" })),
     ).toBe(false);

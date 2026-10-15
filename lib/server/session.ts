@@ -47,7 +47,11 @@ export function unseal<T>(sealed: string | undefined): T | null {
   if (!sealed) return null;
   try {
     const raw = Buffer.from(sealed, "base64url");
-    const d = createDecipheriv("aes-256-gcm", k, raw.subarray(0, 12));
+    // 12 IV + 16 tag + at least 1 byte of ciphertext.
+    if (raw.length < 29) return null;
+    const d = createDecipheriv("aes-256-gcm", k, raw.subarray(0, 12), {
+      authTagLength: 16,
+    });
     d.setAuthTag(raw.subarray(12, 28));
     const text = Buffer.concat([
       d.update(raw.subarray(28)),
