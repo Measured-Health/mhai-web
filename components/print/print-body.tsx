@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import { PrintSheet } from "@/components/print/print-sheet";
 import { parseBody } from "@/components/result/parse-body";
@@ -18,11 +19,25 @@ export function PrintBody({ params }: { params: Promise<{ id: string }> }) {
     const t = setTimeout(() => window.print(), 300);
     return () => clearTimeout(t);
   }, [ready]);
-  if (!item || !r.data)
+  // Unknown id, or a consultation from a session that has ended.
+  if (!item) notFound();
+  if (!r.data)
     return (
-      <p className="p-10 text-center text-ink-3">
-        This result is no longer available in this session.
-      </p>
+      <div className="p-10 text-center text-ink-3">
+        <p role="status">
+          {r.isError
+            ? "This result couldn't be loaded for printing."
+            : "Preparing the printout…"}
+        </p>
+        {r.isError && (
+          <Link
+            href={`/c/${id}`}
+            className="mt-3 inline-flex min-h-11 items-center text-sm text-mint-deep"
+          >
+            ← Back to result
+          </Link>
+        )}
+      </div>
     );
   return (
     <>
