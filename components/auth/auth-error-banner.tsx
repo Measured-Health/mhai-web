@@ -8,18 +8,23 @@ import { authErrorCopy } from "./auth-error-copy";
 export function AuthErrorBanner({
   error,
   noun,
+  copy: override,
   children,
 }: {
   error: AuthError;
   noun?: string;
+  /** Replaces the standard wording for this error. */
+  copy?: { title: string; body: string };
   children?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => ref.current?.focus(), [error]);
-  const copy = authErrorCopy(error.code, {
-    noun,
-    attemptsLeft: error.attemptsLeft,
-  });
+  const copy =
+    override ??
+    authErrorCopy(error.code, {
+      noun,
+      attemptsLeft: error.attemptsLeft,
+    });
   return (
     <div ref={ref} tabIndex={-1} className="mb-4 outline-none">
       <Banner tone="bad" title={copy.title}>

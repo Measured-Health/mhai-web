@@ -1,3 +1,4 @@
+import { normalizeBackupCode } from "./codes";
 import {
   AuthError,
   type AuthClient,
@@ -36,11 +37,6 @@ const trigger = (login: string) =>
     .toLowerCase()
     .split("@")[0]!
     .split(/[._+-]/)[0] ?? "";
-const normalizeBackup = (c: string) =>
-  c
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .replace(/^(.{4})(.{4})$/, "$1-$2");
 
 /** Sample accounts for the demo's sign-in page. Any other email works too. */
 export const SAMPLE_ACCOUNTS = [
@@ -221,7 +217,7 @@ export function createMockAuthClient({
     async verifyCode(code, { backup }) {
       if (!pending) throw new AuthError("mfa_expired");
       if (backup) {
-        const c = normalizeBackup(code);
+        const c = normalizeBackupCode(code);
         if (!backupLeft.has(c)) throw new AuthError("mfa_invalid");
         backupLeft.delete(c);
       } else if (code.replace(/\D/g, "") !== MOCK_CODE) {
