@@ -25,10 +25,7 @@ async function refresh(s: ServerSession): Promise<ServerSession> {
 /** Same-origin proxy for clinical calls: adds the token the browser never sees. */
 async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   const { path } = await ctx.params;
-  if (
-    !ALLOWED.has(path[0] ?? "") ||
-    !path.every((p) => SEGMENT.test(p))
-  )
+  if (!ALLOWED.has(path[0] ?? "") || !path.every((p) => SEGMENT.test(p)))
     return json(404, { code: "not_found" });
   if (req.method !== "GET" && !sameOrigin(req)) return forbidden();
 
