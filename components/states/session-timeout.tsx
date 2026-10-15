@@ -1,6 +1,7 @@
 "use client";
 import {
   Fragment,
+  startTransition,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -123,7 +124,9 @@ export function SessionGuard({
   const [epoch, setEpoch] = useState(0);
   const { status, signOut } = useAuth();
   const onSignOut = useCallback(() => {
-    setEpoch((n) => n + 1);
+    // Same transition as signOut's clear/SIGNED_OUT/replace (they are
+    // batched), so the remount never commits while still signed in.
+    startTransition(() => setEpoch((n) => n + 1));
     void signOut("idle");
   }, [signOut]);
   return (

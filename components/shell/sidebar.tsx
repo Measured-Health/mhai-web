@@ -10,6 +10,7 @@ import {
   CircleHelp,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-context";
+import { initials } from "@/lib/auth/types";
 import { historyStatus, type SessionItem } from "@/lib/session-store";
 import { useNow } from "@/lib/hooks/use-now";
 import { Logo, Mark } from "../ui/brand";
@@ -22,14 +23,6 @@ const DOT = {
   review: "bg-bad",
   failed: "bg-ink-3",
 } as const;
-const initials = (name: string) =>
-  name
-    .replace(/^(Dr|Prof|Mr|Mrs|Ms)\.?\s+/i, "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join("");
 const ago = (t: number, now: number) => {
   const m = Math.max(0, Math.round((now - t) / 60000));
   return m < 60 ? `${m} min` : `${Math.round(m / 60)} h`;

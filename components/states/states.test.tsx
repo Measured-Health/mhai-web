@@ -506,6 +506,42 @@ describe("SessionGuard", () => {
   });
 });
 
+describe("SessionGuard ordering", () => {
+  it("never re-mounts the page while still signed in after the idle deadline", () => {
+    vi.useFakeTimers();
+    const seen: string[] = [];
+    function Page() {
+      const { status } = useAuth();
+      useEffect(() => {
+        seen.push(status);
+      }, [status]);
+      return null;
+    }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SessionProvider>
+          <ToastProvider>
+            <AuthProvider
+              client={createMockAuthClient()}
+              initialUser={TEST_USER}
+            >
+              <SessionGuard warnAfterMs={1000} signOutAfterMs={2000}>
+                <Page />
+              </SessionGuard>
+            </AuthProvider>
+          </ToastProvider>
+        </SessionProvider>
+      </QueryClientProvider>,
+    );
+    expect(seen).toEqual(["signed_in"]);
+    for (let i = 0; i < 3; i++) act(() => vi.advanceTimersByTime(1000));
+    expect(replace).toHaveBeenCalledWith("/sign-in");
+    // Only the first mount saw signed_in; the remount saw signed_out.
+    expect(seen.filter((s) => s === "signed_in")).toHaveLength(1);
+    expect(seen.at(-1)).toBe("signed_out");
+  });
+});
+
 describe("SignedOutNotice", () => {
   it.each([
     ["idle", "Signed out for privacy", /15 minutes of inactivity/],
