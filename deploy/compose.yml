@@ -1,0 +1,22 @@
+# The mhai-web demo on the shared preview instance, next to the EMR stack.
+# Lives at /srv/mhai-web on the instance; the deploy workflow pulls the image
+# and restarts this one service. Nothing here touches the EMR containers.
+
+name: mhai-web
+
+services:
+  web:
+    image: ${WEB_IMAGE:-ghcr.io/measured-health/mhai-web:latest}
+    # The workflow pulls before every `up`, so a plain restart needs no GHCR login.
+    pull_policy: missing
+    restart: unless-stopped
+    # Loopback only: Docker's own iptables rules sit in front of the security
+    # group, so 0.0.0.0 would put the app on the internet without nginx.
+    ports:
+      - "127.0.0.1:8090:8080"
+    # The instance has 3.7 GiB shared with MongoDB and the EMR. The demo is a
+    # small Node server; cap it so it can never starve them.
+    mem_limit: 384m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
