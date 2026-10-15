@@ -1,0 +1,126 @@
+export type Role = "clinician" | "admin" | "auditor" | "researcher";
+
+/** The signed-in person, as the UI shows them. Fields the API doesn't have yet are null. */
+export interface User {
+  username: string;
+  email: string | null;
+  /** Short name for the sidebar and greetings, e.g. "Dr. Reyes". */
+  displayName: string;
+  fullName: string | null;
+  role: Role;
+  /** Job title from hospital records, e.g. "Attending physician". */
+  roleTitle: string | null;
+  specialty: string | null;
+  hospital: string | null;
+  mfaEnabled: boolean;
+  /** Unused backup codes, or null when unknown. */
+  backupCodesLeft: number | null;
+}
+
+/** First sign-in steps still to do, in this order. */
+export type FirstStep = "terms" | "password" | "mfa";
+
+export type SignInResult =
+  | { status: "signed_in"; user: User; steps: FirstStep[] }
+  | { status: "mfa_required" };
+
+/** What the current backend supports. The UI hides anything that's false. */
+export interface Capabilities {
+  /** "Continue with hospital account" (single sign-on). */
+  sso: boolean;
+  /** Sign in with a work email (otherwise a username). */
+  emailLogin: boolean;
+  passwordReset: boolean;
+  /** Active devices, sign out one, sign out everywhere. */
+  devices: boolean;
+  trustDevice: boolean;
+}
+
+export const AUTH_ERROR_CODES = [
+  "invalid_credentials",
+  "locked",
+  "mfa_invalid",
+  "mfa_expired",
+  "rate_limited",
+  "weak_password",
+  "wrong_password",
+  "link_expired",
+  "session_expired",
+  "sso_failed",
+  "unavailable",
+] as const;
+
+export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];
+
+export class AuthError extends Error {
+  constructor(
+    readonly code: AuthErrorCode,
+    /** Only when the backend says so; never guessed. */
+    readonly attemptsLeft?: number,
+  ) {
+    super(code);
+    this.name = "AuthError";
+  }
+}
+
+export interface Device {
+  id: string;
+  /** e.g. "Chrome on Windows · Ward 4 PC" */
+  label: string;
+  place: string | null;
+  lastActiveAt: number;
+  current: boolean;
+}
+
+export interface MfaSetup {
+  otpauthUri: string;
+  /** The same secret as text, for "Can't scan?". */
+  secret: string;
+  /** Ten one-time codes, shown once. */
+  backupCodes: string[];
+}
+
+/** Who is signed in, and the first sign-in steps they still owe. */
+export interface Session {
+  user: User;
+  steps: FirstStep[];
+}
+
+export interface AuthClient {
+  readonly capabilities: Capabilities;
+  getSession(): Promise<Session | null>;
+  signIn(login: string, password: string): Promise<SignInResult>;
+  signInWithHospital(): Promise<SignInResult>;
+  verifyCode(
+    code: string,
+    opts: { backup: boolean; trustDevice: boolean },
+  ): Promise<SignInResult>;
+  /** Finishes hospital sign-on with the one-time code from the return URL. */
+  completeHospitalSignIn(code: string): Promise<SignInResult>;
+  signOut(): Promise<void>;
+  acceptTerms(): Promise<void>;
+  /** `current` is null during first sign-in (temporary password). */
+  changePassword(current: string | null, next: string): Promise<void>;
+  startMfaSetup(): Promise<MfaSetup>;
+  confirmMfaSetup(code: string): Promise<void>;
+  /** Replaces all backup codes; returns the new ones (shown once). */
+  regenerateBackupCodes(): Promise<string[]>;
+  requestPasswordReset(email: string): Promise<void>;
+  resetPassword(token: string, next: string): Promise<void>;
+  listDevices(): Promise<Device[]>;
+  signOutDevice(id: string): Promise<void>;
+  signOutEverywhere(): Promise<void>;
+}
+
+/** Only clinicians use this app; every other role gets the 403 page. */
+export const isClinical = (u: User | null) => u?.role === "clinician";
+
+/** "Dr. Reyes" → "DR"; "Ana Maria Reyes" → "AM". */
+export function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "?";
+  return words
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+}
