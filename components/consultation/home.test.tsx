@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Providers } from "@/app/providers";
 import type { QueryCreateIn } from "@/lib/api/contract";
 import { useSession, type SessionItem } from "@/lib/session-store";
+import { TEST_USER } from "@/tests/auth-wrapper";
 
 const push = vi.fn();
 let search = new URLSearchParams();
@@ -119,6 +120,40 @@ describe("Home", () => {
     expect(screen.getByLabelText(/^Specialty area/)).toHaveValue("Emergency");
     expect(screen.getByLabelText(/^Medical history/)).toHaveValue("Smoker");
     expect(screen.getByRole("radio", { name: "Male" })).toBeChecked();
+  });
+
+  it("offline, Analyse saves the question and shows Waiting to send in place", async () => {
+    await new Promise<void>((r) => {
+      const req = indexedDB.deleteDatabase("mhai-outbox");
+      req.onsuccess = req.onerror = req.onblocked = () => r();
+    });
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    const pushState = vi.spyOn(window.history, "pushState");
+    const tree = () => (
+      <Providers auth={{ initialUser: TEST_USER }}>
+        <Seeded>
+          <Page />
+        </Seeded>
+      </Providers>
+    );
+    let view!: ReturnType<typeof render>;
+    await act(async () => {
+      view = render(tree());
+    });
+    search = new URLSearchParams("edit=q1");
+    view.rerender(tree());
+    await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
+    await vi.waitFor(() => expect(pushState).toHaveBeenCalled());
+    expect(createQuery).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    const url = String(pushState.mock.calls[0]![2]);
+    expect(url).toMatch(/^\/\?waiting=local-/);
+    search = new URLSearchParams(url.slice(2));
+    view.rerender(tree());
+    expect(
+      await screen.findByRole("heading", { name: "Waiting to send" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/saved securely on this device/)).toBeVisible();
   });
 
   it("asks before New consultation mid-draft, and Discard gives a clean form", async () => {

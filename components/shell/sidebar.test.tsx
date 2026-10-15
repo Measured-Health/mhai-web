@@ -31,6 +31,19 @@ const items = [
 ];
 
 describe("Sidebar", () => {
+  it("labels questions saved offline as waiting, or as couldn't send", () => {
+    renderWithAuth(
+      <Sidebar
+        items={[
+          { ...items[0], id: "local-1", kind: undefined, pending: "waiting" },
+          { ...items[1], id: "local-2", kind: undefined, pending: "failed" },
+        ]}
+      />,
+    );
+    expect(screen.getByText(/Waiting to send ·/)).toBeInTheDocument();
+    expect(screen.getByText(/Couldn't send ·/)).toBeInTheDocument();
+  });
+
   it("lists session history with plain-language status and marks the current one", () => {
     renderWithAuth(<Sidebar items={items} />);
     expect(

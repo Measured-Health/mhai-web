@@ -64,6 +64,29 @@ type Mine = Who & {
   resolved: Record<string, string>;
 };
 
+/** The owner, once known; queueing waits on it right after sign-in. */
+type OwnerWait = {
+  promise: Promise<Who>;
+  resolve(w: Who): void;
+  reject(e: Error): void;
+  settled: boolean;
+};
+function ownerWait(): OwnerWait {
+  const d = { settled: false } as OwnerWait;
+  d.promise = new Promise<Who>((res, rej) => {
+    d.resolve = (w) => {
+      d.settled = true;
+      res(w);
+    };
+    d.reject = (e) => {
+      d.settled = true;
+      rej(e);
+    };
+  });
+  d.promise.catch(() => {}); // a rejection nobody awaited isn't an error
+  return d;
+}
+
 /** Unsent questions and feedback, encrypted on this device, synced when online. */
 export function OutboxProvider({ children }: { children: ReactNode }) {
   const { user, status } = useAuth();
@@ -75,7 +98,7 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
   // Bumped to start a sync from an event: the sync itself runs in an effect.
   const [kick, setKick] = useState(0);
   // Written in effects and handlers only (never during render).
-  const who = useRef<Promise<Who> | null>(null);
+  const who = useRef<OwnerWait | null>(null);
   const running = useRef(false);
   const again = useRef(false);
   const gen = useRef(0);
@@ -121,14 +144,24 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!username) {
-      who.current = null;
+      // Still loading: callers keep waiting. Signed out: they fail.
+      if (status === "signed_out") {
+        who.current?.reject(new Error("Not signed in"));
+        const done = ownerWait();
+        done.reject(new Error("Not signed in"));
+        who.current = done;
+      }
       return;
     }
     let on = true;
-    const p = ownerId(username).then((o) => ({ username, owner: o }));
-    who.current = p;
-    void p.then(async (w) => {
-      if (!on) return;
+    const wait =
+      who.current && !who.current.settled
+        ? who.current
+        : (who.current = ownerWait());
+    void ownerId(username).then(async (o) => {
+      if (!on) return; // the next user's effect settles `wait`
+      const w = { username, owner: o };
+      wait.resolve(w);
       setMine((m) =>
         m?.username === username && m.loaded
           ? m
@@ -140,7 +173,7 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
     return () => {
       on = false;
     };
-  }, [username, load]);
+  }, [username, status, load]);
 
   const sync = useEffectEvent(async () => {
     if (!cur) return;
@@ -231,7 +264,7 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
       ready: owner !== null,
       loaded,
       async queueQuery(q) {
-        const w = await (who.current ?? notSignedIn());
+        const w = await (who.current ??= ownerWait()).promise;
         const localId = `local-${crypto.randomUUID()}`;
         await box.add(w.owner, "query", { q, localId });
         await load(w);
@@ -239,13 +272,13 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
         return localId;
       },
       async queueFeedback(f) {
-        const w = await (who.current ?? notSignedIn());
+        const w = await (who.current ??= ownerWait()).promise;
         await box.add(w.owner, "feedback", { f });
         await load(w);
         setKick((n) => n + 1);
       },
       async discard(id) {
-        const w = await (who.current ?? notSignedIn());
+        const w = await (who.current ??= ownerWait()).promise;
         const found = (await box.list(w.owner)).find(
           (i) =>
             i.id === id || (i.kind === "query" && i.payload.localId === id),
@@ -254,7 +287,7 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
         await load(w);
       },
       async clearMine() {
-        const w = await (who.current ?? notSignedIn());
+        const w = await (who.current ??= ownerWait()).promise;
         await box.clearOwner(w.owner);
         await load(w);
       },

@@ -1,13 +1,57 @@
-import { waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useEffect, useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderWithAuth } from "@/tests/auth-wrapper";
+import { useAuth } from "@/lib/auth/auth-context";
+import { OutboxProvider, useOutbox } from "@/lib/offline/outbox-context";
+import { AuthTestProvider, renderWithAuth } from "@/tests/auth-wrapper";
 import { SignOut } from "./sign-out";
 
 const replace = vi.fn();
+const back = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace }),
+  useRouter: () => ({ push: vi.fn(), replace, back }),
 }));
-beforeEach(() => replace.mockClear());
+beforeEach(async () => {
+  replace.mockClear();
+  back.mockClear();
+  await new Promise<void>((r) => {
+    const req = indexedDB.deleteDatabase("mhai-outbox");
+    req.onsuccess = req.onerror = req.onblocked = () => r();
+  });
+});
+
+const Q = {
+  clinical_question: "Central chest pain for 40 minutes. Likely diagnosis?",
+  urgency: "urgent" as const,
+  patient_data: { age: 54, sex: "male" as const, symptoms: ["Chest pain"] },
+};
+
+/** Queues one question, then opens /sign-out. */
+function QueueThenSignOut() {
+  const { queueQuery, items } = useOutbox();
+  const once = useRef(false);
+  useEffect(() => {
+    if (once.current) return;
+    once.current = true;
+    void queueQuery(Q);
+  }, [queueQuery]);
+  return items.length ? <SignOut /> : null;
+}
+function Status() {
+  return <output data-testid="auth">{useAuth().status}</output>;
+}
+const mountWithUnsent = () =>
+  act(async () => {
+    render(
+      <AuthTestProvider>
+        <OutboxProvider>
+          <Status />
+          <QueueThenSignOut />
+        </OutboxProvider>
+      </AuthTestProvider>,
+    );
+  });
 
 describe("SignOut", () => {
   it("signs out and lands on sign-in", async () => {
@@ -18,5 +62,30 @@ describe("SignOut", () => {
   it("sends a signed-out visitor to sign-in", async () => {
     renderWithAuth(<SignOut />, null);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
+  });
+  it("asks before deleting unsent items; Stay signed in goes back", async () => {
+    await mountWithUnsent();
+    expect(
+      await screen.findByRole("heading", { name: "You have 1 unsent item" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Signing out deletes them from this device."),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Stay signed in" }),
+    );
+    expect(back).toHaveBeenCalled();
+    expect(screen.getByTestId("auth")).toHaveTextContent("signed_in");
+  });
+  it("Sign out and delete clears the items, then signs out once", async () => {
+    await mountWithUnsent();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Sign out and delete" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("auth")).toHaveTextContent("signed_out"),
+    );
+    expect(replace).toHaveBeenCalledWith("/sign-in");
+    expect(replace).toHaveBeenCalledTimes(1);
   });
 });

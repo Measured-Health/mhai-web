@@ -7,6 +7,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import { AuthProvider } from "@/lib/auth/auth-context";
 import type { AuthClient, User } from "@/lib/auth/types";
 import { retryDelay, shouldRetry } from "@/lib/network";
+import { OutboxProvider } from "@/lib/offline/outbox-context";
 import { SessionProvider } from "@/lib/session-store";
 
 export function Providers({
@@ -38,7 +39,9 @@ export function Providers({
           <NetworkEffects />
           <AuthProvider client={auth?.client} initialUser={auth?.initialUser}>
             {/* Idle sign-out on every route, including /print, while signed in. */}
-            <SessionGuard>{children}</SessionGuard>
+            <OutboxProvider>
+              <SessionGuard>{children}</SessionGuard>
+            </OutboxProvider>
           </AuthProvider>
         </ToastProvider>
       </SessionProvider>

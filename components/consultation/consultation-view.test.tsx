@@ -132,6 +132,33 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("ConsultationView", () => {
+  it("shows Waiting to send for a question saved offline, without polling", async () => {
+    const LOCAL: SessionItem = { ...ITEM, id: "local-1", pending: "waiting" };
+    function SeedLocal({ children }: { children: ReactNode }) {
+      const { add, get } = useSession();
+      useEffect(() => add(LOCAL), [add]);
+      return get("local-1") ? children : null;
+    }
+    status.mockClear();
+    render(
+      <Providers>
+        <SeedLocal>
+          <ConsultationView id="local-1" />
+        </SeedLocal>
+      </Providers>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Waiting to send" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Analysing your question" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Edit question/ }),
+    );
+    expect(push).toHaveBeenCalledWith("/?edit=local-1");
+  });
+
   it("shows the analysing view while the query runs", async () => {
     mount();
     expect(

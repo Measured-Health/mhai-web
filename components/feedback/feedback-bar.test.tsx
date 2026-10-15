@@ -8,6 +8,8 @@ import { FIXTURES } from "@/lib/api/fixtures";
 import { toResultView } from "@/lib/result-view";
 import { SessionProvider, useSession } from "@/lib/session-store";
 import { ToastProvider } from "../ui/toast";
+import { OutboxProvider } from "@/lib/offline/outbox-context";
+import { AuthTestProvider } from "@/tests/auth-wrapper";
 
 const send = vi.fn(async (f: { action: string }) =>
   f.action === "correct"
@@ -197,5 +199,27 @@ describe("FeedbackBar", () => {
     expect(screen.queryByText(/agreement was recorded/)).toBeNull();
     expect(screen.getByTestId("agreed")).toHaveTextContent("none");
     expect(screen.getByRole("button", { name: /I agree/ })).toBeEnabled();
+  });
+  it("offline, saves agreement on this device and says it will be sent", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    render(
+      <AuthTestProvider>
+        <OutboxProvider>
+          <ToastProvider>
+            <Seed />
+            <Probe />
+            <FeedbackBar queryId="q1" view={toResultView(FIXTURES.high)} />
+          </ToastProvider>
+        </OutboxProvider>
+      </AuthTestProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /I agree/ }));
+    expect(await screen.findByText("Saved on this device")).toBeInTheDocument();
+    expect(
+      screen.getByText("It will be sent when you're back online."),
+    ).toBeInTheDocument();
+    expect(send).not.toHaveBeenCalled();
+    expect(screen.getByTestId("feedback")).toHaveTextContent("agree");
+    vi.restoreAllMocks();
   });
 });

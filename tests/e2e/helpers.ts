@@ -42,15 +42,55 @@ export async function expectNoForbiddenWords(page: Page) {
   expect(names).not.toMatch(FORBIDDEN);
 }
 
+/**
+ * Nothing in browser storage. The one exception (CONTRIBUTING) is the offline
+ * outbox database, `mhai-outbox`, and only while its `items` store is empty.
+ */
 export async function expectNoStorage(page: Page) {
   const state = await page.evaluate(async () => {
     const dbs = indexedDB.databases ? await indexedDB.databases() : [];
+    const others = dbs.filter((d) => d.name !== "mhai-outbox").length;
+    const outboxItems = dbs.some((d) => d.name === "mhai-outbox")
+      ? await new Promise<number>((resolve, reject) => {
+          const open = indexedDB.open("mhai-outbox");
+          open.onerror = () => reject(open.error);
+          open.onsuccess = () => {
+            const db = open.result;
+            const req = db.transaction("items").objectStore("items").count();
+            req.onsuccess = () => {
+              db.close();
+              resolve(req.result);
+            };
+            req.onerror = () => reject(req.error);
+          };
+        })
+      : 0;
     return {
       local: localStorage.length,
       session: sessionStorage.length,
-      idb: dbs.length,
+      idb: others,
+      outboxItems,
       cookie: document.cookie,
     };
   });
-  expect(state).toEqual({ local: 0, session: 0, idb: 0, cookie: "" });
+  expect(state).toEqual({
+    local: 0,
+    session: 0,
+    idb: 0,
+    outboxItems: 0,
+    cookie: "",
+  });
+}
+
+/** The sidebar's "N waiting to send" row, visible (opens the menu on phones). */
+export async function expectOutboxIndicator(page: Page, text: string) {
+  if (isMobile(page)) {
+    await page.getByRole("button", { name: "Open menu" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Menu" }).getByRole("status"),
+    ).toHaveText(text);
+    await page.keyboard.press("Escape");
+  } else {
+    await expect(page.getByText(text).filter({ visible: true })).toBeVisible();
+  }
 }

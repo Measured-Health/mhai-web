@@ -6,6 +6,7 @@ import { historyStatus, type SessionItem } from "@/lib/session-store";
 import { useNow } from "@/lib/hooks/use-now";
 import { Logo, Mark } from "../ui/brand";
 import { cn } from "../ui/cn";
+import { OutboxIndicator } from "../states/outbox-indicator";
 import { AccountMenu } from "./account-menu";
 import { groupHistory } from "./group-history";
 
@@ -65,6 +66,7 @@ export function Sidebar({
         <Plus aria-hidden className="size-5" />
         <span className={label}>New consultation</span>
       </Link>
+      <OutboxIndicator rail={rail} />
       <button
         type="button"
         onClick={onOpenSearch}
