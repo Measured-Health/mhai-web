@@ -17,6 +17,7 @@ import {
   readSession,
   writeSession,
 } from "@/lib/server/session";
+import { __resetRefreshCacheForTests } from "@/lib/server/refresh";
 import { TEST_USER } from "@/tests/auth-wrapper";
 import { GET, POST } from "./[...path]/route";
 
@@ -27,6 +28,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockReset();
   jar.values.clear();
+  __resetRefreshCacheForTests();
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -113,6 +115,9 @@ describe("clinical API proxy", () => {
     [["queries", "..", "admin", "users"]],
     [["queries", ""]],
     [["auth", "login"]],
+    [["queries", "../admin/users"]],
+    [["queries", "a\\b"]],
+    [["queries", "%2e"]],
   ])("refuses %j", async (path) => {
     await session();
     const res = await GET(get(), ctx(...path));
@@ -171,5 +176,86 @@ describe("clinical API proxy", () => {
     fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
     const res = await GET(get(), ctx("queries", "q1"));
     expect(res.status).toBe(503);
+  });
+
+  it("forwards a normal nested path", async () => {
+    await session();
+    fetchMock.mockResolvedValueOnce(Response.json({}));
+    const res = await GET(get(), ctx("queries", "q-1", "result"));
+    expect(res.status).toBe(200);
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(
+      "http://api.test/api/v1/queries/q-1/result",
+    );
+  });
+
+  it("never echoes upstream error text", async () => {
+    await session();
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { code: "validation_failed", detail: "secret detail" },
+        { status: 422 },
+      ),
+    );
+    const res = await GET(get(), ctx("queries", "q1"));
+    expect(res.status).toBe(422);
+    const text = await res.text();
+    expect(JSON.parse(text)).toEqual({ code: "validation_failed" });
+    expect(text).not.toContain("secret detail");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+
+    fetchMock.mockResolvedValueOnce(
+      new Response("<html>boom</html>", {
+        status: 500,
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+    const bad = await GET(get(), ctx("queries", "q1"));
+    expect(bad.status).toBe(500);
+    expect(await bad.json()).toEqual({ code: "error" });
+  });
+
+  it("keeps the old token when the refresh fails", async () => {
+    await session(60_000);
+    const before = jar.values.get(SESSION_COOKIE);
+    fetchMock
+      .mockResolvedValueOnce(Response.json({}, { status: 500 }))
+      .mockResolvedValueOnce(Response.json({}));
+    await GET(get(), ctx("queries", "q1"));
+    expect(
+      (fetchMock.mock.calls[1] as [string, RequestInit])[1].headers,
+    ).toMatchObject({ Authorization: "Bearer tok" });
+    expect(jar.values.get(SESSION_COOKIE)).toBe(before);
+  });
+
+  it("ignores a malformed refresh reply", async () => {
+    await session(60_000);
+    const before = jar.values.get(SESSION_COOKIE);
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ access_token: "t2" }))
+      .mockResolvedValueOnce(Response.json({}));
+    await GET(get(), ctx("queries", "q1"));
+    expect(
+      (fetchMock.mock.calls[1] as [string, RequestInit])[1].headers,
+    ).toMatchObject({ Authorization: "Bearer tok" });
+    expect(jar.values.get(SESSION_COOKIE)).toBe(before);
+  });
+
+  it("refreshes once for concurrent requests", async () => {
+    await session(60_000);
+    fetchMock.mockImplementation(async (url: string) =>
+      url.endsWith("/auth/refresh")
+        ? Response.json({ access_token: "t2", expires_in: 900 })
+        : Response.json({}),
+    );
+    await Promise.all([
+      GET(get(), ctx("queries", "q1")),
+      GET(get(), ctx("queries", "q2")),
+    ]);
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls.filter(([u]) => u.endsWith("/auth/refresh"))).toHaveLength(1);
+    const fwd = calls.filter(([u]) => !u.endsWith("/auth/refresh"));
+    expect(fwd).toHaveLength(2);
+    for (const [, init] of fwd)
+      expect(init.headers).toMatchObject({ Authorization: "Bearer t2" });
   });
 });

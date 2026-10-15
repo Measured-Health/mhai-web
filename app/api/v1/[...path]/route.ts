@@ -1,5 +1,6 @@
-import { api, apiBase } from "@/lib/server/api";
+import { apiBase } from "@/lib/server/api";
 import { forbidden, json, sameOrigin } from "@/lib/server/http";
+import { refreshOnce } from "@/lib/server/refresh";
 import {
   clearSession,
   readSession,
@@ -10,24 +11,15 @@ import {
 const ALLOWED = new Set(["queries", "feedback", "corrections", "readyz"]);
 const REFRESH_WITHIN_MS = 5 * 60_000;
 const MAX_BODY = 64 * 1024;
+const SEGMENT = /^[A-Za-z0-9_-]+$/; // ids are opaque; no dots, slashes or escapes
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9-]{1,64}$/;
 
 async function refresh(s: ServerSession): Promise<ServerSession> {
-  try {
-    const r = await api<{ access_token: string; expires_in: number }>(
-      "/auth/refresh",
-      { method: "POST", token: s.token },
-    );
-    const next = {
-      ...s,
-      token: r.access_token,
-      expiresAt: Date.now() + r.expires_in * 1000,
-    };
-    await writeSession(next);
-    return next;
-  } catch {
-    return s; // still valid for a few minutes; the next call tries again
-  }
+  const r = await refreshOnce(s.token);
+  if (!r) return s; // still valid for a few minutes; the next call tries again
+  const next = { ...s, ...r };
+  await writeSession(next);
+  return next;
 }
 
 /** Same-origin proxy for clinical calls: adds the token the browser never sees. */
@@ -35,7 +27,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   const { path } = await ctx.params;
   if (
     !ALLOWED.has(path[0] ?? "") ||
-    path.some((p) => p === "" || p === "." || p === "..")
+    !path.every((p) => SEGMENT.test(p))
   )
     return json(404, { code: "not_found" });
   if (req.method !== "GET" && !sameOrigin(req)) return forbidden();
@@ -73,6 +65,13 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   if (res.status === 401) {
     await clearSession();
     return json(401, { code: "session_expired" });
+  }
+  if (!res.ok) {
+    // Never echo upstream error text: keep only the problem code.
+    const p = (await res.json().catch(() => null)) as { code?: unknown } | null;
+    return json(res.status, {
+      code: typeof p?.code === "string" ? p.code : "error",
+    });
   }
   return new Response(res.body, {
     status: res.status,
