@@ -50,7 +50,7 @@ or shown.
 
 - **On your machine:** `NEXT_PUBLIC_USE_MOCK=true npm run build && npx next start`
   (the flag is read at build time, so it must be set for the build)
-- **For the team:** https://mhai-demo.measured-health.org, behind a shared
+- **For the team:** https://demo.measured-health.org, behind a shared
   password. Every merge to `main` that passes CI deploys there; see
   [deploy/README.md](deploy/README.md).
 - **One-time setup (maintainer):** create the label once with

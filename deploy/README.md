@@ -14,7 +14,7 @@ and health-check. It never touches the EMR containers or nginx.
 
 ## One-time setup on the instance
 
-Run as `ubuntu`. The demo is at `mhai-demo.measured-health.org`; its DNS A
+Run as `ubuntu`. The demo is at `demo.measured-health.org`; its DNS A
 record must point at the instance (3.239.87.6).
 
 1. Compose file:
@@ -43,7 +43,7 @@ record must point at the instance (3.239.87.6).
 4. TLS, once DNS resolves to the instance:
 
    ```bash
-   sudo certbot --nginx -d mhai-demo.measured-health.org -m <ops-email> --agree-tos
+   sudo certbot --nginx -d demo.measured-health.org -m <ops-email> --agree-tos
    sudo nginx -t && sudo systemctl reload nginx
    ```
 
