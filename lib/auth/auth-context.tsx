@@ -13,6 +13,7 @@ import {
 } from "react";
 import { useSession } from "../session-store";
 import { getAuthClient } from "./client";
+import { onUnauthorized } from "./events";
 import {
   isClinical,
   type AuthClient,
@@ -131,6 +132,9 @@ export function AuthProvider({
     },
     [client, history, router],
   );
+
+  // A live call found the session gone: sign out once, saying why.
+  useEffect(() => onUnauthorized(() => void signOut("expired")), [signOut]);
 
   const value = useMemo<AuthCtx>(
     () => ({

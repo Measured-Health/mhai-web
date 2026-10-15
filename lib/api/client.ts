@@ -6,6 +6,7 @@ import type {
   QueryStatusOut,
   Readiness,
 } from "./contract";
+import { createLiveClient } from "./live";
 import { createMockClient } from "./mock";
 
 export interface MhaiClient {
@@ -18,12 +19,10 @@ export interface MhaiClient {
 
 let client: MhaiClient | undefined;
 
-/** Plan 1 ships mock mode only. Plan 2 adds the live client behind the BFF. */
+/** Mock data when NEXT_PUBLIC_USE_MOCK=true; otherwise the live API via the BFF. */
 export function getClient(): MhaiClient {
-  if (process.env.NEXT_PUBLIC_USE_MOCK !== "true") {
-    throw new Error(
-      "Live API client arrives in Plan 2. Set NEXT_PUBLIC_USE_MOCK=true.",
-    );
-  }
-  return (client ??= createMockClient());
+  return (client ??=
+    process.env.NEXT_PUBLIC_USE_MOCK === "true"
+      ? createMockClient()
+      : createLiveClient());
 }

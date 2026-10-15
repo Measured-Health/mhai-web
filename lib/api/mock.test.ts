@@ -138,8 +138,21 @@ describe("getClient", () => {
     expect(getClient()).toBe(getClient());
   });
 
-  it("refuses to run without mock mode in Plan 1", () => {
+  it("uses the live client outside mock mode", async () => {
     vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "false");
-    expect(() => getClient()).toThrow(/Plan 2/);
+    vi.resetModules();
+    const { getClient: fresh } = await import("./client");
+    const c = fresh();
+    for (const m of [
+      "createQuery",
+      "getStatus",
+      "getResult",
+      "sendFeedback",
+      "getReadiness",
+    ])
+      expect(typeof (c as unknown as Record<string, unknown>)[m]).toBe(
+        "function",
+      );
+    vi.unstubAllEnvs();
   });
 });
