@@ -43,18 +43,18 @@ arrives after about 9 seconds.
 ### Share the demo
 
 The demo runs on sample data (`NEXT_PUBLIC_USE_MOCK=true`). A ribbon on
-every screen says so, and its **Give feedback** link opens a GitHub issue
-form. Feedback lands under the `design-feedback` label. The link carries
-only the page path (ids masked) and the screen size, never anything typed
-or shown.
+every screen says so, and its **Give feedback** button opens a short form.
+The server appends each message to a file for the team to review (see
+[deploy/README.md](deploy/README.md)); it never goes to GitHub. Besides the
+message and an optional name or role, it carries only the page path (ids
+masked) and the screen size, never anything else typed or shown.
 
 - **On your machine:** `NEXT_PUBLIC_USE_MOCK=true npm run build && npx next start`
-  (the flag is read at build time, so it must be set for the build)
+  (the flag is read at build time, so it must be set for the build).
+  Feedback is saved to `.feedback/feedback.jsonl` in development.
 - **For the team:** https://demo.measured-health.org (open, not listed
   by search engines). Every merge to `main` that passes CI deploys there; see
   [deploy/README.md](deploy/README.md).
-- **One-time setup (maintainer):** create the label once with
-  `gh label create design-feedback --color 15999E --description "Feedback from the demo"`
 
 ### Tests
 

@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 3100;
+/** Where the e2e server saves demo feedback (inside the ignored test output). */
+export const FEEDBACK_LOG = "test-results/e2e-feedback.jsonl";
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -19,7 +21,7 @@ export default defineConfig({
     timeout: 240_000,
     // Port 3100 is dedicated to this suite, so reuse is safe locally.
     reuseExistingServer: !process.env.CI,
-    env: { NEXT_PUBLIC_USE_MOCK: "true" },
+    env: { NEXT_PUBLIC_USE_MOCK: "true", FEEDBACK_LOG_PATH: FEEDBACK_LOG },
   },
   projects: [
     {
