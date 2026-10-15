@@ -13,10 +13,15 @@ const body = {
   viewport: "390×844",
   website: "",
 };
-const post = (b: unknown, ip = "1.2.3.4") =>
+const post = (b: unknown, ip = "1.2.3.4", origin = "http://demo") =>
   new Request("http://demo/api/feedback", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Real-IP": ip },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Real-IP": ip,
+      host: "demo",
+      origin,
+    },
     body: typeof b === "string" ? b : JSON.stringify(b),
   });
 
@@ -40,6 +45,13 @@ describe("POST /api/feedback", () => {
       "/tmp/fb.jsonl",
     );
     expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+  it("refuses a mismatched Origin, and saves nothing", async () => {
+    const res = await (
+      await load()
+    )(post(body, "1.2.3.4", "https://evil.test"));
+    expect(res.status).toBe(403);
+    expect(appendFeedback).not.toHaveBeenCalled();
   });
   it("is unavailable when the file can't be written", async () => {
     appendFeedback.mockRejectedValue(new Error("EACCES"));

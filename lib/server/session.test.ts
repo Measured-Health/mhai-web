@@ -1,0 +1,114 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const jar = vi.hoisted(() => {
+  const values = new Map<string, string>();
+  const options = new Map<string, Record<string, unknown>>();
+  return {
+    values,
+    options,
+    get: (n: string) =>
+      values.has(n) ? { name: n, value: values.get(n)! } : undefined,
+    set: (n: string, v: string, o: Record<string, unknown>) => {
+      values.set(n, v);
+      options.set(n, o);
+    },
+    delete: (n: string) => values.delete(n),
+  };
+});
+vi.mock("next/headers", () => ({ cookies: async () => jar }));
+
+import {
+  MFA_COOKIE,
+  SESSION_COOKIE,
+  clearSession,
+  readMfa,
+  readSession,
+  readTrust,
+  seal,
+  startSession,
+  unseal,
+  writeMfa,
+  writeTrust,
+} from "./session";
+
+beforeEach(() => {
+  vi.stubEnv("SESSION_SECRET", "x".repeat(32));
+  jar.values.clear();
+  jar.options.clear();
+});
+afterEach(() => vi.unstubAllEnvs());
+
+const LOGIN = {
+  access_token: "tok",
+  expires_in: 900,
+  user: { username: "a.reyes", role: "clinician", mfa_enabled: true },
+};
+
+describe("seal / unseal", () => {
+  it("round-trips, and two seals of the same value differ", () => {
+    const a = seal({ n: 1 });
+    expect(unseal(a)).toEqual({ n: 1 });
+    expect(seal({ n: 1 })).not.toBe(a);
+  });
+  it("rejects tampering and garbage", () => {
+    const a = seal({ n: 1 });
+    const flipped = a.slice(0, -2) + (a.endsWith("A") ? "BB" : "AA");
+    expect(unseal(flipped)).toBeNull();
+    expect(unseal("not-a-cookie")).toBeNull();
+    expect(unseal(undefined)).toBeNull();
+  });
+  it("rejects a value sealed with another secret", () => {
+    const a = seal({ n: 1 });
+    vi.stubEnv("SESSION_SECRET", "y".repeat(32));
+    expect(unseal(a)).toBeNull();
+  });
+  it("fails loudly without a strong secret", () => {
+    vi.stubEnv("SESSION_SECRET", "short");
+    expect(() => seal({})).toThrow(/SESSION_SECRET/);
+    expect(() => unseal("abc")).toThrow(/SESSION_SECRET/);
+  });
+});
+
+describe("session cookies", () => {
+  it("starts a session in a sealed, httpOnly, strict cookie for the token's life", async () => {
+    const r = await startSession(LOGIN, 1_000);
+    expect(r).toMatchObject({
+      status: "signed_in",
+      user: { role: "clinician" },
+      steps: [],
+    });
+    const raw = jar.values.get(SESSION_COOKIE)!;
+    expect(raw).not.toContain("tok");
+    expect(jar.options.get(SESSION_COOKIE)).toMatchObject({
+      httpOnly: true,
+      sameSite: "strict",
+      path: "/",
+      maxAge: 900,
+    });
+    expect(await readSession(1_000)).toMatchObject({
+      token: "tok",
+      expiresAt: 901_000,
+    });
+  });
+  it("treats an expired session as none", async () => {
+    await startSession(LOGIN, 0);
+    expect(await readSession(900_001)).toBeNull();
+  });
+  it("keeps the MFA step token for 5 minutes, and clears both cookies", async () => {
+    await writeMfa("mfa-tok", 0);
+    expect(jar.options.get(MFA_COOKIE)).toMatchObject({
+      maxAge: 300,
+      httpOnly: true,
+    });
+    expect(await readMfa(299_000)).toMatchObject({ mfaToken: "mfa-tok" });
+    expect(await readMfa(300_001)).toBeNull();
+    await startSession(LOGIN);
+    await clearSession();
+    expect(jar.values.size).toBe(0);
+  });
+  it("keeps the trusted-device token across sign-out", async () => {
+    await writeTrust("dev-1");
+    await clearSession();
+    expect(await readTrust()).toBe("dev-1");
+  });
+});
