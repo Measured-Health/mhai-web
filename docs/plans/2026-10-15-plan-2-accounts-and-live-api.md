@@ -2,29 +2,71 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Put sign-in, first sign-in, password reset, the account page and
-the 403 "wrong app" page in front of the Plan 1 clinical flow, mock first.
-Add the server-side session (BFF) and the live API adapters, written
-against the backend's approved API design, so the app can switch to the
-real API without UI changes.
+**Goal:** Build the full sign-in and account experience in front of the
+Plan 1 clinical flow. It covers:
+
+- sign-in, including hospital sign-on;
+- first sign-in;
+- password reset;
+- the account page, with devices and backup codes;
+- the 403 "wrong app" page.
+
+Also add the server-side session (BFF), the live API adapters and support
+for weak or patchy networks. Everything runs on sample data now and
+switches to the real API without UI changes.
 
 **Architecture:**
 
-- UI reads auth through a typed `AuthClient`, the same pattern as Plan 1's
+- **Auth goes through a typed `AuthClient`,** the same pattern as Plan 1's
   `MhaiClient`. There are two implementations:
-  - `createMockAuthClient()` (memory only, used when
-    `NEXT_PUBLIC_USE_MOCK=true`);
+  - `createMockAuthClient()`: memory only, with sample accounts, used
+    when `NEXT_PUBLIC_USE_MOCK=true`;
   - `createLiveAuthClient()`, which calls this app's own route handlers
     under `/api/auth/*`.
-- Those route handlers (the BFF) call the MHAI API, keep its token in a
+- **The BFF:** those route handlers call the MHAI API, keep its token in a
   sealed `httpOnly` cookie, and proxy clinical calls through
   `/api/v1/*`. Browser JavaScript never sees a token.
-- An `AuthProvider` holds the signed-in user in memory. An `AuthGate` keeps
-  every clinical screen behind sign-in, first sign-in and the clinician
-  role.
-- A `Capabilities` object says what the current backend supports, and the
-  UI hides the rest. So the mock shows the whole design, and the live app
-  shows only what the API can do.
+- **The gate:** an `AuthProvider` holds the signed-in user in memory, and
+  an `AuthGate` keeps every clinical screen behind sign-in, first sign-in
+  and the clinician role.
+- **Every feature is built and switched on, in mock and live.** Where the
+  backend design doesn't define an endpoint yet, this plan uses an
+  **assumed contract**: the table below, inferred from how the backend
+  spec designs its neighbours. Each assumption lives in one BFF route and
+  in the API types, so aligning with the real backend is a small, local
+  change.
+- **`Capabilities`** stays as a switch for a backend that ships a feature
+  later or never. It is all `true` today.
+
+**The assumed backend contract.** Base `/api/v1`. Errors are
+`problem+json` with `code`. These sit beside the spec's real endpoints
+(`/auth/login`, `/auth/mfa/*`, `/auth/refresh`, `/auth/logout`,
+`/auth/password`, `/auth/oidc/*`, `/queries`, `/feedback`, `/readyz`):
+
+| Feature (spec §10)                          | Assumed endpoint                                                                                                                                                                               |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who am I, incl. terms and backup-code count | `user` in the login reply gains `email`, `display_name`, `full_name`, `role_title`, `specialty`, `hospital`, `mfa_enabled`, `must_change_password`, `terms_accepted_at`, `recovery_codes_left` |
+| Accept terms (8)                            | `POST /auth/terms {version}` → 204                                                                                                                                                             |
+| Password reset (4)                          | `POST /auth/password/forgot {email}` → 202 (same reply for any email); `POST /auth/password/reset {token, new_password}` → 204; codes `invalid_token`, `token_expired`, `validation_failed`    |
+| Devices (5)                                 | `GET /auth/sessions` → `[{id, device, location, last_seen_at, current}]`; `DELETE /auth/sessions/{id}` → 204; `POST /auth/sessions/revoke-all` → 204                                           |
+| Trust this device (7)                       | `POST /auth/mfa/challenge {…, trust_device}` may return `device_token`; send it back as `device_token` on `POST /auth/login`                                                                   |
+| Backup codes (7)                            | `POST /auth/mfa/recovery-codes` → `{recovery_codes}` (replaces the old ones)                                                                                                                   |
+| Hospital sign-on (spec §4.1, designed)      | `GET /auth/oidc/login?return_to=` → IdP → our `/sign-in/hospital?code=` → `POST /auth/oidc/exchange {code}`                                                                                    |
+| Retry-safe submit (new)                     | `Idempotency-Key` header on `POST /queries` and `POST /feedback`                                                                                                                               |
+
+**Weak and patchy networks.** Clinicians in resource-limited clinics are
+the product's audience (the brand panel says so). So the app must work on
+2G/3G and survive drops:
+
+- adaptive polling that pauses while offline;
+- retries with backoff for network errors only;
+- retry-safe submits (`Idempotency-Key`);
+- "send when back online" for a finished form (memory only);
+- a data-saver mode (no motion, slower polling);
+- gzip on the demo server;
+- an end-to-end test on a throttled "slow 3G" connection.
+
+The backend's side is listed as new spec §10 items (Task 15).
 
 **Tech Stack:** as Plan 1, plus:
 
@@ -42,37 +84,32 @@ items 4–8 and §11. Also read:
   (the 403 card).
 
 The backend contract is the approved design
-`mhai-multiagent/docs/specs/2026-10-08-api-gateway-phase1-design.md` §4.
-The backend API is **not built yet**, so the live half is written and
-tested against that design, using a fake upstream.
+`mhai-multiagent/docs/specs/2026-10-08-api-gateway-phase1-design.md` §4,
+plus the assumed endpoints above. The backend API is **not built yet**,
+so the live half is tested against a fake upstream.
 
 **Not in this plan:**
 
-- **Types generated from OpenAPI.** The backend has no committed
-  `openapi.json` yet (its spec §4 plans `mhai openapi export`), so
-  `lib/api/contract.ts` stays hand-written. A follow-up swaps it for
-  `openapi-typescript` output once the file exists.
-- **Live features the backend design doesn't include yet** (spec §10).
-  The capabilities flags hide them, and the mock shows them:
-  - hospital single sign-on (backend Plan 3);
-  - email as the login name;
-  - password reset by email;
-  - devices and "sign out everywhere";
-  - "trust this device";
-  - a server record of accepted terms;
-  - viewing or regenerating backup codes.
+- **Generated OpenAPI types.** There's no `openapi.json` yet, so
+  `lib/api/contract.ts` and the new `lib/api/auth-contract.ts` are written
+  by hand from the backend spec and the assumed table above. When the
+  backend commits `openapi.json`, swap in `openapi-typescript` output and
+  fix any differences in the BFF routes.
 - **Plan 3:** My feedback & corrections (including the account page's
   feedback stats) and the review queue.
 - **Plan 4:** the hospital admin app.
 
-**Mock first:** the demo keeps running on mock data, with the sign-in
-screens in front. A hint on the sign-in page tells testers how to reach
-each state:
+**Sample accounts (mock):** the sign-in page lists sample accounts that
+fill the form in one tap:
 
-- any email and password signs in;
-- two-step code `123456`;
-- emails starting `mfa`, `new`, `admin` or `locked`;
-- the password `wrong`.
+- a clinician who signs straight in;
+- a clinician with two-step (code `123456`);
+- a new account (first sign-in);
+- a hospital admin (the 403 page);
+- a locked account.
+
+Any other email and password also signs in, and the password `wrong`
+counts down to a lock.
 
 ## Global Constraints
 
@@ -96,27 +133,35 @@ each state:
     (`httpOnly`, `SameSite=Strict`, `Path=/`, `Secure` in production).
   - The MFA step token lives only in the sealed `mhai_mfa` cookie (same
     flags, 5 minutes).
-  - Seal both with AES-256-GCM, keyed from `SESSION_SECRET`, which must be
-    ≥32 characters. Live mode refuses to start a session without it.
+  - The trusted-device token lives only in the sealed `mhai_trusted`
+    cookie (same flags, 30 days).
+  - Seal all three with AES-256-GCM, keyed from `SESSION_SECRET`, which
+    must be ≥32 characters. Live mode refuses to start a session without
+    it.
 - **Nothing about the account goes in browser storage:** no passwords,
   codes, backup codes, emails or user objects in `localStorage`,
-  `sessionStorage`, IndexedDB or the URL. Reset tokens arrive in the URL
-  from the email; strip them from the address bar as soon as they're
-  read.
+  `sessionStorage`, IndexedDB or the URL. Reset and sign-on codes arrive
+  in the URL; strip them from the address bar as soon as they're read.
 - **Generic sign-in errors:** never reveal whether an account or email
   exists. The forgot-password reply is the same either way.
-- **Show only what the backend supports:** read `capabilities` and hide
-  the rest. Never show an attempt count, device or date that the API
-  didn't give.
+- **Show only what the data has:** never show an attempt count, device,
+  date or backup-code count that the API didn't give. Hide the element
+  instead.
 - **Never send a user or clinician id from the client.** The BFF adds the
   token, and the API knows who you are.
-- **Same-origin writes:** every BFF `POST` checks that `Origin` matches
-  `Host`, and otherwise returns 403 `{code:"forbidden"}`.
+- **Same-origin writes:** every BFF `POST` or `DELETE` checks that
+  `Origin` matches `Host`, and otherwise returns 403 `{code:"forbidden"}`.
 - **BFF responses** send `Cache-Control: no-store`, and never echo
   upstream error text. The body is `{code}` only.
 - **Clinical app is for clinicians.** Any other role (`admin`, `auditor`,
   `researcher`, or anything unknown) sees the 403 page, never a clinical
   screen.
+- **Weak networks:**
+  - retry only network failures and 5xx, with exponential backoff and
+    jitter, never 4xx;
+  - every write that may be retried carries an `Idempotency-Key`;
+  - nothing queued for later is ever written to storage: memory only,
+    cleared on sign-out.
 - **Commits:** imperative subject ≤72 characters, and **no AI
   attribution**. Work on branch `agent/plan-2-accounts`; humans merge.
 
@@ -143,6 +188,20 @@ each state:
 5. **The API is down or times out during sign-in.** Expected: "We can't
    reach MHAI right now", never "wrong password", and the attempt counter
    untouched. Tested in Tasks 4 and 11.
+6. **The connection drops or crawls mid-consultation:**
+   - offline while analysing;
+   - a request that times out;
+   - a slow 3G link.
+
+   Expected:
+   - polling pauses while offline and resumes on reconnect, and the time
+     offline doesn't count towards "stalled";
+   - network errors retry with backoff, and 4xx never retry;
+   - a retried submit never creates a second consultation (same
+     `Idempotency-Key`);
+   - the whole flow completes on slow 3G.
+
+   Tested in Task 14.
 
 ---
 
@@ -163,8 +222,10 @@ lib/api/
 lib/server/
   session.ts               seal/unseal, cookie names and options, read/write session
   api.ts                   api(): MHAI API fetch with timeout + problem+json → UpstreamError
-  map-user.ts              toUser(), stepsFor()
-  http.ts                  json(), sameOrigin(), authErrorResponse()
+  map-user.ts              toUser(), stepsFor(), toDevice()
+  http.ts                  json(), sameOrigin(), forbidden(), authCode()
+lib/api/auth-contract.ts   API auth types (spec + assumed contract), replaced by OpenAPI later
+lib/network.ts             useNetwork(), pollDelay(), retry policy (Task 14)
 app/(auth)/
   layout.tsx               AuthLayout (brand panel + card)
   sign-in/page.tsx         sign-in
@@ -172,19 +233,23 @@ app/(auth)/
   welcome/page.tsx         first sign-in: terms → password → 2-step → backup codes
   forgot-password/page.tsx request a reset link → "check your email"
   reset-password/page.tsx  new password → "password updated"
+  sign-in/hospital/page.tsx  hospital sign-on return (Task 13)
 app/no-access/page.tsx     403 "wrong app"
 app/ended/                 moved from app/(clinical)/ended (outside the gate)
 app/(clinical)/account/page.tsx   profile & security
 app/api/auth/{login,mfa,session,logout,password,terms}/route.ts
-app/api/auth/mfa/setup/route.ts, app/api/auth/mfa/setup/confirm/route.ts
+app/api/auth/mfa/setup/route.ts, app/api/auth/mfa/setup/confirm/route.ts,
+app/api/auth/mfa/recovery-codes/route.ts, app/api/auth/password/{forgot,reset}/route.ts,
+app/api/auth/devices/route.ts, app/api/auth/devices/[id]/route.ts,
+app/api/auth/devices/sign-out-all/route.ts, app/api/auth/oidc/{login,exchange}/route.ts
 app/api/v1/[...path]/route.ts     clinical API proxy
 components/auth/           AuthLayout, GuestGate, AuthGate, SignInForm, DemoHint,
                            CodeInput, CodeForm, PasswordFields, WelcomeFlow, TermsStep,
                            NewPasswordStep, MfaSetup, QrCode, BackupCodes,
                            ForgotPassword, ResetPassword, NoAccess
-components/account/        AccountView, ChangePasswordDialog, DevicesSection
+components/account/        AccountView, ChangePasswordDialog, DevicesSection, NewBackupCodesDialog
 components/shell/account-menu.tsx
-tests/auth-wrapper.tsx     TEST_USER, withAuth() for component tests
+tests/auth-wrapper.tsx     TEST_USER, FROM_CLIENT, renderWithAuth() for component tests
 tests/e2e/account.spec.ts
 ```
 
@@ -797,6 +862,174 @@ Expected: no errors.
 git add lib/auth
 git commit -m "Add auth types and the memory-only mock auth client"
 ```
+
+#### Full-frontend additions (part of this task)
+
+> Do these before this task's commit step, and include them in its tests
+> and its commit.
+
+Where these differ from the code above, these win.
+
+**Types (`lib/auth/types.ts`):**
+
+- `User` gains `backupCodesLeft: number | null`, the unused backup codes,
+  or `null` when unknown.
+- `AuthErrorCode` gains `"sso_failed"`.
+- `AuthClient` gains:
+
+```ts
+  /** Finishes hospital sign-on with the one-time code from the return URL. */
+  completeHospitalSignIn(code: string): Promise<SignInResult>;
+  /** Replaces all backup codes; returns the new ones (shown once). */
+  regenerateBackupCodes(): Promise<string[]>;
+```
+
+**Mock (`lib/auth/mock.ts`):**
+
+- **Sample accounts:** each trigger gets its own person. Export
+  `SAMPLE_ACCOUNTS` so the sign-in page can list them (Task 4). Replace
+  `userFor` with:
+
+```ts
+export const MOCK_SSO_CODE = "demo-sso";
+export const MOCK_NEW_BACKUP_CODES = MOCK_BACKUP_CODES.map((c) =>
+  c.split("").reverse().join(""),
+);
+
+/** Sample accounts for the demo's sign-in page. Any other email works too. */
+export const SAMPLE_ACCOUNTS = [
+  {
+    email: "a.reyes@havanahospital.org",
+    label: "Clinician",
+    note: "Signs straight in",
+  },
+  {
+    email: "mfa.okafor@havanahospital.org",
+    label: "Clinician with two-step",
+    note: "Code 123456",
+  },
+  {
+    email: "new.bello@havanahospital.org",
+    label: "New account",
+    note: "First sign-in steps",
+  },
+  {
+    email: "admin.adeyemi@havanahospital.org",
+    label: "Hospital admin",
+    note: "Shows the 403 page",
+  },
+  {
+    email: "locked.eze@havanahospital.org",
+    label: "Locked account",
+    note: "Shows the lock",
+  },
+] as const;
+
+const PEOPLE: Record<
+  string,
+  Pick<User, "displayName" | "fullName" | "roleTitle" | "specialty">
+> = {
+  mfa: {
+    displayName: "Dr. Okafor",
+    fullName: "Dr. Chidi Okafor",
+    roleTitle: "Consultant",
+    specialty: "Paediatrics",
+  },
+  new: {
+    displayName: "Nurse Bello",
+    fullName: "Amina Bello",
+    roleTitle: "Staff nurse",
+    specialty: "General ward",
+  },
+  admin: {
+    displayName: "Kemi Adeyemi",
+    fullName: "Kemi Adeyemi",
+    roleTitle: "Hospital admin",
+    specialty: null,
+  },
+  auditor: {
+    displayName: "Tunde Bakare",
+    fullName: "Tunde Bakare",
+    roleTitle: "Auditor",
+    specialty: null,
+  },
+};
+const REYES = {
+  displayName: "Dr. Reyes",
+  fullName: "Dr. Ana Reyes",
+  roleTitle: "Attending physician",
+  specialty: "Internal Medicine",
+};
+
+function userFor(login: string, role: Role, mfaEnabled: boolean): User {
+  return {
+    username: login.split("@")[0]!,
+    email: login.includes("@") ? login : null,
+    ...(PEOPLE[trigger(login)] ?? REYES),
+    role,
+    hospital: "Havana Hospital",
+    mfaEnabled,
+    backupCodesLeft: mfaEnabled ? 8 : null,
+  };
+}
+```
+
+- **Backup codes:**
+  - a successful backup-code `verifyCode` also decrements the pending
+    user's `backupCodesLeft`;
+  - `confirmMfaSetup` sets `backupCodesLeft: 10`;
+  - `regenerateBackupCodes` needs a session, resets the remaining set to
+    `MOCK_NEW_BACKUP_CODES`, sets `backupCodesLeft: 10`, and returns a
+    copy of `MOCK_NEW_BACKUP_CODES`.
+- **`completeHospitalSignIn(code)`:**
+  - `MOCK_SSO_CODE` signs in the Reyes clinician (`steps: []`);
+  - any other code throws `AuthError("sso_failed")`.
+
+Add these tests to `lib/auth/mock.test.ts`:
+
+```ts
+it("gives each sample account its own person", async () => {
+  const c = createMockAuthClient();
+  const r = await c.signIn(SAMPLE_ACCOUNTS[2].email, "temp");
+  if (r.status !== "signed_in") throw new Error();
+  expect(r.user).toMatchObject({
+    displayName: "Nurse Bello",
+    mfaEnabled: false,
+    backupCodesLeft: null,
+  });
+  expect((await c.signIn(SAMPLE_ACCOUNTS[3].email, "pw")).status).toBe(
+    "signed_in",
+  );
+  expect(await fail(c.signIn(SAMPLE_ACCOUNTS[4].email, "pw"))).toMatchObject({
+    code: "locked",
+  });
+});
+
+it("finishes hospital sign-on with the demo code only", async () => {
+  const c = createMockAuthClient();
+  expect(await fail(c.completeHospitalSignIn("nope"))).toMatchObject({
+    code: "sso_failed",
+  });
+  expect((await c.completeHospitalSignIn(MOCK_SSO_CODE)).status).toBe(
+    "signed_in",
+  );
+});
+
+it("replaces backup codes and counts what's left", async () => {
+  const c = createMockAuthClient();
+  await c.signIn("mfa@h.org", "pw");
+  await c.verifyCode(MOCK_BACKUP_CODES[0]!, {
+    backup: true,
+    trustDevice: false,
+  });
+  expect((await c.getSession())?.user.backupCodesLeft).toBe(7);
+  expect(await c.regenerateBackupCodes()).toEqual(MOCK_NEW_BACKUP_CODES);
+  expect((await c.getSession())?.user.backupCodesLeft).toBe(10);
+});
+```
+
+Add `MOCK_SSO_CODE`, `MOCK_NEW_BACKUP_CODES` and `SAMPLE_ACCOUNTS` to the
+test's import from `./mock`.
 
 ---
 
@@ -1962,6 +2195,24 @@ git add -A
 git commit -m "Gate the clinical app behind sign-in and say why you were signed out"
 ```
 
+#### Full-frontend additions (part of this task)
+
+> Do these before this task's commit step, and include them in its tests
+> and its commit.
+
+- **`TEST_USER`** in `tests/auth-wrapper.tsx` gains `backupCodesLeft: 8`.
+- **`AuthCtx`** gains `completeHospitalSignIn(code: string):
+Promise<SignInResult>`. It is implemented like `signIn`:
+  `apply(await client.completeHospitalSignIn(code))`. Task 13 uses it.
+- **Delete two tests from `components/consultation/home.test.tsx`:** "explains
+  the sign-out until dismissed, and stores nothing" and "clears the notice when
+  the next consultation is started", along with their `NOTICE` constant and
+  `idleOut` helper if nothing else uses them. The notice now lives on the
+  sign-in page, and Step 8's `SignedOutNotice` tests cover it. Keep the storage
+  assertion by adding `expect(setItem).not.toHaveBeenCalled()` to the
+  `SessionGuard` test in `states.test.tsx`, with `const setItem =
+vi.spyOn(Storage.prototype, "setItem")` at its start.
+
 ---
 
 ### Task 4: The sign-in layout and the sign-in page
@@ -2573,6 +2824,52 @@ npx prettier --write . && npm run lint && npm run typecheck
 git add -A
 git commit -m "Add the sign-in page with generic errors and the demo hint"
 ```
+
+#### Full-frontend additions (part of this task)
+
+> Do these before this task's commit step, and include them in its tests
+> and its commit.
+
+**Sample accounts on the sign-in page.**
+
+- `DemoHint` takes `onPick(email: string): void` and lists
+  `SAMPLE_ACCOUNTS` as buttons. Each is ≥44 px tall, labelled `Use
+{label} ({email})`, and shows the label in bold and the note in muted
+  text.
+- `SignInForm` passes `onPick={(e) => { setLogin(e);
+setPassword("demo-password"); setMissing({ login: false, password: false
+}); }}`.
+- Keep the existing hint text under the list: the code `123456`, the
+  password `wrong`, and any email works.
+
+**Hospital sign-on in live mode.** The live client's
+`signInWithHospital` navigates the whole page away (Task 12) and never
+resolves. So `run()` must leave the button busy rather than time out.
+Nothing to change here, but don't add a timeout.
+
+**Wording.** `authErrorCopy` gains `sso_failed`: "We couldn't sign you
+in with your hospital account." / "Try again, or use your email and
+password."
+
+Add to `components/auth/sign-in-form.test.tsx`:
+
+```tsx
+it("fills the form from a sample account", async () => {
+  page();
+  await userEvent.click(
+    screen.getByRole("button", {
+      name: /Use New account \(new\.bello@havanahospital\.org\)/,
+    }),
+  );
+  expect(screen.getByLabelText("Work email")).toHaveValue(
+    "new.bello@havanahospital.org",
+  );
+  expect(screen.getByLabelText("Password")).toHaveValue("demo-password");
+});
+```
+
+The hint renders only when `NEXT_PUBLIC_USE_MOCK === "true"`, which
+`tests/setup.ts` sets (Task 3).
 
 ---
 
@@ -3971,6 +4268,15 @@ npx prettier --write . && npm run lint && npm run typecheck
 git add -A
 git commit -m "Add first sign-in: terms, new password, two-step setup, backup codes"
 ```
+
+#### Full-frontend additions (part of this task)
+
+> Do these before this task's commit step, and include them in its tests
+> and its commit.
+
+`MfaSetup` calls `updateUser({ mfaEnabled: true, backupCodesLeft:
+setup.data.backupCodes.length })` after confirming, so the account page
+shows "10 of 10 left" straight away.
 
 ---
 
@@ -5680,6 +5986,128 @@ git add -A
 git commit -m "Add the account menu, guarded sign-out and the profile page"
 ```
 
+#### Full-frontend additions (part of this task)
+
+> Do these before this task's commit step, and include them in its tests
+> and its commit.
+
+**Backup codes on the account page (design 5: "Backup codes · 8 of 10
+left").** Add a row to the Security card, after Password, shown only when
+`user.mfaEnabled`:
+
+- **Label:** "Backup codes". Under it: "{n} of 10 left", only when
+  `backupCodesLeft` isn't `null`; otherwise "Use one if you lose your
+  phone".
+- **Button:** "New codes", with `aria-label` "Get new backup codes".
+- It opens `NewBackupCodesDialog`, in
+  `components/account/new-backup-codes-dialog.tsx`:
+
+```tsx
+"use client";
+import { useState } from "react";
+import { useAuth } from "@/lib/auth/auth-context";
+import type { AuthError } from "@/lib/auth/types";
+import { BackupCodes } from "../auth/backup-codes";
+import { authErrorCopy, errorCode } from "../auth/sign-in-form";
+import { Banner } from "../ui/banner";
+import { Button } from "../ui/button";
+import { Dialog } from "../ui/dialog";
+
+/** Replaces every backup code; the new ones are shown once. */
+export function NewBackupCodesDialog({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose(): void;
+}) {
+  const { client, updateUser, signOut } = useAuth();
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const [error, setError] = useState<AuthError | null>(null);
+  const [busy, setBusy] = useState(false);
+  const close = () => {
+    setCodes(null);
+    setError(null);
+    onClose();
+  };
+  const make = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const fresh = await client.regenerateBackupCodes();
+      setCodes(fresh);
+      updateUser({ backupCodesLeft: fresh.length });
+    } catch (e) {
+      const ae = errorCode(e);
+      if (ae.code === "session_expired") return void signOut("expired");
+      setError(ae);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copy = error ? authErrorCopy(error.code) : null;
+  return (
+    <Dialog open={open} onClose={close} title="New backup codes">
+      {codes ? (
+        <BackupCodes codes={codes} onFinish={close} finishLabel="Done" />
+      ) : (
+        <>
+          {copy && (
+            <div className="mb-3">
+              <Banner tone="bad" title={copy.title}>
+                <p>{copy.body}</p>
+              </Banner>
+            </div>
+          )}
+          <p className="mb-[18px] text-[14.5px] text-ink-2">
+            Your current backup codes will stop working. You&apos;ll see the new
+            ones once, so have somewhere ready to save them.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={close}>
+              Cancel
+            </Button>
+            <Button disabled={busy} onClick={() => void make()}>
+              Get new codes
+            </Button>
+          </div>
+        </>
+      )}
+    </Dialog>
+  );
+}
+```
+
+Add to `components/account/account-view.test.tsx`:
+
+```tsx
+it("shows backup codes left and replaces them", async () => {
+  const user = userEvent.setup();
+  await signedIn({ ...TEST_USER, backupCodesLeft: 8 });
+  const security = screen.getByRole("region", { name: "Security" });
+  expect(within(security).getByText("8 of 10 left")).toBeInTheDocument();
+  await user.click(
+    within(security).getByRole("button", { name: "Get new backup codes" }),
+  );
+  const dialog = screen.getByRole("dialog", { name: "New backup codes" });
+  await user.click(
+    within(dialog).getByRole("button", { name: "Get new codes" }),
+  );
+  expect(
+    await within(dialog).findByRole("list", { name: "Backup codes" }),
+  ).toBeInTheDocument();
+  await user.click(
+    within(dialog).getByLabelText("I've saved these codes somewhere safe"),
+  );
+  await user.click(within(dialog).getByRole("button", { name: "Done" }));
+  expect(within(security).getByText("10 of 10 left")).toBeInTheDocument();
+});
+```
+
+The live client lists devices now too (Task 12), so `DevicesSection`
+shows in both modes. Keep its `capabilities.devices` check, which is a
+switch for later.
+
 ---
 
 ### Task 10: Server session sealing and the API helper (BFF core)
@@ -6409,6 +6837,121 @@ git add lib/server .env.example
 git commit -m "Add the BFF core: sealed session cookies and the MHAI API helper"
 ```
 
+#### Full-frontend additions (part of this task)
+
+> Do these before this task's commit step, and include them in its tests
+> and its commit.
+
+**API auth types in one place.** Move `ApiUser`, `ApiLoginOk` and
+`ApiMfaRequired` out of `lib/server/map-user.ts` into a new
+`lib/api/auth-contract.ts`. `map-user.ts` imports them from there. Mark
+that file as hand-written from the backend spec plus this plan's assumed
+contract, to be replaced by generated OpenAPI types. `ApiUser` gains:
+
+```ts
+  terms_accepted_at?: string | null;
+  recovery_codes_left?: number | null;
+```
+
+Also add these types:
+
+```ts
+export interface ApiSession {
+  id: string;
+  device: string;
+  location?: string | null;
+  last_seen_at: string; // ISO 8601
+  current: boolean;
+}
+export interface ApiDeviceToken {
+  device_token?: string;
+}
+```
+
+**`toUser`** adds `backupCodesLeft: u.recovery_codes_left ?? null`.
+
+**`stepsFor`** adds `terms` when `terms_accepted_at === null` (an
+explicit `null` means "never accepted"; a missing field means we don't
+know, so no step). The order stays `terms` → `password` → `mfa`, with no
+duplicates:
+
+```ts
+export function stepsFor(u: ApiUser): FirstStep[] {
+  const steps: FirstStep[] = [];
+  if (u.must_change_password || u.terms_accepted_at === null)
+    steps.push("terms");
+  if (u.must_change_password) steps.push("password");
+  if (u.mfa_enabled === false) steps.push("mfa");
+  return steps;
+}
+```
+
+**`toDevice(s: ApiSession): Device`:** `{ id: s.id, label: s.device,
+place: s.location ?? null, lastActiveAt: Date.parse(s.last_seen_at),
+current: s.current }`.
+
+**The trusted-device cookie** (`lib/server/session.ts`):
+
+- `TRUST_COOKIE = "mhai_trusted"` and `TRUST_TTL_S = 30 * 86_400`;
+- `readTrust(): Promise<string | null>` unseals `{ deviceToken }`;
+- `writeTrust(token)` seals it with `cookieOptions(TRUST_TTL_S)`.
+
+`clearSession()` does **not** delete the trust cookie: trusting a device
+outlives signing out, which is the point of it.
+
+Add to the tests:
+
+```ts
+// map-user.test.ts
+it("asks for terms only when the API says they were never accepted", () => {
+  expect(
+    stepsFor({ username: "u", role: "clinician", terms_accepted_at: null }),
+  ).toEqual(["terms"]);
+  expect(
+    stepsFor({
+      username: "u",
+      role: "clinician",
+      terms_accepted_at: "2026-10-01T00:00:00Z",
+    }),
+  ).toEqual([]);
+  expect(
+    stepsFor({
+      username: "u",
+      role: "clinician",
+      must_change_password: true,
+      terms_accepted_at: null,
+    }),
+  ).toEqual(["terms", "password"]);
+});
+it("maps a device", () => {
+  expect(
+    toDevice({
+      id: "s1",
+      device: "Chrome on Windows",
+      location: null,
+      last_seen_at: "2026-10-15T08:00:00Z",
+      current: true,
+    }),
+  ).toEqual({
+    id: "s1",
+    label: "Chrome on Windows",
+    place: null,
+    lastActiveAt: Date.parse("2026-10-15T08:00:00Z"),
+    current: true,
+  });
+});
+
+// session.test.ts
+it("keeps the trusted-device token across sign-out", async () => {
+  await writeTrust("dev-1");
+  await clearSession();
+  expect(await readTrust()).toBe("dev-1");
+});
+```
+
+`toUser`'s expected object in the existing test gains `backupCodesLeft:
+null`.
+
 ---
 
 ### Task 11: The BFF auth routes
@@ -6906,6 +7449,172 @@ npx prettier --write app/api && npm run lint && npm run typecheck
 git add app/api/auth
 git commit -m "Add the BFF auth routes: login, two-step, session, password, logout"
 ```
+
+#### Full-frontend additions (part of this task)
+
+> Do these before this task's commit step, and include them in its tests
+> and its commit.
+
+These routes use the **assumed contract** in the plan header. Each
+upstream path and body lives only in its route file.
+
+**Changes to the routes above:**
+
+- **`login`:** if `readTrust()` returns a token, add `device_token` to
+  the upstream body. (The upstream call then expects `{ username,
+password, device_token }`; update the test's `toHaveBeenCalledWith` for
+  the trusted case only.)
+- **`mfa`:** send `{ mfa_token, code, trust_device: trustDevice }`. If the
+  reply has `device_token`, call `writeTrust(device_token)`.
+- **`terms`:** call `POST /auth/terms {version: TERMS_VERSION}` with the
+  token first. Export `TERMS_VERSION = "2026-10"` from
+  `lib/auth/terms.ts`. Map errors with `authCode(e, "other")`, then drop
+  the step.
+
+**New routes.** Every `POST` and `DELETE` checks `sameOrigin`; every
+route returns `{code}` on error.
+
+| Route                                         | Upstream                                                                         | Out                                                                                                                                                |
+| --------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/auth/password/forgot {email}`      | `POST /auth/password/forgot {email}`                                             | 202, **also** when upstream says 404 or 422, so the reply never reveals an account. Only `rate_limited` (429) and `unavailable` (503) get through. |
+| `POST /api/auth/password/reset {token, next}` | `POST /auth/password/reset {token, new_password}`                                | 204. `invalid_token` and `token_expired` → 410 `link_expired`; `validation_failed` → 422 `weak_password`.                                          |
+| `GET /api/auth/devices`                       | `GET /auth/sessions`                                                             | `Device[]` via `toDevice`                                                                                                                          |
+| `DELETE /api/auth/devices/[id]`               | `DELETE /auth/sessions/{encodeURIComponent(id)}`                                 | 204                                                                                                                                                |
+| `POST /api/auth/devices/sign-out-all`         | `POST /auth/sessions/revoke-all`                                                 | 204, then `clearSession()`                                                                                                                         |
+| `POST /api/auth/mfa/recovery-codes`           | `POST /auth/mfa/recovery-codes`                                                  | `{backupCodes}`; reseals the session with `backupCodesLeft = codes.length`                                                                         |
+| `GET /api/auth/oidc/login`                    | none: 302 to `${apiBase()}/auth/oidc/login?return_to=${origin}/sign-in/hospital` | redirect                                                                                                                                           |
+| `POST /api/auth/oidc/exchange {code}`         | `POST /auth/oidc/exchange {code}`                                                | `startSession(...)`. Any failure except 503 → 401 `sso_failed`.                                                                                    |
+
+`authCode` gains no new cases. The reset and sign-on mappings above are
+local to their routes.
+
+**Tests.** Add to `app/api/auth/auth-routes.test.ts`, using the same jar
+and `upstream` mocks:
+
+```ts
+import { POST as forgot } from "./password/forgot/route";
+import { POST as reset } from "./password/reset/route";
+import { GET as devices } from "./devices/route";
+import { DELETE as dropDevice } from "./devices/[id]/route";
+import { POST as signOutAll } from "./devices/sign-out-all/route";
+import { POST as newCodes } from "./mfa/recovery-codes/route";
+import { GET as oidcLogin } from "./oidc/login/route";
+import { POST as oidcExchange } from "./oidc/exchange/route";
+import { TRUST_COOKIE } from "@/lib/server/session";
+
+describe("assumed endpoints", () => {
+  it("never reveals whether an email has an account", async () => {
+    upstream.mockRejectedValueOnce(new UpstreamError(404, "not_found"));
+    expect((await forgot(post({ email: "who@ever.org" }))).status).toBe(202);
+    upstream.mockRejectedValueOnce(new UpstreamError(429, "rate_limited"));
+    expect(await (await forgot(post({ email: "a@b.org" }))).json()).toEqual({
+      code: "rate_limited",
+    });
+  });
+  it("resets a password, and calls a dead link expired", async () => {
+    upstream.mockResolvedValueOnce(undefined);
+    expect(
+      (await reset(post({ token: "t", next: "tram-lantern-okra" }))).status,
+    ).toBe(204);
+    expect(upstream).toHaveBeenLastCalledWith("/auth/password/reset", {
+      method: "POST",
+      body: { token: "t", new_password: "tram-lantern-okra" },
+    });
+    upstream.mockRejectedValueOnce(new UpstreamError(410, "token_expired"));
+    expect(
+      await (
+        await reset(post({ token: "t", next: "tram-lantern-okra" }))
+      ).json(),
+    ).toEqual({
+      code: "link_expired",
+    });
+  });
+  it("lists, drops and revokes devices", async () => {
+    await signedIn();
+    upstream.mockResolvedValueOnce([
+      {
+        id: "s1",
+        device: "Chrome on Windows",
+        location: "Lagos",
+        last_seen_at: "2026-10-15T08:00:00Z",
+        current: true,
+      },
+    ]);
+    expect(await (await devices()).json()).toEqual([
+      {
+        id: "s1",
+        label: "Chrome on Windows",
+        place: "Lagos",
+        lastActiveAt: Date.parse("2026-10-15T08:00:00Z"),
+        current: true,
+      },
+    ]);
+    upstream.mockResolvedValueOnce(undefined);
+    const del = new Request("http://demo.test/api/auth/devices/s%2F2", {
+      method: "DELETE",
+      headers: { host: "demo.test", origin: "http://demo.test" },
+    });
+    expect(
+      (await dropDevice(del, { params: Promise.resolve({ id: "s/2" }) }))
+        .status,
+    ).toBe(204);
+    expect(upstream).toHaveBeenLastCalledWith("/auth/sessions/s%2F2", {
+      method: "DELETE",
+      token: "tok",
+    });
+    upstream.mockResolvedValueOnce(undefined);
+    expect((await signOutAll(post())).status).toBe(204);
+    expect(jar.values.get(SESSION_COOKIE)).toBeUndefined();
+  });
+  it("issues new backup codes and updates the count", async () => {
+    await signedIn();
+    upstream.mockResolvedValueOnce({ recovery_codes: ["A", "B"] });
+    expect(await (await newCodes(post())).json()).toEqual({
+      backupCodes: ["A", "B"],
+    });
+    expect((await readSession())?.user.backupCodesLeft).toBe(2);
+  });
+  it("trusts a device after two-step, and offers it at the next sign-in", async () => {
+    upstream.mockResolvedValueOnce({ mfa_required: true, mfa_token: "m" });
+    await login(post({ login: "a", password: "pw" }));
+    upstream.mockResolvedValueOnce({ ...LOGIN_OK, device_token: "dev-1" });
+    await mfa(post({ code: "123456", backup: false, trustDevice: true }));
+    expect(upstream).toHaveBeenLastCalledWith("/auth/mfa/challenge", {
+      method: "POST",
+      body: { mfa_token: "m", code: "123456", trust_device: true },
+    });
+    expect(jar.values.get(TRUST_COOKIE)).toBeTruthy();
+    upstream.mockResolvedValueOnce(LOGIN_OK);
+    await login(post({ login: "a", password: "pw" }));
+    expect(upstream).toHaveBeenLastCalledWith("/auth/login", {
+      method: "POST",
+      body: { username: "a", password: "pw", device_token: "dev-1" },
+    });
+  });
+  it("sends hospital sign-on to the API and back to our return page", async () => {
+    vi.stubEnv("MHAI_API_URL", "http://api.test");
+    const res = await oidcLogin(
+      new Request("http://demo.test/api/auth/oidc/login", {
+        headers: { host: "demo.test" },
+      }),
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe(
+      "http://api.test/api/v1/auth/oidc/login?return_to=http%3A%2F%2Fdemo.test%2Fsign-in%2Fhospital",
+    );
+    upstream.mockRejectedValueOnce(new UpstreamError(400, "invalid_code"));
+    expect(await (await oidcExchange(post({ code: "x" }))).json()).toEqual({
+      code: "sso_failed",
+    });
+    upstream.mockResolvedValueOnce(LOGIN_OK);
+    expect((await oidcExchange(post({ code: "good" }))).status).toBe(200);
+  });
+});
+```
+
+`oidc/login` builds the origin from `X-Forwarded-Proto` (default `http`)
+and `X-Forwarded-Host` or `Host`, never from the request URL. Behind
+nginx the URL is the container's address.
 
 ---
 
@@ -7766,9 +8475,774 @@ git add -A
 git commit -m "Add the clinical API proxy and live clients, and sign out on expiry"
 ```
 
+#### Full-frontend additions (part of this task)
+
+> Do these before this task's commit step, and include them in its tests
+> and its commit.
+
+**Everything on in live mode.** `LIVE_CAPABILITIES` is all `true`, and the
+live auth client implements every method against the Task 11 routes:
+
+| Method                         | Calls                                                                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `signInWithHospital()`         | `window.location.assign("/api/auth/oidc/login")`, then returns `new Promise<never>(() => {})`. The page is leaving. |
+| `completeHospitalSignIn(code)` | `POST /api/auth/oidc/exchange {code}`                                                                               |
+| `requestPasswordReset(email)`  | `POST /api/auth/password/forgot {email}`                                                                            |
+| `resetPassword(token, next)`   | `POST /api/auth/password/reset {token, next}`                                                                       |
+| `listDevices()`                | `GET /api/auth/devices`                                                                                             |
+| `signOutDevice(id)`            | `DELETE /api/auth/devices/${encodeURIComponent(id)}`                                                                |
+| `signOutEverywhere()`          | `POST /api/auth/devices/sign-out-all`                                                                               |
+| `regenerateBackupCodes()`      | `POST /api/auth/mfa/recovery-codes`, returning `.backupCodes`                                                       |
+
+- `KNOWN` gains `"sso_failed"`. `unsupported` and its uses are deleted.
+- In `lib/auth/live.test.ts`:
+  - replace the capabilities test with `expect(Object.values(LIVE_CAPABILITIES).every(Boolean)).toBe(true)`;
+  - replace "refuses what isn't supported yet" with checks that
+    `listDevices()` calls `GET /api/auth/devices` and that
+    `regenerateBackupCodes()` returns `["A"]` from a `{backupCodes:
+["A"]}` reply.
+
+**Retry-safe writes through the proxy.** In `app/api/v1/[...path]/route.ts`,
+forward the request's `Idempotency-Key` header when present. It may only
+contain letters, digits and `-`, up to 64 characters; drop it otherwise.
+Add a proxy test that a POST with `Idempotency-Key: k-1` reaches upstream
+with that header, and that `Idempotency-Key: bad key!` doesn't. Task 14
+makes the client send it.
+
 ---
 
-### Task 13: End-to-end acceptance, docs and the changelog
+### Task 13: Hospital sign-on return page
+
+**Files:**
+
+- Create: `components/auth/hospital-return.tsx`, `components/auth/hospital-return.test.tsx`, `app/(auth)/sign-in/hospital/page.tsx`
+
+**Interfaces:**
+
+- Consumes:
+  - `useAuth().completeHospitalSignIn` (Task 3 additions);
+  - `GuestGate`, `AuthHeading`, `authErrorCopy` and `errorCode` (Task 4,
+    including its `sso_failed` copy);
+  - the live `signInWithHospital` and the `oidc/*` routes (Tasks 11–12).
+- Produces: `HospitalReturn`, the page the backend sends people back to
+  after hospital sign-on: `/sign-in/hospital?code=…`.
+
+**Behaviour:**
+
+- Read `code` once from the URL, then strip it with `history.replaceState`
+  (a one-time code, 60 s).
+- Call `completeHospitalSignIn(code)` once, guarded with a ref against
+  StrictMode's double effect.
+- While waiting, show "Signing you in…" (`role="status"`).
+- **On success:** `GuestGate` sends them where they belong.
+- **On failure, or with no code:**
+  - heading "Hospital sign-in";
+  - a red banner with the `sso_failed` copy (or the copy for whatever
+    other code came back);
+  - a "Back to sign in" link.
+
+- [ ] **Step 1: Write the failing test**
+
+`components/auth/hospital-return.test.tsx`:
+
+```tsx
+import { screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MOCK_SSO_CODE } from "@/lib/auth/mock";
+import { renderWithAuth } from "@/tests/auth-wrapper";
+import { GuestGate } from "./guest-gate";
+import { HospitalReturn } from "./hospital-return";
+
+let search = new URLSearchParams();
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace }),
+  useSearchParams: () => search,
+}));
+beforeEach(() => replace.mockClear());
+
+const page = () =>
+  renderWithAuth(
+    <GuestGate>
+      <HospitalReturn />
+    </GuestGate>,
+    null,
+  );
+
+describe("HospitalReturn", () => {
+  it("finishes sign-on with the code, then strips it and goes home", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      `/sign-in/hospital?code=${MOCK_SSO_CODE}`,
+    );
+    search = new URLSearchParams({ code: MOCK_SSO_CODE });
+    page();
+    expect(window.location.search).toBe("");
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+  });
+  it("explains a failed sign-on", async () => {
+    search = new URLSearchParams({ code: "stale" });
+    page();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We couldn't sign you in with your hospital account.",
+    );
+    expect(
+      screen.getByRole("link", { name: "Back to sign in" }),
+    ).toHaveAttribute("href", "/sign-in");
+  });
+  it("handles a return with no code", async () => {
+    search = new URLSearchParams();
+    page();
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+  });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx vitest run components/auth/hospital-return.test.tsx`
+Expected: FAIL (module not found).
+
+- [ ] **Step 3: Write the component and the route**
+
+`components/auth/hospital-return.tsx`:
+
+```tsx
+"use client";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useAuth } from "@/lib/auth/auth-context";
+import { AuthError } from "@/lib/auth/types";
+import { Banner } from "../ui/banner";
+import { AuthHeading } from "./auth-layout";
+import { authErrorCopy, errorCode } from "./sign-in-form";
+
+/** /sign-in/hospital?code=…: where hospital sign-on hands back to MHAI. */
+export function HospitalReturn() {
+  const { completeHospitalSignIn } = useAuth();
+  const params = useSearchParams();
+  const [code] = useState(() => params.get("code"));
+  const [error, setError] = useState<AuthError | null>(() =>
+    code ? null : new AuthError("sso_failed"),
+  );
+  const started = useRef(false);
+
+  useEffect(() => {
+    if (window.location.search)
+      window.history.replaceState(null, "", "/sign-in/hospital");
+  }, []);
+  useEffect(() => {
+    if (!code || started.current) return;
+    started.current = true;
+    completeHospitalSignIn(code).catch((e) => setError(errorCode(e)));
+  }, [code, completeHospitalSignIn]);
+
+  if (!error)
+    return (
+      <p role="status" className="text-center text-[14.5px] text-ink-2">
+        Signing you in…
+      </p>
+    );
+  const copy = authErrorCopy(error.code);
+  return (
+    <>
+      <AuthHeading title="Hospital sign-in" />
+      <Banner tone="bad" title={copy.title}>
+        <p>{copy.body}</p>
+      </Banner>
+      <p className="mt-6 text-center text-[13px]">
+        <Link
+          href="/sign-in"
+          className="inline-flex min-h-11 items-center text-mint-deep"
+        >
+          Back to sign in
+        </Link>
+      </p>
+    </>
+  );
+}
+```
+
+`completeHospitalSignIn` comes from the `useMemo` value in
+`AuthProvider`, so it is a new function whenever the context changes. The
+`started` ref keeps the call to one.
+
+`app/(auth)/sign-in/hospital/page.tsx`:
+
+```tsx
+import type { Metadata } from "next";
+import { Suspense } from "react";
+import { GuestGate } from "@/components/auth/guest-gate";
+import { HospitalReturn } from "@/components/auth/hospital-return";
+
+export const metadata: Metadata = { title: "Signing in · MHAI" };
+
+export default function HospitalReturnPage() {
+  return (
+    <GuestGate>
+      <Suspense fallback={null}>
+        <HospitalReturn />
+      </Suspense>
+    </GuestGate>
+  );
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `npx vitest run components/auth/hospital-return.test.tsx`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+npx prettier --write . && npm run lint && npm run typecheck
+git add -A
+git commit -m "Add the hospital sign-on return page"
+```
+
+---
+
+### Task 14: Weak and patchy networks
+
+**Files:**
+
+- Create:
+  - `lib/network.ts`
+  - `lib/network.test.ts`
+  - `lib/hooks/use-send-when-online.ts`
+  - `lib/hooks/use-send-when-online.test.tsx`
+  - `components/states/network-effects.tsx`
+  - `tests/e2e/network.spec.ts`
+- Modify:
+  - `lib/api/client.ts`, `lib/api/mock.ts`, `lib/api/live.ts`: optional
+    `{ idempotencyKey }` on writes;
+  - `lib/queries.ts`: adaptive polling, offline-aware stall, retry-safe
+    submit and feedback;
+  - `app/providers.tsx`: the retry policy and `<NetworkEffects />`;
+  - `app/globals.css`: data-saver motion off;
+  - `app/(clinical)/page.tsx`: send when back online.
+
+**Interfaces:**
+
+- Consumes: `ApiError` (Task 12); the Plan 1 hooks `useSubmitQuery`,
+  `useQueryStatus` and `useSendFeedback` (in `lib/queries.ts`); and the
+  home page's submit handler.
+- Produces:
+  - `useNetwork(): { online: boolean; saveData: boolean; slow: boolean }`;
+  - `pollDelay(elapsedMs, { slow, saveData }): number`;
+  - `shouldRetry(failures, error, max?): boolean`;
+  - `retryDelay(attempt): number`;
+  - `useSendWhenOnline<T>(send: (v: T) => void): { pending: T | null;
+queue(v: T): void; cancel(): void }`;
+  - `MhaiClient.createQuery(q, opts?: { idempotencyKey?: string })` and
+    `MhaiClient.sendFeedback(f, opts?: { idempotencyKey?: string })`;
+  - `NetworkEffects`.
+
+**Rules:**
+
+- **Network state:**
+  - `online` is `navigator.onLine`, kept live with the `online` and
+    `offline` events.
+  - `slow` is `navigator.connection.effectiveType` being `"slow-2g"` or
+    `"2g"`.
+  - `saveData` is `navigator.connection.saveData`.
+  - Browsers without `navigator.connection` count as fast with no data
+    saver.
+  - On the server everything is `false`, except `online`, which is
+    `true`.
+- **Polling:**
+  - the delay is 2 s for the first 30 s, then 5 s until 2 min, then 10 s;
+  - on `slow` or `saveData` it is at least 5 s;
+  - polling stops while offline (`refetchInterval` returns `false`), and
+    TanStack's `refetchOnReconnect` resumes it;
+  - time spent offline never counts towards the 120 s stall: on
+    reconnect, the "last progress" time resets to now.
+- **Retries:**
+  - queries retry up to 3 times, and only for a network failure (any
+    non-`ApiError`, or `ApiError` status 0) or a 5xx, never a 4xx;
+  - the delay is `min(30 s, 1 s × 2^attempt) × (0.5–1.0 jitter)`;
+  - the submit and feedback mutations use the same policy, with one
+    `Idempotency-Key` (`crypto.randomUUID()`) per user action, reused
+    across its retries;
+  - the live client sends it as the `Idempotency-Key` header, and the mock
+    ignores it.
+- **Send when back online:**
+  - pressing Analyse while offline doesn't submit. It keeps the form and
+    shows an info banner above the form: "You're offline" / "Your question
+    is ready. It will be sent as soon as you're back online.", with a "Don't
+    send" button;
+  - on reconnect it submits once, exactly as if Analyse had been pressed;
+  - the pending question lives in React state only, and is dropped on
+    "Don't send", on sign-out (remount) and on leaving the page.
+- **Data saver** (`saveData` or `slow`):
+  - `NetworkEffects` sets `data-save-data` on `<html>`, and CSS turns off
+    animations and transitions there, the same as reduced motion;
+  - after an offline spell, `NetworkEffects` shows the toast "You're back
+    online".
+
+- [ ] **Step 1: Write the failing tests**
+
+`lib/network.test.ts`:
+
+```ts
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "./api/errors";
+import { pollDelay, retryDelay, shouldRetry, useNetwork } from "./network";
+
+afterEach(() => vi.restoreAllMocks());
+
+describe("pollDelay", () => {
+  it("polls quickly at first, then backs off", () => {
+    const fast = { slow: false, saveData: false };
+    expect(pollDelay(0, fast)).toBe(2_000);
+    expect(pollDelay(29_999, fast)).toBe(2_000);
+    expect(pollDelay(30_000, fast)).toBe(5_000);
+    expect(pollDelay(120_000, fast)).toBe(10_000);
+  });
+  it("is never faster than 5 s on 2G or data saver", () => {
+    expect(pollDelay(0, { slow: true, saveData: false })).toBe(5_000);
+    expect(pollDelay(0, { slow: false, saveData: true })).toBe(5_000);
+    expect(pollDelay(200_000, { slow: true, saveData: true })).toBe(10_000);
+  });
+});
+
+describe("shouldRetry / retryDelay", () => {
+  it("retries network failures and 5xx, never 4xx", () => {
+    expect(shouldRetry(0, new TypeError("offline"))).toBe(true);
+    expect(shouldRetry(0, new ApiError(0, "network"))).toBe(true);
+    expect(shouldRetry(0, new ApiError(503, "unavailable"))).toBe(true);
+    expect(shouldRetry(0, new ApiError(409, "result_not_ready"))).toBe(false);
+    expect(shouldRetry(0, new ApiError(401, "session_expired"))).toBe(false);
+    expect(shouldRetry(3, new TypeError("offline"))).toBe(false);
+  });
+  it("backs off exponentially with jitter, capped at 30 s", () => {
+    vi.spyOn(Math, "random").mockReturnValue(1);
+    expect(retryDelay(0)).toBe(1_000);
+    expect(retryDelay(3)).toBe(8_000);
+    expect(retryDelay(10)).toBe(30_000);
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    expect(retryDelay(3)).toBe(4_000);
+  });
+});
+
+describe("useNetwork", () => {
+  it("follows online and offline events", () => {
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    const { result } = renderHook(() => useNetwork());
+    expect(result.current.online).toBe(true);
+    onLine.mockReturnValue(false);
+    act(() => void window.dispatchEvent(new Event("offline")));
+    expect(result.current.online).toBe(false);
+  });
+  it("reads 2G and data saver from the connection", () => {
+    Object.defineProperty(navigator, "connection", {
+      configurable: true,
+      value: {
+        effectiveType: "2g",
+        saveData: true,
+        addEventListener() {},
+        removeEventListener() {},
+      },
+    });
+    const { result } = renderHook(() => useNetwork());
+    expect(result.current).toMatchObject({ slow: true, saveData: true });
+    Reflect.deleteProperty(navigator, "connection");
+  });
+});
+```
+
+`lib/hooks/use-send-when-online.test.tsx`:
+
+```tsx
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { useSendWhenOnline } from "./use-send-when-online";
+
+afterEach(() => vi.restoreAllMocks());
+
+describe("useSendWhenOnline", () => {
+  it("holds a value while offline and sends it once on reconnect", () => {
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    const send = vi.fn();
+    const { result } = renderHook(() => useSendWhenOnline(send));
+    act(() => result.current.queue({ q: 1 }));
+    expect(result.current.pending).toEqual({ q: 1 });
+    expect(send).not.toHaveBeenCalled();
+    onLine.mockReturnValue(true);
+    act(() => void window.dispatchEvent(new Event("online")));
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith({ q: 1 });
+    expect(result.current.pending).toBeNull();
+    act(() => void window.dispatchEvent(new Event("online")));
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+  it("drops the value on cancel", () => {
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    const send = vi.fn();
+    const { result } = renderHook(() => useSendWhenOnline(send));
+    act(() => result.current.queue("x"));
+    act(() => result.current.cancel());
+    onLine.mockReturnValue(true);
+    act(() => void window.dispatchEvent(new Event("online")));
+    expect(send).not.toHaveBeenCalled();
+  });
+});
+```
+
+Add to `lib/api/live.test.ts`:
+
+```ts
+it("sends the idempotency key on a retried submit", async () => {
+  const fetchImpl = reply(202, { query_id: "q1" });
+  await createLiveClient({ fetchImpl }).createQuery({} as never, {
+    idempotencyKey: "k-1",
+  });
+  const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+  expect(init.headers).toMatchObject({ "Idempotency-Key": "k-1" });
+});
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `npx vitest run lib/network.test.ts lib/hooks/use-send-when-online.test.tsx lib/api/live.test.ts`
+Expected: FAIL (modules not found, and the header missing).
+
+- [ ] **Step 3: Write the network helpers**
+
+`lib/network.ts`:
+
+```ts
+"use client";
+import { useSyncExternalStore } from "react";
+import { ApiError } from "./api/errors";
+
+export interface Network {
+  online: boolean;
+  saveData: boolean;
+  slow: boolean;
+}
+type Connection = {
+  effectiveType?: string;
+  saveData?: boolean;
+  addEventListener?(type: "change", fn: () => void): void;
+  removeEventListener?(type: "change", fn: () => void): void;
+};
+const connection = (): Connection | undefined =>
+  (navigator as Navigator & { connection?: Connection }).connection;
+
+const SERVER: Network = { online: true, saveData: false, slow: false };
+let snapshot: Network = SERVER;
+function read(): Network {
+  const c = connection();
+  const next: Network = {
+    online: navigator.onLine,
+    saveData: c?.saveData === true,
+    slow: c?.effectiveType === "slow-2g" || c?.effectiveType === "2g",
+  };
+  // Same object while nothing changed (useSyncExternalStore needs that).
+  if (
+    next.online !== snapshot.online ||
+    next.saveData !== snapshot.saveData ||
+    next.slow !== snapshot.slow
+  )
+    snapshot = next;
+  return snapshot;
+}
+function subscribe(fn: () => void) {
+  window.addEventListener("online", fn);
+  window.addEventListener("offline", fn);
+  connection()?.addEventListener?.("change", fn);
+  return () => {
+    window.removeEventListener("online", fn);
+    window.removeEventListener("offline", fn);
+    connection()?.removeEventListener?.("change", fn);
+  };
+}
+
+/** Online state, 2G and data saver, live. */
+export const useNetwork = () =>
+  useSyncExternalStore(subscribe, read, () => SERVER);
+
+/** Poll often at first, then back off; never faster than 5 s on 2G or data saver. */
+export function pollDelay(
+  elapsedMs: number,
+  n: Pick<Network, "slow" | "saveData">,
+) {
+  const base =
+    elapsedMs < 30_000 ? 2_000 : elapsedMs < 120_000 ? 5_000 : 10_000;
+  return n.slow || n.saveData ? Math.max(base, 5_000) : base;
+}
+
+/** Retry network failures and 5xx; a 4xx won't change on retry. */
+export function shouldRetry(failures: number, e: unknown, max = 3): boolean {
+  if (e instanceof ApiError && e.status >= 400 && e.status < 500) return false;
+  return failures < max;
+}
+
+export const retryDelay = (attempt: number) =>
+  Math.min(30_000, 1_000 * 2 ** attempt) * (0.5 + Math.random() / 2);
+```
+
+`lib/hooks/use-send-when-online.ts`:
+
+```ts
+"use client";
+import { useEffect, useEffectEvent, useState } from "react";
+
+/** Holds one value while offline (memory only) and sends it once on reconnect. */
+export function useSendWhenOnline<T>(send: (v: T) => void) {
+  const [pending, setPending] = useState<T | null>(null);
+  const flush = useEffectEvent(() => {
+    if (pending === null) return;
+    setPending(null);
+    send(pending);
+  });
+  useEffect(() => {
+    const on = () => flush();
+    window.addEventListener("online", on);
+    return () => window.removeEventListener("online", on);
+  }, []);
+  return {
+    pending,
+    queue: (v: T) => setPending(() => v),
+    cancel: () => setPending(null),
+  };
+}
+```
+
+- [ ] **Step 4: Wire it into the clients, queries and providers**
+
+**Clients:**
+
+- `lib/api/client.ts`: in `MhaiClient`, change two methods to
+  `createQuery(q: QueryCreateIn, opts?: { idempotencyKey?: string })` and
+  `sendFeedback(f: FeedbackIn, opts?: { idempotencyKey?: string })`.
+- `lib/api/mock.ts`: no change (the extra argument is ignored).
+- `lib/api/live.ts`: `call()` takes an optional `headers` record merged
+  into its headers, and `createQuery` and `sendFeedback` pass `{
+"Idempotency-Key": opts.idempotencyKey }` when it's set.
+
+**Queries (`lib/queries.ts`):**
+
+- `useSubmitQuery` mutates `{ q, key }` internally and exposes the same
+  `mutate(q, options?)` as before. Call sites don't change:
+
+```ts
+export function useSubmitQuery() {
+  const session = useSession();
+  const m = useMutation({
+    mutationFn: ({ q, key }: { q: QueryCreateIn; key: string }) =>
+      getClient().createQuery(q, { idempotencyKey: key }),
+    // Same key on every retry: the API answers a repeat with the first result.
+    retry: (n, e) => shouldRetry(n, e),
+    retryDelay,
+    onSuccess: ({ query_id }, { q }) =>
+      session.add({
+        id: query_id,
+        title: titleFor(q),
+        urgency: q.urgency,
+        createdAt: Date.now(),
+        query: q,
+      }),
+  });
+  return {
+    ...m,
+    mutate: (q: QueryCreateIn, options?: Parameters<typeof m.mutate>[1]) =>
+      m.mutate({ q, key: crypto.randomUUID() }, options),
+  };
+}
+```
+
+If any call site reads `submit.variables`, it now gets `{ q, key }`.
+Change those reads to `submit.variables?.q`.
+
+- `useSendFeedback` follows the same pattern: a `{ f, key }` variable,
+  the same `retry` and `retryDelay`, and the same exposed `mutate(f,
+options?)`.
+- `useQueryStatus`:
+  - read `const net = useNetwork()`;
+  - keep a `startedAt` ref set in an effect when `id` changes;
+  - make `refetchInterval` return `false` when finished, stalled or
+    `!net.online`, and otherwise `pollDelay(Date.now() -
+startedAt.current, net)`;
+  - add an effect on `net.online` that, when it becomes `true`, sets the
+    stall tracker's `at` to `Date.now()`;
+  - set `retry: (n, e) => shouldRetry(n, e)` and `retryDelay` on the
+    query.
+
+**Providers (`app/providers.tsx`):**
+
+- the default `retry` becomes `(n, e) => shouldRetry(n, e)`, with
+  `retryDelay` (this replaces Task 12's rule);
+- mount `<NetworkEffects />` inside `ToastProvider`.
+
+`components/states/network-effects.tsx`:
+
+```tsx
+"use client";
+import { useEffect, useRef } from "react";
+import { useNetwork } from "@/lib/network";
+import { useToast } from "../ui/toast";
+
+/** Data-saver styling on <html>, and "back online" after an offline spell. */
+export function NetworkEffects() {
+  const { online, saveData, slow } = useNetwork();
+  const { show } = useToast();
+  const wasOffline = useRef(false);
+  useEffect(() => {
+    const root = document.documentElement;
+    if (saveData || slow) root.dataset.saveData = "true";
+    else delete root.dataset.saveData;
+  }, [saveData, slow]);
+  useEffect(() => {
+    if (!online) wasOffline.current = true;
+    else if (wasOffline.current) {
+      wasOffline.current = false;
+      show({ title: "You're back online", tone: "ok", ms: 2400 });
+    }
+  }, [online, show]);
+  return null;
+}
+```
+
+`app/globals.css`: add after the reduced-motion rules:
+
+```css
+/* Data saver or 2G: no motion, the same as reduced motion. */
+[data-save-data] *,
+[data-save-data] *::before,
+[data-save-data] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+```
+
+**Home page (`app/(clinical)/page.tsx`):** wrap the submit.
+
+- `const later = useSendWhenOnline<QueryCreateIn>((q) => send(q));`,
+  where `send` is the page's existing submit call.
+- In the Analyse handler, after validation passes: `if
+(!navigator.onLine) return later.queue(q);`.
+- Render `{later.pending && <Banner tone="info" title="You're
+offline">…</Banner>}` above the form, with the body "Your question is
+  ready. It will be sent as soon as you're back online." and a ghost
+  button "Don't send" calling `later.cancel()`.
+- While `later.pending`, the Analyse button reads "Waiting for
+  connection…" and is disabled.
+
+Add to `components/consultation/home.test.tsx`:
+
+```tsx
+it("holds the question while offline and sends it on reconnect", async () => {
+  const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  await mount(<Page />);
+  await userEvent.click(screen.getByRole("button", { name: /Febrile child/ }));
+  await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
+  expect(await screen.findByText("You're offline")).toBeInTheDocument();
+  expect(createQuery).not.toHaveBeenCalled();
+  onLine.mockReturnValue(true);
+  await act(async () => void window.dispatchEvent(new Event("online")));
+  await vi.waitFor(() => expect(createQuery).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/c/q2"));
+});
+```
+
+In the existing "welcomes a first visit … then submits" test, the
+`createQuery` assertion becomes `toHaveBeenCalledWith(expect.objectContaining({…}),
+{ idempotencyKey: expect.any(String) })`.
+
+- [ ] **Step 5: Write the slow-network and offline e2e tests**
+
+`tests/e2e/network.spec.ts`:
+
+```ts
+import { expect, test } from "@playwright/test";
+import { signIn } from "./helpers";
+
+test.setTimeout(240_000);
+
+test("the whole flow works on a slow 3G connection", async ({ page }) => {
+  const cdp = await page.context().newCDPSession(page);
+  // About "Slow 3G": 400 kbit/s each way and 400 ms latency.
+  await cdp.send("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: 400,
+    downloadThroughput: 50 * 1024,
+    uploadThroughput: 50 * 1024,
+  });
+  await signIn(page);
+  await expect(page).toHaveURL(/\/$/, { timeout: 90_000 });
+  await page.getByRole("button", { name: /Start a consultation/ }).click();
+  await page.getByLabel("Age").fill("54");
+  await page.getByRole("radio", { name: "Male", exact: true }).click();
+  await page.getByRole("radio", { name: /Urgent/ }).click();
+  if ((page.viewportSize()?.width ?? 1440) < 768)
+    await page.getByRole("button", { name: "Next" }).click();
+  await page.getByLabel("Presenting symptoms").fill("Chest pain");
+  await page.getByLabel("Presenting symptoms").press("Enter");
+  await page
+    .getByLabel("Clinical question")
+    .fill("Central chest pain for 40 minutes. Likely diagnosis?");
+  if ((page.viewportSize()?.width ?? 1440) < 768)
+    await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: /Analyse/ }).click();
+  await expect(page.getByText("High confidence").first()).toBeVisible({
+    timeout: 120_000,
+  });
+});
+
+test("a question asked offline is sent when the connection returns", async ({
+  page,
+  context,
+}) => {
+  await signIn(page);
+  await expect(page).toHaveURL(/\/$/);
+  await page.getByRole("button", { name: /Start a consultation/ }).click();
+  await page.getByLabel("Age").fill("54");
+  await page.getByRole("radio", { name: "Male", exact: true }).click();
+  await page.getByRole("radio", { name: /Urgent/ }).click();
+  if ((page.viewportSize()?.width ?? 1440) < 768)
+    await page.getByRole("button", { name: "Next" }).click();
+  await page.getByLabel("Presenting symptoms").fill("Chest pain");
+  await page.getByLabel("Presenting symptoms").press("Enter");
+  await page
+    .getByLabel("Clinical question")
+    .fill("Central chest pain for 40 minutes. Likely diagnosis?");
+  if ((page.viewportSize()?.width ?? 1440) < 768)
+    await page.getByRole("button", { name: "Next" }).click();
+  await context.setOffline(true);
+  await page.getByRole("button", { name: /Analyse/ }).click();
+  await expect(page.getByText("You're offline").first()).toBeVisible();
+  await context.setOffline(false);
+  await expect(page.getByText("Analysing your question")).toBeVisible();
+  await expect(page.getByText("You're back online")).toBeVisible();
+});
+```
+
+These steps repeat `fillForm` from `clinical-flow.spec.ts` on purpose. If
+Task 15 has already moved `fillForm` into `helpers.ts`, import it
+instead.
+
+- [ ] **Step 6: Run everything**
+
+Run: `npx vitest run && npx playwright test tests/e2e/network.spec.ts`
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
+
+```bash
+npx prettier --write . && npm run lint && npm run typecheck
+git add -A
+git commit -m "Support weak networks: adaptive polling, safe retries, send when online"
+```
+
+---
+
+### Task 15: End-to-end acceptance, docs and the changelog
 
 **Files:**
 
@@ -8040,9 +9514,118 @@ git add -A
 git commit -m "Add account e2e tests and document sign-in and live mode"
 ```
 
+#### Full-frontend additions (part of this task)
+
+> Do these before this task's commit step, and include them in its tests
+> and its commit.
+
+**More e2e tests** for `tests/e2e/account.spec.ts`:
+
+```ts
+test("a sample account fills the form in one tap", async ({ page }) => {
+  await page.goto("/sign-in");
+  await page
+    .getByRole("button", { name: /Use Clinician with two-step/ })
+    .click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/sign-in\/code$/);
+});
+
+test("hospital sign-on in the demo", async ({ page }) => {
+  await page.goto("/sign-in");
+  await page
+    .getByRole("button", { name: "Continue with hospital account" })
+    .click();
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("new backup codes from the account page", async ({ page }) => {
+  await signIn(page);
+  await expect(page).toHaveURL(/\/$/);
+  await openAccountMenu(page);
+  await page.getByRole("menuitem", { name: "Profile & security" }).click();
+  await page.getByRole("button", { name: "Get new backup codes" }).click();
+  await page.getByRole("button", { name: "Get new codes" }).click();
+  await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
+});
+```
+
+Also move `fillForm` into `tests/e2e/helpers.ts` and use it from
+`network.spec.ts`, replacing that file's repeated form steps.
+
+**The backend's side, in spec §10.** Append these to
+`docs/specs/2026-10-13-ui-design-v3.md` §10 (numbered from 14), so the
+backend team has the assumed contract and the network asks in one place:
+
+```markdown
+14. **Assumed contract for account features.** The frontend calls these
+    until the backend defines them, so please match them or tell us what
+    changed:
+    - `POST /auth/terms {version}`;
+    - `POST /auth/password/forgot {email}` (202 for any email);
+    - `POST /auth/password/reset {token, new_password}`;
+    - `GET /auth/sessions`, `DELETE /auth/sessions/{id}` and
+      `POST /auth/sessions/revoke-all`;
+    - `trust_device` on `/auth/mfa/challenge`, returning `device_token`,
+      which `/auth/login` accepts back;
+    - `POST /auth/mfa/recovery-codes`;
+    - on the login `user`: `email`, `display_name`, `full_name`,
+      `role_title`, `specialty`, `hospital`, `mfa_enabled`,
+      `must_change_password`, `terms_accepted_at` and
+      `recovery_codes_left`.
+15. **Retry-safe writes:** honour `Idempotency-Key` on `POST /queries` and
+    `POST /feedback`. A repeat with the same key within 24 h returns the
+    first response and does no new work.
+16. **Compression:** gzip or brotli on JSON responses. A
+    `ClinicalResultOut` with citations is the largest payload on a 2G
+    link.
+17. **Cheaper status checks:**
+    - `ETag` on `GET /queries/{id}`, honouring `If-None-Match` with a 304;
+    - optionally `GET /queries/{id}?wait=20` (long poll): reply as soon as
+      the status changes, or after 20 s.
+
+    Both cut requests and bytes for clinics on slow links.
+
+18. **Tolerant sessions:** a brief loss of connection shouldn't cost the
+    session. The 15-minute token with sliding refresh already allows
+    this; keep rate limits loose enough for backed-off retries.
+```
+
+**README:** add a short "Weak networks" section:
+
+- what the app does: it slows polling, pauses while offline, retries
+  safely, holds a finished question until the connection returns,
+  switches to data saver on 2G, and has a slow-3G end-to-end test;
+- a pointer to spec §10 items 15–17 for the backend.
+
+**Demo server compression check.** After this branch deploys, run:
+
+```bash
+curl -s -o /dev/null -w '%{size_download} ' -H 'Accept-Encoding: gzip' https://demo.measured-health.org/
+curl -sI -H 'Accept-Encoding: gzip' https://demo.measured-health.org/ | grep -i content-encoding
+```
+
+Next.js compresses responses by default (`compress: true`), so this should
+print `content-encoding: gzip`. If it doesn't, add `gzip on;
+gzip_proxied any; gzip_vary on; gzip_types text/plain text/css
+application/javascript application/json image/svg+xml;` to
+`deploy/nginx/mhai-demo.conf`. Then install it on the server with
+`nginx -t` before the reload, as in `deploy/README.md`.
+
+The `CHANGELOG.md` entry under Added gains: "Weak-network support:
+adaptive polling, safe retries with idempotency keys, sending a question
+once back online, and a data-saver mode."
+
 ---
 
 ## Self-review notes
+
+- **Full frontend:** every §5.5 feature is built and switched on in live
+  mode against the assumed contract (plan header). Hospital sign-on
+  returns through Task 13; devices, password reset, trust this device,
+  terms and backup codes go through the Task 11 additions.
+- **Weak networks:** Task 14 covers the frontend and Task 15 the backend
+  asks (spec §10 items 14–18), plus a slow-3G end-to-end test.
 
 - **Spec coverage (§5.5 Account):**
   - sign-in (OIDC first, then email and password, three trust points):
