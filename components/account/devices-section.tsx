@@ -3,7 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Monitor } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
+import type { AuthError } from "@/lib/auth/types";
 import { useNow } from "@/lib/hooks/use-now";
+import { AuthErrorBanner } from "../auth/auth-error-banner";
+import { errorCode } from "../auth/auth-error-copy";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 
@@ -23,6 +26,7 @@ export function DevicesSection() {
     queryFn: () => client.listDevices(),
   });
   const [confirm, setConfirm] = useState(false);
+  const [failed, setFailed] = useState<AuthError | null>(null);
 
   const signOutOne = async (id: string) => {
     await client.signOutDevice(id);
@@ -30,7 +34,15 @@ export function DevicesSection() {
   };
   const everywhere = async () => {
     setConfirm(false);
-    await client.signOutEverywhere().catch(() => {});
+    setFailed(null);
+    try {
+      await client.signOutEverywhere();
+    } catch (e) {
+      const ae = errorCode(e);
+      if (ae.code === "session_expired") return void signOut("expired");
+      setFailed(ae);
+      return;
+    }
     await signOut("manual");
   };
 
@@ -49,6 +61,15 @@ export function DevicesSection() {
         <p className="mb-3 mt-1 text-[13.5px] text-ink-2">
           Sign out anything you don&apos;t recognise.
         </p>
+        {failed && (
+          <AuthErrorBanner
+            error={failed}
+            copy={{
+              title: "We couldn't sign out your other devices.",
+              body: "Check your connection and try again.",
+            }}
+          />
+        )}
         <ul className="flex flex-col divide-y divide-line">
           {devices.data?.map((d) => (
             <li key={d.id} className="flex min-h-14 items-center gap-3 py-2">

@@ -156,3 +156,33 @@ describe("AccountView backup codes", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("AccountView sign out everywhere failing", () => {
+  it("stays signed in and says so", async () => {
+    const user = userEvent.setup();
+    const client = createMockAuthClient();
+    await client.signIn(TEST_USER.email!, "pw");
+    client.signOutEverywhere = () => Promise.reject(new Error("offline"));
+    renderWithAuth(
+      <ToastProvider>
+        <AccountView />
+      </ToastProvider>,
+      TEST_USER,
+      client,
+    );
+    const devices = await screen.findByRole("region", { name: "Devices" });
+    await user.click(
+      within(devices).getByRole("button", { name: "Sign out everywhere" }),
+    );
+    const confirm = screen.getByRole("dialog", {
+      name: "Sign out everywhere?",
+    });
+    await user.click(
+      within(confirm).getByRole("button", { name: "Sign out everywhere" }),
+    );
+    expect(
+      await screen.findByText("We couldn't sign out your other devices."),
+    ).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
+});

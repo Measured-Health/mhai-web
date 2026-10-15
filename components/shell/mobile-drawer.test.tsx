@@ -57,4 +57,16 @@ describe("MobileDrawer", () => {
     await userEvent.keyboard("{Escape}");
     expect(outside).toHaveFocus();
   });
+  it("closes only the account menu on Escape, leaving the drawer open", async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderWithAuth(<MobileDrawer {...base} onClose={onClose} open />);
+    const trigger = screen.getByRole("button", { name: /Account/ });
+    await user.click(trigger);
+    expect(screen.getByRole("menu", { name: "Account" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(trigger).toHaveFocus();
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

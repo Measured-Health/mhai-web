@@ -17,7 +17,6 @@ import {
 } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { initials } from "@/lib/auth/types";
-import { useEscape } from "@/lib/hooks/use-escape";
 import { cn } from "../ui/cn";
 import { useShell } from "./app-shell";
 
@@ -56,7 +55,6 @@ export function AccountMenu({ rail }: { rail: boolean }) {
     setOpen(false);
     if (refocus) trigger.current?.focus();
   }, []);
-  useEscape(open, () => close(true));
   useEffect(() => {
     if (!open) return;
     ref.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
@@ -70,6 +68,13 @@ export function AccountMenu({ rail }: { rail: boolean }) {
   if (!user) return null;
   const role = [user.roleTitle, user.specialty].filter(Boolean).join(" · ");
 
+  // Esc closes only the menu, so an open mobile drawer stays put.
+  const onEscape = (e: KeyboardEvent) => {
+    if (!open || e.key !== "Escape") return;
+    e.preventDefault();
+    e.nativeEvent.stopPropagation();
+    close(true);
+  };
   const onMenuKey = (e: KeyboardEvent) => {
     const items = [
       ...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ??
@@ -88,7 +93,14 @@ export function AccountMenu({ rail }: { rail: boolean }) {
   };
 
   return (
-    <div ref={ref} className="relative border-t border-line pt-2.5">
+    <div
+      ref={ref}
+      onKeyDown={onEscape}
+      className={cn(
+        "relative border-t border-line pt-2.5",
+        rail && "self-stretch",
+      )}
+    >
       <button
         ref={trigger}
         type="button"
@@ -133,7 +145,7 @@ export function AccountMenu({ rail }: { rail: boolean }) {
           className={cn(
             "absolute z-30 rounded-2xl bg-white p-1.5 shadow-[0_30px_60px_-20px_#46035166] ring-1 ring-line",
             rail
-              ? "bottom-0 left-full ml-2 w-[260px]"
+              ? "bottom-0 left-full ml-5 w-[260px]"
               : "bottom-[calc(100%+8px)] left-0 right-0",
           )}
         >
