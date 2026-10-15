@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>MHAI · Screen layouts v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Darker+Grotesque:wght@600;700;800;900&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bloom:#460351;--bloom-2:#2c0136;--bloom-tint:#6e3c6a;--orchid:#a8499e;--lilac:#f1ecf4;--lilac-2:#e8dfee;
+  --mint:#15999E;--mint-2:#43c1c5;--mint-deep:#15777c;--mint-wash:#e3f4f4;
+  --ink:#1c0d22;--ink-2:#4a3d50;--ink-3:#8a7f90;--line:#ece4ef;--bg:#f6f2f8;
+  --ok:#1b7a4a;--ok-wash:#e4f5ec;--ok-deep:#135a36;
+  --warn:#b5742a;--warn-wash:#fbf0e2;--warn-deep:#8c5a1f;--warn-line:#eccA8e;
+  --bad:#a04438;--bad-wash:#f8e8e5;--bad-deep:#7d3029;--bad-line:#e0b5ae;
+  --r:22px;--r-sm:12px;--shadow:0 24px 50px -28px rgba(70,3,81,.4);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Outfit,sans-serif;color:var(--ink);background:#1a1320}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+/* tabs */
+.tabs-in{display:none}
+.tabbar{display:flex;gap:6px;padding:14px 20px;background:#1a1320;position:sticky;top:0;z-index:5;flex-wrap:wrap;align-items:center}
+.tabbar .ttl{color:#efe6f2;font-weight:600;margin-right:14px}
+.tabbar label{color:#cbbfd3;font-size:13px;padding:7px 13px;border-radius:999px;cursor:pointer;border:1px solid #3a2e44}
+#t1:checked~.tabbar [for=t1],#t2:checked~.tabbar [for=t2],#t3:checked~.tabbar [for=t3],#t4:checked~.tabbar [for=t4],#t5:checked~.tabbar [for=t5],#t6:checked~.tabbar [for=t6],#t7:checked~.tabbar [for=t7]{background:var(--mint);color:#fff;border-color:var(--mint)}
+.v{display:none}
+.fo{display:none}#t1:checked~.app .fo{display:inline}#t1:checked~.app .nf{display:none}
+#t1:checked~.app .v1,#t2:checked~.app .v2,#t3:checked~.app .v3,#t4:checked~.app .v4,#t5:checked~.app .v5,#t6:checked~.app .v6,#t7:checked~.app .v7{display:block}
+#t1:checked~.app .p1,#t2:checked~.app .p2,#t3:checked~.app .p3,#t4:checked~.app .p4,#t5:checked~.app .p5,#t6:checked~.app .p3{display:flex}
+#t7:checked~.app{grid-template-columns:256px minmax(0,1fr) 0}
+#d2:checked~#t7:checked~.app,#d3:checked~#t7:checked~.app{grid-template-columns:76px minmax(0,1fr) 0}
+.ib.on{background:var(--lilac);color:var(--bloom);border-color:var(--lilac-2)}
+.note{display:none;color:#cbbfd3;font-size:13px;padding:0 20px 14px;line-height:1.5;max-width:1200px}
+#t1:checked~.n1,#t2:checked~.n2,#t3:checked~.n3,#t4:checked~.n4,#t5:checked~.n5,#t6:checked~.n6,#t7:checked~.n7{display:block}
+
+/* shell */
+.app{display:grid;grid-template-columns:256px minmax(0,1fr) 330px;height:860px;margin:0 20px 20px;border-radius:18px;overflow:hidden;background:var(--bg);position:relative}
+/* sidebar */
+.sb{background:linear-gradient(175deg,#4d0a5b 0%,var(--bloom) 40%,var(--bloom-2) 100%);color:#efe6f2;display:flex;flex-direction:column;padding:18px 14px;position:relative;overflow:hidden}
+.sb::after{content:"";position:absolute;right:-70px;bottom:-90px;width:240px;height:240px;background:radial-gradient(circle,#15999e44,transparent 70%);pointer-events:none}
+.brand{display:flex;align-items:center;gap:10px;padding:2px 6px 16px}
+.mark{position:relative;width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,var(--mint),var(--mint-2));display:grid;place-items:center;box-shadow:0 0 0 4px #15999e2e}
+.brand b{font-family:'Darker Grotesque';font-size:22px;font-weight:900;letter-spacing:-.01em;line-height:.9;display:block}
+.brand small{font-size:10.5px;opacity:.6;letter-spacing:.04em}
+.newc{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--mint);color:#fff;border-radius:12px;padding:11px;font-weight:600;font-size:14px;box-shadow:0 10px 24px -10px var(--mint)}
+.search{margin-top:10px;display:flex;align-items:center;gap:8px;background:#ffffff12;border:1px solid #ffffff1c;border-radius:10px;padding:8px 10px;font-size:13px;color:#cdbcd6}
+.kbd{margin-left:auto;font-family:'JetBrains Mono';font-size:10.5px;border:1px solid #ffffff30;border-radius:5px;padding:1px 5px;opacity:.8}
+.grp{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.5;margin:18px 8px 6px}
+.it{display:flex;gap:10px;padding:8px;border-radius:10px;font-size:13px;line-height:1.3;align-items:flex-start}
+.it .ic{width:28px;height:28px;border-radius:8px;background:#ffffff14;display:grid;place-items:center;flex:none;font-size:13px}
+.it small{display:flex;align-items:center;gap:5px;opacity:.65;font-size:11px;margin-top:2px}
+.it.on{background:#ffffff17;box-shadow:inset 3px 0 0 var(--mint-2)}
+.sd{width:7px;height:7px;border-radius:50%;display:inline-block}
+.me{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px 6px 0;border-top:1px solid #ffffff1a;font-size:13px;position:relative;z-index:1}
+.av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--orchid),var(--bloom-tint));display:grid;place-items:center;font-weight:700;font-size:12px}
+.me small{display:block;opacity:.6;font-size:11px}
+.session-note{font-size:10.5px;opacity:.45;padding:8px 8px 0;line-height:1.4}
+
+/* center */
+.center{display:flex;flex-direction:column;min-width:0;position:relative;
+  background:radial-gradient(700px 360px at 85% -10%,#15999e22,transparent 60%),radial-gradient(600px 360px at -10% 110%,#4603511a,transparent 60%),var(--bg)}
+.center::before{content:"";position:absolute;inset:0;background-image:linear-gradient(#4603510a 1px,transparent 1px),linear-gradient(90deg,#4603510a 1px,transparent 1px);background-size:26px 26px;mask-image:radial-gradient(ellipse at 50% 0%,#000 20%,transparent 70%);pointer-events:none}
+.top{display:flex;align-items:center;gap:12px;padding:16px 26px;border-bottom:1px solid #ffffffaa;position:relative}
+.top h2{margin:0;font-size:16px;font-weight:600}
+.top .sub{font-size:12px;color:var(--ink-3)}
+.urg{font-family:'JetBrains Mono';font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px;font-weight:600}
+.urg.routine{background:var(--mint-wash);color:var(--mint-deep)}.urg.urgent{background:var(--warn-wash);color:var(--warn-deep)}.urg.emerg{background:var(--bad-wash);color:var(--bad-deep)}
+.tbtn{margin-left:auto;display:flex;gap:8px}
+.ib{height:34px;padding:0 11px;border-radius:10px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)}
+.scroll{flex:1;overflow:auto;padding:28px 26px 40px;position:relative}
+.v{max-width:700px;margin:0 auto}
+
+/* card */
+.card{position:relative;background:rgba(255,255,255,.84);backdrop-filter:blur(18px);border-radius:var(--r);padding:24px 26px;box-shadow:var(--shadow)}
+.card::before{content:"";position:absolute;inset:0;border-radius:var(--r);padding:1px;background:linear-gradient(135deg,var(--mint),#46035133,transparent 60%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+h1.dx{font-family:'Darker Grotesque';font-size:38px;font-weight:900;line-height:.95;margin:10px 0 8px;letter-spacing:-.005em}
+.eyebrow{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mint);font-weight:600}
+.chip{font-family:'JetBrains Mono';font-size:11px;padding:4px 10px;border-radius:999px;background:var(--lilac);color:var(--bloom)}
+.conf{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:7px 13px;border-radius:999px}
+.conf.ok{background:var(--ok-wash);color:var(--ok-deep)}.conf.warn{background:var(--warn-wash);color:var(--warn-deep)}
+.bars{display:inline-flex;gap:2px;align-items:flex-end}.bars i{width:4px;border-radius:2px;display:block;background:currentColor}.bars i.off{opacity:.22}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sec{margin-top:18px}
+.sec h4{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.prose{font-size:14.5px;line-height:1.75;color:var(--ink-2)}
+.prose ul{margin:0;padding-left:18px}.prose li{margin:4px 0}
+.ref{font-size:11px;padding:2px 8px;border-radius:7px;white-space:nowrap;font-weight:500;cursor:pointer}
+.ref.v{background:var(--ok-wash);color:var(--ok-deep)}.ref.u{background:var(--warn-wash);color:var(--warn-deep)}
+.ref.hl{outline:2px solid var(--mint);outline-offset:1px}
+.acts{display:flex;gap:8px;margin-top:22px;align-items:center;padding-top:18px;border-top:1px solid var(--line)}
+.btn{padding:10px 18px;border-radius:999px;font-size:13.5px;font-weight:600;border:0;display:inline-flex;gap:7px;align-items:center}
+.b-agree{background:var(--bloom);color:#fff}.b-sugg{background:var(--lilac);color:var(--bloom)}
+.b-copy{margin-left:auto;background:#fff;border:1px solid var(--line);color:var(--ink-2)}
+.meta{font-size:11.5px;color:var(--ink-3);margin-top:12px;display:flex;gap:14px}
+.disc{font-size:11.5px;color:var(--ink-3);margin-top:16px;text-align:center}
+.banner{display:flex;gap:12px;align-items:flex-start;border-radius:16px;padding:14px 16px;margin-bottom:14px;font-size:13.5px;line-height:1.5}
+.banner b{display:block;font-size:14px}
+.banner.warn{background:var(--warn-wash);border:1px solid var(--warn-line);color:var(--warn-deep)}
+.banner.bad{background:var(--bad-wash);border:1px solid var(--bad-line);color:var(--bad-deep)}
+.banner.info{background:#fff8dc;border:1px solid #f1df9a;color:#7a6512}
+.bic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;font-weight:700}
+.banner.warn .bic{background:#f3dcb8}.banner.bad .bic{background:#efc9c3}
+
+/* form */
+.fhead h1{font-family:'Darker Grotesque';font-size:40px;font-weight:900;margin:0;line-height:1}
+.fhead p{margin:6px 0 20px;color:var(--ink-2);font-size:14.5px}
+.fs{padding:18px 0;border-top:1px solid var(--line)}
+.fs:first-of-type{border-top:0;padding-top:4px}
+.fsl{display:flex;gap:10px;align-items:baseline;margin-bottom:12px}
+.fsl .n{font-family:'JetBrains Mono';font-size:11px;color:var(--mint);font-weight:600}
+.fsl b{font-size:14px}
+.grid2{display:grid;grid-template-columns:140px 1fr;gap:14px}
+.lab{font-size:12.5px;color:var(--ink-2);margin-bottom:6px;display:flex;justify-content:space-between}
+.lab .req{color:var(--bad)}
+.inp{background:#fff;border:1px solid var(--lilac-2);border-radius:12px;padding:11px 13px;font-size:14px;color:var(--ink);min-height:44px}
+.inp.focus{border-color:var(--mint);box-shadow:0 0 0 4px #15999e22}
+.inp.ph{color:var(--ink-3)}
+.seg{display:flex;background:var(--lilac);border-radius:12px;padding:4px;gap:4px}
+.seg span{flex:1;text-align:center;padding:8px 6px;border-radius:9px;font-size:13.5px;color:var(--ink-2)}
+.seg span.on{background:#fff;color:var(--bloom);font-weight:600;box-shadow:0 2px 8px -4px #46035155}
+.prio{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.prio>span{border:1px solid var(--lilac-2);background:#fff;border-radius:12px;padding:10px 12px;font-size:13.5px;display:flex;gap:8px;align-items:center}
+.prio>span small{display:block;font-size:11px;color:var(--ink-3)}
+.prio>span.on{border-color:var(--mint);box-shadow:0 0 0 3px #15999e1f}
+.sugg{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.sugg span{font-size:12px;padding:4px 10px;border-radius:999px;background:#fff;border:1px dashed var(--lilac-2);color:var(--ink-2)}
+.tag2{font-size:12.5px;padding:4px 10px;border-radius:999px;background:var(--mint-wash);color:var(--mint-deep);display:inline-flex;gap:6px;align-items:center}
+.ta{min-height:110px;line-height:1.6}
+.hint{font-size:12px;color:var(--ink-3);margin-top:6px;display:flex;justify-content:space-between}
+.coll{display:flex;justify-content:space-between;align-items:center;color:var(--ink-2);font-size:13.5px}
+.submit{position:sticky;bottom:0;margin-top:6px;display:flex;align-items:center;gap:12px;padding:16px 0 0}
+.go{background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;border-radius:999px;padding:13px 24px;font-weight:600;font-size:15px;display:inline-flex;gap:10px;align-items:center;box-shadow:0 14px 28px -12px var(--mint)}
+.go .kbd{border-color:#ffffff66}
+
+/* processing */
+.proc{text-align:center;max-width:540px;margin:20px auto 0}
+.ecg{height:70px;margin:4px auto 6px}
+.ecg path{stroke:var(--mint);stroke-width:2.6;fill:none;stroke-dasharray:400;animation:draw 2.2s linear infinite}
+@keyframes draw{from{stroke-dashoffset:400}to{stroke-dashoffset:0}}
+.proc h1{font-family:'Darker Grotesque';font-size:34px;font-weight:900;margin:0}
+.proc p{color:var(--ink-2);margin:4px 0 18px}
+.steps{text-align:left;display:flex;flex-direction:column;gap:6px}
+.st{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:14px;font-size:14px;background:#fff;border:1px solid var(--line)}
+.st .d{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;flex:none;border:2px solid var(--lilac-2);color:var(--ink-3)}
+.st.done{background:var(--mint-wash);border-color:transparent;color:var(--mint-deep)}.st.done .d{background:var(--mint);border-color:var(--mint);color:#fff}
+.st.now{background:#fff;border-color:var(--mint);box-shadow:0 0 0 4px #15999e1a;font-weight:600}.st.now .d{border-color:var(--mint);position:relative}
+.st.now .d::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--mint);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.6);opacity:.4}}
+.st.todo{color:var(--ink-3)}
+.st .tm{margin-left:auto;font-family:'JetBrains Mono';font-size:11.5px;opacity:.75}
+.pb{height:6px;background:var(--lilac);border-radius:9px;overflow:hidden;margin-top:18px}.pb i{display:block;height:100%;width:58%;background:linear-gradient(90deg,var(--mint),var(--mint-2));border-radius:9px}
+.pbl{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3);margin-top:6px}
+
+/* right panel */
+.panel{background:#fffffff2;border-left:1px solid var(--line);padding:20px 18px;flex-direction:column;gap:18px;overflow:auto;display:none}
+.ph{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px}
+.ph .s{width:30px;height:30px;border-radius:9px;background:var(--mint-wash);display:grid;place-items:center;color:var(--mint-deep)}
+.pt{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin-bottom:8px}
+.chk{display:flex;gap:10px;align-items:center;font-size:13px;padding:7px 0}
+.chk .ci{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-size:11px;flex:none}
+.ci.ok{background:var(--ok-wash);color:var(--ok)}.ci.w{background:var(--warn-wash);color:var(--warn)}.ci.b{background:var(--bad-wash);color:var(--bad)}
+.chk small{display:block;color:var(--ink-3);font-size:11.5px}
+.m{margin:9px 0}.mr{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;color:var(--ink-2)}
+.mt{height:7px;background:var(--lilac);border-radius:9px;overflow:hidden}.mt i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,var(--mint),var(--mint-2))}.mt i.w{background:linear-gradient(90deg,var(--warn),#d4983c)}
+.src{border:1px solid var(--line);border-radius:14px;padding:11px 12px;font-size:12.5px;line-height:1.45;margin-bottom:8px;background:#fff}
+.src.hl{border-color:var(--mint);box-shadow:0 0 0 3px #15999e1f}
+.src .sh{display:flex;justify-content:space-between;gap:8px;align-items:center;font-weight:600}
+.src q{display:block;color:var(--ink-2);font-style:italic;margin:6px 0;quotes:none}
+.src small{color:var(--ink-3);font-size:11px}
+.vb{font-size:10.5px;padding:2px 7px;border-radius:6px;font-weight:600}
+.vb.ok{background:var(--ok-wash);color:var(--ok-deep)}.vb.w{background:var(--warn-wash);color:var(--warn-deep)}
+.tip{background:var(--lilac);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.55;color:var(--ink-2)}
+.tip b{color:var(--bloom)}
+.how{counter-reset:h;display:flex;flex-direction:column;gap:10px}
+.how div{display:flex;gap:10px;font-size:13px;line-height:1.45;color:var(--ink-2)}
+.how div::before{counter-increment:h;content:counter(h);width:22px;height:22px;border-radius:50%;background:var(--mint-wash);color:var(--mint-deep);font-size:11.5px;font-weight:600;display:grid;place-items:center;flex:none}
+.fail{text-align:center;max-width:520px;margin:30px auto 0}
+.fail .big{width:64px;height:64px;border-radius:20px;background:var(--bad-wash);color:var(--bad);display:grid;place-items:center;font-size:28px;margin:0 auto 14px}
+.fail h1{font-family:'Darker Grotesque';font-size:34px;font-weight:900;margin:0}
+.fail p{color:var(--ink-2);line-height:1.6}
+.corr{margin-top:16px;background:var(--warn-wash);border:1px solid var(--warn-line);border-radius:16px;padding:16px}
+.corr .lab{color:var(--warn-deep)}
+.toast{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;border-radius:12px;padding:10px 16px;font-size:13px;display:flex;gap:8px;align-items:center;box-shadow:0 10px 30px -10px #000}
+
+.devbar{top:56px;padding-top:0}
+#d1:checked~.devbar [for=d1],#d2:checked~.devbar [for=d2],#d3:checked~.devbar [for=d3]{background:#efe6f2;color:var(--bloom);border-color:#efe6f2}
+.show-port,.evbar{display:none}
+#d2:checked~.app,#d3:checked~.app{margin:0 auto 20px;grid-template-columns:76px minmax(0,1fr) 300px}
+#d2:checked~.app{width:1024px;height:768px}
+#d3:checked~.app{width:820px;height:1100px;grid-template-columns:76px minmax(0,1fr)}
+#d2:checked~.app .lbl,#d3:checked~.app .lbl{display:none}
+#d2:checked~.app .sb,#d3:checked~.app .sb{padding:16px 12px;align-items:center}
+#d2:checked~.app .brand,#d3:checked~.app .brand{padding:2px 0 14px}
+#d2:checked~.app .newc,#d3:checked~.app .newc{width:44px;height:44px;padding:0;font-size:20px}
+#d2:checked~.app .search,#d3:checked~.app .search{width:44px;height:40px;justify-content:center;padding:0}
+#d2:checked~.app .grp,#d3:checked~.app .grp{width:28px;height:1px;background:#ffffff30;margin:14px 0 8px;font-size:0}
+#d2:checked~.app .it,#d3:checked~.app .it{padding:6px}
+#d2:checked~.app .it .ic,#d3:checked~.app .it .ic{width:38px;height:38px;border-radius:11px}
+#d2:checked~.app .it.on,#d3:checked~.app .it.on{box-shadow:inset 0 0 0 2px var(--mint-2)}
+#d2:checked~.app .me,#d3:checked~.app .me{justify-content:center;padding:10px 0 0;width:100%}
+#d2:checked~.app .scroll{padding:22px 20px 30px}
+#d2:checked~.app .grid2{grid-template-columns:110px 1fr}
+#d2:checked~.app .panel{padding:16px 14px}
+#d3:checked~.app .panel{display:none!important}
+#d3:checked~.app .show-port{display:inline}#d3:checked~.app .hide-port{display:none}
+#d3:checked~.app .evbar{display:flex}
+#t1:checked~.app .evbar,#t2:checked~.app .evbar,#t6:checked~.app .evbar,#t7:checked~.app .evbar{display:none!important}
+.evbar{position:absolute;left:24px;right:24px;bottom:20px;align-items:center;gap:12px;background:#ffffffee;backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:18px;padding:12px 14px;box-shadow:var(--shadow);font-size:13px}
+.evbar small{display:block;color:var(--ink-3);font-size:12px}
+#d3:checked~.app .scroll{padding-bottom:110px}
+.mark::after{content:"";position:absolute;inset:-4px;border-radius:13px;border:2px solid var(--mint-2);animation:ring 2.4s ease-out infinite}
+@keyframes ring{0%{opacity:.7;transform:scale(.92)}100%{opacity:0;transform:scale(1.35)}}
+.flag{width:7px;height:7px;border-radius:50%;background:#f0a640;display:inline-block;margin-left:6px;vertical-align:middle;box-shadow:0 0 0 3px #f0a64033}
+.cl{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;opacity:.7;font-weight:600;margin-left:2px}
+.ref.x{background:var(--bad-wash);color:var(--bad-deep)}
+.strike{text-decoration:line-through;text-decoration-color:var(--bad);color:var(--ink-3)}
+.banner.ok{background:var(--ok-wash);border:1px solid #a8d9bf;color:var(--ok-deep)}.banner.ok .bic{background:#c6ead5}
+.sys{display:flex;gap:10px;align-items:center;background:#fff8dc;border-bottom:1px solid #f1df9a;color:#7a6512;font-size:13px;padding:9px 26px;position:relative}
+
+/* light sidebar (v2) */
+.sys.v{display:none!important}#t6:checked~.app .sys.v{display:flex!important}
+.live::after{inset:-3px!important;border-width:1.5px!important}
+.sb{background:linear-gradient(180deg,#ffffff 0%,#fbf8fc 100%)!important;color:var(--ink)!important;border-right:1px solid var(--line)}
+.sb::after{background:radial-gradient(circle,#15999e1f,transparent 70%)!important}
+.brand{flex-direction:column;align-items:flex-start;gap:6px;padding:4px 6px 18px}
+.logo{height:46px;width:auto;display:block}
+.rmark{display:none;height:38px;width:auto}
+.tagline{font-size:11px;color:var(--ink-3);display:flex;align-items:center;gap:7px;letter-spacing:.02em}
+.live{width:7px;height:7px;border-radius:50%;background:var(--mint);position:relative}
+.live::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--mint);animation:ring 2.4s ease-out infinite}
+.search{background:var(--bg)!important;border-color:var(--line)!important;color:var(--ink-3)!important}
+.search .kbd{border-color:var(--lilac-2)}
+.grp{color:var(--ink-3);opacity:1!important}
+.it{color:var(--ink)}
+.it .ic{background:var(--lilac)!important;color:var(--bloom)}
+.it small{color:var(--ink-3);opacity:1!important}
+.it:hover{background:#f6f2f8}
+.it.on{background:var(--mint-wash)!important;box-shadow:inset 3px 0 0 var(--mint)!important}
+.it.on .ic{background:#fff!important;color:var(--mint-deep)}
+.me{border-top-color:var(--line)!important}
+.me small{color:var(--ink-3);opacity:1!important}
+.av{color:#fff}
+.session-note{color:var(--ink-3);opacity:1!important}
+#d2:checked~.app .rmark,#d3:checked~.app .rmark{display:block}
+#d2:checked~.app .brand,#d3:checked~.app .brand{align-items:center}
+#d2:checked~.app .grp,#d3:checked~.app .grp{background:var(--line)!important}
+#d2:checked~.app .it.on,#d3:checked~.app .it.on{box-shadow:inset 0 0 0 2px var(--mint)!important}
+.icd{position:relative;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.icd .cp{opacity:.55;font-size:11px}
+.icd .tt{display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:3;white-space:nowrap;background:var(--ink);color:#fff;font-family:Outfit;font-size:12px;line-height:1.45;padding:8px 11px;border-radius:10px;box-shadow:0 10px 24px -10px #000}
+.icd .tt i{opacity:.65;font-style:normal;font-size:11px}
+.icd:hover .tt{display:block}
+#t4:checked~.app .v4 .icd .tt{display:block}
+.me .org{display:flex;align-items:center;gap:4px;color:var(--mint-deep)!important;font-weight:500;margin-top:1px}
+.me .more{margin-left:auto;color:var(--ink-3);font-size:16px}
+</style></head>
+<body>
+<input class="tabs-in" type="radio" name="t" id="t1" checked>
+<input class="tabs-in" type="radio" name="t" id="t2">
+<input class="tabs-in" type="radio" name="t" id="t3">
+<input class="tabs-in" type="radio" name="t" id="t4">
+<input class="tabs-in" type="radio" name="t" id="t5">
+<input class="tabs-in" type="radio" name="t" id="t6">
+<input class="tabs-in" type="radio" name="t" id="t7">
+<input class="tabs-in" type="radio" name="d" id="d1" checked>
+<input class="tabs-in" type="radio" name="d" id="d2">
+<input class="tabs-in" type="radio" name="d" id="d3">
+<div class="tabbar"><span class="ttl">MHAI screen layouts · v2</span>
+  <label for="t1">1 · New consultation</label><label for="t2">2 · Analysing</label><label for="t3">3 · Result: High confidence</label><label for="t4">4 · Use with caution + correction</label><label for="t5">5 · Needs review</label><label for="t6">6 · Couldn't complete</label><label for="t7">7 · Feedback sent · panel closed</label>
+</div>
+<div class="tabbar devbar"><span class="ttl">Device</span><label for="d1">Desktop · 1440</label><label for="d2">Tablet landscape · 1024</label><label for="d3">Tablet portrait · 820</label></div>
+<div class="note n1">The form is split into 3 numbered groups so the eye moves top-to-bottom. Sex and priority are one-click choices, not dropdowns. Symptoms become tags, with common ones suggested. The right panel explains how it works and what a good question looks like, so a first-time user needs no training. <b>⌘↵</b> submits.</div>
+<div class="note n2">One focal point: the heartbeat line and a live checklist in plain language. The right panel repeats what you asked, so you can check it while you wait.</div>
+<div class="note n3">The answer comes first: the diagnosis in big type, with the confidence pill beside it. Recommendations are bullets with inline source tags. Hovering a tag highlights the matching source on the right. The actions sit at the bottom of the card, where you finish reading.</div>
+<div class="note n4">An amber banner explains in one sentence why caution is needed. "Suggest correction" opens inline, inside the card, so you never lose context. A "needs review" tag points at the claim that wasn't verified.</div>
+<div class="note n5">Safety rule: there is no confidence pill, and the red banner is unmissable. The diagnosis is shown as a "possible" assessment, and agreeing still requires a review.</div>
+<div class="note n7">After "I agree", a green confirmation replaces the buttons' focus and both dim, so you can't send twice. Copy flips to "Copied". The evidence panel is collapsed via the top-bar toggle, and the result gets the full width.</div>
+<div class="note n6">This is not a dead end. Your inputs are kept, you get one clear primary action (Try again), and you can go back and edit. The system-status link explains outages in plain words.</div>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="grp">Today</div>
+    <div class="it on"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="it"><div class="ic">◐</div><div class="lbl">Febrile child, 3 F<span class="flag" title="Flagged"></span><small><span class="sd" style="background:var(--warn)"></span>Use with caution · 1 h</small></div></div>
+    <div class="it"><div class="ic">⚗</div><div class="lbl">Low potassium<small><span class="sd" style="background:var(--bad)"></span>Needs review · 3 h</small></div></div>
+    <div class="grp">Yesterday</div>
+    <div class="it"><div class="ic">✚</div><div class="lbl">Post-op fever, day 2<small><span class="sd" style="background:var(--ok)"></span>High confidence</small></div></div>
+    <div class="it"><div class="ic">℞</div><div class="lbl">Warfarin interaction<small><span class="sd" style="background:var(--warn)"></span>Use with caution</small></div></div>
+    <div class="grp">Earlier</div>
+    <div class="it"><div class="ic">♡</div><div class="lbl">Palpitations, 31 F<small><span class="sd" style="background:var(--ok)"></span>High confidence · Mon</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside>
+
+  <!-- CENTER -->
+  <main class="center">
+    <!-- top bars per view -->
+    <div class="top">
+      <div><h2><span class="fo">New consultation</span><span class="nf">Chest pain, 54 M</span></h2><div class="sub mono"><span class="fo">Draft · not submitted</span><span class="nf">Started 14:05</span></div></div>
+      <span class="urg urgent nf">Urgent</span>
+      <div class="tbtn"><span class="ib">▣ <span class="hide-port">Evidence panel</span><span class="show-port">Evidence &amp; safety</span></span></div>
+    </div>
+    <div class="sys v v6">⚠ Some services are running slowly right now. Results may take longer than usual.</div>
+    <div class="scroll">
+
+      <!-- 1 FORM -->
+      <section class="v v1">
+        <div class="fhead"><span class="eyebrow">New consultation</span><h1>What's going on with your patient?</h1><p>Three quick sections. The more detail you give, the better the answer.</p></div>
+        <div class="card">
+          <div class="fs"><div class="fsl"><span class="n">01</span><b>Patient</b></div>
+            <div class="grid2">
+              <div><div class="lab">Age <span class="req">*</span></div><div class="inp mono">54</div></div>
+              <div><div class="lab">Sex <span class="req">*</span></div><div class="seg"><span class="on">Male</span><span>Female</span><span>Other</span></div></div>
+            </div>
+            <div style="margin-top:14px"><div class="lab">Priority <span class="req">*</span></div>
+              <div class="prio"><span><span class="sd" style="background:var(--mint)"></span><div>Routine<small>Clinic visit</small></div></span><span class="on"><span class="sd" style="background:var(--warn)"></span><div>Urgent<small>Same day</small></div></span><span><span class="sd" style="background:var(--bad)"></span><div>Emergency<small>Act now</small></div></span></div></div>
+          </div>
+          <div class="fs"><div class="fsl"><span class="n">02</span><b>Presentation</b></div>
+            <div class="lab">Presenting symptoms <span class="req">*</span></div>
+            <div class="inp" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="tag2">Chest pain ×</span><span class="tag2">Sweating ×</span><span style="color:var(--ink-3);font-size:13.5px">Type and press Enter…</span></div>
+            <div class="sugg"><span>+ Shortness of breath</span><span>+ Nausea</span><span>+ Left arm pain</span><span>+ Dizziness</span></div>
+            <div style="margin-top:14px"><div class="lab">Clinical question <span class="req">*</span></div>
+              <div class="inp ta focus">54-year-old male, central chest pain for 40 min radiating to the left arm, diaphoretic. BP 150/95, HR 104. Smoker, type 2 diabetes. What is the most likely diagnosis and immediate management?</div>
+              <div class="hint"><span>Tip: include vitals, duration and relevant history.</span><span class="mono">212 / 2000</span></div></div>
+          </div>
+          <div class="fs"><div class="fsl"><span class="n">03</span><b>Optional</b></div>
+            <div class="grid2" style="grid-template-columns:1fr 1fr">
+              <div><div class="lab">Specialty area</div><div class="inp">Let the system decide ▾</div></div>
+              <div><div class="lab">&nbsp;</div><div class="inp coll">＋ Additional context (medical history) <span>▸</span></div></div>
+            </div>
+          </div>
+          <div class="submit"><span class="go"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>Analyse <span class="kbd">⌘ ↵</span></span><span style="font-size:12.5px;color:var(--ink-3)">Patient details are masked before analysis.</span></div>
+        </div>
+      </section>
+
+      <!-- 2 PROCESSING -->
+      <section class="v v2">
+        <div class="card proc">
+          <svg class="ecg" viewBox="0 0 300 70"><path d="M0 35h70l10-20 14 40 12-52 14 60 10-28h170"/></svg>
+          <h1>Analysing your question</h1>
+          <p>Running clinical safety checks. This usually takes 10–20 seconds.</p>
+          <div class="steps">
+            <div class="st done"><span class="d">✓</span>Protecting patient privacy<span class="tm">0.4s</span></div>
+            <div class="st done"><span class="d">✓</span>Searching medical guidelines<span class="tm">2.1s</span></div>
+            <div class="st now"><span class="d"></span>Generating clinical assessment<span class="tm">…</span></div>
+            <div class="st todo"><span class="d"></span>Verifying against evidence</div>
+            <div class="st todo"><span class="d"></span>Running safety checks</div>
+            <div class="st todo"><span class="d"></span>Finalising recommendation</div>
+          </div>
+          <div class="pb"><i></i></div><div class="pbl"><span>Step 3 of 6</span><span class="mono">58%</span></div>
+        </div>
+      </section>
+
+      <!-- 3 HIGH -->
+      <section class="v v3">
+        <div class="card">
+          <div class="row"><span class="chip icd" title="ICD-10 diagnosis code: Unstable angina. Click to copy.">ICD-10 · I20.0 <span class="cp">⧉</span><span class="tt">ICD-10 diagnosis code<br><b>Unstable angina</b><br><i>Click to copy</i></span></span><span class="conf ok" style="margin-left:auto"><span class="bars"><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i><i style="height:12px"></i><i class="off" style="height:14px"></i></span>High <span class="cl">confidence</span></span></div>
+          <h1 class="dx">Unstable angina</h1>
+          <div class="prose">Presentation is consistent with acute coronary syndrome in a high-risk patient (smoker, type 2 diabetes).</div>
+          <div class="sec"><h4>Recommended next steps</h4><div class="prose"><ul>
+            <li>12-lead ECG within 10 minutes of arrival <span class="ref v hl">✓ AHA 2021 Chest Pain</span></li>
+            <li>Serial high-sensitivity troponin at 0 and 3 hours <span class="ref v">✓ ESC 2023 ACS</span></li>
+            <li>Aspirin 300 mg chewed, unless contraindicated <span class="ref v">✓ AHA 2021 Chest Pain</span></li>
+            <li>Risk-stratify with HEART score before disposition <span class="ref v">✓ NICE CG95</span></li></ul></div></div>
+          <div class="acts"><span class="btn b-agree">✓ I agree</span><span class="btn b-sugg">✎ Suggest correction</span><span class="btn b-copy">⧉ Copy</span></div>
+          <div class="meta mono"><span>Completed in 11.8 s</span><span>4 sources</span></div>
+        </div>
+        <div class="disc">Decision support only. Final clinical judgement rests with the treating clinician.</div>
+      </section>
+
+      <!-- 4 CAUTION + correction -->
+      <section class="v v4">
+        <div class="banner warn"><span class="bic">!</span><div><b>Use with caution</b>One recommendation couldn't be matched to a guideline. Check it before acting.</div></div>
+        <div class="card">
+          <div class="row"><span class="chip icd" title="ICD-10 diagnosis code: Dengue fever. Click to copy.">ICD-10 · A90 <span class="cp">⧉</span><span class="tt">ICD-10 diagnosis code<br><b>Dengue fever</b><br><i>Click to copy</i></span></span><span class="conf warn" style="margin-left:auto"><span class="bars"><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i><i class="off" style="height:12px"></i><i class="off" style="height:14px"></i></span>Use with caution <span class="cl">confidence</span></span></div>
+          <h1 class="dx">Dengue fever, likely</h1>
+          <div class="sec"><h4>Recommended next steps</h4><div class="prose"><ul>
+            <li>NS1 antigen test and full blood count <span class="ref v">✓ WHO Dengue 2024</span></li>
+            <li>Oral fluids, paracetamol for fever; avoid NSAIDs <span class="ref v">✓ WHO Dengue 2024</span></li>
+            <li>Admit if platelets fall below 100 × 10⁹/L <span class="ref u">ⓘ Needs review</span></li></ul></div></div>
+          <div class="acts"><span class="btn b-agree" style="opacity:.45">✓ I agree</span><span class="btn b-sugg" style="box-shadow:0 0 0 2px var(--warn)">✎ Suggest correction</span><span class="btn b-copy">⧉ Copy</span></div>
+          <div class="corr">
+            <div class="lab">What should the diagnosis or recommendation be?</div>
+            <div class="inp" style="margin-bottom:10px">Admission threshold is clinical warning signs, not a platelet cut-off alone.</div>
+            <div class="lab">Why? <span class="req">*</span></div>
+            <div class="inp">WHO 2024 uses warning signs (abdominal pain, bleeding, lethargy) for admission.</div>
+            <div class="row" style="margin-top:12px"><span class="btn b-agree">Submit correction</span><span class="btn" style="background:transparent;color:var(--ink-2)">Cancel</span><span style="margin-left:auto;font-size:12px;color:var(--warn-deep)">A second clinician reviews every correction.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 NEEDS REVIEW -->
+      <section class="v v5">
+        <div class="banner bad"><span class="bic">⚠</span><div><b>This result needs clinician review before any clinical action is taken</b>The evidence didn't support enough of this answer for the system to stand behind it.</div></div>
+        <div class="card" style="opacity:.96">
+          <div class="row"><span class="eyebrow" style="color:var(--bad)">Possible assessment · not verified</span></div>
+          <h1 class="dx" style="color:var(--ink-2)">Hypokalaemia, cause unclear</h1>
+          <div class="prose">Serum K⁺ 2.9 mmol/L. Several suggested causes and replacement doses could not be verified against the available guidelines <span class="ref u">ⓘ Needs review</span>.</div>
+          <div class="sec"><h4>Removed by safety checks</h4><div class="prose"><span class="strike">IV potassium 40 mmol over 1 hour via peripheral line</span> <span class="ref x">✕ Removed: unsafe dose</span></div></div>
+          <div class="acts"><span class="btn b-agree">Mark as reviewed</span><span class="btn b-sugg">✎ Suggest correction</span><span class="btn b-copy">⧉ Copy</span></div>
+        </div>
+        <div class="disc">No confidence level is shown for results that need review.</div>
+      </section>
+
+      <!-- 7 FEEDBACK SENT -->
+      <section class="v v7">
+        <div class="banner ok"><span class="bic">✓</span><div><b>Thanks, your agreement was recorded</b>It helps us measure how often the system gets it right.</div></div>
+        <div class="card">
+          <div class="row"><span class="chip icd" title="ICD-10 diagnosis code: Unstable angina. Click to copy.">ICD-10 · I20.0 <span class="cp">⧉</span><span class="tt">ICD-10 diagnosis code<br><b>Unstable angina</b><br><i>Click to copy</i></span></span><span class="conf ok" style="margin-left:auto"><span class="bars"><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i><i style="height:12px"></i><i class="off" style="height:14px"></i></span>High <span class="cl">confidence</span></span></div>
+          <h1 class="dx">Unstable angina</h1>
+          <div class="prose">Presentation is consistent with acute coronary syndrome in a high-risk patient (smoker, type 2 diabetes).</div>
+          <div class="sec"><h4>Recommended next steps</h4><div class="prose"><ul>
+            <li>12-lead ECG within 10 minutes of arrival <span class="ref v">✓ AHA 2021 Chest Pain</span></li>
+            <li>Serial high-sensitivity troponin at 0 and 3 hours <span class="ref v">✓ ESC 2023 ACS</span></li></ul></div></div>
+          <div class="acts"><span class="btn b-agree" style="opacity:.4">✓ Agreed</span><span class="btn b-sugg" style="opacity:.4">✎ Suggest correction</span><span class="btn b-copy" style="color:var(--ok);border-color:#a8d9bf">✓ Copied</span></div>
+          <div class="meta mono"><span>Completed in 11.8 s</span><span>4 sources</span></div>
+        </div>
+      </section>
+
+      <!-- 6 FAILED -->
+      <section class="v v6">
+        <div class="card fail">
+          <div class="big">↻</div>
+          <h1>We couldn't complete this one</h1>
+          <p>The analysis service didn't respond in time. Your answers are saved. Nothing was lost.</p>
+          <div class="row" style="justify-content:center;margin-top:16px"><span class="go">↻ Try again</span><span class="btn b-sugg">Edit question</span></div>
+          <p style="font-size:12.5px;color:var(--ink-3);margin-top:16px">Still failing? <u>Check system status</u></p>
+        </div>
+      </section>
+
+    </div>
+    <div class="evbar"><span class="ci ok" style="width:26px;height:26px;border-radius:8px;display:grid;place-items:center">✓</span><div><b>Evidence &amp; safety</b><small>3 safety checks passed · 4 sources</small></div><span class="go" style="padding:9px 16px;font-size:13px;margin-left:auto">Open ↑</span></div>
+  </main>
+
+  <!-- RIGHT PANELS -->
+  <aside class="panel p1">
+    <div class="ph"><span class="s">?</span>How it works</div>
+    <div class="how"><div>Describe the patient and ask a clear clinical question.</div><div>Personal details are masked, then guidelines are searched.</div><div>Every claim is checked against the sources before you see it.</div><div>You get a confidence level and the exact sources used.</div></div>
+    <div class="tip"><b>A good question</b><br>"54 M, chest pain 40 min radiating to left arm, BP 150/95, HR 104, smoker. Likely diagnosis and immediate management?"</div>
+    <div><div class="pt">Try an example</div><div class="sugg" style="margin:0"><span>Febrile child</span><span>Post-op fever</span><span>Drug interaction</span></div></div>
+  </aside>
+  <aside class="panel p2">
+    <div class="ph"><span class="s">≡</span>Your question</div>
+    <div class="tip" style="background:#fff;border:1px solid var(--line)"><span class="mono" style="font-size:12px;color:var(--ink-3)">54 · Male · Urgent</span><br>Chest pain, sweating<br><br>54-year-old male, central chest pain for 40 min radiating to the left arm, diaphoretic. BP 150/95, HR 104…</div>
+    <div style="font-size:12.5px;color:var(--ink-3)">Evidence and safety details appear here when the analysis finishes.</div>
+  </aside>
+  <aside class="panel p3">
+    <div class="ph"><span class="s">⛨</span>Evidence &amp; safety</div>
+    <div><div class="pt">Safety checks</div>
+      <div class="chk"><span class="ci ok">✓</span><div>Patient data protected</div></div>
+      <div class="chk"><span class="ci ok">✓</span><div>Consistent reasoning</div></div>
+      <div class="chk"><span class="ci ok">✓</span><div>Evidence-backed claims<small>4 of 4 claims verified</small></div></div>
+    </div>
+    <div><div class="pt">Why this confidence</div>
+      <div class="m"><div class="mr"><span>Evidence match</span><span class="mono">92%</span></div><div class="mt"><i style="width:92%"></i></div></div>
+      <div class="m"><div class="mr"><span>Internal consistency</span><span class="mono">100%</span></div><div class="mt"><i style="width:100%"></i></div></div>
+      <div class="m"><div class="mr"><span>Values &amp; dosages</span><span class="mono">90%</span></div><div class="mt"><i style="width:90%"></i></div></div>
+      <div class="m"><div class="mr"><span>Answer stability</span><span class="mono">61%</span></div><div class="mt"><i class="w" style="width:61%"></i></div></div>
+    </div>
+    <div><div class="pt">Sources used</div>
+      <div class="src hl"><div class="sh">AHA 2021 Chest Pain Guideline<span class="vb ok">Verified</span></div><q>"Obtain a 12-lead ECG within 10 minutes of arrival…"</q><small>Used 2 times</small></div>
+      <div class="src"><div class="sh">ESC 2023 ACS Guideline<span class="vb ok">Verified</span></div><q>"Serial hs-cTn at 0h/3h…"</q><small>Used 1 time</small></div>
+      <div class="src"><div class="sh">NICE CG95<span class="vb ok">Verified</span></div><small>Used 1 time</small></div>
+    </div>
+  </aside>
+  <aside class="panel p4">
+    <div class="ph"><span class="s" style="background:var(--warn-wash);color:var(--warn)">⛨</span>Evidence &amp; safety</div>
+    <div><div class="pt">Safety checks</div>
+      <div class="chk"><span class="ci ok">✓</span><div>Patient data protected</div></div>
+      <div class="chk"><span class="ci ok">✓</span><div>Consistent reasoning</div></div>
+      <div class="chk"><span class="ci w">!</span><div>Evidence-backed claims<small>2 of 3 claims verified</small></div></div>
+      <div class="banner warn" style="margin:6px 0 0;padding:10px 12px;font-size:12.5px"><div><b style="font-size:13px">1 recommendation needs review</b>The admission threshold wasn't found in the guidelines.</div></div>
+    </div>
+    <div><div class="pt">Why this confidence</div>
+      <div class="m"><div class="mr"><span>Evidence match</span><span class="mono">66%</span></div><div class="mt"><i class="w" style="width:66%"></i></div></div>
+      <div class="m"><div class="mr"><span>Internal consistency</span><span class="mono">95%</span></div><div class="mt"><i style="width:95%"></i></div></div>
+      <div class="m"><div class="mr"><span>Values &amp; dosages</span><span class="mono">70%</span></div><div class="mt"><i class="w" style="width:70%"></i></div></div>
+      <div class="m"><div class="mr"><span>Answer stability</span><span class="mono">58%</span></div><div class="mt"><i class="w" style="width:58%"></i></div></div>
+    </div>
+    <div><div class="pt">Sources used</div>
+      <div class="src"><div class="sh">WHO Dengue Guidelines 2024<span class="vb ok">Verified</span></div><q>"Avoid NSAIDs; use paracetamol for fever…"</q><small>Used 2 times</small></div>
+      <div class="src"><div class="sh">Unmatched claim<span class="vb w">Needs review</span></div><small>No supporting source found</small></div>
+    </div>
+  </aside>
+  <aside class="panel p5">
+    <div class="ph"><span class="s" style="background:var(--bad-wash);color:var(--bad)">⛨</span>Evidence &amp; safety</div>
+    <div><div class="pt">Safety checks</div>
+      <div class="chk"><span class="ci ok">✓</span><div>Patient data protected</div></div>
+      <div class="chk"><span class="ci w">!</span><div>Consistent reasoning<small>Answers varied between runs</small></div></div>
+      <div class="chk"><span class="ci b">✕</span><div>Evidence-backed claims<small>1 of 4 claims verified</small></div></div>
+    </div>
+    <div class="banner info" style="margin:0;font-size:12.5px"><div><b style="font-size:13px">Reduced-accuracy mode</b>Evidence checking ran in reduced-accuracy mode.</div></div>
+    <div><div class="pt">Sources used</div>
+      <div class="src"><div class="sh">BNF: Potassium chloride<span class="vb w">Needs review</span></div><small>Used 1 time</small></div>
+    </div>
+  </aside>
+</div>
+</body></html>

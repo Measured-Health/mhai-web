@@ -37,8 +37,12 @@ Every PR must pass:
 
 ## Clinical UI rules
 
-- **The approved mockup is the visual source of truth:**
-  `design/mhai-clinical-mockup-v2.html`.
+- **Design v3 is the visual source of truth:** the boards in `design/v3/`
+  and the spec `docs/specs/2026-10-13-ui-design-v3.md`. The v2 mockup
+  (`design/mhai-clinical-mockup-v2.html`) is the checklist of what the
+  app must contain.
+- **Show only what the API returns.** Never invent a confidence bar, a
+  timing or an ICD-10 code; hide the element when the field is missing.
 - **Clinicians never see technical terms:** no "trust score", "NLI",
   "semantic entropy", PASS/REGENERATE/ESCALATE or KB ids. Use the
   plain-language mapping from the Phase 1 build guide.

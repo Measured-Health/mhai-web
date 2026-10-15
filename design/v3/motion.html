@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>MHAI · Motion v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Darker+Grotesque:wght@800;900&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bloom:#460351;--lilac:#f1ecf4;--lilac-2:#e8dfee;--mint:#15999E;--mint-2:#43c1c5;--mint-deep:#15777c;--mint-wash:#e3f4f4;
+  --ink:#1c0d22;--ink-2:#4a3d50;--ink-3:#8a7f90;--line:#ece4ef;--bg:#f6f2f8;
+  --ok:#1b7a4a;--ok-wash:#e4f5ec;--ok-deep:#135a36;--warn:#b5742a;--warn-wash:#fbf0e2;--bad:#a04438;--bad-wash:#f8e8e5;
+  /* motion tokens */
+  --t-instant:100ms;--t-fast:160ms;--t-base:240ms;--t-slow:400ms;--t-story:700ms;
+  --e-out:cubic-bezier(.2,.7,.2,1);--e-in-out:cubic-bezier(.65,0,.35,1);--e-spring:cubic-bezier(.34,1.56,.64,1);
+}
+*{box-sizing:border-box}
+body{margin:0;background:#1a1320;color:#efe6f2;font-family:Outfit,sans-serif}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+header{padding:22px 28px 6px;display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap}
+header h1{font-family:'Darker Grotesque';font-size:40px;font-weight:900;margin:0;line-height:1}
+header p{color:#cbbfd3;max-width:760px;margin:6px 0 0;font-size:14px;line-height:1.5}
+.ctl{margin-left:auto;display:flex;gap:8px}
+.ctl button{font:inherit;font-size:13px;border-radius:999px;padding:9px 16px;border:1px solid #3a2e44;background:transparent;color:#efe6f2;cursor:pointer}
+.ctl button.p{background:var(--mint);border-color:var(--mint);color:#fff}
+.tok{display:flex;gap:10px;flex-wrap:wrap;padding:12px 28px 4px}
+.tok span{font-size:12px;border:1px solid #3a2e44;border-radius:10px;padding:6px 10px;color:#cbbfd3}
+.tok b{color:#fff;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding:18px 28px 40px}
+.demo{background:var(--bg);color:var(--ink);border-radius:20px;overflow:hidden;display:flex;flex-direction:column}
+.stage{height:250px;position:relative;display:grid;place-items:center;padding:18px;overflow:hidden;
+  background:radial-gradient(300px 160px at 90% 0%,#15999e1f,transparent 60%),var(--bg)}
+.cap{padding:14px 16px;border-top:1px solid var(--line);background:#fff;font-size:13px;color:var(--ink-2);line-height:1.5;flex:1}
+.cap b{display:flex;justify-content:space-between;color:var(--ink);font-size:14.5px;margin-bottom:4px}
+.cap b button{font:inherit;font-size:11.5px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:2px 9px;cursor:pointer;color:var(--ink-2)}
+.cap code{font-family:'JetBrains Mono';font-size:11px;background:var(--lilac);color:var(--bloom);padding:1px 5px;border-radius:5px}
+.card{background:#fff;border-radius:18px;padding:16px 18px;box-shadow:0 20px 40px -26px #46035166;width:100%;max-width:300px}
+.pillc{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;background:var(--ok-wash);color:var(--ok-deep)}
+.bars{display:inline-flex;gap:2px;align-items:flex-end;height:14px}.bars i{width:4px;border-radius:2px;background:currentColor;display:block}
+.dx{font-family:'Darker Grotesque';font-size:30px;font-weight:900;line-height:1;margin:10px 0 6px}
+.ln{height:10px;border-radius:6px;background:var(--lilac);margin:7px 0}
+.btnx{display:inline-flex;align-items:center;gap:7px;border:0;font:inherit;font-weight:600;font-size:14px;border-radius:999px;padding:11px 18px;cursor:pointer}
+.go{background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;box-shadow:0 12px 24px -12px var(--mint)}
+.agree{background:var(--bloom);color:#fff}
+
+/* 1 result reveal: stagger */
+.run .rv>*{animation:fadeUp var(--t-slow) var(--e-out) both}
+.run .rv>*:nth-child(1){animation-delay:0ms}.run .rv>*:nth-child(2){animation-delay:80ms}.run .rv>*:nth-child(3){animation-delay:160ms}.run .rv>*:nth-child(4){animation-delay:220ms}.run .rv>*:nth-child(5){animation-delay:280ms}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+/* 2 bars fill */
+.run .fill i{animation:barUp var(--t-base) var(--e-spring) both}
+.run .fill i:nth-child(2){animation-delay:70ms}.run .fill i:nth-child(3){animation-delay:140ms}.run .fill i:nth-child(4){animation-delay:210ms}
+@keyframes barUp{from{transform:scaleY(0);transform-origin:bottom}to{transform:scaleY(1);transform-origin:bottom}}
+.meter{height:8px;border-radius:9px;background:var(--lilac);overflow:hidden;margin:6px 0 12px}
+.meter i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,var(--mint),var(--mint-2));width:var(--w)}
+.run .meter i{animation:grow var(--t-story) var(--e-out) both}
+@keyframes grow{from{width:0}}
+/* 3 step check */
+.st{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;font-size:13.5px;background:#fff;border:1px solid var(--line);margin:5px 0;transition:background var(--t-base),color var(--t-base),border-color var(--t-base)}
+.st .d{width:22px;height:22px;border-radius:50%;border:2px solid var(--lilac-2);display:grid;place-items:center;flex:none;transition:all var(--t-base) var(--e-spring)}
+.st.done{background:var(--mint-wash);border-color:transparent;color:var(--mint-deep)}
+.st.done .d{background:var(--mint);border-color:var(--mint);transform:scale(1.08)}
+.st .d svg{width:12px;height:12px;stroke:#fff;stroke-width:3;fill:none;stroke-dasharray:20;stroke-dashoffset:20}
+.st.done .d svg{stroke-dashoffset:0;transition:stroke-dashoffset var(--t-base) var(--e-out) 80ms}
+.st.now{border-color:var(--mint);box-shadow:0 0 0 4px #15999e1a;font-weight:600}
+.st.now .d::after{content:"";width:7px;height:7px;border-radius:50%;background:var(--mint);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.6);opacity:.35}}
+.pb{height:5px;border-radius:9px;background:var(--lilac);overflow:hidden;margin-top:8px}.pb i{display:block;height:100%;background:linear-gradient(90deg,var(--mint),var(--mint-2));transition:width var(--t-slow) var(--e-out)}
+/* 4 ECG */
+.ecg path{stroke:var(--mint);stroke-width:2.6;fill:none;stroke-linecap:round;stroke-dasharray:420;animation:draw 2.2s linear infinite}
+.ecg .glow{stroke:#43c1c5;stroke-width:8;opacity:.18;filter:blur(3px)}
+@keyframes draw{from{stroke-dashoffset:420}to{stroke-dashoffset:0}}
+/* 5 citation link */
+.ref{font-size:11.5px;padding:2px 8px;border-radius:7px;background:var(--ok-wash);color:var(--ok-deep);cursor:pointer;transition:box-shadow var(--t-fast)}
+.ref.hl{box-shadow:0 0 0 2px var(--mint)}
+.src{border:1px solid var(--line);border-radius:12px;padding:9px 11px;font-size:12.5px;background:#fff;margin-top:8px;transition:border-color var(--t-base),box-shadow var(--t-base),transform var(--t-base) var(--e-spring)}
+.src.hl{border-color:var(--mint);box-shadow:0 0 0 4px #15999e22;transform:translateX(-4px)}
+/* 6 press + success */
+.btnx{transition:transform var(--t-instant) var(--e-out),box-shadow var(--t-fast),filter var(--t-fast)}
+.btnx:hover{filter:brightness(1.06)}
+.btnx:active,.btnx.pressed{transform:scale(.96)}
+.okmsg{display:flex;gap:10px;align-items:center;background:var(--ok-wash);color:var(--ok-deep);border-radius:14px;padding:10px 14px;font-size:13.5px;font-weight:600;opacity:0;transform:translateY(6px)}
+.run .okmsg{animation:fadeUp var(--t-base) var(--e-out) 200ms both}
+.ck{width:26px;height:26px;border-radius:50%;background:var(--ok);display:grid;place-items:center}
+.ck svg{width:14px;height:14px;stroke:#fff;stroke-width:3;fill:none;stroke-dasharray:22;stroke-dashoffset:22}
+.run .ck{animation:pop var(--t-base) var(--e-spring) 200ms both}
+.run .ck svg{animation:dash var(--t-base) var(--e-out) 380ms both}
+@keyframes pop{from{transform:scale(.4)}to{transform:scale(1)}}
+@keyframes dash{to{stroke-dashoffset:0}}
+.dim{transition:opacity var(--t-base)}.run .dim{opacity:.4}
+/* 7 sheet */
+.phone{width:200px;height:220px;border-radius:26px;background:#fff;border:6px solid #0b0810;position:relative;overflow:hidden}
+.scrim{position:absolute;inset:0;background:#1c0d2200;transition:background var(--t-base)}
+.sheet{position:absolute;left:0;right:0;bottom:0;height:70%;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -10px 30px -10px #0005;transform:translateY(100%);transition:transform var(--t-slow) var(--e-spring);padding:8px 12px}
+.run .scrim{background:#1c0d2255}.run .sheet{transform:none}
+.grab{width:32px;height:4px;border-radius:9px;background:var(--lilac-2);margin:0 auto 10px}
+/* 8 toast */
+.toast{position:absolute;right:14px;top:14px;width:240px;background:#fff;border-radius:14px;padding:11px 13px;font-size:13px;box-shadow:0 20px 40px -16px #1c0d2288;display:flex;gap:10px;transform:translateX(120%);opacity:0}
+.run .toast{animation:toastIn var(--t-slow) var(--e-spring) both, toastOut var(--t-base) var(--e-in-out) 3.2s both}
+@keyframes toastIn{to{transform:none;opacity:1}}
+@keyframes toastOut{to{transform:translateX(120%);opacity:0}}
+.toast .tbar{position:absolute;left:12px;right:12px;bottom:5px;height:2px;border-radius:2px;background:var(--mint);transform-origin:left}
+.run .toast .tbar{animation:tb 3.2s linear both}
+@keyframes tb{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+/* 9 skeleton -> content */
+.sk{background:linear-gradient(90deg,#ece4ef 0%,#f8f4fa 40%,#ece4ef 80%);background-size:300% 100%;animation:sh 1.4s linear infinite;border-radius:8px}
+@keyframes sh{from{background-position:100% 0}to{background-position:-200% 0}}
+.swap{position:relative;width:100%;max-width:300px;height:150px}
+.swap>div{position:absolute;inset:0;transition:opacity var(--t-base) var(--e-out)}
+.swap .real{opacity:0}.run .swap .real{opacity:1}.run .swap .skel{opacity:0}
+/* 10 count up */
+.kpi{font-family:'Darker Grotesque';font-size:58px;font-weight:900;line-height:1}
+/* 11 sidebar / nav */
+.nav{width:220px;background:#fff;border-radius:16px;padding:10px;box-shadow:0 20px 40px -26px #46035166}
+.it{position:relative;padding:9px 12px;border-radius:10px;font-size:13.5px;color:var(--ink-2);z-index:1;cursor:pointer;transition:color var(--t-fast)}
+.it.on{color:var(--mint-deep);font-weight:600}
+.ind{position:absolute;left:10px;right:10px;height:38px;border-radius:10px;background:var(--mint-wash);box-shadow:inset 3px 0 0 var(--mint);transition:transform var(--t-base) var(--e-spring);z-index:0}
+/* 12 error shake + focus */
+.inp{background:#fff;border:1px solid var(--lilac-2);border-radius:12px;padding:11px 13px;font-size:14px;width:100%;max-width:280px;transition:border-color var(--t-fast),box-shadow var(--t-fast)}
+.inp.f{border-color:var(--mint);box-shadow:0 0 0 4px #15999e22}
+.inp.bad{border-color:var(--bad);box-shadow:0 0 0 4px #a044381a}
+.run .inp.bad{animation:shake 320ms var(--e-out)}
+@keyframes shake{20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+.ferr{font-size:12.5px;color:var(--bad);margin-top:6px;opacity:0}.run .ferr{animation:fadeUp var(--t-fast) var(--e-out) 120ms both}
+/* 13 live dot + logo */
+.live{width:10px;height:10px;border-radius:50%;background:var(--mint);position:relative;display:inline-block}
+.live::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:2px solid var(--mint);animation:ring 2.4s ease-out infinite}
+@keyframes ring{0%{opacity:.7;transform:scale(.6)}100%{opacity:0;transform:scale(1.6)}}
+.mk path{stroke-dasharray:260;stroke-dashoffset:260}
+.run .mk path{animation:dash 1.4s var(--e-in-out) forwards}
+/* 14 banner */
+.ban{display:flex;gap:10px;background:var(--bad-wash);border:1px solid #e0b5ae;color:#7d3029;border-radius:14px;padding:11px 13px;font-size:13px;width:100%;max-width:300px;transform-origin:top;opacity:0}
+.run .ban{animation:banIn var(--t-base) var(--e-out) both}
+@keyframes banIn{from{opacity:0;transform:scaleY(.6)}to{opacity:1;transform:none}}
+/* 15 page transition */
+.pg{width:100%;max-width:300px;height:150px;position:relative}
+.pg>div{position:absolute;inset:0;border-radius:16px;background:#fff;box-shadow:0 20px 40px -26px #46035166;padding:16px;transition:opacity var(--t-base) var(--e-out),transform var(--t-base) var(--e-out)}
+.pg .b{opacity:0;transform:translateX(16px)}
+.run .pg .a{opacity:0;transform:translateX(-16px)}.run .pg .b{opacity:1;transform:none}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}
+}
+body.rm *,body.rm *::before,body.rm *::after{animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}
+</style></head><body>
+<header><div><h1>Motion</h1><p>Motion here has a job. It shows progress, links cause to effect, and confirms an action. It is never decoration. It is fast (100–400 ms), uses one easing family, and turns off completely when the user asks for reduced motion.</p></div>
+<div class="ctl"><button class="p" onclick="replayAll()">▶ Replay all</button><button id="rmb" onclick="document.body.classList.toggle('rm');this.textContent=document.body.classList.contains('rm')?'Reduced motion: ON':'Reduced motion: OFF'">Reduced motion: OFF</button></div></header>
+<div class="tok"><span><b>instant</b> 100 ms · press</span><span><b>fast</b> 160 ms · hover, focus, tags</span><span><b>base</b> 240 ms · state changes, dialogs</span><span><b>slow</b> 400 ms · sheets, reveals</span><span><b>story</b> 700 ms · meters, first load</span><span><b>ease-out</b> (.2,.7,.2,1)</span><span><b>spring</b> (.34,1.56,.64,1) · small things only</span></div>
+<div class="grid">
+
+<div class="demo" data-d><div class="stage"><div class="card rv">
+<div style="display:flex;justify-content:space-between;align-items:center"><span class="mono" style="font-size:11px;background:var(--lilac);color:var(--bloom);padding:3px 8px;border-radius:999px">ICD-10 · I20.0</span><span class="pillc"><span class="bars fill"><i style="height:6px"></i><i style="height:9px"></i><i style="height:12px"></i><i style="height:14px"></i></span>High</span></div>
+<div class="dx">Unstable angina</div><div class="ln" style="width:92%"></div><div class="ln" style="width:76%"></div>
+<div style="display:flex;gap:6px;margin-top:10px"><span class="btnx agree" style="padding:7px 12px;font-size:12px">✓ I agree</span><span class="btnx" style="padding:7px 12px;font-size:12px;background:var(--lilac);color:var(--bloom)">✎ Correct</span></div></div></div>
+<div class="cap"><b>1 · Result reveal <button>replay</button></b>When the result arrives, its parts fade up in order: chip and confidence, then diagnosis, then text, then actions (80 ms apart). The eye follows the reading order. The signal bars grow in with a small spring. <code>slow</code> <code>ease-out</code></div></div>
+
+<div class="demo" data-d id="steps"><div class="stage"><div style="width:100%;max-width:300px">
+<div class="st" data-s><span class="d"><svg viewBox="0 0 12 12"><path d="M2 6.5l2.5 2.5L10 3"/></svg></span>Protecting patient privacy</div>
+<div class="st" data-s><span class="d"><svg viewBox="0 0 12 12"><path d="M2 6.5l2.5 2.5L10 3"/></svg></span>Searching medical guidelines</div>
+<div class="st" data-s><span class="d"><svg viewBox="0 0 12 12"><path d="M2 6.5l2.5 2.5L10 3"/></svg></span>Generating clinical assessment</div>
+<div class="st" data-s><span class="d"><svg viewBox="0 0 12 12"><path d="M2 6.5l2.5 2.5L10 3"/></svg></span>Verifying against evidence</div>
+<div class="pb"><i id="pbi" style="width:0"></i></div></div></div>
+<div class="cap"><b>2 · Analysing steps <button>replay</button></b>The active step glows and its dot pulses. When it completes, the dot pops and a check draws in, and the progress bar eases forward. Progress is driven by the API's <code>progress</code>, never faked.</div></div>
+
+<div class="demo" data-d><div class="stage"><svg class="ecg" viewBox="0 0 300 80" style="width:100%;max-width:300px"><path class="glow" d="M0 40h80l12-22 16 44 14-58 16 66 12-30h150"/><path d="M0 40h80l12-22 16 44 14-58 16 66 12-30h150"/></svg></div>
+<div class="cap"><b>3 · Heartbeat line</b>Loops only while analysing, as a calm "working" signal. It has a soft glow and a linear 2.2 s draw. With reduced motion it's a static line, and the steps carry the meaning.</div></div>
+
+<div class="demo" data-d><div class="stage"><div style="width:100%;max-width:300px">
+<div class="card" style="max-width:none;font-size:13.5px;line-height:1.7">12-lead ECG within 10 min <span class="ref" onmouseenter="hl(1)" onmouseleave="hl(0)">✓ AHA 2021</span><br>Serial troponin at 0 and 3 h <span class="ref" onmouseenter="hl(2)" onmouseleave="hl(0)">✓ ESC 2023</span></div>
+<div class="src" id="s1"><b>AHA 2021 Chest Pain</b> · Verified</div><div class="src" id="s2"><b>ESC 2023 ACS</b> · Verified</div></div></div>
+<div class="cap"><b>4 · Citation → source</b>Hover a source tag in the text to light up its source card. The card nudges toward the text, which shows the link between claim and evidence without a click. <code>fast</code> for the tag, <code>base</code> with spring for the card. (Hover the tags.)</div></div>
+
+<div class="demo" data-d><div class="stage"><div style="width:100%;max-width:300px">
+<div style="display:flex;gap:8px;margin-bottom:12px"><span class="btnx agree pressme">✓ I agree</span><span class="btnx dim" style="background:var(--lilac);color:var(--bloom)">✎ Correct</span></div>
+<div class="okmsg"><span class="ck"><svg viewBox="0 0 14 14"><path d="M2.5 7.5l3 3L11.5 4"/></svg></span>Thanks, your agreement was recorded</div></div></div>
+<div class="cap"><b>5 · Press → confirm <button>replay</button></b>Buttons compress slightly when pressed (<code>instant</code>). The confirmation pops, its check draws, and the other buttons dim, so it's clear the action went through and can't be sent twice.</div></div>
+
+<div class="demo" data-d><div class="stage"><div class="phone"><div style="padding:14px 12px"><div class="dx" style="font-size:22px">Unstable angina</div><div class="ln"></div><div class="ln" style="width:70%"></div></div><div class="scrim"></div><div class="sheet"><div class="grab"></div><b style="font-size:13px">Evidence &amp; safety</b><div class="meter" style="--w:92%"><i></i></div><div class="meter" style="--w:61%"><i></i></div></div></div></div>
+<div class="cap"><b>6 · Bottom sheet (mobile) <button>replay</button></b>Slides up with a light spring while the backdrop dims. Swipe down to close; it follows your finger. Meters inside fill once (<code>story</code>), so they read as measurements.</div></div>
+
+<div class="demo" data-d><div class="stage"><div style="width:100%;height:100%;position:relative"><div class="card" style="position:absolute;left:16px;bottom:16px;max-width:200px;opacity:.6"><div class="ln"></div><div class="ln" style="width:60%"></div></div>
+<div class="toast"><span class="ck" style="flex:none;animation:none"><svg viewBox="0 0 14 14" style="stroke-dashoffset:0"><path d="M2.5 7.5l3 3L11.5 4"/></svg></span><div><b>Correction approved</b><div style="color:var(--ink-3);font-size:12px">Dengue fever · Dr. Bello</div></div><i class="tbar"></i></div></div></div>
+<div class="cap"><b>7 · Toast <button>replay</button></b>Notifications slide in from the right with a spring. A thin bar shows the time left, and they leave on their own. Hovering pauses them. Undo toasts last 10 s.</div></div>
+
+<div class="demo" data-d><div class="stage"><div class="swap"><div class="skel"><div class="sk" style="height:22px;width:40%"></div><div class="sk" style="height:30px;width:70%;margin:12px 0"></div><div class="sk" style="height:12px;margin:8px 0"></div><div class="sk" style="height:12px;width:80%"></div></div>
+<div class="real card" style="max-width:none"><span class="pillc">High confidence</span><div class="dx">Unstable angina</div><div class="ln"></div><div class="ln" style="width:80%"></div></div></div></div>
+<div class="cap"><b>8 · Skeleton → content <button>replay</button></b>Skeletons shimmer in the exact shape of the content, then cross-fade (<code>base</code>). Nothing jumps. If loading takes under 200 ms, the skeleton isn't shown at all.</div></div>
+
+<div class="demo" data-d><div class="stage"><div style="text-align:center"><div class="kpi" data-count="1284">0</div><div style="color:var(--ink-3);font-size:13px">Consultations this month</div><div class="meter" style="--w:82%;width:220px;margin:14px auto 4px"><i></i></div><div class="mono" style="font-size:12px;color:var(--ink-3)">82% agreed</div></div></div>
+<div class="cap"><b>9 · Numbers (admin usage) <button>replay</button></b>Big numbers count up once on first view (600 ms, ease-out), and bars grow. Only on dashboards, never in clinical results, where values must be readable at once.</div></div>
+
+<div class="demo" data-d><div class="stage"><div class="nav" id="nav"><div class="ind" id="ind"></div>
+<div class="it on" onclick="nav(0)">☺ Staff</div><div class="it" onclick="nav(1)">⚙ Hospital settings</div><div class="it" onclick="nav(2)">≋ Activity</div><div class="it" onclick="nav(3)">▤ Usage</div></div></div>
+<div class="cap"><b>10 · Navigation indicator</b>The selected highlight slides between items instead of jumping, so you see where you went. Click the items. <code>base</code> with spring.</div></div>
+
+<div class="demo" data-d><div class="stage"><div style="width:100%;max-width:280px"><div style="font-size:12.5px;color:var(--ink-2);margin-bottom:6px">Age *</div><div class="inp f" id="fi">54</div><div style="height:14px"></div><div class="inp bad mono">154</div><div class="ferr">✕ Must be 0–120</div></div></div>
+<div class="cap"><b>11 · Focus and errors <button>replay</button></b>Focus rings fade in quickly (<code>fast</code>). An invalid field gives one short shake (320 ms) when Analyse is pressed, and the message fades in. No shake with reduced motion; the red ring and message still show.</div></div>
+
+<div class="demo" data-d><div class="stage"><div style="display:flex;flex-direction:column;align-items:center;gap:16px"><svg class="mk" viewBox="0 0 58 52" width="110"><defs><linearGradient id="g" x1="0" x2="1"><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#g)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<div style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-3)"><span class="live"></span>Clinical decision support</div></div></div>
+<div class="cap"><b>12 · Brand moments <button>replay</button></b>The "M" heartbeat draws itself once on the sign-in screen and the first load. The live dot beside the logo breathes slowly to show the service is up. That's all the brand motion; it never repeats on every page.</div></div>
+
+<div class="demo" data-d><div class="stage"><div class="ban"><b>⚠</b><div><b>Needs clinician review</b><br>before any clinical action is taken</div></div></div>
+<div class="cap"><b>13 · Safety banners <button>replay</button></b>The red and amber banners unfold quickly and then <b>stay still</b>. No looping or pulsing: urgency comes from colour and wording, and nothing should pull attention away from reading.</div></div>
+
+<div class="demo" data-d><div class="stage"><div class="pg"><div class="a"><b>New consultation</b><div class="ln" style="margin-top:12px"></div><div class="ln" style="width:70%"></div></div><div class="b"><b>Analysing…</b><div class="pb"><i style="width:40%"></i></div></div></div></div>
+<div class="cap"><b>14 · Screen changes <button>replay</button></b>Form → analysing → result slide a short way (16 px) and cross-fade, in reading direction. Uses the View Transitions API where supported, and an instant swap elsewhere.</div></div>
+
+<div class="demo" data-d><div class="stage" style="font-size:13px;color:var(--ink-2);line-height:1.7;place-items:start"><div><b style="color:var(--ink)">Never animate</b><br>· diagnosis text, doses, numbers in results<br>· safety banners after they appear<br>· anything that loops, except the ECG and live dot<br>· parallax, or tilt on clinical cards<br>· anything longer than 700 ms<br><br><b style="color:var(--ink)">Reduced motion</b><br>All of it switches to instant state changes. Try the toggle at the top right.</div></div>
+<div class="cap"><b>15 · Rules</b>Motion is part of the clinical safety story: it may help a clinician notice something, but it never delays reading or competes with the content.</div></div>
+
+</div>
+<script>
+function play(d){d.classList.remove('run');void d.offsetWidth;d.classList.add('run');
+  if(d.id==='steps')steps(d);
+  d.querySelectorAll('[data-count]').forEach(count);
+  const p=d.querySelector('.pressme');if(p){p.classList.add('pressed');setTimeout(()=>p.classList.remove('pressed'),120)}}
+function replayAll(){document.querySelectorAll('[data-d]').forEach(play)}
+document.querySelectorAll('[data-d]').forEach(d=>{const b=d.querySelector('.cap button');if(b)b.onclick=()=>play(d)});
+let tm=[];function steps(d){tm.forEach(clearTimeout);tm=[];const s=[...d.querySelectorAll('[data-s]')],pb=document.getElementById('pbi');
+  s.forEach(x=>x.className='st');pb.style.width='0';
+  s.forEach((x,i)=>{tm.push(setTimeout(()=>{x.classList.add('now')},i*900));tm.push(setTimeout(()=>{x.classList.remove('now');x.classList.add('done');pb.style.width=((i+1)/s.length*100)+'%'},i*900+700))})}
+function count(el){const n=+el.dataset.count,t0=performance.now(),dur=document.body.classList.contains('rm')?1:600;
+  (function f(t){const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,3);el.textContent=Math.round(n*e).toLocaleString();if(k<1)requestAnimationFrame(f)})(t0)}
+function hl(i){[1,2].forEach(k=>{document.getElementById('s'+k).classList.toggle('hl',k===i)});document.querySelectorAll('.ref').forEach((r,k)=>r.classList.toggle('hl',k+1===i))}
+function nav(i){document.getElementById('ind').style.transform='translateY('+(i*38)+'px)';document.querySelectorAll('#nav .it').forEach((x,k)=>x.classList.toggle('on',k===i))}
+replayAll();
+</script>
+</body></html>

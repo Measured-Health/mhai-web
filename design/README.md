@@ -1,18 +1,28 @@
 # Design
 
-`mhai-clinical-mockup-v2.html` is the approved interactive mockup for the
-Phase 1 clinical workflow, and the visual source of truth for the app.
-Open it in a browser. Port its colours, fonts (IBM Plex Sans and Mono),
-spacing, components and plain-language wording exactly, rather than
-redesigning.
+**`v3/` is the current design.** Open `v3/index.html` in a browser. Each
+board has tabs for its screens, and some have device sizes. The written
+spec is `docs/specs/2026-10-13-ui-design-v3.md`: tokens, type, layout,
+screen behaviour, wording, accessibility, and the backend gaps the design
+depends on.
+
+`brand/` holds the Measured Health logo (original and transparent PNG) and
+the "M" mark redrawn as SVG. Replace them with the official SVGs when
+they're available. `bhai-logo-placeholder.svg` is a text placeholder for the
+partner's logo; swap in the official BHAI logo when it arrives.
+
+`mhai-clinical-mockup-v2.html` is the originally approved mockup. v3
+restyles it but keeps all of its content. Use it as the checklist of what
+the app must contain (the spec, section 9).
 
 `MHAI_Phase1_Cursor_Build_Guide.pdf` is the Phase 1 Build Guide: scope, the
 clinician-language rules, the day-by-day build plan and the final acceptance
 checklist. It's marked confidential, so keep it inside this private
-repository. Where the guide and the repository differ (Next.js instead of
-Vite, the backend API's actual shape), CONTRIBUTING.md and the backend's
-OpenAPI contract take precedence.
+repository. Where the guide and the repository differ, CONTRIBUTING.md, the
+v3 spec and the backend's OpenAPI contract take precedence. Examples are
+Next.js instead of Vite, the backend API's actual shape, and v3 instead of
+"match the mockup exactly".
 
-These files are kept exactly as approved; Prettier skips this folder. To
-change the design, add a new version (`-v3`) through review instead of
-editing an existing one.
+These files are kept as approved; Prettier skips this folder. To change
+the design, add a new version (`v4/`) through review instead of editing
+an existing one.

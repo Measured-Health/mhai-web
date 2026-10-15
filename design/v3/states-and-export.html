@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>MHAI · Screen layouts v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Darker+Grotesque:wght@600;700;800;900&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bloom:#460351;--bloom-2:#2c0136;--bloom-tint:#6e3c6a;--orchid:#a8499e;--lilac:#f1ecf4;--lilac-2:#e8dfee;
+  --mint:#15999E;--mint-2:#43c1c5;--mint-deep:#15777c;--mint-wash:#e3f4f4;
+  --ink:#1c0d22;--ink-2:#4a3d50;--ink-3:#8a7f90;--line:#ece4ef;--bg:#f6f2f8;
+  --ok:#1b7a4a;--ok-wash:#e4f5ec;--ok-deep:#135a36;
+  --warn:#b5742a;--warn-wash:#fbf0e2;--warn-deep:#8c5a1f;--warn-line:#eccA8e;
+  --bad:#a04438;--bad-wash:#f8e8e5;--bad-deep:#7d3029;--bad-line:#e0b5ae;
+  --r:22px;--r-sm:12px;--shadow:0 24px 50px -28px rgba(70,3,81,.4);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Outfit,sans-serif;color:var(--ink);background:#1a1320}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+/* tabs */
+.tabs-in{display:none}
+.tabbar{display:flex;gap:6px;padding:14px 20px;background:#1a1320;position:sticky;top:0;z-index:5;flex-wrap:wrap;align-items:center}
+.tabbar .ttl{color:#efe6f2;font-weight:600;margin-right:14px}
+.tabbar label{color:#cbbfd3;font-size:13px;padding:7px 13px;border-radius:999px;cursor:pointer;border:1px solid #3a2e44}
+#t1:checked~.tabbar [for=t1],#t2:checked~.tabbar [for=t2],#t3:checked~.tabbar [for=t3],#t4:checked~.tabbar [for=t4],#t5:checked~.tabbar [for=t5],#t6:checked~.tabbar [for=t6],#t7:checked~.tabbar [for=t7]{background:var(--mint);color:#fff;border-color:var(--mint)}
+.v{display:none}
+.fo{display:none}#t1:checked~.app .fo{display:inline}#t1:checked~.app .nf{display:none}
+#t1:checked~.app .v1,#t2:checked~.app .v2,#t3:checked~.app .v3,#t4:checked~.app .v4,#t5:checked~.app .v5,#t6:checked~.app .v6,#t7:checked~.app .v7{display:block}
+#t1:checked~.app .p1,#t2:checked~.app .p2,#t3:checked~.app .p3,#t4:checked~.app .p4,#t5:checked~.app .p5,#t6:checked~.app .p3{display:flex}
+#t7:checked~.app{grid-template-columns:256px minmax(0,1fr) 0}
+#d2:checked~#t7:checked~.app,#d3:checked~#t7:checked~.app{grid-template-columns:76px minmax(0,1fr) 0}
+.ib.on{background:var(--lilac);color:var(--bloom);border-color:var(--lilac-2)}
+.note{display:none;color:#cbbfd3;font-size:13px;padding:0 20px 14px;line-height:1.5;max-width:1200px}
+#t1:checked~.n1,#t2:checked~.n2,#t3:checked~.n3,#t4:checked~.n4,#t5:checked~.n5,#t6:checked~.n6,#t7:checked~.n7{display:block}
+
+/* shell */
+.app{display:grid;grid-template-columns:256px minmax(0,1fr) 330px;height:860px;margin:0 20px 20px;border-radius:18px;overflow:hidden;background:var(--bg);position:relative}
+/* sidebar */
+.sb{background:linear-gradient(175deg,#4d0a5b 0%,var(--bloom) 40%,var(--bloom-2) 100%);color:#efe6f2;display:flex;flex-direction:column;padding:18px 14px;position:relative;overflow:hidden}
+.sb::after{content:"";position:absolute;right:-70px;bottom:-90px;width:240px;height:240px;background:radial-gradient(circle,#15999e44,transparent 70%);pointer-events:none}
+.brand{display:flex;align-items:center;gap:10px;padding:2px 6px 16px}
+.mark{position:relative;width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,var(--mint),var(--mint-2));display:grid;place-items:center;box-shadow:0 0 0 4px #15999e2e}
+.brand b{font-family:'Darker Grotesque';font-size:22px;font-weight:900;letter-spacing:-.01em;line-height:.9;display:block}
+.brand small{font-size:10.5px;opacity:.6;letter-spacing:.04em}
+.newc{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--mint);color:#fff;border-radius:12px;padding:11px;font-weight:600;font-size:14px;box-shadow:0 10px 24px -10px var(--mint)}
+.search{margin-top:10px;display:flex;align-items:center;gap:8px;background:#ffffff12;border:1px solid #ffffff1c;border-radius:10px;padding:8px 10px;font-size:13px;color:#cdbcd6}
+.kbd{margin-left:auto;font-family:'JetBrains Mono';font-size:10.5px;border:1px solid #ffffff30;border-radius:5px;padding:1px 5px;opacity:.8}
+.grp{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.5;margin:18px 8px 6px}
+.it{display:flex;gap:10px;padding:8px;border-radius:10px;font-size:13px;line-height:1.3;align-items:flex-start}
+.it .ic{width:28px;height:28px;border-radius:8px;background:#ffffff14;display:grid;place-items:center;flex:none;font-size:13px}
+.it small{display:flex;align-items:center;gap:5px;opacity:.65;font-size:11px;margin-top:2px}
+.it.on{background:#ffffff17;box-shadow:inset 3px 0 0 var(--mint-2)}
+.sd{width:7px;height:7px;border-radius:50%;display:inline-block}
+.me{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px 6px 0;border-top:1px solid #ffffff1a;font-size:13px;position:relative;z-index:1}
+.av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--orchid),var(--bloom-tint));display:grid;place-items:center;font-weight:700;font-size:12px}
+.me small{display:block;opacity:.6;font-size:11px}
+.session-note{font-size:10.5px;opacity:.45;padding:8px 8px 0;line-height:1.4}
+
+/* center */
+.center{display:flex;flex-direction:column;min-width:0;position:relative;
+  background:radial-gradient(700px 360px at 85% -10%,#15999e22,transparent 60%),radial-gradient(600px 360px at -10% 110%,#4603511a,transparent 60%),var(--bg)}
+.center::before{content:"";position:absolute;inset:0;background-image:linear-gradient(#4603510a 1px,transparent 1px),linear-gradient(90deg,#4603510a 1px,transparent 1px);background-size:26px 26px;mask-image:radial-gradient(ellipse at 50% 0%,#000 20%,transparent 70%);pointer-events:none}
+.top{display:flex;align-items:center;gap:12px;padding:16px 26px;border-bottom:1px solid #ffffffaa;position:relative}
+.top h2{margin:0;font-size:16px;font-weight:600}
+.top .sub{font-size:12px;color:var(--ink-3)}
+.urg{font-family:'JetBrains Mono';font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px;font-weight:600}
+.urg.routine{background:var(--mint-wash);color:var(--mint-deep)}.urg.urgent{background:var(--warn-wash);color:var(--warn-deep)}.urg.emerg{background:var(--bad-wash);color:var(--bad-deep)}
+.tbtn{margin-left:auto;display:flex;gap:8px}
+.ib{height:34px;padding:0 11px;border-radius:10px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)}
+.scroll{flex:1;overflow:auto;padding:28px 26px 40px;position:relative}
+.v{max-width:700px;margin:0 auto}
+
+/* card */
+.card{position:relative;background:rgba(255,255,255,.84);backdrop-filter:blur(18px);border-radius:var(--r);padding:24px 26px;box-shadow:var(--shadow)}
+.card::before{content:"";position:absolute;inset:0;border-radius:var(--r);padding:1px;background:linear-gradient(135deg,var(--mint),#46035133,transparent 60%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+h1.dx{font-family:'Darker Grotesque';font-size:38px;font-weight:900;line-height:.95;margin:10px 0 8px;letter-spacing:-.005em}
+.eyebrow{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mint);font-weight:600}
+.chip{font-family:'JetBrains Mono';font-size:11px;padding:4px 10px;border-radius:999px;background:var(--lilac);color:var(--bloom)}
+.conf{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:7px 13px;border-radius:999px}
+.conf.ok{background:var(--ok-wash);color:var(--ok-deep)}.conf.warn{background:var(--warn-wash);color:var(--warn-deep)}
+.bars{display:inline-flex;gap:2px;align-items:flex-end}.bars i{width:4px;border-radius:2px;display:block;background:currentColor}.bars i.off{opacity:.22}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sec{margin-top:18px}
+.sec h4{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.prose{font-size:14.5px;line-height:1.75;color:var(--ink-2)}
+.prose ul{margin:0;padding-left:18px}.prose li{margin:4px 0}
+.ref{font-size:11px;padding:2px 8px;border-radius:7px;white-space:nowrap;font-weight:500;cursor:pointer}
+.ref.v{background:var(--ok-wash);color:var(--ok-deep)}.ref.u{background:var(--warn-wash);color:var(--warn-deep)}
+.ref.hl{outline:2px solid var(--mint);outline-offset:1px}
+.acts{display:flex;gap:8px;margin-top:22px;align-items:center;padding-top:18px;border-top:1px solid var(--line)}
+.btn{padding:10px 18px;border-radius:999px;font-size:13.5px;font-weight:600;border:0;display:inline-flex;gap:7px;align-items:center}
+.b-agree{background:var(--bloom);color:#fff}.b-sugg{background:var(--lilac);color:var(--bloom)}
+.b-copy{margin-left:auto;background:#fff;border:1px solid var(--line);color:var(--ink-2)}
+.meta{font-size:11.5px;color:var(--ink-3);margin-top:12px;display:flex;gap:14px}
+.disc{font-size:11.5px;color:var(--ink-3);margin-top:16px;text-align:center}
+.banner{display:flex;gap:12px;align-items:flex-start;border-radius:16px;padding:14px 16px;margin-bottom:14px;font-size:13.5px;line-height:1.5}
+.banner b{display:block;font-size:14px}
+.banner.warn{background:var(--warn-wash);border:1px solid var(--warn-line);color:var(--warn-deep)}
+.banner.bad{background:var(--bad-wash);border:1px solid var(--bad-line);color:var(--bad-deep)}
+.banner.info{background:#fff8dc;border:1px solid #f1df9a;color:#7a6512}
+.bic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;font-weight:700}
+.banner.warn .bic{background:#f3dcb8}.banner.bad .bic{background:#efc9c3}
+
+/* form */
+.fhead h1{font-family:'Darker Grotesque';font-size:40px;font-weight:900;margin:0;line-height:1}
+.fhead p{margin:6px 0 20px;color:var(--ink-2);font-size:14.5px}
+.fs{padding:18px 0;border-top:1px solid var(--line)}
+.fs:first-of-type{border-top:0;padding-top:4px}
+.fsl{display:flex;gap:10px;align-items:baseline;margin-bottom:12px}
+.fsl .n{font-family:'JetBrains Mono';font-size:11px;color:var(--mint);font-weight:600}
+.fsl b{font-size:14px}
+.grid2{display:grid;grid-template-columns:140px 1fr;gap:14px}
+.lab{font-size:12.5px;color:var(--ink-2);margin-bottom:6px;display:flex;justify-content:space-between}
+.lab .req{color:var(--bad)}
+.inp{background:#fff;border:1px solid var(--lilac-2);border-radius:12px;padding:11px 13px;font-size:14px;color:var(--ink);min-height:44px}
+.inp.focus{border-color:var(--mint);box-shadow:0 0 0 4px #15999e22}
+.inp.ph{color:var(--ink-3)}
+.seg{display:flex;background:var(--lilac);border-radius:12px;padding:4px;gap:4px}
+.seg span{flex:1;text-align:center;padding:8px 6px;border-radius:9px;font-size:13.5px;color:var(--ink-2)}
+.seg span.on{background:#fff;color:var(--bloom);font-weight:600;box-shadow:0 2px 8px -4px #46035155}
+.prio{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.prio>span{border:1px solid var(--lilac-2);background:#fff;border-radius:12px;padding:10px 12px;font-size:13.5px;display:flex;gap:8px;align-items:center}
+.prio>span small{display:block;font-size:11px;color:var(--ink-3)}
+.prio>span.on{border-color:var(--mint);box-shadow:0 0 0 3px #15999e1f}
+.sugg{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.sugg span{font-size:12px;padding:4px 10px;border-radius:999px;background:#fff;border:1px dashed var(--lilac-2);color:var(--ink-2)}
+.tag2{font-size:12.5px;padding:4px 10px;border-radius:999px;background:var(--mint-wash);color:var(--mint-deep);display:inline-flex;gap:6px;align-items:center}
+.ta{min-height:110px;line-height:1.6}
+.hint{font-size:12px;color:var(--ink-3);margin-top:6px;display:flex;justify-content:space-between}
+.coll{display:flex;justify-content:space-between;align-items:center;color:var(--ink-2);font-size:13.5px}
+.submit{position:sticky;bottom:0;margin-top:6px;display:flex;align-items:center;gap:12px;padding:16px 0 0}
+.go{background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;border-radius:999px;padding:13px 24px;font-weight:600;font-size:15px;display:inline-flex;gap:10px;align-items:center;box-shadow:0 14px 28px -12px var(--mint)}
+.go .kbd{border-color:#ffffff66}
+
+/* processing */
+.proc{text-align:center;max-width:540px;margin:20px auto 0}
+.ecg{height:70px;margin:4px auto 6px}
+.ecg path{stroke:var(--mint);stroke-width:2.6;fill:none;stroke-dasharray:400;animation:draw 2.2s linear infinite}
+@keyframes draw{from{stroke-dashoffset:400}to{stroke-dashoffset:0}}
+.proc h1{font-family:'Darker Grotesque';font-size:34px;font-weight:900;margin:0}
+.proc p{color:var(--ink-2);margin:4px 0 18px}
+.steps{text-align:left;display:flex;flex-direction:column;gap:6px}
+.st{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:14px;font-size:14px;background:#fff;border:1px solid var(--line)}
+.st .d{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;flex:none;border:2px solid var(--lilac-2);color:var(--ink-3)}
+.st.done{background:var(--mint-wash);border-color:transparent;color:var(--mint-deep)}.st.done .d{background:var(--mint);border-color:var(--mint);color:#fff}
+.st.now{background:#fff;border-color:var(--mint);box-shadow:0 0 0 4px #15999e1a;font-weight:600}.st.now .d{border-color:var(--mint);position:relative}
+.st.now .d::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--mint);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.6);opacity:.4}}
+.st.todo{color:var(--ink-3)}
+.st .tm{margin-left:auto;font-family:'JetBrains Mono';font-size:11.5px;opacity:.75}
+.pb{height:6px;background:var(--lilac);border-radius:9px;overflow:hidden;margin-top:18px}.pb i{display:block;height:100%;width:58%;background:linear-gradient(90deg,var(--mint),var(--mint-2));border-radius:9px}
+.pbl{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3);margin-top:6px}
+
+/* right panel */
+.panel{background:#fffffff2;border-left:1px solid var(--line);padding:20px 18px;flex-direction:column;gap:18px;overflow:auto;display:none}
+.ph{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px}
+.ph .s{width:30px;height:30px;border-radius:9px;background:var(--mint-wash);display:grid;place-items:center;color:var(--mint-deep)}
+.pt{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin-bottom:8px}
+.chk{display:flex;gap:10px;align-items:center;font-size:13px;padding:7px 0}
+.chk .ci{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-size:11px;flex:none}
+.ci.ok{background:var(--ok-wash);color:var(--ok)}.ci.w{background:var(--warn-wash);color:var(--warn)}.ci.b{background:var(--bad-wash);color:var(--bad)}
+.chk small{display:block;color:var(--ink-3);font-size:11.5px}
+.m{margin:9px 0}.mr{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;color:var(--ink-2)}
+.mt{height:7px;background:var(--lilac);border-radius:9px;overflow:hidden}.mt i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,var(--mint),var(--mint-2))}.mt i.w{background:linear-gradient(90deg,var(--warn),#d4983c)}
+.src{border:1px solid var(--line);border-radius:14px;padding:11px 12px;font-size:12.5px;line-height:1.45;margin-bottom:8px;background:#fff}
+.src.hl{border-color:var(--mint);box-shadow:0 0 0 3px #15999e1f}
+.src .sh{display:flex;justify-content:space-between;gap:8px;align-items:center;font-weight:600}
+.src q{display:block;color:var(--ink-2);font-style:italic;margin:6px 0;quotes:none}
+.src small{color:var(--ink-3);font-size:11px}
+.vb{font-size:10.5px;padding:2px 7px;border-radius:6px;font-weight:600}
+.vb.ok{background:var(--ok-wash);color:var(--ok-deep)}.vb.w{background:var(--warn-wash);color:var(--warn-deep)}
+.tip{background:var(--lilac);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.55;color:var(--ink-2)}
+.tip b{color:var(--bloom)}
+.how{counter-reset:h;display:flex;flex-direction:column;gap:10px}
+.how div{display:flex;gap:10px;font-size:13px;line-height:1.45;color:var(--ink-2)}
+.how div::before{counter-increment:h;content:counter(h);width:22px;height:22px;border-radius:50%;background:var(--mint-wash);color:var(--mint-deep);font-size:11.5px;font-weight:600;display:grid;place-items:center;flex:none}
+.fail{text-align:center;max-width:520px;margin:30px auto 0}
+.fail .big{width:64px;height:64px;border-radius:20px;background:var(--bad-wash);color:var(--bad);display:grid;place-items:center;font-size:28px;margin:0 auto 14px}
+.fail h1{font-family:'Darker Grotesque';font-size:34px;font-weight:900;margin:0}
+.fail p{color:var(--ink-2);line-height:1.6}
+.corr{margin-top:16px;background:var(--warn-wash);border:1px solid var(--warn-line);border-radius:16px;padding:16px}
+.corr .lab{color:var(--warn-deep)}
+.toast{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;border-radius:12px;padding:10px 16px;font-size:13px;display:flex;gap:8px;align-items:center;box-shadow:0 10px 30px -10px #000}
+
+.devbar{top:56px;padding-top:0}
+#d1:checked~.devbar [for=d1],#d2:checked~.devbar [for=d2],#d3:checked~.devbar [for=d3]{background:#efe6f2;color:var(--bloom);border-color:#efe6f2}
+.show-port,.evbar{display:none}
+#d2:checked~.app,#d3:checked~.app{margin:0 auto 20px;grid-template-columns:76px minmax(0,1fr) 300px}
+#d2:checked~.app{width:1024px;height:768px}
+#d3:checked~.app{width:820px;height:1100px;grid-template-columns:76px minmax(0,1fr)}
+#d2:checked~.app .lbl,#d3:checked~.app .lbl{display:none}
+#d2:checked~.app .sb,#d3:checked~.app .sb{padding:16px 12px;align-items:center}
+#d2:checked~.app .brand,#d3:checked~.app .brand{padding:2px 0 14px}
+#d2:checked~.app .newc,#d3:checked~.app .newc{width:44px;height:44px;padding:0;font-size:20px}
+#d2:checked~.app .search,#d3:checked~.app .search{width:44px;height:40px;justify-content:center;padding:0}
+#d2:checked~.app .grp,#d3:checked~.app .grp{width:28px;height:1px;background:#ffffff30;margin:14px 0 8px;font-size:0}
+#d2:checked~.app .it,#d3:checked~.app .it{padding:6px}
+#d2:checked~.app .it .ic,#d3:checked~.app .it .ic{width:38px;height:38px;border-radius:11px}
+#d2:checked~.app .it.on,#d3:checked~.app .it.on{box-shadow:inset 0 0 0 2px var(--mint-2)}
+#d2:checked~.app .me,#d3:checked~.app .me{justify-content:center;padding:10px 0 0;width:100%}
+#d2:checked~.app .scroll{padding:22px 20px 30px}
+#d2:checked~.app .grid2{grid-template-columns:110px 1fr}
+#d2:checked~.app .panel{padding:16px 14px}
+#d3:checked~.app .panel{display:none!important}
+#d3:checked~.app .show-port{display:inline}#d3:checked~.app .hide-port{display:none}
+#d3:checked~.app .evbar{display:flex}
+#t1:checked~.app .evbar,#t2:checked~.app .evbar,#t6:checked~.app .evbar,#t7:checked~.app .evbar{display:none!important}
+.evbar{position:absolute;left:24px;right:24px;bottom:20px;align-items:center;gap:12px;background:#ffffffee;backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:18px;padding:12px 14px;box-shadow:var(--shadow);font-size:13px}
+.evbar small{display:block;color:var(--ink-3);font-size:12px}
+#d3:checked~.app .scroll{padding-bottom:110px}
+.mark::after{content:"";position:absolute;inset:-4px;border-radius:13px;border:2px solid var(--mint-2);animation:ring 2.4s ease-out infinite}
+@keyframes ring{0%{opacity:.7;transform:scale(.92)}100%{opacity:0;transform:scale(1.35)}}
+.flag{width:7px;height:7px;border-radius:50%;background:#f0a640;display:inline-block;margin-left:6px;vertical-align:middle;box-shadow:0 0 0 3px #f0a64033}
+.cl{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;opacity:.7;font-weight:600;margin-left:2px}
+.ref.x{background:var(--bad-wash);color:var(--bad-deep)}
+.strike{text-decoration:line-through;text-decoration-color:var(--bad);color:var(--ink-3)}
+.banner.ok{background:var(--ok-wash);border:1px solid #a8d9bf;color:var(--ok-deep)}.banner.ok .bic{background:#c6ead5}
+.sys{display:flex;gap:10px;align-items:center;background:#fff8dc;border-bottom:1px solid #f1df9a;color:#7a6512;font-size:13px;padding:9px 26px;position:relative}
+
+/* light sidebar (v2) */
+.sys.v{display:none!important}#t6:checked~.app .sys.v{display:flex!important}
+.live::after{inset:-3px!important;border-width:1.5px!important}
+.sb{background:linear-gradient(180deg,#ffffff 0%,#fbf8fc 100%)!important;color:var(--ink)!important;border-right:1px solid var(--line)}
+.sb::after{background:radial-gradient(circle,#15999e1f,transparent 70%)!important}
+.brand{flex-direction:column;align-items:flex-start;gap:6px;padding:4px 6px 18px}
+.logo{height:46px;width:auto;display:block}
+.rmark{display:none;height:38px;width:auto}
+.tagline{font-size:11px;color:var(--ink-3);display:flex;align-items:center;gap:7px;letter-spacing:.02em}
+.live{width:7px;height:7px;border-radius:50%;background:var(--mint);position:relative}
+.live::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--mint);animation:ring 2.4s ease-out infinite}
+.search{background:var(--bg)!important;border-color:var(--line)!important;color:var(--ink-3)!important}
+.search .kbd{border-color:var(--lilac-2)}
+.grp{color:var(--ink-3);opacity:1!important}
+.it{color:var(--ink)}
+.it .ic{background:var(--lilac)!important;color:var(--bloom)}
+.it small{color:var(--ink-3);opacity:1!important}
+.it:hover{background:#f6f2f8}
+.it.on{background:var(--mint-wash)!important;box-shadow:inset 3px 0 0 var(--mint)!important}
+.it.on .ic{background:#fff!important;color:var(--mint-deep)}
+.me{border-top-color:var(--line)!important}
+.me small{color:var(--ink-3);opacity:1!important}
+.av{color:#fff}
+.session-note{color:var(--ink-3);opacity:1!important}
+#d2:checked~.app .rmark,#d3:checked~.app .rmark{display:block}
+#d2:checked~.app .brand,#d3:checked~.app .brand{align-items:center}
+#d2:checked~.app .grp,#d3:checked~.app .grp{background:var(--line)!important}
+#d2:checked~.app .it.on,#d3:checked~.app .it.on{box-shadow:inset 0 0 0 2px var(--mint)!important}
+.icd{position:relative;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.icd .cp{opacity:.55;font-size:11px}
+.icd .tt{display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:3;white-space:nowrap;background:var(--ink);color:#fff;font-family:Outfit;font-size:12px;line-height:1.45;padding:8px 11px;border-radius:10px;box-shadow:0 10px 24px -10px #000}
+.icd .tt i{opacity:.65;font-style:normal;font-size:11px}
+.icd:hover .tt{display:block}
+#t4:checked~.app .v4 .icd .tt{display:block}
+.me .org{display:flex;align-items:center;gap:4px;color:var(--mint-deep)!important;font-weight:500;margin-top:1px}
+.me .more{margin-left:auto;color:var(--ink-3);font-size:16px}
+
+.navr2{margin-top:8px;display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;font-size:13.5px;color:var(--ink-2)}
+.navr2>span:first-child{width:28px;height:28px;border-radius:8px;background:var(--lilac);color:var(--bloom);display:grid;place-items:center}
+.cnt2{margin-left:auto;background:var(--warn);color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px}
+.ov{position:absolute;inset:0;background:#1c0d2266;backdrop-filter:blur(3px);display:grid;place-items:center;z-index:6}
+.ov.top{place-items:start center;padding-top:90px}
+.dlg{width:440px;background:#fff;border-radius:24px;padding:24px 26px;box-shadow:0 40px 80px -30px #1c0d22aa;position:relative}
+.dlg h2{font-family:'Darker Grotesque';font-size:32px;font-weight:900;margin:8px 0 6px;line-height:1}
+.dlg p{color:var(--ink-2);font-size:14.5px;line-height:1.55;margin:0 0 18px}
+.dlg .bigic{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;font-size:24px}
+.dlg .acts2{display:flex;gap:8px;justify-content:flex-end}
+.ghost{background:#fff;border:1px solid var(--line);color:var(--ink-2)}
+.danger{background:#fff;border:1px solid var(--bad-line);color:var(--bad)}
+.ferr{font-size:12.5px;color:var(--bad);margin-top:6px;display:flex;gap:6px;align-items:center}
+.inp.bad{border-color:var(--bad);box-shadow:0 0 0 4px #a044381a}
+.sumerr{display:flex;gap:10px;background:var(--bad-wash);border:1px solid var(--bad-line);color:var(--bad-deep);border-radius:14px;padding:12px 14px;font-size:13.5px;margin-bottom:16px}
+.sk{background:linear-gradient(90deg,#ece4ef 0%,#f7f3f9 40%,#ece4ef 80%);background-size:300% 100%;animation:sh 1.4s linear infinite;border-radius:8px}
+@keyframes sh{from{background-position:100% 0}to{background-position:-200% 0}}
+.cmdk{width:620px;background:#fff;border-radius:22px;box-shadow:0 40px 80px -30px #1c0d22aa;overflow:hidden}
+.cmdk .q{display:flex;gap:10px;align-items:center;padding:16px 18px;font-size:17px;border-bottom:1px solid var(--line)}
+.cmdk .grp2{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding:12px 18px 4px}
+.cmdk .r{display:flex;gap:12px;align-items:center;padding:10px 18px;font-size:14px}
+.cmdk .r.on{background:var(--mint-wash)}
+.cmdk .r .ic{width:30px;height:30px;border-radius:9px;background:var(--lilac);color:var(--bloom);display:grid;place-items:center;flex:none}
+.cmdk .r small{display:block;color:var(--ink-3);font-size:12px}
+.cmdk .r .k{margin-left:auto;font-family:'JetBrains Mono';font-size:11px;color:var(--ink-3)}
+.cmdk mark{background:#c9ece4;color:inherit;border-radius:3px;padding:0 1px}
+.cmdk .ft{display:flex;gap:16px;padding:10px 18px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink-3)}
+.kb{font-family:'JetBrains Mono';font-size:11px;border:1px solid var(--lilac-2);border-bottom-width:2px;border-radius:6px;padding:1px 6px;background:#fff;color:var(--ink-2)}
+.kgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px 28px}
+.kgrid div{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px;color:var(--ink-2)}
+.pg{display:grid;place-items:center;height:100%;text-align:center}
+.pg .big{width:80px;height:80px;border-radius:26px;display:grid;place-items:center;font-size:34px;margin:0 auto 16px}
+.pg h1{font-family:'Darker Grotesque';font-size:42px;font-weight:900;margin:0;line-height:1}
+.pg p{color:var(--ink-2);max-width:420px;line-height:1.6;margin:10px auto 18px}
+.code{font-family:'JetBrains Mono';font-size:12px;color:var(--ink-3);margin-top:14px}
+.stx{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--line)}
+.stx:first-child{border-top:0}
+.pl{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.pl.w{background:var(--warn-wash);color:var(--warn-deep)}.pl.b{background:var(--bad-wash);color:var(--bad-deep)}.pl.ok{background:var(--ok-wash);color:var(--ok-deep)}.pl.n{background:var(--lilac);color:var(--bloom)}
+.toastn{position:absolute;right:22px;top:72px;width:340px;background:#fff;border-radius:18px;box-shadow:0 30px 60px -24px #1c0d2299,0 0 0 1px var(--line);padding:14px 16px;display:flex;gap:12px;z-index:5;font-size:13.5px;line-height:1.45}
+.toastn small{display:block;color:var(--ink-3);font-size:12px;margin-top:4px}
+.bell{position:relative}.bell i{position:absolute;top:5px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--bad);border:2px solid #fff}
+.helpg{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.helpg .card{padding:16px}
+.helpg h4{margin:8px 0 4px;font-size:15px}.helpg p{margin:0;color:var(--ink-3);font-size:13px;line-height:1.5}
+.hic{width:36px;height:36px;border-radius:11px;background:var(--mint-wash);color:var(--mint-deep);display:grid;place-items:center}
+.gloss{display:grid;grid-template-columns:180px 1fr;gap:0;font-size:13.5px}
+.gloss div{padding:10px 0;border-top:1px solid var(--line)}
+.gloss div:nth-child(odd){font-weight:600}
+.gloss div:nth-child(even){color:var(--ink-2)}
+.offl{display:flex;gap:10px;align-items:center;background:var(--ink);color:#fff;font-size:13px;padding:9px 26px;position:relative}
+#b1:checked~.tabbar [for=b1],#b2:checked~.tabbar [for=b2],#b3:checked~.tabbar [for=b3],#b4:checked~.tabbar [for=b4],#b5:checked~.tabbar [for=b5],#b6:checked~.tabbar [for=b6],#b7:checked~.tabbar [for=b7],#b8:checked~.tabbar [for=b8],#b9:checked~.tabbar [for=b9],#b10:checked~.tabbar [for=b10],#b11:checked~.tabbar [for=b11],#b12:checked~.tabbar [for=b12]{background:var(--mint);color:#fff;border-color:var(--mint)}
+.ww{display:none!important}
+#b1:checked~.w1.ww{display:grid!important}
+#b2:checked~.w2.ww{display:grid!important}
+#b3:checked~.w3.ww{display:grid!important}
+#b4:checked~.w4.ww{display:grid!important}
+#b5:checked~.w5.ww{display:grid!important}
+#b6:checked~.w6.ww{display:grid!important}
+#b7:checked~.w7.ww{display:grid!important}
+#b8:checked~.w8.ww{display:grid!important}
+#b9:checked~.w9.ww{display:grid!important}
+#b10:checked~.w10.ww{display:grid!important}
+#b11:checked~.w11.ww{display:grid!important}
+#b12:checked~.w12.ww{display:grid!important}
+.nn{display:none}
+#b1:checked~.nn1{display:block}
+#b2:checked~.nn2{display:block}
+#b3:checked~.nn3{display:block}
+#b4:checked~.nn4{display:block}
+#b5:checked~.nn5{display:block}
+#b6:checked~.nn6{display:block}
+#b7:checked~.nn7{display:block}
+#b8:checked~.nn8{display:block}
+#b9:checked~.nn9{display:block}
+#b10:checked~.nn10{display:block}
+#b11:checked~.nn11{display:block}
+#b12:checked~.nn12{display:block}</style></head><body>
+<input class="tabs-in" type="radio" name="b" id="b1" checked>
+<input class="tabs-in" type="radio" name="b" id="b2">
+<input class="tabs-in" type="radio" name="b" id="b3">
+<input class="tabs-in" type="radio" name="b" id="b4">
+<input class="tabs-in" type="radio" name="b" id="b5">
+<input class="tabs-in" type="radio" name="b" id="b6">
+<input class="tabs-in" type="radio" name="b" id="b7">
+<input class="tabs-in" type="radio" name="b" id="b8">
+<input class="tabs-in" type="radio" name="b" id="b9">
+<input class="tabs-in" type="radio" name="b" id="b10">
+<input class="tabs-in" type="radio" name="b" id="b11">
+<input class="tabs-in" type="radio" name="b" id="b12">
+<div class="tabbar"><span class="ttl">States, utilities &amp; export · v1</span><label for="b1">1 · Form errors</label><label for="b2">2 · Loading</label><label for="b3">3 · First visit</label><label for="b4">4 · Session timeout</label><label for="b5">5 · Unsaved draft</label><label for="b6">6 · Not found / no access / offline</label><label for="b7">7 · My corrections</label><label for="b8">8 · Search (⌘K)</label><label for="b9">9 · Shortcuts</label><label for="b10">10 · Help & guide</label><label for="b11">11 · Export menu</label><label for="b12">12 · Print preview</label></div>
+<div class="note nn nn1">Errors appear when you press Analyse, not while typing. A summary at the top links to each problem, each field explains how to fix it in plain words, and focus jumps to the first error. Input is never cleared.</div>
+<div class="note nn nn2">Skeletons match the real layout, so nothing jumps when content arrives. They're used when opening a past consultation, or while the sidebar history loads.</div>
+<div class="note nn nn3">The first-time user gets a warm welcome and three example questions, not a blank screen. Clicking an example fills the form so they can see how it works.</div>
+<div class="note nn nn4">Ward computers are shared. After 13 minutes idle, a countdown warns you, and at 15 you're signed out. A draft form is saved for this session, but never stored on the device.</div>
+<div class="note nn nn5">Leaving a half-filled form asks first. "Keep editing" is the default (safe) action.</div>
+<div class="note nn nn6">Three page-level problems in one view. Each says what happened and gives one clear way forward. Offline shows a dark strip at the top: the current result stays readable, and Analyse waits until you're back online.</div>
+<div class="note nn nn7">Where you follow up on corrections you suggested. A notification appears when a reviewer decides, and the bell in the top bar keeps a history. Rejections always show the reviewer's reason.</div>
+<div class="note nn nn8">One box to search consultations and run actions. It matches symptoms, diagnoses and specialties, and you can drive it with the arrow keys and Enter. On mobile it's the search field in the drawer.</div>
+<div class="note nn nn9">Press ? anywhere. The shortcuts are grouped by where you use them.</div>
+<div class="note nn nn10">Short, scannable help. It shows how to read a result, what each confidence level means, and a glossary that maps the words on screen to plain explanations.</div>
+<div class="note nn nn11">"Copy" becomes a split button. The menu offers: copy as text (for the patient notes), print or save as PDF, and copy the ICD-10 code. Results that need review carry their red banner onto every export.</div>
+<div class="note nn nn12">A4, black-and-white friendly. Confidence is shown as a word and bars, never colour alone. The sources are numbered, and the disclaimer and the reviewer line are in the footer. Only what the clinician typed is included; no names or IDs are added.</div>
+<div class="app ww w1 " style="grid-template-columns:256px minmax(0,1fr) 0"><aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="navr2"><span>⇄</span><span class="lbl">Review corrections</span><span class="cnt2 lbl">3</span></div>
+    <div class="grp">Today</div>
+    <div class="it on"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="it"><div class="ic">◐</div><div class="lbl">Febrile child, 3 F<span class="flag" title="Flagged"></span><small><span class="sd" style="background:var(--warn)"></span>Use with caution · 1 h</small></div></div>
+    <div class="it"><div class="ic">⚗</div><div class="lbl">Low potassium<small><span class="sd" style="background:var(--bad)"></span>Needs review · 3 h</small></div></div>
+    <div class="grp">Yesterday</div>
+    <div class="it"><div class="ic">✚</div><div class="lbl">Post-op fever, day 2<small><span class="sd" style="background:var(--ok)"></span>High confidence</small></div></div>
+    <div class="it"><div class="ic">℞</div><div class="lbl">Warfarin interaction<small><span class="sd" style="background:var(--warn)"></span>Use with caution</small></div></div>
+    <div class="grp">Earlier</div>
+    <div class="it"><div class="ic">♡</div><div class="lbl">Palpitations, 31 F<small><span class="sd" style="background:var(--ok)"></span>High confidence · Mon</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside><main class="center"><div class="top"><div><h2>New consultation</h2><div class="sub mono">Draft · not submitted</div></div></div><div class="scroll"><div class="v" style="display:block;max-width:700px;margin:0 auto">
+<div class="sumerr"><b>!</b><div><b>2 things need fixing before we can analyse</b><u>Age must be between 0 and 120</u> · <u>Clinical question is too short</u></div></div>
+<div class="card">
+ <div class="fs"><div class="fsl"><span class="n">01</span><b>Patient</b></div>
+  <div class="grid2"><div><div class="lab">Age <span class="req">*</span></div><div class="inp mono bad">154</div><div class="ferr">✕ Must be 0–120</div></div>
+  <div><div class="lab">Sex <span class="req">*</span></div><div class="seg"><span class="on">Male</span><span>Female</span><span>Other</span></div></div></div></div>
+ <div class="fs"><div class="fsl"><span class="n">02</span><b>Presentation</b></div>
+  <div class="lab">Clinical question <span class="req">*</span></div><div class="inp ta bad">Chest pain?</div>
+  <div class="ferr">✕ Add a bit more detail (at least 10 characters). Vitals, duration and history help most.</div>
+  <div class="hint"><span></span><span class="mono">11 / 2000</span></div></div>
+ <div class="submit"><span class="go">Analyse <span class="kbd">⌘ ↵</span></span></div>
+</div></div></div></main><aside></aside></div>
+<div class="app ww w2 " style="grid-template-columns:256px minmax(0,1fr) 330px"><aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="navr2"><span>⇄</span><span class="lbl">Review corrections</span><span class="cnt2 lbl">3</span></div>
+    <div class="grp">Today</div>
+    <div class="it on"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="it"><div class="ic">◐</div><div class="lbl">Febrile child, 3 F<span class="flag" title="Flagged"></span><small><span class="sd" style="background:var(--warn)"></span>Use with caution · 1 h</small></div></div>
+    <div class="it"><div class="ic">⚗</div><div class="lbl">Low potassium<small><span class="sd" style="background:var(--bad)"></span>Needs review · 3 h</small></div></div>
+    <div class="grp">Yesterday</div>
+    <div class="it"><div class="ic">✚</div><div class="lbl">Post-op fever, day 2<small><span class="sd" style="background:var(--ok)"></span>High confidence</small></div></div>
+    <div class="it"><div class="ic">℞</div><div class="lbl">Warfarin interaction<small><span class="sd" style="background:var(--warn)"></span>Use with caution</small></div></div>
+    <div class="grp">Earlier</div>
+    <div class="it"><div class="ic">♡</div><div class="lbl">Palpitations, 31 F<small><span class="sd" style="background:var(--ok)"></span>High confidence · Mon</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside><main class="center"><div class="top"><div><h2>Chest pain, 54 M</h2><div class="sub mono">Completed 14:06</div></div><span class="urg urgent">Urgent</span><div class="tbtn"><span class="ib">▣ Evidence panel</span></div></div><div class="scroll"><div style="max-width:700px;margin:0 auto"><div class="card">
+<div class="row"><div class="sk" style="width:110px;height:24px;border-radius:999px"></div><div class="sk" style="width:150px;height:30px;border-radius:999px;margin-left:auto"></div></div>
+<div class="sk" style="width:62%;height:40px;margin:16px 0 14px"></div>
+<div class="sk" style="height:14px;margin:8px 0"></div><div class="sk" style="height:14px;width:92%;margin:8px 0"></div><div class="sk" style="height:14px;width:70%;margin:8px 0 20px"></div>
+<div class="sk" style="height:14px;width:85%;margin:8px 0"></div><div class="sk" style="height:14px;width:78%;margin:8px 0"></div>
+<div class="row" style="margin-top:24px"><div class="sk" style="width:110px;height:40px;border-radius:999px"></div><div class="sk" style="width:170px;height:40px;border-radius:999px"></div></div>
+</div></div></div></main><aside class="panel" style="display:flex"><div class="ph"><span class="s">⛨</span>Evidence &amp; safety</div><div class="sk" style="height:16px;margin:6px 0"></div><div class="sk" style="height:16px;margin:6px 0"></div><div class="sk" style="height:16px;margin:6px 0"></div><div class="sk" style="height:40px;margin:6px 0"></div><div class="sk" style="height:12px;margin:6px 0"></div><div class="sk" style="height:12px;margin:6px 0"></div><div class="sk" style="height:12px;margin:6px 0"></div><div class="sk" style="height:70px;margin:6px 0"></div><div class="sk" style="height:70px;margin:6px 0"></div></aside></div>
+<div class="app ww w3 " style="grid-template-columns:256px minmax(0,1fr) 0"><aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="navr2"><span>⇄</span><span class="lbl">Review corrections</span></div>
+    <div class="lbl" style="margin:26px 8px;padding:16px;border:1px dashed var(--lilac-2);border-radius:14px;font-size:13px;color:var(--ink-3);line-height:1.5;text-align:center">No consultations yet.<br>They'll appear here as you go.</div><div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside><main class="center"><div class="top"><div><h2>Home</h2></div></div><div class="scroll"><div style="max-width:700px;margin:30px auto 0;text-align:center">
+<div class="eyebrow">Welcome, Dr. Reyes</div><h1 class="dx" style="font-size:48px;margin:10px 0">Ask your first clinical question</h1>
+<p style="color:var(--ink-2);font-size:15.5px;line-height:1.6;max-width:520px;margin:0 auto 24px">Describe a patient and what you need to know. You'll get an evidence-checked answer with sources, usually in under 20 seconds.</p>
+<span class="go">＋ Start a consultation</span>
+<div class="pt" style="margin-top:34px">Or try an example</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:left">
+<div class="card" style="padding:14px 16px"><b>Febrile child</b><div style="font-size:12.5px;color:var(--ink-3);margin-top:4px">3 F, fever 3 days, rash. Dengue?</div></div>
+<div class="card" style="padding:14px 16px"><b>Chest pain</b><div style="font-size:12.5px;color:var(--ink-3);margin-top:4px">54 M, central pain radiating to arm.</div></div>
+<div class="card" style="padding:14px 16px"><b>Drug interaction</b><div style="font-size:12.5px;color:var(--ink-3);margin-top:4px">Warfarin plus a new antibiotic.</div></div>
+</div></div></div></main><aside></aside></div>
+<div class="app ww w4 " style="grid-template-columns:256px minmax(0,1fr) 0"><aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="navr2"><span>⇄</span><span class="lbl">Review corrections</span><span class="cnt2 lbl">3</span></div>
+    <div class="grp">Today</div>
+    <div class="it on"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="it"><div class="ic">◐</div><div class="lbl">Febrile child, 3 F<span class="flag" title="Flagged"></span><small><span class="sd" style="background:var(--warn)"></span>Use with caution · 1 h</small></div></div>
+    <div class="it"><div class="ic">⚗</div><div class="lbl">Low potassium<small><span class="sd" style="background:var(--bad)"></span>Needs review · 3 h</small></div></div>
+    <div class="grp">Yesterday</div>
+    <div class="it"><div class="ic">✚</div><div class="lbl">Post-op fever, day 2<small><span class="sd" style="background:var(--ok)"></span>High confidence</small></div></div>
+    <div class="it"><div class="ic">℞</div><div class="lbl">Warfarin interaction<small><span class="sd" style="background:var(--warn)"></span>Use with caution</small></div></div>
+    <div class="grp">Earlier</div>
+    <div class="it"><div class="ic">♡</div><div class="lbl">Palpitations, 31 F<small><span class="sd" style="background:var(--ok)"></span>High confidence · Mon</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside><main class="center"><div class="top"><div><h2>Chest pain, 54 M</h2><div class="sub mono">Completed 14:06</div></div><span class="urg urgent">Urgent</span><div class="tbtn"><span class="ib">▣ Evidence panel</span></div></div><div class="scroll"><div style="max-width:700px;margin:0 auto;opacity:.6"><div class="card"><h1 class="dx">Unstable angina</h1><div class="prose">Presentation is consistent with acute coronary syndrome…</div></div></div></div></main><aside></aside><div class="ov"><div class="dlg"><div class="bigic" style="background:var(--warn-wash);color:var(--warn)">◷</div><h2>Still there?</h2><p>For patient privacy you'll be signed out in <b class="mono" style="color:var(--warn-deep)">1:47</b> because of inactivity.</p><div class="acts2"><span class="btn ghost">Sign out now</span><span class="go" style="padding:11px 20px">Stay signed in</span></div></div></div></div>
+<div class="app ww w5 " style="grid-template-columns:256px minmax(0,1fr) 0"><aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="navr2"><span>⇄</span><span class="lbl">Review corrections</span><span class="cnt2 lbl">3</span></div>
+    <div class="grp">Today</div>
+    <div class="it on"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="it"><div class="ic">◐</div><div class="lbl">Febrile child, 3 F<span class="flag" title="Flagged"></span><small><span class="sd" style="background:var(--warn)"></span>Use with caution · 1 h</small></div></div>
+    <div class="it"><div class="ic">⚗</div><div class="lbl">Low potassium<small><span class="sd" style="background:var(--bad)"></span>Needs review · 3 h</small></div></div>
+    <div class="grp">Yesterday</div>
+    <div class="it"><div class="ic">✚</div><div class="lbl">Post-op fever, day 2<small><span class="sd" style="background:var(--ok)"></span>High confidence</small></div></div>
+    <div class="it"><div class="ic">℞</div><div class="lbl">Warfarin interaction<small><span class="sd" style="background:var(--warn)"></span>Use with caution</small></div></div>
+    <div class="grp">Earlier</div>
+    <div class="it"><div class="ic">♡</div><div class="lbl">Palpitations, 31 F<small><span class="sd" style="background:var(--ok)"></span>High confidence · Mon</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside><main class="center"><div class="top"><div><h2>New consultation</h2><div class="sub mono">Draft · not submitted</div></div></div><div class="scroll"><div style="max-width:700px;margin:0 auto;opacity:.6"><div class="card"><div class="fhead"><h1>What's going on with your patient?</h1></div><div class="inp ta">54-year-old male, central chest pain for 40 min…</div></div></div></div></main><aside></aside><div class="ov"><div class="dlg"><div class="bigic" style="background:var(--lilac);color:var(--bloom)">✎</div><h2>Discard this draft?</h2><p>You've started a consultation for <b>54 M, chest pain</b>. If you leave now, what you typed will be lost.</p><div class="acts2"><span class="btn" style="background:transparent;color:var(--bad)">Discard</span><span class="go" style="padding:11px 20px">Keep editing</span></div></div></div></div>
+<div class="app ww w6 " style="grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;background:transparent">
+<div class="center" style="border-radius:18px"><div class="pg"><div><div class="big" style="background:var(--lilac);color:var(--bloom)">?</div><h1>We can't find that</h1><p>This consultation doesn't exist, or it was in a session that has ended.</p><span class="go">Back to home</span><div class="code">Error 404</div></div></div></div>
+<div class="center" style="border-radius:18px"><div class="pg"><div><div class="big" style="background:var(--bad-wash);color:var(--bad)">🔒</div><h1>You don't have access</h1><p>This page is for clinicians. Admin accounts manage the system in the admin app.</p><span class="go">Go to admin app</span><div class="code">Error 403</div></div></div></div>
+<div class="center" style="border-radius:18px"><div class="offl">⚡ You're offline. Showing what's already loaded.</div><div class="pg" style="height:auto;padding-top:60px"><div><div class="big" style="background:var(--warn-wash);color:var(--warn)">⌁</div><h1>No connection</h1><p>Your result is still here. New analyses will be possible when you're back online.</p><span class="btn ghost">↻ Try again</span></div></div></div>
+</div><div class="app ww w7 " style="grid-template-columns:256px minmax(0,1fr) 0"><aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="navr2"><span>⇄</span><span class="lbl">Review corrections</span><span class="cnt2 lbl">3</span></div>
+    <div class="grp">Today</div>
+    <div class="it on"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="it"><div class="ic">◐</div><div class="lbl">Febrile child, 3 F<span class="flag" title="Flagged"></span><small><span class="sd" style="background:var(--warn)"></span>Use with caution · 1 h</small></div></div>
+    <div class="it"><div class="ic">⚗</div><div class="lbl">Low potassium<small><span class="sd" style="background:var(--bad)"></span>Needs review · 3 h</small></div></div>
+    <div class="grp">Yesterday</div>
+    <div class="it"><div class="ic">✚</div><div class="lbl">Post-op fever, day 2<small><span class="sd" style="background:var(--ok)"></span>High confidence</small></div></div>
+    <div class="it"><div class="ic">℞</div><div class="lbl">Warfarin interaction<small><span class="sd" style="background:var(--warn)"></span>Use with caution</small></div></div>
+    <div class="grp">Earlier</div>
+    <div class="it"><div class="ic">♡</div><div class="lbl">Palpitations, 31 F<small><span class="sd" style="background:var(--ok)"></span>High confidence · Mon</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside><main class="center"><div class="top"><div><h2>My feedback &amp; corrections</h2></div><div class="tbtn"><span class="ib bell">🔔<i></i></span></div></div><div class="scroll"><div style="max-width:760px;margin:0 auto"><div class="eyebrow">Your account</div><h1 class="dx" style="font-size:40px">My feedback &amp; corrections</h1>
+<div class="row" style="margin:8px 0 16px"><span class="pl n">All · 6</span><span class="pl w">Waiting · 1</span><span class="pl ok">Approved · 4</span><span class="pl b">Rejected · 1</span></div>
+<div class="card" style="padding:6px 20px">
+<div class="stx"><span class="pl ok">Approved</span><div style="flex:1"><b>Dengue fever: admission criteria</b><div style="font-size:13px;color:var(--ink-3)">Approved by Dr. Bello · today 15:10 · now with clinical sign-off</div></div><span style="color:var(--mint-deep);font-size:13px">View ›</span></div>
+<div class="stx"><span class="pl w">Waiting</span><div style="flex:1"><b>Paediatric dosing</b><div style="font-size:13px;color:var(--ink-3)">Submitted 5 h ago · reviewers reminded</div></div><span style="color:var(--mint-deep);font-size:13px">View ›</span></div>
+<div class="stx"><span class="pl b">Rejected</span><div style="flex:1"><b>Hypokalaemia: dose wording</b><div style="font-size:13px;color:var(--ink-3);margin-bottom:6px">Rejected by Dr. Mensah · yesterday</div><div style="background:var(--bad-wash);border-radius:12px;padding:9px 12px;font-size:13px;color:var(--bad-deep)">"Partly right, needs rewording: keep 10 mmol/h max but mention cardiac monitoring."</div></div><span style="color:var(--mint-deep);font-size:13px">Resubmit ›</span></div>
+</div></div></div></main><aside></aside><div class="toastn"><span class="ci ok" style="width:30px;height:30px;border-radius:10px;display:grid;place-items:center;flex:none">✓</span><div><b>Your correction was approved</b><br>Dengue fever: admission criteria<small>Dr. Bello · just now</small></div></div></div>
+<div class="app ww w8 " style="grid-template-columns:256px minmax(0,1fr) 0"><aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="navr2"><span>⇄</span><span class="lbl">Review corrections</span><span class="cnt2 lbl">3</span></div>
+    <div class="grp">Today</div>
+    <div class="it on"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="it"><div class="ic">◐</div><div class="lbl">Febrile child, 3 F<span class="flag" title="Flagged"></span><small><span class="sd" style="background:var(--warn)"></span>Use with caution · 1 h</small></div></div>
+    <div class="it"><div class="ic">⚗</div><div class="lbl">Low potassium<small><span class="sd" style="background:var(--bad)"></span>Needs review · 3 h</small></div></div>
+    <div class="grp">Yesterday</div>
+    <div class="it"><div class="ic">✚</div><div class="lbl">Post-op fever, day 2<small><span class="sd" style="background:var(--ok)"></span>High confidence</small></div></div>
+    <div class="it"><div class="ic">℞</div><div class="lbl">Warfarin interaction<small><span class="sd" style="background:var(--warn)"></span>Use with caution</small></div></div>
+    <div class="grp">Earlier</div>
+    <div class="it"><div class="ic">♡</div><div class="lbl">Palpitations, 31 F<small><span class="sd" style="background:var(--ok)"></span>High confidence · Mon</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside><main class="center"><div class="top"><div><h2>Chest pain, 54 M</h2><div class="sub mono">Completed 14:06</div></div><span class="urg urgent">Urgent</span><div class="tbtn"><span class="ib">▣ Evidence panel</span></div></div><div class="scroll"><div style="max-width:700px;margin:0 auto;opacity:.5"><div class="card"><h1 class="dx">Unstable angina</h1></div></div></div></main><aside></aside><div class="ov top"><div class="cmdk"><div class="q">⌕ <span>fev<span style="border-left:2px solid var(--mint);margin-left:1px"></span></span><span class="kb" style="margin-left:auto">esc</span></div>
+<div class="grp2">Consultations</div>
+<div class="r on"><span class="ic">◐</span><div>Febrile child, 3 F — <mark>Fev</mark>er 3 days, rash<small>Use with caution · today 13:02</small></div><span class="k">↵</span></div>
+<div class="r"><span class="ic">✚</span><div>Post-op <mark>fev</mark>er, day 2<small>High confidence · yesterday</small></div></div>
+<div class="grp2">Actions</div>
+<div class="r"><span class="ic">＋</span><div>New consultation</div><span class="k">N</span></div>
+<div class="r"><span class="ic">⇄</span><div>Review corrections</div><span class="k">G R</span></div>
+<div class="ft"><span><span class="kb">↑</span> <span class="kb">↓</span> move</span><span><span class="kb">↵</span> open</span><span><span class="kb">esc</span> close</span></div></div></div></div>
+<div class="app ww w9 " style="grid-template-columns:256px minmax(0,1fr) 0"><aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="navr2"><span>⇄</span><span class="lbl">Review corrections</span><span class="cnt2 lbl">3</span></div>
+    <div class="grp">Today</div>
+    <div class="it on"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="it"><div class="ic">◐</div><div class="lbl">Febrile child, 3 F<span class="flag" title="Flagged"></span><small><span class="sd" style="background:var(--warn)"></span>Use with caution · 1 h</small></div></div>
+    <div class="it"><div class="ic">⚗</div><div class="lbl">Low potassium<small><span class="sd" style="background:var(--bad)"></span>Needs review · 3 h</small></div></div>
+    <div class="grp">Yesterday</div>
+    <div class="it"><div class="ic">✚</div><div class="lbl">Post-op fever, day 2<small><span class="sd" style="background:var(--ok)"></span>High confidence</small></div></div>
+    <div class="it"><div class="ic">℞</div><div class="lbl">Warfarin interaction<small><span class="sd" style="background:var(--warn)"></span>Use with caution</small></div></div>
+    <div class="grp">Earlier</div>
+    <div class="it"><div class="ic">♡</div><div class="lbl">Palpitations, 31 F<small><span class="sd" style="background:var(--ok)"></span>High confidence · Mon</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside><main class="center"><div class="top"><div><h2>Chest pain, 54 M</h2><div class="sub mono">Completed 14:06</div></div><span class="urg urgent">Urgent</span><div class="tbtn"><span class="ib">▣ Evidence panel</span></div></div><div class="scroll"><div style="max-width:700px;margin:0 auto;opacity:.5"><div class="card"><h1 class="dx">Unstable angina</h1></div></div></div></main><aside></aside><div class="ov"><div class="dlg" style="width:640px"><div class="row"><h2 style="margin:0">Keyboard shortcuts</h2><span class="kb" style="margin-left:auto">esc</span></div><p style="margin:6px 0 16px">Work faster without the mouse.</p>
+<div class="kgrid">
+<div>Search / commands<span><span class="kb">⌘</span> <span class="kb">K</span></span></div><div>Agree with result<span class="kb">A</span></div>
+<div>New consultation<span class="kb">N</span></div><div>Suggest correction<span class="kb">C</span></div>
+<div>Submit form<span><span class="kb">⌘</span> <span class="kb">↵</span></span></div><div>Copy result<span><span class="kb">⇧</span> <span class="kb">C</span></span></div>
+<div>Toggle evidence panel<span class="kb">E</span></div><div>Review: approve / reject<span><span class="kb">A</span> <span class="kb">R</span></span></div>
+<div>Previous / next consultation<span><span class="kb">↑</span> <span class="kb">↓</span></span></div><div>Print / export<span><span class="kb">⌘</span> <span class="kb">P</span></span></div>
+</div></div></div></div>
+<div class="app ww w10 " style="grid-template-columns:256px minmax(0,1fr) 0"><aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="navr2"><span>⇄</span><span class="lbl">Review corrections</span><span class="cnt2 lbl">3</span></div>
+    <div class="grp">Today</div>
+    <div class="it on"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="it"><div class="ic">◐</div><div class="lbl">Febrile child, 3 F<span class="flag" title="Flagged"></span><small><span class="sd" style="background:var(--warn)"></span>Use with caution · 1 h</small></div></div>
+    <div class="it"><div class="ic">⚗</div><div class="lbl">Low potassium<small><span class="sd" style="background:var(--bad)"></span>Needs review · 3 h</small></div></div>
+    <div class="grp">Yesterday</div>
+    <div class="it"><div class="ic">✚</div><div class="lbl">Post-op fever, day 2<small><span class="sd" style="background:var(--ok)"></span>High confidence</small></div></div>
+    <div class="it"><div class="ic">℞</div><div class="lbl">Warfarin interaction<small><span class="sd" style="background:var(--warn)"></span>Use with caution</small></div></div>
+    <div class="grp">Earlier</div>
+    <div class="it"><div class="ic">♡</div><div class="lbl">Palpitations, 31 F<small><span class="sd" style="background:var(--ok)"></span>High confidence · Mon</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside><main class="center"><div class="top"><div><h2>Help &amp; guide</h2></div><div class="tbtn"><span class="ib">Contact support</span></div></div><div class="scroll"><div style="max-width:860px;margin:0 auto"><div class="eyebrow">Help &amp; guide</div><h1 class="dx" style="font-size:44px">How to use MHAI</h1>
+<div class="helpg" style="margin:16px 0 22px">
+<div class="card"><div class="hic">✎</div><h4>Ask a good question</h4><p>Age, sex, vitals, duration and history give the best answers.</p></div>
+<div class="card"><div class="hic">◔</div><h4>Read the confidence</h4><p>High, Use with caution, or Needs review: what each means and what to do.</p></div>
+<div class="card"><div class="hic">⛨</div><h4>Check the evidence</h4><p>Every claim links to the guideline it came from.</p></div></div>
+<div class="card" style="display:flex;gap:18px;align-items:center;margin-bottom:14px"><img src="assets/mh-logo-t.png" style="height:40px"><span style="font-family:'Darker Grotesque';font-size:30px;font-weight:900;color:var(--ink-3)">×</span><div style="font-family:'Darker Grotesque';font-size:30px;font-weight:900;color:var(--bloom);letter-spacing:.04em;line-height:1">BHAI<div style="font-family:Outfit;font-size:12px;font-weight:500;color:var(--ink-3);letter-spacing:0">University of Chicago</div></div><div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-left:8px;flex:1"><b style="color:var(--ink)">About MHAI.</b> Built by Measured Health in partnership with BHAI at the University of Chicago, our research partner in healthcare AI for diagnostic support and clinical decision-making.</div></div>
+<div class="card"><h3 style="margin:0 0 8px">What the labels mean</h3><div class="gloss">
+<div><span class="conf ok" style="padding:3px 10px;font-size:12px">High confidence</span></div><div>Claims match the guidelines. Still apply your clinical judgement.</div>
+<div><span class="conf warn" style="padding:3px 10px;font-size:12px">Use with caution</span></div><div>Some parts weren't verified. Check the amber-tagged lines before acting.</div>
+<div><span class="pl b">Needs review</span></div><div>Not enough evidence. Don't act on it without review.</div>
+<div>Evidence-backed claims</div><div>How many statements were matched to a source.</div>
+<div>Answer stability</div><div>Whether the system gives the same answer when asked again.</div>
+</div></div></div></div></main><aside></aside></div>
+<div class="app ww w11 " style="grid-template-columns:256px minmax(0,1fr) 0"><aside class="sb">
+    <div class="brand"><img class="logo lbl" src="assets/mh-logo-t.png" alt="Measured Health"><svg class="rmark" viewBox="0 0 58 52" aria-label="Measured Health"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#15999E"/><stop offset=".5" stop-color="#15999E"/><stop offset=".75" stop-color="#5a3a78"/><stop offset="1" stop-color="#6b2a68"/></linearGradient></defs><path d="M2 30 C5 28 7 29 8 31 C9 33 11 31 12 29 L22 15 C24 13 25 15 24 18 L18 46 C17 49 20 49 21 46 L35 6 C36 3 39 4 38 8 L30 46 C29 49 32 49 33 46 L46 14 C47 11 50 12 49 16 L45 40 C44 46 49 48 53 45" fill="none" stroke="url(#mg)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="tagline lbl"><span class="live"></span>Clinical decision support</div></div>
+    <div class="newc">＋<span class="lbl"> New consultation</span></div>
+    <div class="search">⌕<span class="lbl"> Search consultations</span> <span class="kbd lbl">⌘K</span></div>
+    <div class="navr2"><span>⇄</span><span class="lbl">Review corrections</span><span class="cnt2 lbl">3</span></div>
+    <div class="grp">Today</div>
+    <div class="it on"><div class="ic">♥</div><div class="lbl">Chest pain, 54 M<small><span class="sd" style="background:var(--ok)"></span>High confidence · 2 min</small></div></div>
+    <div class="it"><div class="ic">◐</div><div class="lbl">Febrile child, 3 F<span class="flag" title="Flagged"></span><small><span class="sd" style="background:var(--warn)"></span>Use with caution · 1 h</small></div></div>
+    <div class="it"><div class="ic">⚗</div><div class="lbl">Low potassium<small><span class="sd" style="background:var(--bad)"></span>Needs review · 3 h</small></div></div>
+    <div class="grp">Yesterday</div>
+    <div class="it"><div class="ic">✚</div><div class="lbl">Post-op fever, day 2<small><span class="sd" style="background:var(--ok)"></span>High confidence</small></div></div>
+    <div class="it"><div class="ic">℞</div><div class="lbl">Warfarin interaction<small><span class="sd" style="background:var(--warn)"></span>Use with caution</small></div></div>
+    <div class="grp">Earlier</div>
+    <div class="it"><div class="ic">♡</div><div class="lbl">Palpitations, 31 F<small><span class="sd" style="background:var(--ok)"></span>High confidence · Mon</small></div></div>
+    <div class="session-note lbl">History is kept for this session only.</div>
+    <div class="me" title="Dr. Reyes · Attending, Internal Medicine · Havana Hospital"><div class="av">DR</div><div class="lbl">Dr. Reyes<small>Attending · Internal Medicine</small><small class="org">⌂ Havana Hospital</small></div><span class="lbl more">⋯</span></div>
+  </aside><main class="center"><div class="top"><div><h2>Chest pain, 54 M</h2><div class="sub mono">Completed 14:06</div></div><span class="urg urgent">Urgent</span><div class="tbtn"><span class="ib">▣ Evidence panel</span></div></div><div class="scroll"><div style="max-width:700px;margin:0 auto"><div class="card">
+<div class="row"><span class="chip">ICD-10 · I20.0</span><span class="conf ok" style="margin-left:auto"><span class="bars"><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i><i style="height:12px"></i><i class="off" style="height:14px"></i></span>High <span class="cl">confidence</span></span></div>
+<h1 class="dx">Unstable angina</h1><div class="prose">Presentation is consistent with acute coronary syndrome in a high-risk patient.</div>
+<div class="acts" style="position:relative"><span class="btn b-agree">✓ I agree</span><span class="btn b-sugg">✎ Suggest correction</span><span class="btn b-copy" style="box-shadow:0 0 0 3px #15999e33">⧉ Copy ▾</span>
+<div style="position:absolute;right:0;top:64px;width:270px;background:#fff;border-radius:16px;box-shadow:0 30px 60px -20px #46035166,0 0 0 1px var(--line);padding:6px;z-index:3">
+<div class="mi" style="display:flex;gap:10px;padding:10px;border-radius:10px;font-size:13.5px;background:var(--bg)">⧉ Copy as text<span class="kb" style="margin-left:auto">⇧C</span></div>
+<div class="mi" style="display:flex;gap:10px;padding:10px;font-size:13.5px">⎙ Print or save as PDF<span class="kb" style="margin-left:auto">⌘P</span></div>
+<div class="mi" style="display:flex;gap:10px;padding:10px;font-size:13.5px">#  Copy ICD-10 code</div>
+<div style="font-size:11.5px;color:var(--ink-3);padding:8px 10px;border-top:1px solid var(--line)">Exports include the sources and the disclaimer.</div></div></div>
+</div></div></div></main><aside></aside></div>
+<div class="app ww w12 " style="grid-template-columns:1fr;background:#5b5160;place-items:center;padding:24px">
+<div style="width:595px;height:800px;background:#fff;box-shadow:0 20px 50px -10px #000a;padding:44px 48px;font-size:12.5px;line-height:1.55;color:#1c0d22;position:relative;font-family:Outfit">
+<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1c0d22;padding-bottom:12px"><img src="assets/mh-logo-t.png" style="height:34px"><div style="text-align:right;font-size:11px;color:#555">Clinical decision support summary<br><span class="mono">Printed 13 Oct 2026, 14:20 · Ref MH-7F3A</span></div></div>
+<div style="display:flex;gap:24px;margin:16px 0;font-size:12px"><div><b>Patient</b><br>54 · Male</div><div><b>Priority</b><br>Urgent</div><div><b>Requested by</b><br>Dr. Reyes, Havana Hospital</div></div>
+<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#555">Assessment</div>
+<div style="display:flex;align-items:baseline;gap:12px"><h1 style="font-family:'Darker Grotesque';font-size:34px;font-weight:900;margin:2px 0">Unstable angina</h1><span class="mono">ICD-10 I20.0</span></div>
+<div style="border:1.5px solid #1c0d22;border-radius:8px;display:inline-flex;gap:8px;padding:4px 10px;font-weight:600;align-items:center"><span class="bars" style="color:#1c0d22"><i style="height:5px"></i><i style="height:7px"></i><i style="height:9px"></i><i style="height:11px"></i><i class="off" style="height:13px"></i></span>HIGH CONFIDENCE</div>
+<p>Presentation is consistent with acute coronary syndrome in a high-risk patient (smoker, type 2 diabetes).</p>
+<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#555">Recommended next steps</div>
+<ol style="padding-left:18px;margin:6px 0 14px"><li>12-lead ECG within 10 minutes of arrival <sup>[1]</sup></li><li>Serial high-sensitivity troponin at 0 and 3 hours <sup>[2]</sup></li><li>Aspirin 300 mg chewed, unless contraindicated <sup>[1]</sup></li><li>Risk-stratify with HEART score before disposition <sup>[3]</sup></li></ol>
+<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#555">Sources</div>
+<div style="font-size:11.5px">[1] AHA 2021 Chest Pain Guideline ✓ verified<br>[2] ESC 2023 ACS Guideline ✓ verified<br>[3] NICE CG95 ✓ verified</div>
+<div style="font-size:11.5px;margin-top:12px">Safety checks: patient data protected ✓ · consistent reasoning ✓ · 4 of 4 claims verified ✓</div>
+<div style="position:absolute;left:48px;right:48px;bottom:36px;border-top:1px solid #ccc;padding-top:10px;font-size:10.5px;color:#555;display:flex;justify-content:space-between"><span>Decision support only. Final clinical judgement rests with the treating clinician.<br>Clinician agreed: Dr. Reyes · 14:08 · MHAI by Measured Health, in partnership with BHAI (University of Chicago)</span><span class="mono">Page 1 of 1</span></div>
+</div></div>
+</body></html>
