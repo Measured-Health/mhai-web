@@ -1,4 +1,6 @@
 import "@testing-library/jest-dom/vitest";
+// jsdom has no IndexedDB; the offline outbox needs one.
+import "fake-indexeddb/auto";
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 
