@@ -4,7 +4,7 @@ The sample-data demo runs on the shared preview instance, next to the EMR
 stack, behind the host's nginx:
 
 ```
-browser ──https──> nginx (host, password) ──> 127.0.0.1:8090 ──> mhai-web container
+browser ──https──> nginx (host) ──> 127.0.0.1:8090 ──> mhai-web container
 ```
 
 Every merge to `main` that passes CI runs `.github/workflows/deploy.yml`:
@@ -24,14 +24,7 @@ record must point at the instance (3.239.87.6).
    # copy deploy/compose.yml to /srv/mhai-web/compose.yml
    ```
 
-2. Password (bcrypt). Share the plain password with the team privately:
-
-   ```bash
-   sudo apt-get install -y apache2-utils
-   sudo htpasswd -cB /etc/nginx/mhai-demo.htpasswd team
-   ```
-
-3. nginx site. Test before reloading: a bad config must never take the EMR
+2. nginx site. Test before reloading: a bad config must never take the EMR
    down.
 
    ```bash
@@ -40,19 +33,18 @@ record must point at the instance (3.239.87.6).
    sudo nginx -t && sudo systemctl reload nginx
    ```
 
-4. TLS, once DNS resolves to the instance:
+3. TLS, once DNS resolves to the instance:
 
    ```bash
    sudo certbot --nginx -d demo.measured-health.org -m <ops-email> --agree-tos
    sudo nginx -t && sudo systemctl reload nginx
    ```
 
-5. Deploy key: a key pair used only by this workflow. Add the public key to
-   `~ubuntu/.ssh/authorized_keys` on the instance.
+4. Deploy key: the instance's existing `ubuntu` key (`mh.pem`).
 
-6. In the GitHub repository:
+5. In the GitHub repository:
    - environment `preview` with secrets `DEPLOY_HOST`, `DEPLOY_USER`
-     (`ubuntu`) and `DEPLOY_SSH_KEY` (the private deploy key);
+     (`ubuntu`) and `DEPLOY_SSH_KEY` (the private key);
    - repository variable `DEPLOY_ENABLED=true`.
 
 Then run the workflow once by hand (Actions → Deploy demo → Run workflow).
@@ -61,7 +53,5 @@ Then run the workflow once by hand (Actions → Deploy demo → Run workflow).
 
 - Logs: `cd /srv/mhai-web && docker compose logs --tail=100 web`
 - Restart: `docker compose restart web`
-- Change the password: `sudo htpasswd -B /etc/nginx/mhai-demo.htpasswd team`
-  (no reload needed)
 - Take it down: `docker compose down`, remove the site link from
   `/etc/nginx/sites-enabled/`, then `sudo nginx -t && sudo systemctl reload nginx`.
