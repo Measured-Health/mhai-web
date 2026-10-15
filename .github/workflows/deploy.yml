@@ -96,7 +96,7 @@ jobs:
             docker compose pull web
             docker compose up -d web
 
-            # Straight to the container, past nginx's password: the home page
+            # Straight to the container, not through nginx: the home page
             # must load, and a dead consultation link must be a real 404.
             ok=0
             for _ in $(seq 1 24); do
