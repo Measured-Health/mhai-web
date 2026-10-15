@@ -22,6 +22,9 @@ record must point at the instance (3.239.87.6).
    ```bash
    sudo mkdir -p /srv/mhai-web && sudo chown ubuntu:ubuntu /srv/mhai-web
    # copy deploy/compose.yml to /srv/mhai-web/compose.yml
+   # the feedback folder, writable by the container's user (uid 1001) only
+   sudo mkdir -p /srv/mhai-web/feedback
+   sudo chown 1001:1001 /srv/mhai-web/feedback && sudo chmod 750 /srv/mhai-web/feedback
    ```
 
 2. nginx site. Test before reloading: a bad config must never take the EMR
@@ -50,6 +53,12 @@ record must point at the instance (3.239.87.6).
 Then run the workflow once by hand (Actions → Deploy demo → Run workflow).
 
 ## Day to day
+
+- Read demo feedback (one JSON line per message: time, page, screen size,
+  message, optional name or role):
+  `sudo cat /srv/mhai-web/feedback/feedback.jsonl | jq .`
+  It stays on the instance and goes nowhere else. Testers are asked not to
+  type patient details, but treat it as possibly sensitive anyway.
 
 - Logs: `cd /srv/mhai-web && docker compose logs --tail=100 web`
 - Restart: `docker compose restart web`

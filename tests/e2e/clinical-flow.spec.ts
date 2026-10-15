@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { FORBIDDEN_TERMS } from "../../lib/labels";
+import { FEEDBACK_LOG } from "../../playwright.config";
 
 // Whole-word match. Upper-case terms (NLI, PASS, KB...) are case-sensitive so
 // ordinary words such as "online" or "passed" do not trip them.
@@ -183,4 +185,21 @@ test("in-app navigation still reaches the printout", async ({ page }) => {
   await expect(
     page.getByRole("link", { name: /Back to result/ }),
   ).toBeVisible();
+});
+
+test("demo feedback is saved on the server, with the page masked", async ({
+  page,
+}, info) => {
+  const marker = `Feedback e2e ${info.project.name} ${Date.now()}`;
+  await ask(page, "Fever 3 days and rash, dengue area. Admit?");
+  await expect(resultAlert(page)).toContainText("Use with caution");
+  await page.getByRole("button", { name: /Give feedback/ }).click();
+  await page.getByLabel("Your feedback").fill(marker);
+  await page.getByRole("button", { name: "Send feedback" }).click();
+  await expect(page.getByText("Thanks, the team has it")).toBeVisible();
+  const lines = (await readFile(FEEDBACK_LOG, "utf8")).trim().split("\n");
+  const saved = lines
+    .map((l) => JSON.parse(l))
+    .find((e) => e.message === marker);
+  expect(saved?.page).toBe("/c/[id]");
 });

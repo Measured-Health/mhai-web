@@ -17,6 +17,10 @@ services:
     # The instance has 3.7 GiB shared with MongoDB and the EMR. The demo is a
     # small Node server; cap it so it can never starve them.
     mem_limit: 384m
+    # Demo feedback (one JSON line per message), kept on the host for review.
+    # The folder must be owned by uid 1001, the container's user.
+    volumes:
+      - ./feedback:/data/feedback
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
