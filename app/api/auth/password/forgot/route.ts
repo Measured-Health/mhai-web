@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { api, UpstreamError } from "@/lib/server/api";
-import { authCode, forbidden, json, sameOrigin } from "@/lib/server/http";
+import { forbidden, json, sameOrigin } from "@/lib/server/http";
 
 const Body = z.object({ email: z.string().trim().min(3).max(320) });
 
@@ -15,11 +15,10 @@ export async function POST(req: Request) {
       body: { email: body.data.email },
     });
   } catch (e) {
-    if (e instanceof UpstreamError && (e.status === 404 || e.status === 422))
-      return json(202);
-    const { status, code } = authCode(e, "other");
-    if (code === "rate_limited" || code === "unavailable")
-      return json(status, { code });
+    // Only outages and rate limits surface; every other answer looks alike.
+    const st = e instanceof UpstreamError ? e.status : 503;
+    if (st >= 500) return json(503, { code: "unavailable" });
+    if (st === 429) return json(429, { code: "rate_limited" });
   }
   return json(202);
 }

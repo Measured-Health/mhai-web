@@ -268,15 +268,14 @@ describe("assumed endpoints", () => {
       },
     ]);
     upstream.mockResolvedValueOnce(undefined);
-    const del = new Request("http://demo.test/api/auth/devices/s%2F2", {
+    const del = new Request("http://demo.test/api/auth/devices/s2", {
       method: "DELETE",
       headers: { host: "demo.test", origin: "http://demo.test" },
     });
     expect(
-      (await dropDevice(del, { params: Promise.resolve({ id: "s/2" }) }))
-        .status,
+      (await dropDevice(del, { params: Promise.resolve({ id: "s2" }) })).status,
     ).toBe(204);
-    expect(upstream).toHaveBeenLastCalledWith("/auth/sessions/s%2F2", {
+    expect(upstream).toHaveBeenLastCalledWith("/auth/sessions/s2", {
       method: "DELETE",
       token: "tok",
     });
@@ -340,6 +339,33 @@ describe("assumed endpoints", () => {
     ]);
     upstream.mockRejectedValueOnce(new UpstreamError(503, "unavailable"));
     expect((await oidcExchange(post({ code: "x" }))).status).toBe(503);
+  });
+  it("keeps forgot-password replies alike for every account state", async () => {
+    upstream.mockRejectedValueOnce(new UpstreamError(403, "account_disabled"));
+    expect((await forgot(post({ email: "a@b.org" }))).status).toBe(202);
+    upstream.mockRejectedValueOnce(new UpstreamError(409, "x"));
+    expect((await forgot(post({ email: "a@b.org" }))).status).toBe(202);
+    upstream.mockRejectedValueOnce(new UpstreamError(500, "error"));
+    const r = await forgot(post({ email: "a@b.org" }));
+    expect([r.status, await r.json()]).toEqual([503, { code: "unavailable" }]);
+  });
+  it("never lets a device id rewrite the upstream path", async () => {
+    await signedIn();
+    upstream.mockClear();
+    for (const id of ["..", ".", "s/2"]) {
+      const res = await dropDevice(
+        new Request("http://demo.test/api/auth/devices/x", {
+          method: "DELETE",
+          headers: { host: "demo.test", origin: "http://demo.test" },
+        }),
+        { params: Promise.resolve({ id }) },
+      );
+      expect([res.status, await res.json()]).toEqual([
+        404,
+        { code: "not_found" },
+      ]);
+    }
+    expect(upstream).not.toHaveBeenCalled();
   });
   it("refuses cross-site writes and needs a session on the new routes", async () => {
     const evil = post({}, "https://evil.test");

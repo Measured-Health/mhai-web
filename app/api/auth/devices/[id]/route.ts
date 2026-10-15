@@ -4,12 +4,16 @@ import { readSession } from "@/lib/server/session";
 
 export async function DELETE(
   req: Request,
-  ctx: { params: Promise<{ id: string }> },
+  ctx: RouteContext<"/api/auth/devices/[id]">,
 ) {
   if (!sameOrigin(req)) return forbidden();
   const s = await readSession();
   if (!s) return json(401, { code: "session_expired" });
   const { id } = await ctx.params;
+  // Session ids are opaque tokens. Anything else (".", "..", "/") could
+  // rewrite the upstream path, so it never reaches the API.
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id))
+    return json(404, { code: "not_found" });
   try {
     await api(`/auth/sessions/${encodeURIComponent(id)}`, {
       method: "DELETE",
