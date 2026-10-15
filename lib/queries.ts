@@ -75,6 +75,11 @@ export function useQueryStatus(
     )
       last.current = { id, p: progress, at: Date.now() };
     const t = setInterval(() => {
+      // Offline ticks never count: keep pushing the progress time forward.
+      if (!net.online) {
+        if (last.current) last.current.at = Date.now();
+        return;
+      }
       if (
         last.current &&
         Date.now() - last.current.at >= stallMs &&
@@ -84,7 +89,7 @@ export function useQueryStatus(
         setStalledId(id);
     }, 1000);
     return () => clearInterval(t);
-  }, [id, progress, stallMs, status]);
+  }, [id, progress, stallMs, status, net.online]);
   return {
     status,
     progress,

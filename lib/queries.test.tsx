@@ -1,16 +1,29 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from "vitest";
 import { SessionProvider, useSession } from "./session-store";
 
 const status = vi.fn();
+const create = vi.fn() as Mock<
+  (q?: unknown, o?: { idempotencyKey?: string }) => Promise<unknown>
+>;
+create.mockResolvedValue({ query_id: "q1" });
 vi.mock("./api/client", () => ({
   getClient: () => ({
     getStatus: status,
-    createQuery: vi.fn(async () => ({ query_id: "q1" })),
+    createQuery: create,
   }),
 }));
+import { ApiError } from "./api/errors";
 import { useQueryStatus, useSubmitQuery } from "./queries";
 
 const makeClient = () =>
@@ -181,5 +194,68 @@ describe("useSubmitQuery", () => {
     });
     expect(setItem).not.toHaveBeenCalled();
     expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
+  });
+});
+
+describe("offline time and retried writes", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    create.mockClear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    status.mockReset();
+    vi.restoreAllMocks();
+  });
+
+  it("never counts time spent offline towards the stall", async () => {
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    status.mockResolvedValue({
+      query_id: "q1",
+      status: "processing",
+      progress: 0.3,
+      current_stage: "generation",
+    });
+    const { result } = renderHook(() => useQueryStatus("q1"), {
+      wrapper: wrapWith(makeClient()),
+    });
+    const advance = (ms: number) =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
+    await advance(10_000);
+    onLine.mockReturnValue(false);
+    act(() => void window.dispatchEvent(new Event("offline")));
+    await advance(5 * 60_000);
+    expect(result.current.stalled).toBe(false);
+    onLine.mockReturnValue(true);
+    act(() => void window.dispatchEvent(new Event("online")));
+    await advance(60_000);
+    expect(result.current.stalled).toBe(false);
+    await advance(61_000);
+    expect(result.current.stalled).toBe(true);
+  });
+
+  it("reuses one idempotency key across the retries of a submit", async () => {
+    create
+      .mockRejectedValueOnce(new ApiError(0, "network"))
+      .mockRejectedValueOnce(new ApiError(0, "network"));
+    const { result } = renderHook(() => useSubmitQuery(), {
+      wrapper: wrapWith(makeClient()),
+    });
+    const q = {
+      patient_data: { age: 54, sex: "male", symptoms: ["Chest pain"] },
+      clinical_question: "q".repeat(12),
+      urgency: "urgent",
+    } as never;
+    await act(async () => {
+      const p = result.current.mutateAsync(q);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await p;
+    });
+    expect(create).toHaveBeenCalledTimes(3);
+    const keys = create.mock.calls.map((c) => c[1]?.idempotencyKey);
+    expect(new Set(keys).size).toBe(1);
+    expect(keys[0]).toEqual(expect.any(String));
   });
 });

@@ -94,6 +94,18 @@ describe("motion", () => {
     expect(block).toMatch(/\.draw-once path\s*\{\s*animation: none/);
   });
 
+  it("mirrors reduced motion for data saver and 2G", () => {
+    expect(css).toMatch(
+      /\[data-save-data\] \*,[\s\S]*?animation: none !important;\s*transition: none !important;/,
+    );
+    expect(css).toMatch(
+      /\[data-save-data\] \.draw-once path\s*\{\s*stroke-dashoffset: 0;/,
+    );
+    expect(css).toMatch(
+      /:root\[data-save-data\]::view-transition-group\(\*\),\s*:root\[data-save-data\]::view-transition-old\(\*\),\s*:root\[data-save-data\]::view-transition-new\(\*\)\s*\{\s*animation: none !important;/,
+    );
+  });
+
   it("only fades whole blocks in .reveal, never text inside them", () => {
     expect(css).not.toMatch(/\.reveal\s+[a-z*.]/);
     expect(css).not.toMatch(/\.reveal\s*>\s*\*\s*[>\s]\s*[a-z*.]/);
