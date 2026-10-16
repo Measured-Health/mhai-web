@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Feedback on a weak connection (it fails to send while the device is
+  online) is saved encrypted on the device and sent automatically later,
+  instead of showing an error. It keeps its idempotency key, so a send that
+  did reach the server isn't counted twice. Rejected feedback still shows
+  the error.
 - Two-step codes verify on their own once the sixth digit is typed or
   pasted, at sign-in and during setup; no need to press the button.
 - The right panel on the new consultation page ("How it works", a good
@@ -31,8 +36,8 @@ All notable changes to this project are documented here. The format follows
   keys, sending a question once back online, a data-saver mode and a
   slow-3G end-to-end test.
 - Encrypted offline outbox: questions and feedback made offline are saved
-  encrypted on the device and sent when the connection returns (needs
-  clinical/privacy sign-off).
+  encrypted on the device and sent when the connection returns (clinical
+  and privacy sign-off from the product owner, 16 October 2026).
 - The official BHAI logo in the partner credit (sign-in, Help); the
   partnership is credited to BHAI by name only, including the print footer.
 - Demo feedback form: the ribbon's **Give feedback** opens a short form, and
@@ -65,6 +70,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The demo's two-step setup now appears in authenticator apps as
+  "MHAI Demo" with the account's email (it showed "MHAI:new.bello").
 - Sign-in screens on desktop: only the form column scrolls, so the brand
   panel and the form no longer drift out of line while scrolling.
 - The sign-in screens match design v3 again: the light brand panel with

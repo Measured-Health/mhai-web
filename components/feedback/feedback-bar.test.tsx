@@ -224,7 +224,9 @@ describe("FeedbackBar", () => {
     await userEvent.click(screen.getByRole("button", { name: /I agree/ }));
     expect(await screen.findByText("Saved on this device")).toBeInTheDocument();
     expect(
-      screen.getByText("It will be sent when you're back online."),
+      screen.getByText(
+        "It will be sent automatically when the connection allows.",
+      ),
     ).toBeInTheDocument();
     expect(send).not.toHaveBeenCalled();
     expect(screen.getByTestId("feedback")).toHaveTextContent("agree");

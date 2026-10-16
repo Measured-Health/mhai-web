@@ -72,6 +72,8 @@ export function createOutbox({
       owner: string,
       kind: K,
       payload: OutboxPayload[K],
+      /** Reuse the key of a send that may have reached the server. */
+      idempotencyKey: string = crypto.randomUUID(),
     ): Promise<OutboxItem> {
       const createdAt = now();
       const entry: Entry = {
@@ -80,7 +82,7 @@ export function createOutbox({
         kind,
         createdAt,
         seq: createdAt * 1000 + (counter++ % 1000),
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey,
         status: "waiting",
         sealed: await encrypt(payload, await getKey()),
       };
