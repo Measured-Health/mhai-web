@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClinicalResultOut, Citation } from "./api/contract";
 import { FORBIDDEN_TERMS } from "./labels";
-import { toResultView } from "./result-view";
+import { resultKind, toResultView } from "./result-view";
 
 const EVIDENCE_FAILED =
   "The evidence didn't support enough of this answer for the system to stand behind it.";
@@ -242,5 +242,21 @@ describe("toResultView", () => {
       .toLowerCase();
     for (const term of FORBIDDEN_TERMS)
       expect(shown).not.toContain(term.toLowerCase());
+  });
+});
+
+describe("resultKind", () => {
+  it("puts degraded or escalated first, then maps the decision", () => {
+    expect(resultKind({ decision: "PASS", degraded: false })).toBe("high");
+    expect(resultKind({ decision: "REGENERATE", degraded: false })).toBe(
+      "caution",
+    );
+    expect(resultKind({ decision: "ESCALATE", degraded: false })).toBe(
+      "review",
+    );
+    expect(resultKind({ decision: "PASS", degraded: true })).toBe("review");
+    expect(resultKind({ decision: "REGENERATE", degraded: true })).toBe(
+      "review",
+    );
   });
 });

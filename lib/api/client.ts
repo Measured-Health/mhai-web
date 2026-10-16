@@ -1,10 +1,14 @@
 import type {
   ClinicalResultOut,
+  CorrectionOut,
   FeedbackIn,
   FeedbackOut,
+  FeedbackStatsOut,
   QueryCreateIn,
   QueryStatusOut,
   Readiness,
+  RejectIn,
+  WriteOpts,
 } from "./contract";
 import { createLiveClient } from "./live";
 import { createMockClient } from "./mock";
@@ -21,6 +25,16 @@ export interface MhaiClient {
     opts?: { idempotencyKey?: string },
   ): Promise<FeedbackOut>;
   getReadiness(): Promise<Readiness>;
+  /** Others' waiting corrections; the API never lists your own here. */
+  listPendingCorrections(): Promise<CorrectionOut[]>;
+  /** Your own corrections, every status, newest first. */
+  listMyCorrections(): Promise<CorrectionOut[]>;
+  /** Corrections you decided as a reviewer, newest first. */
+  listMyReviews(): Promise<CorrectionOut[]>;
+  approveCorrection(id: string, opts?: WriteOpts): Promise<void>;
+  rejectCorrection(id: string, r: RejectIn, opts?: WriteOpts): Promise<void>;
+  withdrawCorrection(id: string, opts?: WriteOpts): Promise<void>;
+  getMyFeedbackStats(): Promise<FeedbackStatsOut>;
 }
 
 let client: MhaiClient | undefined;

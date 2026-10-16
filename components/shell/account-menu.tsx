@@ -4,6 +4,7 @@ import {
   CircleHelp,
   Keyboard,
   MoreHorizontal,
+  PenLine,
   Power,
   UserRound,
 } from "lucide-react";
@@ -171,6 +172,18 @@ export function AccountMenu({ rail }: { rail: boolean }) {
           >
             <UserRound aria-hidden className="size-4" />
             Profile &amp; security
+          </Link>
+          <Link
+            role="menuitem"
+            href="/my-feedback"
+            className={ITEM}
+            onClick={() => {
+              close(false);
+              closeDrawer();
+            }}
+          >
+            <PenLine aria-hidden className="size-4" />
+            My feedback &amp; corrections
           </Link>
           <button
             role="menuitem"

@@ -40,6 +40,19 @@ complete, and anything else gives High confidence. "Heart failure" or
 "review his medications" get the normal High confidence result. A result
 arrives after about 9 seconds.
 
+**Corrections and review.** The sample data is written for the clinician
+sample account (Dr. Reyes). **Review corrections** in the sidebar holds
+sample corrections from Dr. Okafor and Nurse Bello, some waiting over 4
+hours, and one of your own, which you can withdraw but not approve.
+Approve gives you 60 seconds to undo; Reject needs a reason, which the
+person who suggested it sees. **My feedback & corrections** (account menu)
+lists your corrections as waiting, approved or rejected, with the
+reviewer's reason, and Profile & security shows your counts. A correction
+you suggest on a result gets a decision about two minutes later: approved,
+or rejected with a reason if its "Why?" contains the word "unsure". The
+bell in the top bar keeps this session's decisions. Like the rest of the
+demo, all of it is in memory only.
+
 ### Share the demo
 
 The demo runs on sample data (`NEXT_PUBLIC_USE_MOCK=true`). A ribbon on

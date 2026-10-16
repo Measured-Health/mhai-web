@@ -92,3 +92,78 @@ export interface Readiness {
   ok: boolean;
   degraded_services: string[];
 }
+
+// ── Corrections (Plan 3). Fields beyond the backend's `corrections` table
+// are the assumed contract in spec §10 item 1. ──
+
+/** `withdrawn` and `rejected` are assumed; the table has the other two. */
+export type CorrectionStatus =
+  "pending_review" | "approved" | "rejected" | "withdrawn";
+
+export type RejectReasonCode =
+  "not_supported" | "needs_rewording" | "unsafe" | "out_of_scope";
+
+/** A person as the API shows them: never an id (CONTRIBUTING). */
+export interface PersonOut {
+  display_name: string;
+  full_name: string | null;
+  specialty: string | null;
+  hospital: string | null;
+}
+
+/** What the system said, embedded because the reviewer can't load the result. */
+export interface CorrectionOriginalOut {
+  decision: ClinicalResultOut["decision"];
+  degraded: boolean;
+  diagnosis: string | null;
+  icd10_code: string | null;
+  response_text: string;
+  citations: Pick<Citation, "source_title" | "claim_text" | "action">[];
+}
+
+/** The consultation as it was asked (patient details already masked). */
+export interface CorrectionConsultationOut {
+  age: number;
+  sex: Sex;
+  symptoms: string[];
+  clinical_question: string;
+  urgency: Urgency;
+  specialty: string | null;
+}
+
+export interface CorrectionOut {
+  id: string;
+  query_id: string;
+  status: CorrectionStatus;
+  corrected_diagnosis: string;
+  reason: string;
+  submitted_by: PersonOut;
+  /** ISO 8601. */
+  submitted_at: string;
+  original: CorrectionOriginalOut;
+  consultation: CorrectionConsultationOut;
+  decided_by: PersonOut | null;
+  /** ISO 8601; also set when withdrawn. */
+  decided_at: string | null;
+  rejection: { reason_code: RejectReasonCode; note: string | null } | null;
+}
+
+export interface RejectIn {
+  reason_code: RejectReasonCode;
+  /** At most 500 characters; omitted when empty. */
+  note?: string;
+}
+
+export interface FeedbackStatsOut {
+  agreed: number;
+  corrections_waiting: number;
+  corrections_approved: number;
+  corrections_rejected: number;
+  corrections_withdrawn: number;
+}
+
+/** Options for a write that may be retried or sent while leaving the page. */
+export interface WriteOpts {
+  idempotencyKey?: string;
+  keepalive?: boolean;
+}

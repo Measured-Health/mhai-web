@@ -1,12 +1,24 @@
-import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MhaiClient } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/errors";
+import { createMockClient } from "@/lib/api/mock";
 import { renderWithAuth } from "@/tests/auth-wrapper";
-import { Sidebar } from "./sidebar";
 
+const holder = vi.hoisted(() => ({ client: null as unknown as MhaiClient }));
+vi.mock("@/lib/api/client", () => ({ getClient: () => holder.client }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/c/q1",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
+import { Sidebar } from "./sidebar";
+
+beforeEach(() => {
+  holder.client = createMockClient();
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const items = [
   {
@@ -102,5 +114,50 @@ describe("Sidebar", () => {
   it("hides the account footer when nobody is signed in", () => {
     renderWithAuth(<Sidebar items={[]} />, null);
     expect(screen.queryByText("Havana Hospital")).not.toBeInTheDocument();
+  });
+  it("links to Review corrections with the waiting count", async () => {
+    renderWithAuth(<Sidebar items={[]} />);
+    const link = await screen.findByRole("link", {
+      name: "Review corrections, 3 waiting",
+    });
+    expect(link).toHaveAttribute("href", "/review");
+    expect(link).toHaveTextContent("Review corrections3");
+    expect(link).not.toHaveAttribute("aria-current");
+  });
+  it("keeps the count in the tablet rail", async () => {
+    renderWithAuth(<Sidebar items={[]} rail />);
+    expect(
+      await screen.findByRole("link", {
+        name: "Review corrections, 3 waiting",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText("Review corrections")).toHaveClass("sr-only");
+  });
+  it("drops the count when nothing is waiting any more", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderWithAuth(<Sidebar items={[]} />);
+    await screen.findByRole("link", { name: "Review corrections, 3 waiting" });
+    const list = vi
+      .spyOn(holder.client, "listPendingCorrections")
+      .mockResolvedValue([]);
+    // The next minute's poll finds the queue empty.
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+    await waitFor(() => expect(list).toHaveBeenCalled());
+    const link = await screen.findByRole("link", {
+      name: "Review corrections",
+    });
+    expect(link).not.toHaveTextContent(/\d/);
+  });
+  it("hides the entry when reviewing isn't available (403)", async () => {
+    const list = vi
+      .spyOn(holder.client, "listPendingCorrections")
+      .mockRejectedValue(new ApiError(403, "forbidden"));
+    renderWithAuth(<Sidebar items={[]} />);
+    await waitFor(() => expect(list).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("link", { name: /Review corrections/ }),
+      ).toBeNull(),
+    );
   });
 });

@@ -41,14 +41,16 @@ function barsFor(score: number | null, kind: ResultKind): 1 | 2 | 3 | 4 | 5 {
   return score !== null && score >= 0.42 ? 3 : 2;
 }
 
+/** Safety rule: degraded or escalated → needs review, never a confidence level. */
+export function resultKind(
+  r: Pick<ClinicalResultOut, "decision" | "degraded">,
+): ResultKind {
+  if (r.degraded || r.decision === "ESCALATE") return "review";
+  return r.decision === "REGENERATE" ? "caution" : "high";
+}
+
 export function toResultView(r: ClinicalResultOut): ResultView {
-  // Safety rule: degraded or escalated → needs review, never a confidence level.
-  const kind: ResultKind =
-    r.degraded || r.decision === "ESCALATE"
-      ? "review"
-      : r.decision === "REGENERATE"
-        ? "caution"
-        : "high";
+  const kind = resultKind(r);
 
   const verified = r.citations.filter((c) => c.action === "PASS").length;
   const open = r.citations.length - verified;

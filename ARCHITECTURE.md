@@ -362,8 +362,11 @@ sequenceDiagram
     Note over A,W: A sees the outcome in My corrections
 ```
 
-Rejecting with a reason, withdrawing, and the "My corrections" list need
-new endpoints. They're listed in the design spec §10.
+Rejecting with a reason, withdrawing, "My corrections", your recent
+decisions and the feedback stats use an assumed contract until the backend
+defines them (design spec §10 item 1). After Approve, the reviewer has 10
+seconds to undo; the approval is sent when that window ends or when they
+leave the page, whichever comes first.
 
 ### 4.7 Hospital admin side
 

@@ -289,3 +289,89 @@ describe("clinical API proxy", () => {
       expect(init.headers).toMatchObject({ Authorization: "Bearer t2" });
   });
 });
+
+describe("corrections and feedback routes", () => {
+  it.each([
+    ["GET", ["corrections"]],
+    ["GET", ["corrections", "mine"]],
+    ["GET", ["corrections", "reviewed"]],
+    ["GET", ["feedback", "stats", "mine"]],
+    ["POST", ["corrections", "c-1", "approve"]],
+    ["POST", ["corrections", "c-1", "reject"]],
+    ["POST", ["corrections", "c-1", "withdraw"]],
+    ["POST", ["feedback"]],
+  ])("forwards %s %j", async (method, path) => {
+    await session();
+    fetchMock.mockResolvedValueOnce(Response.json({}));
+    const res =
+      method === "GET"
+        ? await GET(get(), ctx(...path))
+        : await POST(post("{}"), ctx(...path));
+    expect(res.status).toBe(200);
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(
+      `http://api.test/api/v1/${path.join("/")}`,
+    );
+  });
+
+  it.each([
+    ["GET", ["corrections", "c-1"]],
+    ["GET", ["corrections", "c-1", "approve"]],
+    ["POST", ["corrections"]],
+    ["POST", ["corrections", "c-1"]],
+    ["POST", ["corrections", "c-1", "delete"]],
+    ["POST", ["corrections", "c-1", "approve", "x"]],
+    ["GET", ["feedback"]],
+    ["GET", ["feedback", "stats", "all"]],
+    ["POST", ["feedback", "stats", "mine"]],
+    ["POST", ["corrections", "c.1", "approve"]],
+  ])("refuses %s %j without calling the API", async (method, path) => {
+    await session();
+    const res =
+      method === "GET"
+        ? await GET(get(), ctx(...path))
+        : await POST(post("{}"), ctx(...path));
+    expect(res.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("passes the waiting filter through", async () => {
+    await session();
+    fetchMock.mockResolvedValueOnce(Response.json([]));
+    await GET(
+      get("http://demo.test/api/v1/corrections?status=pending"),
+      ctx("corrections"),
+    );
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(
+      "http://api.test/api/v1/corrections?status=pending",
+    );
+  });
+
+  it("forwards a decision's idempotency key and keeps only the refusal code", async () => {
+    await session();
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { code: "self_approval", detail: "user 42 submitted it" },
+        { status: 403 },
+      ),
+    );
+    const res = await POST(
+      post("{}", "http://demo.test", { "Idempotency-Key": "k-9" }),
+      ctx("corrections", "c-1", "approve"),
+    );
+    expect(
+      (fetchMock.mock.calls[0] as [string, RequestInit])[1].headers,
+    ).toMatchObject({ "Idempotency-Key": "k-9" });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ code: "self_approval" });
+  });
+
+  it("refuses a decision from another site", async () => {
+    await session();
+    const res = await POST(
+      post("{}", "https://evil.test"),
+      ctx("corrections", "c-1", "approve"),
+    );
+    expect(res.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

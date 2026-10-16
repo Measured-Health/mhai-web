@@ -1,6 +1,12 @@
 import type { MhaiClient } from "./client";
-import type { QueryCreateIn, Stage } from "./contract";
+import type {
+  CorrectionConsultationOut,
+  CorrectionOriginalOut,
+  QueryCreateIn,
+  Stage,
+} from "./contract";
 import { FIXTURES } from "./fixtures";
+import { createMockCorrections } from "./mock-corrections";
 
 type Scenario = keyof typeof FIXTURES | "failed";
 const ORDER: Stage[] = [
@@ -25,17 +31,74 @@ export function pickScenario(q: QueryCreateIn): Scenario {
   return "high";
 }
 
+const NO_ORIGINAL: CorrectionOriginalOut = {
+  decision: "PASS",
+  degraded: false,
+  diagnosis: null,
+  icd10_code: null,
+  response_text: "",
+  citations: [],
+};
+const NO_CONSULTATION: CorrectionConsultationOut = {
+  age: 0,
+  sex: "unknown",
+  symptoms: [],
+  clinical_question: "",
+  urgency: "routine",
+  specialty: null,
+};
+
+function originalFor(s: Scenario | undefined): CorrectionOriginalOut {
+  if (!s || s === "failed") return NO_ORIGINAL;
+  const r = FIXTURES[s];
+  return {
+    decision: r.decision,
+    degraded: r.degraded,
+    diagnosis: r.diagnosis,
+    icd10_code: r.icd10_code,
+    response_text: r.response_text,
+    citations: r.citations.map(({ source_title, claim_text, action }) => ({
+      source_title,
+      claim_text,
+      action,
+    })),
+  };
+}
+
+const consultationFor = (
+  q: QueryCreateIn | undefined,
+): CorrectionConsultationOut =>
+  q
+    ? {
+        age: q.patient_data.age,
+        sex: q.patient_data.sex,
+        symptoms: [...q.patient_data.symptoms],
+        clinical_question: q.clinical_question,
+        urgency: q.urgency,
+        specialty: q.specialty ?? null,
+      }
+    : NO_CONSULTATION;
+
 export function createMockClient({
   stepMs = 1500,
   now = () => Date.now(),
-}: { stepMs?: number; now?: () => number } = {}): MhaiClient {
+  decideAfterMs,
+}: {
+  stepMs?: number;
+  now?: () => number;
+  decideAfterMs?: number;
+} = {}): MhaiClient {
   // In memory only: never persisted (CONTRIBUTING: no PHI in browser storage).
-  const jobs = new Map<string, { started: number; scenario: Scenario }>();
+  const jobs = new Map<
+    string,
+    { started: number; scenario: Scenario; q: QueryCreateIn }
+  >();
+  const corrections = createMockCorrections({ now, decideAfterMs });
   let n = 0;
   return {
     async createQuery(q) {
       const id = `mock-${++n}-${Math.random().toString(36).slice(2, 8)}`;
-      jobs.set(id, { started: now(), scenario: pickScenario(q) });
+      jobs.set(id, { started: now(), scenario: pickScenario(q), q });
       return { query_id: id };
     },
     async getStatus(id) {
@@ -76,12 +139,30 @@ export function createMockClient({
       return { ...structuredClone(FIXTURES[j.scenario]), query_id: id };
     },
     async sendFeedback(f) {
-      return f.action === "correct"
-        ? { status: "pending_review", correction_id: `c-${++n}` }
-        : { status: "recorded" };
+      if (f.action === "validate") {
+        corrections.recordAgreement();
+        return { status: "recorded" };
+      }
+      const job = jobs.get(f.query_id);
+      return {
+        status: "pending_review",
+        correction_id: corrections.addMine(
+          f.query_id,
+          f,
+          originalFor(job?.scenario),
+          consultationFor(job?.q),
+        ),
+      };
     },
     async getReadiness() {
       return { ok: true, degraded_services: [] };
     },
+    listPendingCorrections: () => corrections.listPending(),
+    listMyCorrections: () => corrections.listMine(),
+    listMyReviews: () => corrections.listReviewed(),
+    approveCorrection: (id) => corrections.approve(id),
+    rejectCorrection: (id, r) => corrections.reject(id, r),
+    withdrawCorrection: (id) => corrections.withdraw(id),
+    getMyFeedbackStats: () => corrections.stats(),
   };
 }

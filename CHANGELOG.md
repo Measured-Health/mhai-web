@@ -8,6 +8,24 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Profile & security shows your feedback: results you agreed with, and
+  your corrections waiting, approved and rejected, with a link to My
+  feedback & corrections.
+- "Review corrections" in the sidebar (and the tablet rail and phone menu),
+  with how many corrections are waiting for you.
+- Review corrections: the queue (anything waiting over 4 hours flagged),
+  what the system said beside the suggested correction with the changes
+  marked, who suggested it and why, the evidence on file and the
+  consultation. Approve with a 60-second undo, then the next one loads;
+  reject with a required reason the suggester sees, skip, and the A and R
+  shortcuts. Your own corrections can only be withdrawn. Works on phones,
+  with the reject form as a bottom sheet.
+- My feedback & corrections (account menu): your corrections as waiting,
+  approved or rejected with the reviewer's reason; withdraw a waiting one,
+  or change a rejected one and send it again.
+- Decisions on your corrections reach you while you work: a toast when a
+  reviewer approves or rejects one (with their reason), and a bell in the
+  top bar that keeps this session's decisions, in memory only.
 - Feedback on a weak connection (it fails to send while the device is
   online) is saved encrypted on the device and sent automatically later,
   instead of showing an error. It keeps its idempotency key, so a send that

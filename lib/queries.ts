@@ -1,8 +1,9 @@
 "use client";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { getClient } from "./api/client";
 import type { FeedbackIn, FeedbackOut, QueryCreateIn } from "./api/contract";
+import { refreshCorrections } from "./correction-queries";
 import {
   isTransient,
   pollDelay,
@@ -121,6 +122,7 @@ export function useResult(id: string, enabled: boolean) {
 
 export function useFeedback() {
   const outbox = useOutbox();
+  const qc = useQueryClient();
   const m = useMutation({
     mutationFn: async ({
       f,
@@ -151,6 +153,10 @@ export function useFeedback() {
     networkMode: "always",
     // The outbox retries, so the clinician isn't left waiting on backoff.
     retry: false,
+    // A sent correction shows in My corrections; a queued one isn't sent yet.
+    onSuccess: (r) => {
+      if (r.status !== "queued") void refreshCorrections(qc);
+    },
   });
   return {
     ...m,

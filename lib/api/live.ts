@@ -1,6 +1,13 @@
 import { reportUnauthorized } from "../auth/events";
 import type { MhaiClient } from "./client";
-import type { ClinicalResultOut, QueryStatusOut, Readiness } from "./contract";
+import type {
+  ClinicalResultOut,
+  CorrectionOut,
+  FeedbackStatsOut,
+  QueryStatusOut,
+  Readiness,
+  WriteOpts,
+} from "./contract";
 import { ApiError } from "./errors";
 
 /** The real API, through this app's /api/v1 proxy (the token stays server-side). */
@@ -12,6 +19,7 @@ export function createLiveClient({
     method = "GET",
     body?: unknown,
     extra?: Record<string, string>,
+    keepalive = false,
   ) {
     let res: Response;
     try {
@@ -25,6 +33,8 @@ export function createLiveClient({
           ...extra,
         },
         body: body === undefined ? undefined : JSON.stringify(body),
+        // An approval sent while the page unloads must outlive the page.
+        ...(keepalive ? { keepalive: true } : {}),
       });
     } catch {
       throw new ApiError(0, "network");
@@ -44,8 +54,9 @@ export function createLiveClient({
     method = "GET",
     body?: unknown,
     extra?: Record<string, string>,
+    keepalive = false,
   ): Promise<T> {
-    const { res, data } = await call(path, method, body, extra);
+    const { res, data } = await call(path, method, body, extra, keepalive);
     if (!res.ok)
       throw new ApiError(
         res.status,
@@ -58,6 +69,15 @@ export function createLiveClient({
     opts?.idempotencyKey
       ? { "Idempotency-Key": opts.idempotencyKey }
       : undefined;
+  const decide = async (path: string, body: unknown, opts?: WriteOpts) => {
+    await ok<unknown>(
+      path,
+      "POST",
+      body,
+      keyHeader(opts),
+      opts?.keepalive === true,
+    );
+  };
   return {
     async createQuery(q, opts) {
       const r = await ok<{ query_id: string }>(
@@ -83,5 +103,16 @@ export function createLiveClient({
         };
       throw new ApiError(res.status, "error");
     },
+    listPendingCorrections: () =>
+      ok<CorrectionOut[]>("/corrections?status=pending"),
+    listMyCorrections: () => ok<CorrectionOut[]>("/corrections/mine"),
+    listMyReviews: () => ok<CorrectionOut[]>("/corrections/reviewed"),
+    approveCorrection: (c, opts) =>
+      decide(`/corrections/${id(c)}/approve`, undefined, opts),
+    rejectCorrection: (c, r, opts) =>
+      decide(`/corrections/${id(c)}/reject`, r, opts),
+    withdrawCorrection: (c, opts) =>
+      decide(`/corrections/${id(c)}/withdraw`, undefined, opts),
+    getMyFeedbackStats: () => ok<FeedbackStatsOut>("/feedback/stats/mine"),
   };
 }

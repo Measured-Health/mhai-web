@@ -13,6 +13,7 @@ import { useToast } from "../ui/toast";
 import { ChangePasswordDialog } from "./change-password-dialog";
 import { NewBackupCodesDialog } from "./new-backup-codes-dialog";
 import { DevicesSection } from "./devices-section";
+import { FeedbackSection } from "./feedback-section";
 
 const row =
   "flex min-h-14 items-center gap-3 border-t border-line py-3 text-[14px]";
@@ -35,6 +36,7 @@ export function AccountView() {
     ["profile", "Profile"],
     ["security", "Security"],
     ...(capabilities.devices ? [["devices", "Devices"]] : []),
+    ["feedback", "My feedback"],
   ];
 
   return (
@@ -179,6 +181,7 @@ export function AccountView() {
             </section>
 
             {capabilities.devices && <DevicesSection />}
+            <FeedbackSection />
           </div>
         </div>
       </div>

@@ -15,4 +15,9 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(/"potassium" gives Needs\s+review/);
     expect(readme).toMatch(/Words match whole/);
   });
+
+  it("documents the review demo and its trigger word", () => {
+    expect(readme).toMatch(/\*\*Review corrections\*\* in the sidebar/);
+    expect(readme).toMatch(/contains the word "unsure"/);
+  });
 });

@@ -31,6 +31,7 @@ describe("AccountMenu", () => {
     expect(screen.getByText(TEST_USER.email!)).toBeInTheDocument();
     expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
       "Profile & security",
+      "My feedback & corrections",
       "Keyboard shortcuts",
       "Help & guide",
       "Sign out",
@@ -46,7 +47,7 @@ describe("AccountMenu", () => {
     await user.keyboard("{ArrowDown}");
     expect(screen.getAllByRole("menuitem")[1]).toHaveFocus();
     await user.keyboard("{End}");
-    expect(screen.getAllByRole("menuitem")[3]).toHaveFocus();
+    expect(screen.getAllByRole("menuitem")[4]).toHaveFocus();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).toBeNull();
     expect(button).toHaveFocus();
@@ -64,6 +65,15 @@ describe("AccountMenu", () => {
     await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
     expect(navigate).toHaveBeenCalledWith("/sign-out");
     expect(closeDrawer).toHaveBeenCalled();
+  });
+
+  it("links to My feedback & corrections", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(<AccountMenu rail={false} />);
+    await user.click(screen.getByRole("button", { name: /Account/ }));
+    expect(
+      screen.getByRole("menuitem", { name: "My feedback & corrections" }),
+    ).toHaveAttribute("href", "/my-feedback");
   });
 
   it("is absent when nobody is signed in", () => {

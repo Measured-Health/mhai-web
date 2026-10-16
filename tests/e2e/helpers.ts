@@ -101,3 +101,14 @@ export async function expectOutboxIndicator(page: Page, text: string) {
     await expect(page.getByText(text).filter({ visible: true })).toBeVisible();
   }
 }
+
+/** From a signed-in screen: opens Review corrections (from the menu on phones). */
+export async function openReview(page: Page) {
+  if (isMobile(page))
+    await page.getByRole("button", { name: "Open menu" }).click();
+  await page
+    .getByRole("link", { name: /^Review corrections/ })
+    .filter({ visible: true })
+    .click();
+  await expect(page).toHaveURL(/\/review$/);
+}
