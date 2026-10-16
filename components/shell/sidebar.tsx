@@ -39,7 +39,7 @@ function ReviewLink({ rail, on }: { rail: boolean; on: boolean }) {
       aria-label={name}
       aria-current={on ? "page" : undefined}
       className={cn(
-        "mt-2.5 flex min-h-11 items-center gap-2.5 rounded-xl text-[13.5px] font-semibold",
+        "mt-2.5 flex min-h-11 items-center gap-2.5 rounded-xl text-[13.5px] font-semibold focus-visible:outline-2 focus-visible:outline-mint-deep",
         rail ? "relative w-11 justify-center" : "px-2.5",
         on
           ? "bg-mint-wash text-mint-deep shadow-[inset_3px_0_0_var(--color-mint)]"

@@ -1,6 +1,5 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { onlineManager } from "@tanstack/react-query";
 import type { MhaiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import { createMockClient } from "@/lib/api/mock";
@@ -18,7 +17,7 @@ beforeEach(() => {
   holder.client = createMockClient();
 });
 afterEach(() => {
-  onlineManager.setOnline(true);
+  vi.useRealTimers();
 });
 
 const items = [
@@ -134,20 +133,20 @@ describe("Sidebar", () => {
     ).toBeVisible();
     expect(screen.getByText("Review corrections")).toHaveClass("sr-only");
   });
-  it("drops the count when nothing is waiting", async () => {
+  it("drops the count when nothing is waiting any more", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderWithAuth(<Sidebar items={[]} />);
+    await screen.findByRole("link", { name: "Review corrections, 3 waiting" });
     const list = vi
       .spyOn(holder.client, "listPendingCorrections")
       .mockResolvedValue([]);
-    renderWithAuth(<Sidebar items={[]} />);
+    // The next minute's poll finds the queue empty.
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
     await waitFor(() => expect(list).toHaveBeenCalled());
-    await act(async () => {
-      await list.mock.results[0].value;
+    const link = await screen.findByRole("link", {
+      name: "Review corrections",
     });
-    await waitFor(() =>
-      expect(
-        screen.getByRole("link", { name: "Review corrections" }),
-      ).not.toHaveTextContent(/\d/),
-    );
+    expect(link).not.toHaveTextContent(/\d/);
   });
   it("hides the entry when reviewing isn't available (403)", async () => {
     const list = vi
