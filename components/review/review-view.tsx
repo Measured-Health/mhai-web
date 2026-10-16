@@ -17,6 +17,7 @@ import {
   type DecisionError,
   type QueueItem,
 } from "@/lib/corrections";
+import { useIsDesktop } from "@/lib/hooks/use-media";
 import { useNow } from "@/lib/hooks/use-now";
 import { useShortcuts } from "@/lib/hooks/use-shortcuts";
 import { useNetwork } from "@/lib/network";
@@ -53,6 +54,7 @@ export function ReviewView() {
   const mine = useMyCorrections();
   const reviews = useMyReviews();
   const { online } = useNetwork();
+  const desktop = useIsDesktop();
   const now = useNow(60_000);
   const toast = useToast();
   const reject = useRejectCorrection();
@@ -87,11 +89,10 @@ export function ReviewView() {
       setSending((s) => drop(s, c.id));
       if (err.gone) setGoneIds((g) => add(g, c.id));
       if (err.own) setOwnIds((s) => add(s, c.id));
-      // Back in the detail, unless you're busy with another one.
-      const elsewhere =
-        rejectFor !== null ||
-        (approval.pending !== null && approval.pending.item.id !== c.id);
-      if (!err.gone && !elsewhere) {
+      // Back in the detail only if you're still on it (its window was the
+      // one on screen) or on nothing; otherwise don't pull you away (W8).
+      const stillOnIt = approval.pending?.item.id === c.id || selected === null;
+      if (!err.gone && stillOnIt && rejectFor === null) {
         setSelected({ c, mine: err.own });
         setMobileDetail(true);
       }
@@ -138,7 +139,11 @@ export function ReviewView() {
   const pendingId = approval.pending?.item.id ?? null;
   const inFlight = [...sending].some((id) => id !== pendingId);
   const busy = reject.isPending || inFlight;
+  // Only the correction whose detail is on screen can be decided: not while
+  // the undo notice covers it, and on phones only on the detail view.
   const canDecide =
+    approval.pending === null &&
+    (desktop || mobileDetail) &&
     current !== null &&
     !current.mine &&
     !gone &&
@@ -198,7 +203,6 @@ export function ReviewView() {
 
   function openReject() {
     if (!canDecide || !current) return;
-    approval.flush();
     setRejectError(null);
     setRejectFor(current);
   }
@@ -241,7 +245,6 @@ export function ReviewView() {
 
   function openWithdraw() {
     if (!current?.mine || !online || gone || busy) return;
-    approval.flush();
     withdrawFlow.ask(current.c.id);
   }
 

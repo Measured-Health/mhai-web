@@ -74,7 +74,7 @@ export function useWithdrawFlow(opts?: {
 
   const close = () => setId(null);
   async function confirm() {
-    if (!id || !navigator.onLine) return;
+    if (!id || !online) return;
     setError(null);
     setWorking(true);
     try {

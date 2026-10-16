@@ -43,6 +43,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   // TanStack's onlineManager heard any "offline": tell it we're back.
   act(() => void window.dispatchEvent(new Event("online")));
 });
@@ -134,6 +135,77 @@ describe("ReviewView", () => {
     expect(approve.mock.calls[0]?.[0]).toBe("c-asthma");
     expect(await heading("Dengue fever, likely")).toBeVisible();
     expect(notice()).toBeNull();
+  });
+
+  it("A again while the notice is up does nothing to the unseen next one", async () => {
+    const user = typing();
+    const approve = vi.spyOn(holder.client, "approveCorrection");
+    ui();
+    await heading("Acute asthma, moderate");
+    await user.click(approveButton());
+    await user.keyboard("a");
+    expect(approve).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Undo approval" })).toBeVisible();
+    expect(screen.getByText(/Acute asthma, moderate\./)).toBeVisible();
+  });
+
+  it("R while the notice is up opens nothing and sends nothing", async () => {
+    const user = typing();
+    const approve = vi.spyOn(holder.client, "approveCorrection");
+    ui();
+    await heading("Acute asthma, moderate");
+    await user.click(approveButton());
+    await user.keyboard("r");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(approve).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Undo approval" })).toBeVisible();
+  });
+
+  it("on phones, A does nothing while the list is showing", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({
+        matches: false,
+        addEventListener() {},
+        removeEventListener() {},
+      })),
+    );
+    const user = typing();
+    ui();
+    await queue();
+    await user.keyboard("a");
+    expect(notice()).toBeNull();
+    await user.click(
+      within(await queue()).getByRole("button", {
+        name: /Acute asthma, moderate/,
+      }),
+    );
+    await user.keyboard("a");
+    expect(screen.getByText("Correction approved")).toBeVisible();
+  });
+
+  it("a failed send after you moved on leaves you where you are", async () => {
+    const user = typing();
+    vi.spyOn(holder.client, "approveCorrection").mockRejectedValueOnce(
+      new ApiError(500, "server"),
+    );
+    ui();
+    await heading("Acute asthma, moderate");
+    await user.click(approveButton());
+    await user.click(screen.getByRole("button", { name: "Next correction" }));
+    expect(await screen.findByText("Your approval wasn't sent")).toBeVisible();
+    expect(
+      screen.getByText(/Acute asthma, moderate is back in the queue/),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", {
+        name: "Hypokalaemia, cause unclear",
+        level: 2,
+      }),
+    ).toBeVisible();
+    expect(
+      within(await queue()).getByText("Acute asthma, moderate"),
+    ).toBeVisible();
   });
 
   it("undo brings it back, sends nothing, and returns focus to Approve", async () => {
