@@ -365,9 +365,9 @@ describe("questions and feedback saved offline", () => {
         idempotencyKey: key,
       });
       await waitFor(() =>
-        expect(
-          r.current.box.items.some((i) => i.idempotencyKey === key),
-        ).toBe(true),
+        expect(r.current.box.items.some((i) => i.idempotencyKey === key)).toBe(
+          true,
+        ),
       );
     },
   );

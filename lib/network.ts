@@ -68,7 +68,9 @@ export function shouldRetry(failures: number, e: unknown, max = 3): boolean {
 /** Worth trying again later: a network error, timeout, rate limit or 5xx. */
 export function isTransient(e: unknown): boolean {
   if (!(e instanceof ApiError)) return true;
-  return e.status === 0 || e.status === 408 || e.status === 429 || e.status >= 500;
+  return (
+    e.status === 0 || e.status === 408 || e.status === 429 || e.status >= 500
+  );
 }
 
 export const retryDelay = (attempt: number) =>
