@@ -105,10 +105,12 @@ saver on 2G, and has a slow-3G end-to-end test. The backend's side is in
 
 ### Offline
 
-Questions and feedback written while offline are kept encrypted on the
-device and sent when the connection returns. This is the one exception to
-the "nothing in browser storage" rule; see [CONTRIBUTING.md](CONTRIBUTING.md)
-for the exception and its limits. It needs clinical and privacy sign-off.
+Questions written while offline, and feedback that can't be sent
+(offline or on a weak connection), are kept encrypted on the device and
+sent when the connection returns. This is the one exception to the
+"nothing in browser storage" rule; see [CONTRIBUTING.md](CONTRIBUTING.md)
+for the exception and its limits. The product owner gave clinical and
+privacy sign-off on 16 October 2026; any change to it needs a new one.
 
 ### Tests
 

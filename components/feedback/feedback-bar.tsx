@@ -47,7 +47,7 @@ export function FeedbackBar({
       : sent === "agree" || sent === "reviewed"
         ? "agreed"
         : local;
-  // Saved on this device while offline (sent once back online).
+  // Saved on this device, offline or on a weak connection (sent later).
   const [queued, setQueued] = useState(false);
   // A non-empty correction draft guards every route change (links, ⌘K, N,
   // ⌘P, tab close) with the same prompt as an unsent consultation draft.
@@ -108,7 +108,7 @@ export function FeedbackBar({
             }
           >
             {queued
-              ? "It will be sent when you're back online."
+              ? "It will be sent automatically when the connection allows."
               : mode === "agreed"
                 ? "It helps us measure how often the system gets it right."
                 : "A second clinician will review it before anything changes."}

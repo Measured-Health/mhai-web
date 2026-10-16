@@ -68,8 +68,9 @@ Every PR must pass:
     the user) until the same user's next sign-in, when it syncs. Other
     users never see it.
 
-  Nothing else (results, history, drafts) is ever stored. Any change to
-  the outbox needs `clinical-review`. The hashed owner id
+  Nothing else (results, history, drafts) is ever stored. The product
+  owner gave clinical and privacy sign-off on 16 October 2026. Any change
+  to the outbox needs `clinical-review` and a new sign-off. The hashed owner id
   (`sha256("mhai-outbox:" + username)`) is the one accepted exception to
   "nothing about the account in browser storage": it is never the plain
   username, and it only exists while an item waits.
