@@ -2,7 +2,7 @@
 import { Building2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { AuthError } from "@/lib/auth/types";
 import { SignedOutNotice } from "../states/signed-out-notice";
@@ -28,6 +28,18 @@ export function SignInForm() {
   const [busy, setBusy] = useState(false);
   const loginRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+
+  // Back from the hospital sign-on page can restore this page from the
+  // back-forward cache mid-attempt (that attempt never settles): start over.
+  useEffect(() => {
+    const restored = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      setBusy(false);
+      setError(null);
+    };
+    window.addEventListener("pageshow", restored);
+    return () => window.removeEventListener("pageshow", restored);
+  }, []);
 
   const run = async (attempt: () => ReturnType<typeof auth.signIn>) => {
     setBusy(true);
@@ -67,7 +79,8 @@ export function SignInForm() {
             {can.sso && (
               <button
                 type="button"
-                className="font-semibold underline"
+                className="font-semibold underline disabled:opacity-50"
+                disabled={busy}
                 onClick={() => void run(auth.signInWithHospital)}
               >
                 Use hospital account instead

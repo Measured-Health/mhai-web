@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockAuthClient } from "@/lib/auth/mock";
@@ -119,6 +119,46 @@ describe("SignInForm", () => {
       screen.getByRole("button", { name: "Continue with hospital account" }),
     );
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+  });
+
+  it("is usable again when Back restores the page from the hospital sign-on", async () => {
+    const client = createMockAuthClient();
+    // Live: the browser leaves for the hospital page, so this never settles.
+    client.signInWithHospital = () => new Promise(() => {});
+    page(client);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Continue with hospital account" }),
+    );
+    expect(screen.getByRole("button", { name: "Signing in…" })).toBeDisabled();
+    // A fresh load (not from the back-forward cache) changes nothing.
+    act(() => {
+      window.dispatchEvent(
+        new PageTransitionEvent("pageshow", { persisted: false }),
+      );
+    });
+    expect(screen.getByRole("button", { name: "Signing in…" })).toBeDisabled();
+    act(() => {
+      window.dispatchEvent(
+        new PageTransitionEvent("pageshow", { persisted: true }),
+      );
+    });
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Continue with hospital account" }),
+    ).toBeEnabled();
+  });
+
+  it("clears the error when Back restores the page", async () => {
+    const client = createMockAuthClient();
+    page(client);
+    await signIn("x@h.org", "wrong");
+    await screen.findByRole("alert");
+    act(() => {
+      window.dispatchEvent(
+        new PageTransitionEvent("pageshow", { persisted: true }),
+      );
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("fills the form from a sample account", async () => {

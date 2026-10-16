@@ -42,10 +42,10 @@ describe("AuthProvider", () => {
     await client.signIn("new@h.org", "pw");
     mount(client);
     expect(screen.getByTestId("status")).toHaveTextContent("loading");
-    await waitFor(() =>
-      expect(screen.getByTestId("status")).toHaveTextContent("signed_in"),
-    );
-    expect(api.steps).toEqual(["terms", "password", "mfa"]);
+    await waitFor(() => {
+      expect(screen.getByTestId("status")).toHaveTextContent("signed_in");
+      expect(api.steps).toEqual(["terms", "password", "mfa"]);
+    });
   });
 
   it("signs in, tracks a pending code, and finishes first sign-in steps", async () => {
