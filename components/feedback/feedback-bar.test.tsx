@@ -1,8 +1,12 @@
 import { useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  QueryClient,
+  QueryClientProvider,
+  onlineManager,
+} from "@tanstack/react-query";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/errors";
 import { FIXTURES } from "@/lib/api/fixtures";
 import { toResultView } from "@/lib/result-view";
@@ -213,6 +217,10 @@ describe("FeedbackBar", () => {
         </OutboxProvider>
       </AuthTestProvider>,
     );
+    // As in a real browser: TanStack's onlineManager hears the offline event.
+    act(() => {
+      window.dispatchEvent(new Event("offline"));
+    });
     await userEvent.click(screen.getByRole("button", { name: /I agree/ }));
     expect(await screen.findByText("Saved on this device")).toBeInTheDocument();
     expect(
@@ -220,6 +228,9 @@ describe("FeedbackBar", () => {
     ).toBeInTheDocument();
     expect(send).not.toHaveBeenCalled();
     expect(screen.getByTestId("feedback")).toHaveTextContent("agree");
+  });
+  afterEach(() => {
     vi.restoreAllMocks();
+    onlineManager.setOnline(true);
   });
 });

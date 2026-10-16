@@ -94,3 +94,34 @@ test("unsent work survives closing the tab, and syncs at the next sign-in", asyn
   });
   await expect.poll(() => expectNoStorage(again).then(() => true)).toBe(true);
 });
+
+test("agreement given offline is saved on the device, then sent once online", async ({
+  page,
+  context,
+}) => {
+  await signIn(page);
+  await expect(page).toHaveURL(/\/$/);
+  await fillForm(
+    page,
+    "Central chest pain 40 min radiating to the left arm. Diagnosis?",
+  );
+  await page.getByRole("button", { name: /Analyse/ }).click();
+  await expect(
+    page.getByRole("status", { name: /High confidence/ }),
+  ).toBeVisible({ timeout: 60_000 });
+  await context.setOffline(true);
+  await page.getByRole("button", { name: /I agree/ }).click();
+  await expect(
+    page.getByText("Saved on this device", { exact: true }),
+  ).toBeVisible();
+  await expectOutboxIndicator(page, "1 waiting to send");
+  await context.setOffline(false);
+  // Synced: the row is gone (on phones it lives in the menu).
+  if (isMobile(page))
+    await page.getByRole("button", { name: "Open menu" }).click();
+  await expect(page.getByText(/waiting to send|Sending…/)).toHaveCount(0, {
+    timeout: 30_000,
+  });
+  if (isMobile(page)) await page.keyboard.press("Escape");
+  await expect.poll(() => expectNoStorage(page).then(() => true)).toBe(true);
+});

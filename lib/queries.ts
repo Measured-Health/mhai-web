@@ -130,6 +130,9 @@ export function useFeedback() {
       }
       return getClient().sendFeedback(f, { idempotencyKey: key });
     },
+    // The default ("online") pauses an offline mutation before mutationFn
+    // runs, so the outbox branch above would never be reached.
+    networkMode: "always",
     retry: (n, e) => shouldRetry(n, e),
     retryDelay,
   });
