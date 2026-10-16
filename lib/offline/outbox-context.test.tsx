@@ -48,6 +48,16 @@ const otherUser = ({ children }: { children: ReactNode }) => (
     <OutboxProvider>{children}</OutboxProvider>
   </AuthTestProvider>
 );
+const signedOut = ({ children }: { children: ReactNode }) => (
+  <AuthTestProvider user={null}>
+    <OutboxProvider>{children}</OutboxProvider>
+  </AuthTestProvider>
+);
+const admin = ({ children }: { children: ReactNode }) => (
+  <AuthTestProvider user={{ ...TEST_USER, role: "admin" }}>
+    <OutboxProvider>{children}</OutboxProvider>
+  </AuthTestProvider>
+);
 const use = () => ({
   box: useOutbox(),
   session: useSession(),
@@ -292,6 +302,103 @@ describe("OutboxProvider", () => {
       "waiting",
     ]);
     expect(createQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends nothing until first sign-in is finished, then syncs", async () => {
+    createQuery.mockResolvedValue({ query_id: "q-real" });
+    sendFeedback.mockResolvedValue({ status: "recorded" });
+    const { result } = renderHook(use, { wrapper: signedOut });
+    await act(async () => {
+      await result.current.auth.signIn("new@h.org", "pw");
+    });
+    expect(result.current.auth.steps).toEqual(["terms", "password", "mfa"]);
+    await act(async () => {
+      await result.current.box.queueQuery(Q);
+      await result.current.box.queueFeedback({
+        query_id: "q-old",
+        action: "validate",
+      });
+    });
+    await waitFor(() => expect(result.current.box.items).toHaveLength(2));
+    onLine.mockReturnValue(true);
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+      result.current.box.syncNow();
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(createQuery).not.toHaveBeenCalled();
+    expect(sendFeedback).not.toHaveBeenCalled();
+    expect(result.current.box.items).toHaveLength(2);
+    act(() => result.current.auth.completeStep("terms"));
+    act(() => result.current.auth.completeStep("password"));
+    await act(async () => void (await new Promise((r) => setTimeout(r, 50))));
+    expect(createQuery).not.toHaveBeenCalled();
+    act(() => result.current.auth.completeStep("mfa"));
+    await waitFor(() => expect(result.current.box.items).toEqual([]));
+    expect(createQuery).toHaveBeenCalledTimes(1);
+    expect(sendFeedback).toHaveBeenCalledTimes(1);
+  });
+
+  it("never sends for someone who isn't a clinician", async () => {
+    const { result } = renderHook(use, { wrapper: admin });
+    await act(async () => void (await result.current.box.queueQuery(Q)));
+    await waitFor(() => expect(result.current.box.items).toHaveLength(1));
+    onLine.mockReturnValue(true);
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+      result.current.box.syncNow();
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(createQuery).not.toHaveBeenCalled();
+    expect(result.current.box.items).toHaveLength(1);
+    expect(result.current.box.items[0]?.status).toBe("waiting");
+  });
+
+  it("keeps feedback on a 403 and stops until the next try", async () => {
+    sendFeedback.mockRejectedValue(new ApiError(403, "forbidden"));
+    const { result } = renderHook(use, { wrapper: withShell });
+    await act(async () => {
+      await result.current.box.queueFeedback({
+        query_id: "a",
+        action: "validate",
+      });
+      await result.current.box.queueQuery(Q);
+    });
+    onLine.mockReturnValue(true);
+    act(() => result.current.box.syncNow());
+    await waitFor(() => expect(sendFeedback).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.box.syncing).toBe(false));
+    await act(async () => void (await new Promise((r) => setTimeout(r, 50))));
+    expect(createQuery).not.toHaveBeenCalled();
+    expect(result.current.box.items.map((i) => i.status)).toEqual([
+      "waiting",
+      "waiting",
+    ]);
+    expect(screen.queryByText(/couldn't be sent and was removed/)).toBeNull();
+  });
+
+  it("keeps a question waiting on a 403", async () => {
+    createQuery.mockRejectedValue(new ApiError(403, "forbidden"));
+    const { result } = renderHook(use, { wrapper });
+    let localId = "";
+    await act(async () => {
+      localId = await result.current.box.queueQuery(Q);
+      result.current.session.add({
+        id: localId,
+        title: "Chest pain, 54 M",
+        urgency: "urgent",
+        createdAt: 1,
+        query: Q,
+        pending: "waiting",
+      });
+    });
+    onLine.mockReturnValue(true);
+    act(() => result.current.box.syncNow());
+    await waitFor(() => expect(createQuery).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.box.syncing).toBe(false));
+    await act(async () => void (await new Promise((r) => setTimeout(r, 50))));
+    expect(result.current.box.items[0]?.status).toBe("waiting");
+    expect(result.current.session.get(localId)?.pending).toBe("waiting");
   });
 
   it("is inert outside the provider", async () => {

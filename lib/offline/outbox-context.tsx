@@ -15,6 +15,7 @@ import type { FeedbackIn, QueryCreateIn } from "../api/contract";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "../api/errors";
 import { useAuth } from "../auth/auth-context";
+import { isClinical } from "../auth/types";
 import { shouldRetry, useNetwork } from "../network";
 import { titleFor, useSession } from "../session-store";
 import { ownerId } from "./crypto";
@@ -94,11 +95,15 @@ function ownerWait(): OwnerWait {
 
 /** Unsent questions and feedback, encrypted on this device, synced when online. */
 export function OutboxProvider({ children }: { children: ReactNode }) {
-  const { user, status } = useAuth();
+  const { user, status, steps } = useAuth();
   const session = useSession();
   const toast = useToast();
   const { online } = useNetwork();
   const username = status === "signed_in" && user ? user.username : null;
+  // Sending needs the clinical API: a clinician who finished first sign-in.
+  // Anyone else's items are kept (and listed), never sent or dropped.
+  const canSend =
+    status === "signed_in" && isClinical(user) && steps.length === 0;
   const [mine, setMine] = useState<Mine | null>(null);
   const [syncing, setSyncing] = useState(false);
   // Bumped to start a sync from an event: the sync itself runs in an effect.
@@ -206,7 +211,7 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
 
   const sync = useEffectEvent(async () => {
     // Offline: nothing to try (and no "Sending…" flash).
-    if (!cur || !navigator.onLine) return;
+    if (!cur || !canSend || !navigator.onLine) return;
     if (running.current) {
       again.current = true;
       return;
@@ -259,8 +264,14 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
             if (stale()) return;
             const code = e instanceof ApiError ? e.status : 0;
             if (code === 401) return; // auth signs out
-            // Network, 5xx, timeout or rate limit: try again at the next trigger.
-            if (code === 408 || code === 429 || shouldRetry(0, e)) {
+            // Network, 5xx, timeout, rate limit or not allowed (yet): keep
+            // everything and try again at the next trigger.
+            if (
+              code === 403 ||
+              code === 408 ||
+              code === 429 ||
+              shouldRetry(0, e)
+            ) {
               stop = true;
               break;
             }
@@ -293,12 +304,13 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  // Triggers: sign-in (owner known), reconnect, a new item, syncNow, and
-  // every 30 s while items wait. The sync checks navigator.onLine itself.
+  // Triggers: sign-in (owner known), first sign-in finished, reconnect, a new
+  // item, syncNow, and every 30 s while items wait. The sync checks
+  // navigator.onLine itself.
   useEffect(() => {
     // A storage failure (read, remove or mark) waits for the next trigger.
-    if (owner) sync().catch(() => {});
-  }, [owner, online, kick]);
+    if (owner && canSend) sync().catch(() => {});
+  }, [owner, online, kick, canSend]);
   useEffect(() => {
     const go = () => setKick((n) => n + 1);
     window.addEventListener("online", go);
