@@ -7,6 +7,7 @@ const VARIANT = {
   agree: "bg-bloom text-white",
   soft: "bg-lilac text-bloom",
   ghost: "bg-white border border-line text-ink-2",
+  approve: "bg-ok text-white shadow-[0_14px_28px_-14px_var(--color-ok)]",
   danger: "bg-white border border-bad-line text-bad",
 } as const;
 
