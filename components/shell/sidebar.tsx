@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { Plus, Search, Stethoscope, CircleHelp } from "lucide-react";
 import { historyStatus, type SessionItem } from "@/lib/session-store";
 import { useNow } from "@/lib/hooks/use-now";
+import { ago } from "@/lib/time";
 import { Logo, Mark } from "../ui/brand";
 import { cn } from "../ui/cn";
 import { OutboxIndicator } from "../states/outbox-indicator";
@@ -16,10 +17,6 @@ const DOT = {
   review: "bg-bad",
   failed: "bg-ink-3",
 } as const;
-const ago = (t: number, now: number) => {
-  const m = Math.max(0, Math.round((now - t) / 60000));
-  return m < 60 ? `${m} min` : `${Math.round(m / 60)} h`;
-};
 
 /** `rail` hides labels (tablet). Labels stay in the accessibility tree via sr-only. */
 export function Sidebar({
