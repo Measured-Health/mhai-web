@@ -11,7 +11,9 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { useOutbox } from "@/lib/offline/outbox-context";
 
-const ago = (t: number, now: number) => {
+const ago = (t: number | null, now: number) => {
+  // An unreadable time is left out rather than shown as "NaN d ago".
+  if (t === null || !Number.isFinite(t)) return null;
   const m = Math.max(0, Math.round((now - t) / 60_000));
   if (m < 60) return `${m} min ago`;
   if (m < 60 * 24) return `${Math.round(m / 60)} h ago`;
@@ -30,9 +32,18 @@ export function DevicesSection() {
   });
   const [confirm, setConfirm] = useState(false);
   const [failed, setFailed] = useState<AuthError | null>(null);
+  const [failedOne, setFailedOne] = useState<AuthError | null>(null);
 
   const signOutOne = async (id: string) => {
-    await client.signOutDevice(id);
+    setFailedOne(null);
+    try {
+      await client.signOutDevice(id);
+    } catch (e) {
+      const ae = errorCode(e);
+      if (ae.code === "session_expired") return void signOut("expired");
+      setFailedOne(ae);
+      return;
+    }
     await qc.invalidateQueries({ queryKey: ["devices"] });
   };
   const everywhere = async () => {
@@ -42,7 +53,11 @@ export function DevicesSection() {
       await client.signOutEverywhere();
     } catch (e) {
       const ae = errorCode(e);
-      if (ae.code === "session_expired") return void signOut("expired");
+      if (ae.code === "session_expired") {
+        // The dialog promised to delete this device's unsent items.
+        await outbox.clearMine().catch(() => {});
+        return void signOut("expired");
+      }
       setFailed(ae);
       return;
     }
@@ -71,6 +86,15 @@ export function DevicesSection() {
             error={failed}
             copy={{
               title: "We couldn't sign out your other devices.",
+              body: "Check your connection and try again.",
+            }}
+          />
+        )}
+        {failedOne && (
+          <AuthErrorBanner
+            error={failedOne}
+            copy={{
+              title: "We couldn't sign out that device.",
               body: "Check your connection and try again.",
             }}
           />

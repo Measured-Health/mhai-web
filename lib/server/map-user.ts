@@ -32,11 +32,12 @@ export function stepsFor(u: ApiUser): FirstStep[] {
 }
 
 export function toDevice(s: ApiSession): Device {
+  const seen = Date.parse(s.last_seen_at);
   return {
     id: s.id,
     label: s.device,
     place: s.location ?? null,
-    lastActiveAt: Date.parse(s.last_seen_at),
+    lastActiveAt: Number.isFinite(seen) ? seen : null,
     current: s.current,
   };
 }

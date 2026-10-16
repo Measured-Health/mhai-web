@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockAuthClient } from "@/lib/auth/mock";
+import { AuthError } from "@/lib/auth/types";
 import { OutboxProvider } from "@/lib/offline/outbox-context";
 import { renderWithAuth, TEST_USER } from "@/tests/auth-wrapper";
 import { outboxCount, resetOutbox, seedOutbox } from "@/tests/outbox";
@@ -224,5 +225,116 @@ describe("AccountView sign out everywhere with unsent items", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
     expect(await outboxCount(TEST_USER.username)).toBe(0);
     vi.restoreAllMocks();
+  });
+});
+
+describe("AccountView sign out everywhere when the session expired", () => {
+  it("still deletes the unsent items it promised to, then signs out", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    // No reset: the provider's cached device key must stay valid.
+    expect(await outboxCount(TEST_USER.username)).toBe(0);
+    await seedOutbox(TEST_USER.username);
+    const user = userEvent.setup();
+    const client = createMockAuthClient();
+    await client.signIn(TEST_USER.email!, "pw");
+    client.signOutEverywhere = () =>
+      Promise.reject(new AuthError("session_expired"));
+    renderWithAuth(
+      <ToastProvider>
+        <OutboxProvider>
+          <AccountView />
+        </OutboxProvider>
+      </ToastProvider>,
+      TEST_USER,
+      client,
+    );
+    const devices = await screen.findByRole("region", { name: "Devices" });
+    await user.click(
+      within(devices).getByRole("button", { name: "Sign out everywhere" }),
+    );
+    const confirm = screen.getByRole("dialog", {
+      name: "Sign out everywhere?",
+    });
+    await within(confirm).findByText(
+      "Your 1 unsent item on this device will be deleted.",
+    );
+    await user.click(
+      within(confirm).getByRole("button", { name: "Sign out everywhere" }),
+    );
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
+    expect(await outboxCount(TEST_USER.username)).toBe(0);
+    vi.restoreAllMocks();
+  });
+});
+
+describe("AccountView signing out one device", () => {
+  async function render(fail: Error) {
+    const client = createMockAuthClient();
+    await client.signIn(TEST_USER.email!, "pw");
+    client.signOutDevice = () => Promise.reject(fail);
+    renderWithAuth(
+      <ToastProvider>
+        <AccountView />
+      </ToastProvider>,
+      TEST_USER,
+      client,
+    );
+    const devices = await screen.findByRole("region", { name: "Devices" });
+    await userEvent.click(
+      await within(devices).findByRole("button", {
+        name: "Sign out Safari on iPhone",
+      }),
+    );
+    return devices;
+  }
+
+  it("says so when it fails, and keeps the device listed", async () => {
+    const devices = await render(new Error("offline"));
+    expect(
+      await screen.findByText("We couldn't sign out that device."),
+    ).toBeInTheDocument();
+    expect(within(devices).getByText("Safari on iPhone")).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("signs out here when the session expired", async () => {
+    await render(new AuthError("session_expired"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
+    expect(screen.queryByText("We couldn't sign out that device.")).toBeNull();
+  });
+});
+
+describe("AccountView devices without a usable last-active time", () => {
+  it("hides the time instead of showing NaN", async () => {
+    const client = createMockAuthClient();
+    await client.signIn(TEST_USER.email!, "pw");
+    client.listDevices = async () => [
+      {
+        id: "a",
+        label: "Firefox on Linux",
+        place: "Lagos",
+        lastActiveAt: Number.NaN,
+        current: false,
+      },
+      // NaN becomes null on its way through JSON.
+      {
+        id: "b",
+        label: "Edge on Windows",
+        place: null,
+        lastActiveAt: null,
+        current: false,
+      },
+    ];
+    renderWithAuth(
+      <ToastProvider>
+        <AccountView />
+      </ToastProvider>,
+      TEST_USER,
+      client,
+    );
+    const devices = await screen.findByRole("region", { name: "Devices" });
+    await within(devices).findByText("Firefox on Linux");
+    expect(within(devices).getByText("Lagos")).toBeInTheDocument();
+    expect(devices).not.toHaveTextContent(/NaN| ago/);
   });
 });

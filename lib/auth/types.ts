@@ -68,7 +68,8 @@ export interface Device {
   /** e.g. "Chrome on Windows · Ward 4 PC" */
   label: string;
   place: string | null;
-  lastActiveAt: number;
+  /** Null when the API's time can't be read: the UI hides it. */
+  lastActiveAt: number | null;
   current: boolean;
 }
 

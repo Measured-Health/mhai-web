@@ -80,4 +80,15 @@ describe("toDevice", () => {
       current: true,
     });
   });
+  it("leaves out a last-seen time it can't read", () => {
+    expect(
+      toDevice({
+        id: "s2",
+        device: "Firefox on Linux",
+        location: null,
+        last_seen_at: "not a date",
+        current: false,
+      }).lastActiveAt,
+    ).toBeNull();
+  });
 });
