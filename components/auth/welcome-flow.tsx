@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import Link from "next/link";
+import { useState, type ReactNode } from "react";
 import { homeFor, useAuth } from "@/lib/auth/auth-context";
 import type { FirstStep } from "@/lib/auth/types";
 import { useRedirect } from "@/lib/auth/use-redirect";
@@ -39,24 +40,41 @@ export function WelcomeFlow() {
   const eyebrow = (s: Shown) =>
     `Step ${plan.indexOf(s) + 1} of ${plan.length} · ${LABEL[s]}`;
 
+  let step: ReactNode;
   if (current === "terms")
-    return (
+    step = (
       <TermsStep
         eyebrow={eyebrow("terms")}
         onDone={() => auth.completeStep("terms")}
       />
     );
-  if (current === "password")
-    return (
+  else if (current === "password")
+    step = (
       <NewPasswordStep
         eyebrow={eyebrow("password")}
         onDone={() => auth.completeStep("password")}
       />
     );
+  else
+    step = (
+      <MfaSetup
+        eyebrow={(p) => eyebrow(p === "codes" ? "codes" : "mfa")}
+        onDone={() => auth.completeStep("mfa")}
+      />
+    );
   return (
-    <MfaSetup
-      eyebrow={(p) => eyebrow(p === "codes" ? "codes" : "mfa")}
-      onDone={() => auth.completeStep("mfa")}
-    />
+    <>
+      {step}
+      {/* Someone else's account (a shared device): a way out on every step. */}
+      <p className="mt-5 text-center text-[13px]">
+        <Link
+          href="/sign-out"
+          prefetch={false}
+          className="inline-flex min-h-11 items-center text-ink-3 underline"
+        >
+          Not you? Sign out
+        </Link>
+      </p>
+    </>
   );
 }

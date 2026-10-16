@@ -25,6 +25,29 @@ function Grab() {
 }
 
 describe("WelcomeFlow", () => {
+  it("offers a way out on every step: Not you? Sign out", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(
+      <ToastProvider>
+        <Grab />
+        <WelcomeFlow />
+      </ToastProvider>,
+      null,
+    );
+    await act(() => auth.signIn("new.nurse@havanahospital.org", "temp"));
+    const out = () => screen.getByRole("link", { name: "Not you? Sign out" });
+    expect(screen.getByText("Step 1 of 4 · First sign-in")).toBeInTheDocument();
+    expect(out()).toHaveAttribute("href", "/sign-out");
+    await user.click(
+      screen.getByLabelText("I understand and agree to use MHAI this way"),
+    );
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      await screen.findByText("Step 2 of 4 · Your password"),
+    ).toBeInTheDocument();
+    expect(out()).toHaveAttribute("href", "/sign-out");
+  });
+
   it("walks a new account through all four steps, then home", async () => {
     const user = userEvent.setup();
     renderWithAuth(
