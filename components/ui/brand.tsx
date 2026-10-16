@@ -11,16 +11,27 @@ export function Mark({ className = "h-9 w-auto" }: { className?: string }) {
   );
 }
 
-/** BHAI is a text placeholder until the official logo arrives (spec §3, Partner). */
+/** The BHAI logo; decorative wherever the name "BHAI" is written next to it. */
+export function BhaiLogo({ className = "size-7" }: { className?: string }) {
+  return (
+    <img
+      src="/brand/bhai-logo.png"
+      alt=""
+      aria-hidden
+      className={`${className} rounded-md`}
+    />
+  );
+}
+
+/** Partner credit (spec §3, Partner): the BHAI logo and name. */
 export function PartnerLine() {
   return (
     <p className="flex items-center gap-2 text-xs text-ink-3">
       <span>In partnership with</span>
+      <BhaiLogo />
       <b className="font-display text-lg font-black tracking-wide text-bloom">
         BHAI
       </b>
-      <span aria-hidden className="h-3.5 w-px bg-lilac-2" />
-      <span>University of Chicago</span>
     </p>
   );
 }

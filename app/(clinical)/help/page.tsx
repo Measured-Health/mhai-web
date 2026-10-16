@@ -70,12 +70,9 @@ export default function Help() {
               <b id="about-mhai" className="text-ink">
                 About MHAI.
               </b>{" "}
-              Built by Measured Health in partnership with BHAI at the
-              University of Chicago, our research partner in healthcare AI for
-              diagnostic support and clinical decision-making.{" "}
-              <span className="text-ink-3">
-                (BHAI is shown as text until the official logo arrives.)
-              </span>
+              Built by Measured Health in partnership with BHAI, our research
+              partner in healthcare AI for diagnostic support and clinical
+              decision-making.
             </p>
           </section>
           <section className="card-v3 p-5">

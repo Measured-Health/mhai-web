@@ -114,8 +114,7 @@ export function PrintSheet({
             <br />
           </>
         )}
-        MHAI by Measured Health, in partnership with BHAI (University of
-        Chicago)
+        MHAI by Measured Health, in partnership with BHAI
       </footer>
     </article>
   );

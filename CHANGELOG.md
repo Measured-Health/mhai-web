@@ -28,6 +28,8 @@ All notable changes to this project are documented here. The format follows
 - Encrypted offline outbox: questions and feedback made offline are saved
   encrypted on the device and sent when the connection returns (needs
   clinical/privacy sign-off).
+- The official BHAI logo in the partner credit (sign-in, Help); the
+  partnership is credited to BHAI by name only, including the print footer.
 - Demo feedback form: the ribbon's **Give feedback** opens a short form, and
   the server saves each message to a file on the instance for the team to
   review. Testers need no account. Replaces the GitHub issue link, which
