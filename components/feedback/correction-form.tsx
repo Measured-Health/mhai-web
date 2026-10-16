@@ -8,14 +8,19 @@ export function CorrectionForm({
   onCancel,
   onDirtyChange,
   busy,
+  initial,
 }: {
   onSubmit(v: { corrected_diagnosis: string; reason: string }): void;
   onCancel(): void;
   /** True while either field has text (so leaving can ask first). */
   onDirtyChange?(dirty: boolean): void;
   busy: boolean;
+  /** Starting text, for resubmitting a rejected correction. */
+  initial?: { corrected_diagnosis: string; reason: string };
 }) {
-  const [v, setV] = useState({ corrected_diagnosis: "", reason: "" });
+  const [v, setV] = useState(
+    () => initial ?? { corrected_diagnosis: "", reason: "" },
+  );
   const dirty = v.corrected_diagnosis !== "" || v.reason !== "";
   useEffect(() => {
     onDirtyChange?.(dirty);

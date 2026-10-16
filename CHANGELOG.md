@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- My feedback & corrections (account menu): your corrections as waiting,
+  approved or rejected with the reviewer's reason; withdraw a waiting one,
+  or change a rejected one and send it again.
 - Decisions on your corrections reach you while you work: a toast when a
   reviewer approves or rejects one (with their reason), and a bell in the
   top bar that keeps this session's decisions, in memory only.
