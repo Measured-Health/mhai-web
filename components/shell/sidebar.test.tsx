@@ -1,8 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { renderWithAuth } from "@/tests/auth-wrapper";
 import { Sidebar } from "./sidebar";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/c/q1" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/c/q1",
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
 
 const items = [
   {
@@ -27,8 +31,21 @@ const items = [
 ];
 
 describe("Sidebar", () => {
+  it("labels questions saved offline as waiting, or as couldn't send", () => {
+    renderWithAuth(
+      <Sidebar
+        items={[
+          { ...items[0], id: "local-1", kind: undefined, pending: "waiting" },
+          { ...items[1], id: "local-2", kind: undefined, pending: "failed" },
+        ]}
+      />,
+    );
+    expect(screen.getByText(/Waiting to send ·/)).toBeInTheDocument();
+    expect(screen.getByText(/Couldn't send ·/)).toBeInTheDocument();
+  });
+
   it("lists session history with plain-language status and marks the current one", () => {
-    render(<Sidebar items={items} />);
+    renderWithAuth(<Sidebar items={items} />);
     expect(
       screen.getByRole("link", { name: /Chest pain, 54 M/ }),
     ).toHaveAttribute("aria-current", "page");
@@ -36,7 +53,7 @@ describe("Sidebar", () => {
     expect(screen.getByLabelText("Flagged")).toBeInTheDocument();
   });
   it("says 'Completed', not a confidence level, when the result screen showed none", () => {
-    render(
+    renderWithAuth(
       <Sidebar
         items={[
           { ...items[0], confidenceLabel: null },
@@ -49,7 +66,7 @@ describe("Sidebar", () => {
     expect(screen.getAllByText(/Completed/)).toHaveLength(2);
   });
   it("keeps the review and failed labels, which are not confidence levels", () => {
-    render(
+    renderWithAuth(
       <Sidebar
         items={[
           { ...items[0], kind: "review", confidenceLabel: null },
@@ -61,7 +78,7 @@ describe("Sidebar", () => {
     expect(screen.getByText(/Couldn't complete/)).toBeInTheDocument();
   });
   it("shows the new consultation action, session note and hospital", () => {
-    render(<Sidebar items={[]} />);
+    renderWithAuth(<Sidebar items={[]} />);
     expect(
       screen.getByRole("link", { name: /New consultation/ }),
     ).toHaveAttribute("href", "/");
@@ -69,17 +86,21 @@ describe("Sidebar", () => {
     expect(screen.getByText("Havana Hospital")).toBeInTheDocument();
   });
   it("links to Help from the footer", () => {
-    render(<Sidebar items={[]} />);
+    renderWithAuth(<Sidebar items={[]} />);
     expect(screen.getByRole("link", { name: /Help/ })).toHaveAttribute(
       "href",
       "/help",
     );
   });
   it("keeps labels accessible in rail mode", () => {
-    render(<Sidebar items={items} rail />);
+    renderWithAuth(<Sidebar items={items} rail />);
     expect(
       screen.getByRole("link", { name: /New consultation/ }),
     ).toBeVisible();
     expect(screen.getByText("New consultation")).toHaveClass("sr-only");
+  });
+  it("hides the account footer when nobody is signed in", () => {
+    renderWithAuth(<Sidebar items={[]} />, null);
+    expect(screen.queryByText("Havana Hospital")).not.toBeInTheDocument();
   });
 });

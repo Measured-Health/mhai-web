@@ -8,6 +8,26 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Sign-in and accounts (Plan 2, design v3), mock first: sign-in with
+  sample accounts, hospital sign-on, generic errors and a lockout
+  countdown; two-step codes (authenticator apps including Google
+  Authenticator, paste, backup codes, trust this device); first sign-in
+  (terms, new password, QR setup, backup codes); forgot and reset password;
+  the account menu; Profile & security (password, two-step, backup codes,
+  devices, sign out everywhere); and the 403 page for non-clinician
+  accounts.
+- Server-side session (BFF): the API token lives in a sealed httpOnly
+  cookie; clinical calls go through a same-origin `/api/v1` proxy with
+  same-origin checks, scrubbed errors and single-flight refresh; an
+  expired session signs out once with an explanation.
+- Live API clients with every feature switched on, against an assumed
+  backend contract (spec section 10 item 14).
+- Weak-network support: adaptive polling, safe retries with idempotency
+  keys, sending a question once back online, a data-saver mode and a
+  slow-3G end-to-end test.
+- Encrypted offline outbox: questions and feedback made offline are saved
+  encrypted on the device and sent when the connection returns (needs
+  clinical/privacy sign-off).
 - The official BHAI logo in the partner credit (sign-in, Help); the
   partnership is credited to BHAI by name only, including the print footer.
 - Demo feedback form: the ribbon's **Give feedback** opens a short form, and
@@ -40,6 +60,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The signed-out notice now says why: inactivity, signing out yourself, or
+  an ended session. It no longer says "inactivity" after a manual sign-out.
 - Missing pages say what was missing: an unknown address reads "This page
   doesn't exist", and an unknown or ended consultation keeps its own message.
   The printout uses the same not-found page instead of a bare line.

@@ -6,6 +6,7 @@ import type { Stage } from "@/lib/api/contract";
 import { HighlightProvider } from "@/lib/highlight";
 import { useNow } from "@/lib/hooks/use-now";
 import { useShortcuts } from "@/lib/hooks/use-shortcuts";
+import { useOutbox } from "@/lib/offline/outbox-context";
 import { useQueryStatus, useResult, useSubmitQuery } from "@/lib/queries";
 import { toResultView } from "@/lib/result-view";
 import { useSession } from "@/lib/session-store";
@@ -20,6 +21,7 @@ import { useShell } from "../shell/app-shell";
 import { MenuButton } from "../shell/menu-button";
 import { TopBar } from "../shell/top-bar";
 import { FailedView } from "../states/failed-view";
+import { WaitingToSend } from "./waiting-to-send";
 
 /** Ticks its own clock so only this part re-renders while analysing. */
 function Analysing({
@@ -48,6 +50,8 @@ export function ConsultationView({ id }: { id: string }) {
   const { navigate } = useShell();
   const { get, update } = useSession();
   const item = get(id);
+  // A question saved offline that has since reached the server.
+  const real = useOutbox().resolved[id];
   const st = useQueryStatus(id);
   const result = useResult(id, st.status === "completed");
   const resubmit = useSubmitQuery();
@@ -95,8 +99,27 @@ export function ConsultationView({ id }: { id: string }) {
     else if (failed) update(id, { kind: "failed" });
   }, [id, view, failed, diagnosis, update]);
 
+  useEffect(() => {
+    if (real) router.replace(`/c/${real}`);
+  }, [real, router]);
+
+  if (real) return null; // on the way to /c/<real id>
   // Unknown id, or a consultation from a session that has ended.
   if (!item) notFound();
+
+  if (item.pending)
+    return (
+      <>
+        <TopBar
+          title={item.title}
+          urgency={item.urgency}
+          leading={<MenuButton />}
+        />
+        <div className="flex-1 overflow-auto px-4 pb-10 pt-7 md:px-[26px]">
+          <WaitingToSend item={item} />
+        </div>
+      </>
+    );
 
   return (
     <HighlightProvider>

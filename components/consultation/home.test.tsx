@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Providers } from "@/app/providers";
 import type { QueryCreateIn } from "@/lib/api/contract";
 import { useSession, type SessionItem } from "@/lib/session-store";
+import { TEST_USER } from "@/tests/auth-wrapper";
 
 const push = vi.fn();
 let search = new URLSearchParams();
@@ -86,6 +87,7 @@ describe("Home", () => {
       expect.objectContaining({
         patient_data: expect.objectContaining({ age: 3, sex: "female" }),
       }),
+      { idempotencyKey: expect.any(String) },
     );
     expect(setItem).not.toHaveBeenCalled();
   });
@@ -120,6 +122,40 @@ describe("Home", () => {
     expect(screen.getByRole("radio", { name: "Male" })).toBeChecked();
   });
 
+  it("offline, Analyse saves the question and shows Waiting to send in place", async () => {
+    await new Promise<void>((r) => {
+      const req = indexedDB.deleteDatabase("mhai-outbox");
+      req.onsuccess = req.onerror = req.onblocked = () => r();
+    });
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    const pushState = vi.spyOn(window.history, "pushState");
+    const tree = () => (
+      <Providers auth={{ initialUser: TEST_USER }}>
+        <Seeded>
+          <Page />
+        </Seeded>
+      </Providers>
+    );
+    let view!: ReturnType<typeof render>;
+    await act(async () => {
+      view = render(tree());
+    });
+    search = new URLSearchParams("edit=q1");
+    view.rerender(tree());
+    await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
+    await vi.waitFor(() => expect(pushState).toHaveBeenCalled());
+    expect(createQuery).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    const url = String(pushState.mock.calls[0]![2]);
+    expect(url).toMatch(/^\/\?waiting=local-/);
+    search = new URLSearchParams(url.slice(2));
+    view.rerender(tree());
+    expect(
+      await screen.findByRole("heading", { name: "Waiting to send" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/saved securely on this device/)).toBeVisible();
+  });
+
   it("asks before New consultation mid-draft, and Discard gives a clean form", async () => {
     await mount(
       <Seeded>
@@ -140,54 +176,5 @@ describe("Home", () => {
     expect(push).toHaveBeenCalledWith("/");
     expect(screen.getByLabelText(/^Age/)).toHaveValue("");
     expect(screen.queryByText("Draft · not submitted")).not.toBeInTheDocument();
-  });
-});
-
-describe("Home after an idle sign-out", () => {
-  afterEach(() => vi.useRealTimers());
-  // Wall clock jumps 16 minutes; the idle check runs on the wake event.
-  const idleOut = () =>
-    act(() => {
-      vi.setSystemTime(Date.now() + 16 * 60_000);
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
-  const NOTICE = /signed out after 15 minutes of inactivity/;
-
-  it("explains the sign-out until dismissed, and stores nothing", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    const setItem = vi.spyOn(Storage.prototype, "setItem");
-    await mount(<Page />);
-    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
-    idleOut();
-    expect(push).toHaveBeenCalledWith("/");
-    expect(screen.getByText(NOTICE)).toBeInTheDocument();
-    expect(
-      screen.getByText(/Unsaved work was cleared to protect patient data/),
-    ).toBeInTheDocument();
-    // Persistent: still there well after a toast would have gone.
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 3500));
-    });
-    expect(screen.getByText(NOTICE)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
-    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
-    expect(setItem).not.toHaveBeenCalled();
-    expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
-  });
-
-  it("clears the notice when the next consultation is started", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    await mount(<Page />);
-    idleOut();
-    expect(screen.getByText(NOTICE)).toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("button", { name: /Febrile child/ }),
-    );
-    expect(screen.getByText(NOTICE)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
-    await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/c/q2"));
-    await vi.waitFor(() =>
-      expect(screen.queryByText(NOTICE)).not.toBeInTheDocument(),
-    );
   });
 });

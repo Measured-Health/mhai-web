@@ -4,6 +4,7 @@ import { Component, useEffect, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Providers } from "@/app/providers";
 import type { ClinicalResultOut, QueryCreateIn } from "@/lib/api/contract";
+import { ApiError } from "@/lib/api/errors";
 import { FIXTURES } from "@/lib/api/fixtures";
 import { useSession, type SessionItem } from "@/lib/session-store";
 
@@ -131,6 +132,33 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("ConsultationView", () => {
+  it("shows Waiting to send for a question saved offline, without polling", async () => {
+    const LOCAL: SessionItem = { ...ITEM, id: "local-1", pending: "waiting" };
+    function SeedLocal({ children }: { children: ReactNode }) {
+      const { add, get } = useSession();
+      useEffect(() => add(LOCAL), [add]);
+      return get("local-1") ? children : null;
+    }
+    status.mockClear();
+    render(
+      <Providers>
+        <SeedLocal>
+          <ConsultationView id="local-1" />
+        </SeedLocal>
+      </Providers>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Waiting to send" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Analysing your question" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Edit question/ }),
+    );
+    expect(push).toHaveBeenCalledWith("/?edit=local-1");
+  });
+
   it("shows the analysing view while the query runs", async () => {
     mount();
     expect(
@@ -196,7 +224,9 @@ describe("ConsultationView", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /Try again/ }),
     );
-    expect(createQuery).toHaveBeenCalledWith(QUERY);
+    expect(createQuery).toHaveBeenCalledWith(QUERY, {
+      idempotencyKey: expect.any(String),
+    });
     await vi.waitFor(() => expect(replace).toHaveBeenCalledWith("/c/q2"));
   });
 
@@ -266,7 +296,7 @@ describe("ConsultationView", () => {
   });
 
   it("tells the clinician when Try again fails, and keeps both actions", async () => {
-    createQuery.mockRejectedValueOnce(new Error("offline"));
+    createQuery.mockRejectedValueOnce(new ApiError(422, "validation_failed"));
     status.mockReturnValue({
       status: "failed",
       progress: 0.5,

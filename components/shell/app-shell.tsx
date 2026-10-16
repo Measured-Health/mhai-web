@@ -25,6 +25,8 @@ export type NavigationGuard = (href: string) => boolean;
 type ShellCtx = {
   openDrawer(): void;
   openSearch(): void;
+  openShortcuts(): void;
+  closeDrawer(): void;
   searchOpen: boolean;
   closeSearch(): void;
   navigate(href: string): void;
@@ -40,6 +42,8 @@ export function useShell(): ShellCtx {
     ctx ?? {
       openDrawer() {},
       openSearch() {},
+      openShortcuts() {},
+      closeDrawer() {},
       searchOpen: false,
       closeSearch() {},
       navigate: (href) => router.push(href),
@@ -70,21 +74,27 @@ export function AppShell({ children }: { children: ReactNode }) {
     setSearchOpen(true);
   }, []);
   const [keysOpen, setKeysOpen] = useState(false);
+  const openShortcuts = useCallback(() => {
+    setDrawer(false);
+    setKeysOpen(true);
+  }, []);
   useShortcuts({
     "mod+k": openSearch,
-    "?": () => setKeysOpen(true),
+    "?": openShortcuts,
     n: () => navigate("/"),
   });
   const ctx = useMemo<ShellCtx>(
     () => ({
       openDrawer: () => setDrawer(true),
       openSearch,
+      openShortcuts,
+      closeDrawer: () => setDrawer(false),
       searchOpen,
       closeSearch: () => setSearchOpen(false),
       navigate,
       setNavigationGuard,
     }),
-    [openSearch, searchOpen, navigate, setNavigationGuard],
+    [openSearch, openShortcuts, searchOpen, navigate, setNavigationGuard],
   );
   return (
     <Ctx.Provider value={ctx}>

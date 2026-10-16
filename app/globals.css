@@ -120,6 +120,22 @@ body {
   }
 }
 
+/* Data saver or 2G: no motion, the same as reduced motion. */
+[data-save-data] *,
+[data-save-data] *::before,
+[data-save-data] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+[data-save-data] .draw-once path {
+  stroke-dashoffset: 0;
+}
+:root[data-save-data]::view-transition-group(*),
+:root[data-save-data]::view-transition-old(*),
+:root[data-save-data]::view-transition-new(*) {
+  animation: none !important;
+}
+
 @keyframes sk {
   from {
     background-position: 100% 0;

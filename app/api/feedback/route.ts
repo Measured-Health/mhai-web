@@ -1,17 +1,16 @@
 import { FeedbackSchema } from "@/lib/feedback-link";
 import { appendFeedback, createRateLimit } from "@/lib/server/feedback";
+import { forbidden, json, sameOrigin } from "@/lib/server/http";
 
 // Five sends per person per 10 minutes, and 60 an hour across the demo.
 const perPerson = createRateLimit(5, 10 * 60_000);
 const overall = createRateLimit(60, 60 * 60_000);
 
-const json = (status: number, body: object) =>
-  Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
-
 /** The demo's feedback form. Each message is appended to a file on the
  * server for the team to review (deploy/README.md). It goes nowhere else,
  * and nothing is written to the server log. */
 export async function POST(request: Request) {
+  if (!sameOrigin(request)) return forbidden();
   let body: unknown;
   try {
     body = await request.json();

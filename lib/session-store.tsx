@@ -26,6 +26,8 @@ export interface SessionItem {
   diagnosis?: string;
   /** The confidence label the result screen showed; null when it showed none. */
   confidenceLabel?: string | null;
+  /** Saved offline (lib/offline): not on the server yet, or rejected by it. */
+  pending?: "waiting" | "failed";
   query: QueryCreateIn;
 }
 
@@ -37,6 +39,8 @@ export function historyStatus(i: SessionItem): {
   label: string;
   dot: ResultKind | "failed" | null;
 } {
+  if (i.pending === "waiting") return { label: "Waiting to send", dot: null };
+  if (i.pending === "failed") return { label: "Couldn't send", dot: "failed" };
   if (!i.kind) return { label: "Analysing", dot: null };
   if (i.kind === "review" || i.kind === "failed")
     return { label: RESULT_LABEL[i.kind], dot: i.kind };
@@ -50,6 +54,12 @@ type Ctx = {
   add(i: SessionItem): void;
   update(id: string, p: Partial<SessionItem>): void;
   get(id: string): SessionItem | undefined;
+  remove(id: string): void;
+  /**
+   * An offline question reached the server: rename it and clear `pending`.
+   * Adds `fallback` instead when this session doesn't have `from`.
+   */
+  replaceId(from: string, to: string, fallback?: SessionItem): void;
   clear(): void;
 };
 const SessionCtx = createContext<Ctx | null>(null);
@@ -67,6 +77,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setItems((x) => x.map((y) => (y.id === id ? { ...y, ...p } : y))),
     [],
   );
+  const remove = useCallback(
+    (id: string) => setItems((x) => x.filter((y) => y.id !== id)),
+    [],
+  );
+  const replaceId = useCallback(
+    (from: string, to: string, fallback?: SessionItem) =>
+      setItems((x) => {
+        const found = x.find((y) => y.id === from);
+        const rest = x.filter((y) => y.id !== to);
+        if (found)
+          return rest.map((y) => {
+            if (y.id !== from) return y;
+            const next = { ...y, id: to };
+            delete next.pending;
+            return next;
+          });
+        return fallback ? [{ ...fallback, id: to }, ...rest] : x;
+      }),
+    [],
+  );
   // Sign-out: drop history AND cached clinical results held in memory.
   const clear = useCallback(() => {
     setItems([]);
@@ -77,10 +107,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       items,
       add,
       update,
+      remove,
+      replaceId,
       clear,
       get: (id: string) => items.find((i) => i.id === id),
     }),
-    [items, add, update, clear],
+    [items, add, update, remove, replaceId, clear],
   );
   return <SessionCtx.Provider value={value}>{children}</SessionCtx.Provider>;
 }

@@ -1,0 +1,7 @@
+# Reviewed false positives: RFC 6238 test vector, fake test fixtures, common-password blocklist
+1ae6d5ac209664808343fe4434cdb4ddcedfbb41:app/api/auth/auth-routes.test.ts:generic-api-key:211
+9a863945c563f028178e617ec60de765bb615fb6:lib/auth/totp.test.ts:generic-api-key:5
+9cf625f99592802f643971e3106fa3c6db1f9fd9:lib/auth/password-rules.ts:generic-api-key:7
+d7ca6e1542231d2a045010a11a6b64a8ac4a276f:docs/plans/2026-10-15-plan-2-accounts-and-live-api.md:generic-api-key:959
+359cbe49bea98ca4f96872167beab32503857d12:docs/plans/2026-10-15-plan-2-accounts-and-live-api.md:generic-api-key:926
+359cbe49bea98ca4f96872167beab32503857d12:docs/plans/2026-10-15-plan-2-accounts-and-live-api.md:generic-api-key:6214

@@ -56,7 +56,24 @@ Every PR must pass:
 
 - **Never log patient data** to the console, analytics or error tracking.
 - **Never store PHI** in `localStorage`, `sessionStorage`, IndexedDB or
-  service-worker caches.
+  service-worker caches, **with one exception: the offline outbox**
+  (`lib/offline/`). It holds only questions and feedback that couldn't be
+  sent yet:
+  - encrypted with AES-GCM under a non-extractable device key;
+  - bound to the signed-in user (hashed);
+  - deleted once synced, when the user deletes it, and on a **manual**
+    sign-out (any Sign out button, including Sign out everywhere);
+  - purged on next use once older than 72 hours;
+  - kept after an idle or expired sign-out (still encrypted and bound to
+    the user) until the same user's next sign-in, when it syncs. Other
+    users never see it.
+
+  Nothing else (results, history, drafts) is ever stored. Any change to
+  the outbox needs `clinical-review`. The hashed owner id
+  (`sha256("mhai-outbox:" + username)`) is the one accepted exception to
+  "nothing about the account in browser storage": it is never the plain
+  username, and it only exists while an item waits.
+
 - **Use mock or synthetic data only** in code, tests, Storybook and
   screenshots.
 

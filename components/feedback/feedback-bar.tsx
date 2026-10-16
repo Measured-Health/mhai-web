@@ -47,6 +47,8 @@ export function FeedbackBar({
       : sent === "agree" || sent === "reviewed"
         ? "agreed"
         : local;
+  // Saved on this device while offline (sent once back online).
+  const [queued, setQueued] = useState(false);
   // A non-empty correction draft guards every route change (links, ⌘K, N,
   // ⌘P, tab close) with the same prompt as an unsent consultation draft.
   const [draftDirty, setDraftDirty] = useState(false);
@@ -60,7 +62,8 @@ export function FeedbackBar({
     mutate(
       { query_id: queryId, action: "validate" },
       {
-        onSuccess: () => {
+        onSuccess: (out) => {
+          setQueued(out.status === "queued");
           update(queryId, {
             agreedAt: Date.now(),
             feedback: view.kind === "review" ? "reviewed" : "agree",
@@ -97,14 +100,18 @@ export function FeedbackBar({
           <Banner
             tone="ok"
             title={
-              mode === "agreed"
-                ? "Thanks, your agreement was recorded"
-                : "Thanks, your correction was sent for review"
+              queued
+                ? "Saved on this device"
+                : mode === "agreed"
+                  ? "Thanks, your agreement was recorded"
+                  : "Thanks, your correction was sent for review"
             }
           >
-            {mode === "agreed"
-              ? "It helps us measure how often the system gets it right."
-              : "A second clinician will review it before anything changes."}
+            {queued
+              ? "It will be sent when you're back online."
+              : mode === "agreed"
+                ? "It helps us measure how often the system gets it right."
+                : "A second clinician will review it before anything changes."}
           </Banner>
         </div>
       )}
@@ -148,7 +155,8 @@ export function FeedbackBar({
               fb.mutate(
                 { query_id: queryId, action: "correct", ...v },
                 {
-                  onSuccess: () => {
+                  onSuccess: (out) => {
+                    setQueued(out.status === "queued");
                     session.update(queryId, { feedback: "correct" });
                     setMode("corrected");
                     onDone?.("correct");

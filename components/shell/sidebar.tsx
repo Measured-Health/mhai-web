@@ -1,26 +1,15 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  MoreHorizontal,
-  Plus,
-  Search,
-  Stethoscope,
-  Building2,
-  CircleHelp,
-} from "lucide-react";
+import { Plus, Search, Stethoscope, CircleHelp } from "lucide-react";
 import { historyStatus, type SessionItem } from "@/lib/session-store";
 import { useNow } from "@/lib/hooks/use-now";
 import { Logo, Mark } from "../ui/brand";
 import { cn } from "../ui/cn";
+import { OutboxIndicator } from "../states/outbox-indicator";
+import { AccountMenu } from "./account-menu";
 import { groupHistory } from "./group-history";
 
-export const DEMO_USER = {
-  initials: "DR",
-  name: "Dr. Reyes",
-  role: "Attending · Internal Medicine",
-  hospital: "Havana Hospital",
-};
 const DOT = {
   high: "bg-ok",
   caution: "bg-warn",
@@ -49,7 +38,7 @@ export function Sidebar({
     <nav
       aria-label="Consultations"
       className={cn(
-        "relative flex h-full flex-col overflow-hidden border-r border-line bg-gradient-to-b from-white to-[#fbf8fc] py-[18px]",
+        "relative flex h-full flex-col border-r border-line bg-gradient-to-b from-white to-[#fbf8fc] py-[18px]",
         rail ? "items-center px-3" : "px-3.5",
       )}
     >
@@ -77,6 +66,7 @@ export function Sidebar({
         <Plus aria-hidden className="size-5" />
         <span className={label}>New consultation</span>
       </Link>
+      <OutboxIndicator rail={rail} />
       <button
         type="button"
         onClick={onOpenSearch}
@@ -176,33 +166,7 @@ export function Sidebar({
         <CircleHelp aria-hidden className="size-4" />
         <span className={label}>Help</span>
       </Link>
-      <div
-        className={cn(
-          "flex items-center gap-2.5 border-t border-line pt-2.5 text-[13px]",
-          rail ? "justify-center" : "px-1.5",
-        )}
-        title={`${DEMO_USER.name} · ${DEMO_USER.role} · ${DEMO_USER.hospital}`}
-      >
-        <span
-          aria-hidden
-          className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-orchid to-[#6e3c6a] text-xs font-bold text-white"
-        >
-          {DEMO_USER.initials}
-        </span>
-        <span className={label}>
-          {DEMO_USER.name}
-          <small className="block text-[11px] text-ink-3">
-            {DEMO_USER.role}
-          </small>
-          <small className="flex items-center gap-1 text-[11px] font-medium text-mint-deep">
-            <Building2 aria-hidden className="size-3" />
-            {DEMO_USER.hospital}
-          </small>
-        </span>
-        {!rail && (
-          <MoreHorizontal aria-hidden className="ml-auto size-4 text-ink-3" />
-        )}
-      </div>
+      <AccountMenu rail={rail} />
     </nav>
   );
 }

@@ -261,8 +261,9 @@ flowchart LR
   before the API is live.
 - **No patient data in storage:** the query cache is memory-only, and so
   are drafts and session history. Nothing goes in `localStorage`,
-  IndexedDB or a service-worker cache. Sign-out and the idle timeout clear
-  memory.
+  IndexedDB or a service-worker cache, except the encrypted offline outbox
+  of unsent questions and feedback (see CONTRIBUTING). Sign-out and the
+  idle timeout clear memory.
 
 ### 4.3 Signing in
 

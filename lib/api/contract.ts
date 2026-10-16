@@ -83,7 +83,8 @@ export type FeedbackIn =
     };
 
 export interface FeedbackOut {
-  status: "recorded" | "pending_review";
+  /** `queued` is frontend-only: saved for sync. */
+  status: "recorded" | "pending_review" | "queued";
   correction_id?: string;
 }
 

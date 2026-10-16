@@ -47,7 +47,8 @@ npm run build              # production build
 - Follow design v3 (`design/v3/`, spec in `docs/specs/2026-10-13-ui-design-v3.md`), and use the plain-language clinical wording.
   No technical terms in the UI.
 - An escalated or degraded result always shows the review banner.
-- Never log, store or cache patient data in the browser. Use mock or
-  synthetic data only.
+- Never log, store or cache patient data in the browser, except the
+  encrypted offline outbox of unsent questions and feedback (`lib/offline/`,
+  see CONTRIBUTING). Use mock or synthetic data only.
 - Generate API types from the backend OpenAPI schema; never send user ids
   from the client.

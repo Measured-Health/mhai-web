@@ -96,3 +96,21 @@ describe("useShell outside AppShell", () => {
     expect(push).toHaveBeenCalledWith("/y");
   });
 });
+
+describe("useShell().openShortcuts", () => {
+  it("opens the shortcuts dialog", async () => {
+    function Keys() {
+      const { openShortcuts } = useShell();
+      return <button onClick={openShortcuts}>keys</button>;
+    }
+    render(
+      <Providers>
+        <AppShell>
+          <Keys />
+        </AppShell>
+      </Providers>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "keys" }));
+    expect(screen.getByRole("dialog", { name: /shortcuts/i })).toBeVisible();
+  });
+});

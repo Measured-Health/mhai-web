@@ -1,12 +1,19 @@
 import { useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  QueryClient,
+  QueryClientProvider,
+  onlineManager,
+} from "@tanstack/react-query";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api/errors";
 import { FIXTURES } from "@/lib/api/fixtures";
 import { toResultView } from "@/lib/result-view";
 import { SessionProvider, useSession } from "@/lib/session-store";
 import { ToastProvider } from "../ui/toast";
+import { OutboxProvider } from "@/lib/offline/outbox-context";
+import { AuthTestProvider } from "@/tests/auth-wrapper";
 
 const send = vi.fn(async (f: { action: string }) =>
   f.action === "correct"
@@ -75,7 +82,10 @@ describe("FeedbackBar", () => {
     ui();
     expect(screen.getByTestId("agreed")).toHaveTextContent("none");
     await userEvent.click(screen.getByRole("button", { name: /I agree/ }));
-    expect(send).toHaveBeenCalledWith({ query_id: "q1", action: "validate" });
+    expect(send).toHaveBeenCalledWith(
+      { query_id: "q1", action: "validate" },
+      { idempotencyKey: expect.any(String) },
+    );
     expect(
       await screen.findByText(/your agreement was recorded/),
     ).toBeInTheDocument();
@@ -105,12 +115,15 @@ describe("FeedbackBar", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Submit correction" }),
     );
-    expect(send).toHaveBeenLastCalledWith({
-      query_id: "q1",
-      action: "correct",
-      corrected_diagnosis: "Warning signs",
-      reason: "WHO 2024",
-    });
+    expect(send).toHaveBeenLastCalledWith(
+      {
+        query_id: "q1",
+        action: "correct",
+        corrected_diagnosis: "Warning signs",
+        reason: "WHO 2024",
+      },
+      { idempotencyKey: expect.any(String) },
+    );
     expect(await screen.findByText(/sent for review/)).toBeInTheDocument();
     expect(screen.getByTestId("agreed")).toHaveTextContent("none");
   });
@@ -125,7 +138,10 @@ describe("FeedbackBar", () => {
     await userEvent.click(
       screen.getByRole("button", { name: /Mark as reviewed/ }),
     );
-    expect(send).toHaveBeenCalledWith({ query_id: "q1", action: "validate" });
+    expect(send).toHaveBeenCalledWith(
+      { query_id: "q1", action: "validate" },
+      { idempotencyKey: expect.any(String) },
+    );
     await screen.findByText(/your agreement was recorded/);
     expect(screen.getByTestId("feedback")).toHaveTextContent("reviewed");
     expect(screen.getByTestId("agreed")).not.toHaveTextContent("none");
@@ -178,7 +194,7 @@ describe("FeedbackBar", () => {
     expect(screen.getByRole("button", { name: /I agree/ })).toBeDisabled();
   });
   it("shows an error banner and stays retryable when feedback fails", async () => {
-    send.mockRejectedValueOnce(new Error("network"));
+    send.mockRejectedValueOnce(new ApiError(422, "validation_failed"));
     ui();
     await userEvent.click(screen.getByRole("button", { name: /I agree/ }));
     expect(
@@ -187,5 +203,34 @@ describe("FeedbackBar", () => {
     expect(screen.queryByText(/agreement was recorded/)).toBeNull();
     expect(screen.getByTestId("agreed")).toHaveTextContent("none");
     expect(screen.getByRole("button", { name: /I agree/ })).toBeEnabled();
+  });
+  it("offline, saves agreement on this device and says it will be sent", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    render(
+      <AuthTestProvider>
+        <OutboxProvider>
+          <ToastProvider>
+            <Seed />
+            <Probe />
+            <FeedbackBar queryId="q1" view={toResultView(FIXTURES.high)} />
+          </ToastProvider>
+        </OutboxProvider>
+      </AuthTestProvider>,
+    );
+    // As in a real browser: TanStack's onlineManager hears the offline event.
+    act(() => {
+      window.dispatchEvent(new Event("offline"));
+    });
+    await userEvent.click(screen.getByRole("button", { name: /I agree/ }));
+    expect(await screen.findByText("Saved on this device")).toBeInTheDocument();
+    expect(
+      screen.getByText("It will be sent when you're back online."),
+    ).toBeInTheDocument();
+    expect(send).not.toHaveBeenCalled();
+    expect(screen.getByTestId("feedback")).toHaveTextContent("agree");
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    onlineManager.setOnline(true);
   });
 });
