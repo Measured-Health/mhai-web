@@ -131,6 +131,36 @@ describe("clinical API proxy", () => {
     expect(await res.json()).toEqual({ code: "session_expired" });
   });
 
+  it("refuses anyone but a clinician, without calling the API", async () => {
+    await writeSession({
+      token: "tok",
+      expiresAt: Date.now() + 10 * 60_000,
+      user: { ...TEST_USER, role: "admin" },
+      steps: [],
+    });
+    for (const res of [
+      await GET(get(), ctx("queries", "q1")),
+      await POST(post("{}"), ctx("queries")),
+    ]) {
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ code: "forbidden" });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a clinician who hasn't finished first sign-in", async () => {
+    await writeSession({
+      token: "tok",
+      expiresAt: Date.now() + 10 * 60_000,
+      user: TEST_USER,
+      steps: ["terms"],
+    });
+    const res = await GET(get(), ctx("queries", "q1"));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ code: "forbidden" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("clears the session when the API rejects the token", async () => {
     await session();
     fetchMock.mockResolvedValueOnce(
