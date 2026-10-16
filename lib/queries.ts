@@ -3,7 +3,13 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { getClient } from "./api/client";
 import type { FeedbackIn, FeedbackOut, QueryCreateIn } from "./api/contract";
-import { pollDelay, retryDelay, shouldRetry, useNetwork } from "./network";
+import {
+  isTransient,
+  pollDelay,
+  retryDelay,
+  shouldRetry,
+  useNetwork,
+} from "./network";
 import { useOutbox } from "./offline/outbox-context";
 import { isLocalId } from "./offline/outbox";
 import { titleFor, useSession } from "./session-store";
@@ -128,13 +134,23 @@ export function useFeedback() {
         await outbox.queueFeedback(f);
         return { status: "queued" };
       }
-      return getClient().sendFeedback(f, { idempotencyKey: key });
+      try {
+        return await getClient().sendFeedback(f, { idempotencyKey: key });
+      } catch (e) {
+        // A weak connection (network error, timeout, rate limit or a server
+        // error): save it on this device under the same key, so a send that
+        // did reach the server isn't counted twice. The outbox keeps trying.
+        // Anything else (a 4xx) won't change on retry: show the error.
+        if (!isTransient(e)) throw e;
+        await outbox.queueFeedback(f, key);
+        return { status: "queued" };
+      }
     },
     // The default ("online") pauses an offline mutation before mutationFn
     // runs, so the outbox branch above would never be reached.
     networkMode: "always",
-    retry: (n, e) => shouldRetry(n, e),
-    retryDelay,
+    // The outbox retries, so the clinician isn't left waiting on backoff.
+    retry: false,
   });
   return {
     ...m,

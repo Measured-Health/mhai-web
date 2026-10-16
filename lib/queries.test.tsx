@@ -325,4 +325,66 @@ describe("questions and feedback saved offline", () => {
     expect(feedback).not.toHaveBeenCalled();
     await waitFor(() => expect(r.current.box.items).toHaveLength(1));
   });
+  const outboxWrap = ({ children }: { children: ReactNode }) => (
+    <AuthTestProvider>
+      <OutboxProvider>{children}</OutboxProvider>
+    </AuthTestProvider>
+  );
+  const freshOutbox = () =>
+    new Promise<void>((r) => {
+      const req = indexedDB.deleteDatabase("mhai-outbox");
+      req.onsuccess = req.onerror = req.onblocked = () => r();
+    });
+
+  it.each([
+    ["a network error", new ApiError(0, "network")],
+    ["a timeout", new ApiError(408, "timeout")],
+    ["a server error", new ApiError(503, "unavailable")],
+  ])(
+    "online but %s: saves feedback under the same key instead of failing",
+    async (_, err) => {
+      await freshOutbox();
+      feedback.mockRejectedValue(err);
+      const key = `key-${err.status}`;
+      vi.spyOn(crypto, "randomUUID").mockReturnValueOnce(
+        key as ReturnType<typeof crypto.randomUUID>,
+      );
+      const { result: r } = renderHook(
+        () => ({ fb: useFeedback(), box: useOutbox() }),
+        { wrapper: outboxWrap },
+      );
+      let out: unknown;
+      await act(async () => {
+        out = await r.current.fb.mutateAsync({
+          query_id: "q1",
+          action: "validate",
+        });
+      });
+      expect(out).toEqual({ status: "queued" });
+      expect(feedback.mock.calls.map((c) => c[1])).toContainEqual({
+        idempotencyKey: key,
+      });
+      await waitFor(() =>
+        expect(
+          r.current.box.items.some((i) => i.idempotencyKey === key),
+        ).toBe(true),
+      );
+    },
+  );
+
+  it("online and rejected (4xx): shows the error, saves nothing", async () => {
+    await freshOutbox();
+    feedback.mockRejectedValue(new ApiError(422, "invalid"));
+    const { result: r } = renderHook(
+      () => ({ fb: useFeedback(), box: useOutbox() }),
+      { wrapper: outboxWrap },
+    );
+    await act(async () => {
+      await r.current.fb
+        .mutateAsync({ query_id: "q1", action: "validate" })
+        .catch(() => {});
+    });
+    await waitFor(() => expect(r.current.fb.isError).toBe(true));
+    expect(r.current.box.items).toHaveLength(0);
+  });
 });

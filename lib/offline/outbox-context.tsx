@@ -33,7 +33,8 @@ type Ctx = {
   /** The last read failed (no usable storage): `items` may be incomplete. */
   loadError: boolean;
   queueQuery(q: QueryCreateIn): Promise<string>;
-  queueFeedback(f: FeedbackIn): Promise<void>;
+  /** `idempotencyKey`: the key of a send that may have reached the server. */
+  queueFeedback(f: FeedbackIn, idempotencyKey?: string): Promise<void>;
   /** `id` is the item id or a question's localId. */
   discard(id: string): Promise<void>;
   clearMine(): Promise<void>;
@@ -347,9 +348,9 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
         setKick((n) => n + 1);
         return localId;
       },
-      async queueFeedback(f) {
+      async queueFeedback(f, idempotencyKey) {
         const w = await (who.current ??= ownerWait()).promise;
-        await box.add(w.owner, "feedback", { f });
+        await box.add(w.owner, "feedback", { f }, idempotencyKey);
         await load(w);
         setKick((n) => n + 1);
       },

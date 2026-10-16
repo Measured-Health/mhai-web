@@ -272,7 +272,9 @@ export function createMockAuthClient({
       const u = requireSession();
       backupLeft = new Set(MOCK_BACKUP_CODES);
       return {
-        otpauthUri: `otpauth://totp/MHAI:${encodeURIComponent(u.username)}?secret=${MOCK_TOTP_SECRET}&issuer=MHAI`,
+        // Authenticator apps list it as "MHAI Demo" over the email, so the
+        // shared demo key is never mistaken for a real MHAI account.
+        otpauthUri: `otpauth://totp/${encodeURIComponent("MHAI Demo")}:${encodeURIComponent(u.email ?? u.username)}?secret=${MOCK_TOTP_SECRET}&issuer=${encodeURIComponent("MHAI Demo")}&algorithm=SHA1&digits=6&period=30`,
         secret: MOCK_TOTP_SECRET,
         backupCodes: [...MOCK_BACKUP_CODES],
       };

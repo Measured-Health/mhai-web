@@ -105,7 +105,12 @@ describe("mock auth client", () => {
     await c.changePassword(null, "a-long-enough-password");
     expect((await c.getSession())?.steps).toEqual(["mfa"]);
     const setup = await c.startMfaSetup();
-    expect(setup.otpauthUri).toMatch(/^otpauth:\/\/totp\/MHAI:/);
+    expect(setup.otpauthUri).toMatch(
+      /^otpauth:\/\/totp\/MHAI%20Demo:[^?]+%40[^?]+\?/,
+    );
+    expect(new URL(setup.otpauthUri).searchParams.get("issuer")).toBe(
+      "MHAI Demo",
+    );
     expect(setup.backupCodes).toHaveLength(10);
     await expect(c.confirmMfaSetup("111111")).rejects.toMatchObject({
       code: "mfa_invalid",
