@@ -11868,3 +11868,28 @@ git commit -m "Test the hospital admin side end to end; document the demo"
   - bulk actions (R6) and a mobile board for the admin side (R13);
   - whether "Remove" needs a retention review or a waiting period before
     the account is deleted (the backend's retention rules decide).
+
+---
+
+## Amendment (product owner, 2026-10-16): removing staff requires a two-step code
+
+This overrides Tasks 3, 4, 10 and 17 where they differ.
+
+- **Remove** (including "Cancel invite" for an invited person) needs the signed-in admin's current
+  two-step code (6-digit authenticator code, or a backup code). Deactivate, reactivate and the
+  other account actions keep the normal confirmation.
+- **UI (Task 10):** the Remove confirmation dialog shows the shared `CodeInput` (auto-submits on
+  the sixth digit) plus a "Use a backup code" option. The destructive button stays disabled until
+  a full code is entered; Cancel stays the default focus. A wrong code shows "That code didn't
+  work. Try again." and keeps the dialog open (the person is not removed); too many tries shows
+  the existing lockout wording. An admin without two-step turned on sees "Turn on two-step
+  verification in Profile & security to remove staff." with a link, and cannot remove.
+- **Contract (Tasks 3–4):** `DELETE /hospital/staff/{id}` carries the code in the JSON body as
+  `{ "mfa_code": "123456" }` (or `{ "backup_code": "ABCD-1234" }`), with the Idempotency-Key.
+  Errors: 403 `mfa_required` (two-step not set up), 403 `mfa_invalid` (wrong code), 429
+  `mfa_locked`. Add these to spec §10 item 3 as an assumed backend ask, and the codes to
+  `FORBIDDEN_TERMS`. The mock accepts `MOCK_CODE` (123456) or a real code for
+  `MOCK_TOTP_SECRET`, and the mock backup codes.
+- **Tests:** unit — remove sends the code; wrong code keeps the row and shows the error; no
+  two-step → blocked with the link; backup code path. E2E (Task 17) — the remove flow enters
+  123456.
