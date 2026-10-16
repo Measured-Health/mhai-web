@@ -18,6 +18,8 @@ const flush = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("@/lib/review/pending-approvals", () => ({
   flushPendingApprovals: flush,
   registerPendingFlush: () => () => {},
+  endApprovalSession: () => {},
+  approvalSession: () => 0,
 }));
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({

@@ -10,7 +10,7 @@ vi.mock("@/lib/api/client", () => ({
 }));
 import { ApiError } from "@/lib/api/errors";
 import { UNDO_WINDOW_MS } from "@/lib/corrections";
-import { flushPendingApprovals } from "./pending-approvals";
+import { endApprovalSession, flushPendingApprovals } from "./pending-approvals";
 import { useUndoableApproval } from "./use-undoable-approval";
 
 const a = makeCorrection({ id: "a" });
@@ -212,6 +212,43 @@ describe("useUndoableApproval (Review Focus 2)", () => {
     await act(() => flushPendingApprovals());
     await act(() => vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS * 2));
     expect(approve).toHaveBeenCalledTimes(1);
+  });
+
+  it("a sign-out cuts a retry's wait short: one last try, same key", async () => {
+    approve.mockRejectedValue(new ApiError(503, "unavailable"));
+    const { result } = setup();
+    act(() => result.current.start(a));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS));
+    expect(approve).toHaveBeenCalledTimes(1);
+    await act(() => flushPendingApprovals());
+    expect(approve).toHaveBeenCalledTimes(2);
+    expect(opts(1).idempotencyKey).toBe(opts(0).idempotencyKey);
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    act(() => endApprovalSession());
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(approve).toHaveBeenCalledTimes(2);
+  });
+
+  it("a new session drops a retry; only a view still open hears of it", async () => {
+    approve.mockRejectedValue(new ApiError(0, "network"));
+    const { result, unmount } = setup();
+    act(() => result.current.start(a));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS));
+    act(() => endApprovalSession());
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(onFailed).toHaveBeenCalledTimes(1);
+
+    approve.mockClear();
+    onFailed.mockReset();
+    act(() => result.current.start(b));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS));
+    unmount();
+    act(() => endApprovalSession());
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(onFailed).not.toHaveBeenCalled();
+    expect(onSent).not.toHaveBeenCalled();
   });
 
   it("a sign-out never waits long for a slow send", async () => {

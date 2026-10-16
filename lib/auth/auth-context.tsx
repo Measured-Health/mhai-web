@@ -11,7 +11,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { flushPendingApprovals } from "../review/pending-approvals";
+import {
+  endApprovalSession,
+  flushPendingApprovals,
+} from "../review/pending-approvals";
 import { useSession } from "../session-store";
 import { getAuthClient } from "./client";
 import { onUnauthorized } from "./events";
@@ -114,6 +117,8 @@ export function AuthProvider({
     }
     setMfaPending(false);
     setReason(null);
+    // A new sign-in: nothing from before is ever sent under it.
+    endApprovalSession();
     setState({ status: "signed_in", user: r.user, steps: r.steps });
     return r;
   }, []);
@@ -124,8 +129,10 @@ export function AuthProvider({
       live.current = { signedIn: false, mfaPending: false };
       // A waiting approval goes first, while the session still works (it
       // takes the approval, so leaving the page can't send it twice). An
-      // expired session can't send it: it stays waiting.
+      // expired session can't send it: it stays waiting. Then nothing from
+      // this session is sent again (no retry after sign-out).
       const sent = why === "expired" ? null : flushPendingApprovals();
+      if (!sent) endApprovalSession();
       startTransition(() => {
         history.clear();
         setState(SIGNED_OUT);
@@ -133,7 +140,10 @@ export function AuthProvider({
         setReason(why);
         router.replace("/sign-in");
       });
-      await sent;
+      if (sent) {
+        await sent;
+        endApprovalSession();
+      }
       await client.signOut().catch(() => {});
     },
     [client, history, router],

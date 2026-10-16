@@ -210,7 +210,12 @@ describe("UndoNotice", () => {
     const onUndo = vi.fn();
     render(
       <UndoNotice
-        pending={{ item: okafor, key: "k", endsAt: Date.now() + 60_000 }}
+        pending={{
+          item: okafor,
+          key: "k",
+          session: 0,
+          endsAt: Date.now() + 60_000,
+        }}
         onUndo={onUndo}
       />,
     );
@@ -230,7 +235,7 @@ describe("UndoNotice", () => {
   });
 
   it("offers Next correction only when asked, and keeps Undo's name", async () => {
-    const pending = { item: okafor, key: "k", endsAt: T0 + 60_000 };
+    const pending = { item: okafor, key: "k", session: 0, endsAt: T0 + 60_000 };
     const { unmount } = render(
       <UndoNotice pending={pending} onUndo={() => {}} />,
     );

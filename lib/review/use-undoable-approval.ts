@@ -7,7 +7,7 @@ import { ApiError } from "@/lib/api/errors";
 import { refreshCorrections } from "@/lib/correction-queries";
 import { UNDO_WINDOW_MS } from "@/lib/corrections";
 import { isTransient, retryDelay } from "@/lib/network";
-import { registerPendingFlush } from "./pending-approvals";
+import { approvalSession, registerPendingFlush } from "./pending-approvals";
 
 /** Like reject and withdraw: a lost answer is tried again with the same key. */
 const RETRIES = 2;
@@ -16,6 +16,8 @@ export interface PendingApproval {
   item: CorrectionOut;
   /** One key per Approve press, so a repeat never approves twice. */
   key: string;
+  /** The sign-in it belongs to: never sent under another (or none). */
+  session: number;
   endsAt: number;
 }
 
@@ -55,31 +57,70 @@ export function useUndoableApproval({
     handlers.current = { onSent, onFailed };
   });
 
+  /** False once the view is gone: then a dropped send tells no one. */
+  const mounted = useRef(false);
+
   const send = useCallback(
     (p: PendingApproval, keepalive: boolean): Promise<void> => {
+      // Signed out (or someone else signed in) since Approve: it stays waiting.
+      const stale = () => approvalSession() !== p.session;
+      const drop = () => {
+        if (mounted.current)
+          handlers.current.onFailed(p.item, new ApiError(0, "network"));
+      };
+      if (stale()) {
+        drop();
+        return Promise.resolve();
+      }
       // Decisions are never queued offline (R8): not sent, nothing changed.
       if (!navigator.onLine) {
         handlers.current.onFailed(p.item, new ApiError(0, "network"));
         return Promise.resolve();
       }
+      // A retry waits here; a sign-out ends the wait early (`wake`).
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let wake: (() => void) | null = null;
+      let last = keepalive;
+      const stopWaiting = () => {
+        last = true;
+        if (timer) clearTimeout(timer);
+        wake?.();
+      };
       // The same key each time, so a retry never approves twice (R8). Not
-      // after leaving the page (keepalive), and never offline.
-      const attempt = (n: number): Promise<unknown> =>
-        getClient()
-          .approveCorrection(p.item.id, { idempotencyKey: p.key, keepalive })
-          .catch((e: unknown) => {
-            if (keepalive || n >= RETRIES || !navigator.onLine) throw e;
-            if (!isTransient(e)) throw e;
-            return new Promise((r) => setTimeout(r, retryDelay(n + 1))).then(
-              () => attempt(n + 1),
-            );
-          });
-      return attempt(0)
-        .then(
-          () => handlers.current.onSent(p.item),
-          (e: unknown) => handlers.current.onFailed(p.item, e),
-        )
-        .finally(() => void refreshCorrections(qc));
+      // after leaving the page (keepalive), never offline, and never under
+      // another sign-in.
+      const run = async () => {
+        for (let n = 0; ; n++) {
+          try {
+            await getClient().approveCorrection(p.item.id, {
+              idempotencyKey: p.key,
+              keepalive,
+            });
+            return handlers.current.onSent(p.item);
+          } catch (e) {
+            const retry =
+              !last && n < RETRIES && navigator.onLine && isTransient(e);
+            if (!retry) return handlers.current.onFailed(p.item, e);
+            await new Promise<void>((r) => {
+              wake = r;
+              timer = setTimeout(r, retryDelay(n + 1));
+            });
+            timer = wake = null;
+            if (stale()) return drop();
+          }
+        }
+      };
+      let job: Promise<void> | null = null;
+      // Signing out: one last try now, inside its wait; a new session: none.
+      const unregister = registerPendingFlush(() => {
+        stopWaiting();
+        return job ?? Promise.resolve();
+      }, stopWaiting);
+      job = run().finally(() => {
+        unregister();
+        void refreshCorrections(qc);
+      });
+      return job;
     },
     [qc],
   );
@@ -102,6 +143,7 @@ export function useUndoableApproval({
       const p: PendingApproval = {
         item,
         key: crypto.randomUUID(),
+        session: approvalSession(),
         endsAt: Date.now() + windowMs,
       };
       live.current = { p, timer: setTimeout(() => flushWith(false), windowMs) };
@@ -122,9 +164,11 @@ export function useUndoableApproval({
 
   // Leaving the page confirms: in-app (unmount) or the tab going away.
   useEffect(() => {
+    mounted.current = true;
     const leave = () => void flushWith(true);
     window.addEventListener("pagehide", leave);
     return () => {
+      mounted.current = false;
       window.removeEventListener("pagehide", leave);
       leave();
     };

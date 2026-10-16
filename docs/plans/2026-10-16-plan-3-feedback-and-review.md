@@ -12,7 +12,7 @@ suggests a correction can follow it, and a second clinician can review it:
 - **the review queue:** what's waiting (anything over 4 hours flagged),
   what the system said beside the suggested correction with the changes
   marked, who suggested it, why, the evidence on file and the consultation;
-  Approve (with a 10-second Undo), Reject (a reason is required) and Skip,
+  Approve (with a 60-second Undo), Reject (a reason is required) and Skip,
   with A and R shortcuts; your own correction can't be approved or rejected
   by you, only withdrawn; "All caught up" with your recent decisions;
 - **the sidebar entry** "Review corrections" with a waiting count;
@@ -36,7 +36,7 @@ changes.
 - **Pure rules** (overdue, ages, labels, the queue order, which item comes
   next, error wording) are in `lib/corrections.ts`; the word diff is in
   `lib/word-diff.ts`. Both are unit-tested without React.
-- **The 10-second undo** is one hook, `useUndoableApproval`
+- **The 60-second undo** is one hook, `useUndoableApproval`
   (`lib/review/use-undoable-approval.ts`). The approve request is sent only
   when the window ends or the reviewer leaves (ruling R1 below).
 - **Decisions arriving:** `DecisionsProvider` (inside `AppShell`, so only for
@@ -219,7 +219,7 @@ straight in:
   - motion uses the tokens only and is off under reduced motion and data
     saver (`lib/motion.test.ts` scans `components/` and `app/`, so animation
     code goes there, not in `lib/`). The undo countdown is text, not a
-    10-second animation (nothing animates over 700 ms).
+    60-second animation (nothing animates over 700 ms).
 - **Match the design v3 mockups.** Reuse `card-v3`, the colour tokens in
   `app/globals.css`, `Button` (one new `approve` variant in Task 10),
   `Banner`, `Chip`, `Dialog`, `Sheet`, `Skeleton`, `useToast`, `TopBar` and
@@ -309,7 +309,7 @@ lib/corrections.ts          REVIEW_OVERDUE_MS, UNDO_WINDOW_MS, NOTE_MAX, REJECT_
                             STATUS_VIEW, buildQueue, pickNext, decisionError, … (new)
 lib/word-diff.ts            tokenize(), wordDiff() (new)
 lib/correction-queries.ts   CORRECTION_KEYS, polling hooks, reject/withdraw mutations (new)
-lib/review/use-undoable-approval.ts   the 10-second undo (new)
+lib/review/use-undoable-approval.ts   the 60-second undo (new)
 lib/hooks/use-media.ts      useIsDesktop() (new)
 lib/labels.ts               FORBIDDEN_TERMS + pending_review, self_approval
 lib/queries.ts              useFeedback refreshes the correction lists
@@ -1890,7 +1890,7 @@ In `docs/specs/2026-10-13-ui-design-v3.md` §10, replace item 1 with:
      `corrections_approved`, `corrections_rejected` and
      `corrections_withdrawn`;
    - an approval can arrive as a browser `keepalive` request: the
-     10-second undo ends early when the reviewer leaves the page, and the
+     60-second undo ends early when the reviewer leaves the page, and the
      approval is sent then. Treat it like any other request.
 ```
 
@@ -5293,7 +5293,7 @@ git commit -m "Add the reject dialog: a required reason and an optional note"
 
 ---
 
-### Task 9: The 10-second undo
+### Task 9: The 60-second undo
 
 **Files:**
 
@@ -5623,7 +5623,7 @@ Expected: clean.
 
 ```bash
 git add lib/review
-git commit -m "Send an approval after a 10-second undo, or at once on leaving"
+git commit -m "Send an approval after a 60-second undo, or at once on leaving"
 ```
 
 ---
@@ -5883,7 +5883,7 @@ describe("UndoNotice", () => {
     const onUndo = vi.fn();
     render(
       <UndoNotice
-        pending={{ item: okafor, key: "k", endsAt: Date.now() + 10_000 }}
+        pending={{ item: okafor, key: "k", endsAt: Date.now() + 60_000 }}
         onUndo={onUndo}
       />,
     );
@@ -5893,9 +5893,9 @@ describe("UndoNotice", () => {
       "Dengue fever, likely. Dr. Okafor will be told",
     );
     const undo = screen.getByRole("button", { name: "Undo approval" });
-    expect(undo).toHaveTextContent("Undo (10 s)");
+    expect(undo).toHaveTextContent("Undo (60 s)");
     await act(() => vi.advanceTimersByTimeAsync(3_000));
-    expect(undo).toHaveTextContent("Undo (7 s)");
+    expect(undo).toHaveTextContent("Undo (57 s)");
     await userEvent
       .setup({ advanceTimers: vi.advanceTimersByTime })
       .click(undo);
@@ -6562,7 +6562,7 @@ describe("ReviewView", () => {
     expect(screen.getByText("Dr. Chidi Okafor")).toBeVisible();
   });
 
-  it("approve: undo for 10 seconds, the next one loads, sent only at the end", async () => {
+  it("approve: undo for 60 seconds, the next one loads, sent only at the end", async () => {
     const user = typing();
     const approve = vi.spyOn(holder.client, "approveCorrection");
     ui();
@@ -7352,7 +7352,7 @@ Add to `CHANGELOG.md` under _Unreleased_ → Added:
 - Review corrections: the queue (anything waiting over 4 hours flagged),
   what the system said beside the suggested correction with the changes
   marked, who suggested it and why, the evidence on file and the
-  consultation. Approve with a 10-second undo, reject with a required
+  consultation. Approve with a 60-second undo, reject with a required
   reason the suggester sees, skip, and the A and R shortcuts. Your own
   corrections can only be withdrawn. Works on phones, with the reject form
   as a bottom sheet.
@@ -7834,7 +7834,7 @@ test("the sidebar counts what's waiting for you", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("approve, undo, approve again: sent after 10 seconds", async ({
+test("approve, undo, approve again: sent after 60 seconds", async ({
   page,
 }) => {
   await page.clock.install();
@@ -7851,7 +7851,7 @@ test("approve, undo, approve again: sent after 10 seconds", async ({
 
   await page.getByRole("button", { name: "Approve correction" }).click();
   await expect(undoNotice(page)).toBeVisible();
-  await page.clock.fastForward(10_000);
+  await page.clock.fastForward(60_000);
   await expect(undoNotice(page)).toBeHidden();
   await backToQueue(page);
   await expect(row(page, "Acute asthma, moderate")).toHaveCount(0);
@@ -7868,7 +7868,7 @@ test("leaving during the undo window sends the approval at once", async ({
   await row(page, "Dengue fever, likely").click();
   await page.getByRole("button", { name: "Approve correction" }).click();
   await expect(undoNotice(page)).toBeVisible();
-  // Leave inside the 10 seconds, without waiting them out.
+  // Leave inside the 60 seconds, without waiting them out.
   if (isMobile(page))
     await page.getByRole("button", { name: "Open menu" }).click();
   await page
@@ -8032,7 +8032,7 @@ In `README.md`, under "Run on mock data", after the paragraph that ends
 sample account (Dr. Reyes). **Review corrections** in the sidebar holds
 sample corrections from Dr. Okafor and Nurse Bello, some waiting over 4
 hours, and one of your own, which you can withdraw but not approve.
-Approve gives you 10 seconds to undo; Reject needs a reason, which the
+Approve gives you 60 seconds to undo; Reject needs a reason, which the
 person who suggested it sees. **My feedback & corrections** (account menu)
 lists your corrections as waiting, approved or rejected, with the
 reviewer's reason, and Profile & security shows your counts. A correction
@@ -8090,7 +8090,7 @@ git commit -m "Test review and My corrections end to end; describe the demo"
     11 and 7 (where the suggester reads it);
   - your own: Approve and Reject disabled with an explanation, Withdraw
     instead, and the API's 403 `self_approval` handled: Tasks 10, 11 and 3;
-  - after approving, a 10-second undo, then the next item: Tasks 9 and 11
+  - after approving, a 60-second undo, then the next item: Tasks 9 and 11
     (R1);
   - empty queue, "All caught up" and recent decisions: Task 10;
   - the sidebar entry with the count: Task 12; mobile layout: Tasks 8, 10,

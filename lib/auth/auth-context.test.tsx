@@ -1,13 +1,15 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, type ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeCorrection } from "@/tests/corrections";
 
 const approve = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api/client", () => ({
   getClient: () => ({ approveCorrection: approve }),
 }));
+import { ApiError } from "../api/errors";
+import { UNDO_WINDOW_MS } from "../corrections";
 import { useUndoableApproval } from "../review/use-undoable-approval";
 import { createMockAuthClient } from "./mock";
 import { AuthProvider, homeFor, useAuth } from "./auth-context";
@@ -140,14 +142,61 @@ describe("signing out with an approval waiting", () => {
     },
   );
 
-  it("an expired session doesn't try; leaving the page still does once", async () => {
+  it("an expired session sends nothing, then or on leaving: it stays waiting", async () => {
     const client = createMockAuthClient();
     const { unmount } = mount(client, TEST_USER, <Reviewer />);
     act(() => approval.start(makeCorrection({ id: "a" })));
     await act(() => api.signOut("expired"));
     unmount();
+    expect(approve).not.toHaveBeenCalled();
+  });
+});
+
+describe("signing out with an approval waiting to retry", () => {
+  const keys = () =>
+    approve.mock.calls.map(
+      (c) => (c[1] as { idempotencyKey: string }).idempotencyKey,
+    );
+  /** Approved, the window ran out, and the answer was lost: retry pending. */
+  async function lostAnswer() {
+    const client = createMockAuthClient();
+    mount(client, TEST_USER, <Reviewer />);
+    act(() => approval.start(makeCorrection({ id: "a" })));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS));
     expect(approve).toHaveBeenCalledTimes(1);
-    expect(approve.mock.calls[0]?.[1]).toMatchObject({ keepalive: true });
+    return client;
+  }
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    approve.mockReset();
+    approve.mockRejectedValue(new ApiError(0, "network"));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("tries once more at sign-out, with the same key, and never after", async () => {
+    await lostAnswer();
+    await act(() => api.signOut("manual"));
+    expect(approve).toHaveBeenCalledTimes(2);
+    expect(keys()[1]).toBe(keys()[0]);
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(approve).toHaveBeenCalledTimes(2);
+  });
+
+  it("never sends it under the next person to sign in", async () => {
+    await lostAnswer();
+    await act(() => api.signOut("manual"));
+    const before = approve.mock.calls.length;
+    await act(() => api.signIn("new.bello@havanahospital.org", "pw"));
+    expect(api.status).toBe("signed_in");
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(approve).toHaveBeenCalledTimes(before);
+  });
+
+  it("an expired session cancels the retry without trying", async () => {
+    await lostAnswer();
+    await act(() => api.signOut("expired"));
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(approve).toHaveBeenCalledTimes(1);
   });
 });
 
