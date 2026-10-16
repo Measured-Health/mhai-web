@@ -55,8 +55,17 @@ export function createOutbox({
   key,
   now = () => Date.now(),
 }: { key?: Promise<CryptoKey>; now?: () => number } = {}) {
-  let k: Promise<CryptoKey> | undefined = key;
-  const getKey = () => (k ??= deviceKey());
+  let k: Promise<CryptoKey> | undefined;
+  // A key that failed to load isn't kept: the next call tries again.
+  const keep = (p: Promise<CryptoKey>) => {
+    k = p;
+    p.catch(() => {
+      if (k === p) k = undefined;
+    });
+    return p;
+  };
+  if (key) keep(key);
+  const getKey = () => k ?? keep(deviceKey());
 
   return {
     async add<K extends OutboxKind>(
@@ -83,6 +92,7 @@ export function createOutbox({
     async list(owner: string): Promise<OutboxItem[]> {
       if (!(await outboxExists())) return [];
       const out: OutboxItem[] = [];
+      let key: CryptoKey | undefined;
       const entries = (await idbAll<Entry>("items")).sort(
         (a, b) => a.seq - b.seq,
       );
@@ -92,11 +102,16 @@ export function createOutbox({
           continue;
         }
         if (e.owner !== owner) continue;
+        // A key or database failure throws from here: nothing is deleted.
+        key ??= await getKey();
+        let payload: unknown;
         try {
-          out.push(toItem(e, await decrypt(e.sealed, await getKey())));
+          payload = await decrypt(e.sealed, key);
         } catch {
           await idbDelete("items", e.id); // unreadable (key gone): useless, so delete
+          continue;
         }
+        out.push(toItem(e, payload));
       }
       return out;
     },

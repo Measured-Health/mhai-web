@@ -1,6 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as cryptoMod from "./crypto";
 import { OUTBOX_TTL_MS, createOutbox, isLocalId } from "./outbox";
 import { idbAll, outboxExists } from "./db";
+
+vi.mock("./crypto", async (orig) => {
+  const real = await orig<typeof import("./crypto")>();
+  return { ...real, deviceKey: vi.fn(real.deviceKey) };
+});
 
 const Q = {
   clinical_question: "Central chest pain for 40 minutes. Likely diagnosis?",
@@ -92,6 +98,15 @@ describe("outbox", () => {
     expect(await box.list("o")).toEqual([]);
     await box.clearOwner("o");
     expect(await outboxExists()).toBe(false);
+  });
+
+  it("keeps items when the device key can't be read, and retries the key", async () => {
+    await createOutbox().add("o", "query", { q: Q, localId: "local-1" });
+    vi.mocked(cryptoMod.deviceKey).mockRejectedValueOnce(new Error("busy"));
+    const box = createOutbox();
+    await expect(box.list("o")).rejects.toThrow("busy");
+    expect(await idbAll("items")).toHaveLength(1);
+    expect(await box.list("o")).toHaveLength(1);
   });
 
   it("recognises local ids", () => {

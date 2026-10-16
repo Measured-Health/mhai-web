@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/errors";
@@ -6,6 +6,8 @@ import { useAuth } from "../auth/auth-context";
 import { AuthTestProvider, TEST_USER } from "@/tests/auth-wrapper";
 import { useSession } from "../session-store";
 import { OutboxProvider, useOutbox } from "./outbox-context";
+import { ToastProvider } from "@/components/ui/toast";
+import { OutboxIndicator } from "@/components/states/outbox-indicator";
 
 const createQuery = vi.fn();
 const sendFeedback = vi.fn();
@@ -24,6 +26,16 @@ const Q = {
 const wrapper = ({ children }: { children: ReactNode }) => (
   <AuthTestProvider>
     <OutboxProvider>{children}</OutboxProvider>
+  </AuthTestProvider>
+);
+const withShell = ({ children }: { children: ReactNode }) => (
+  <AuthTestProvider>
+    <ToastProvider>
+      <OutboxProvider>
+        <OutboxIndicator rail={false} />
+        {children}
+      </OutboxProvider>
+    </ToastProvider>
   </AuthTestProvider>
 );
 const otherUser = ({ children }: { children: ReactNode }) => (
@@ -165,6 +177,96 @@ describe("OutboxProvider", () => {
     await waitFor(() => expect(result.current.box.items).toHaveLength(1));
     await act(() => result.current.box.discard(localId));
     expect(result.current.box.items).toEqual([]);
+  });
+
+  it("stops a sync for a user who signed out, and never touches the next user's history", async () => {
+    let release!: (v: { query_id: string }) => void;
+    createQuery.mockImplementationOnce(() => new Promise((r) => (release = r)));
+    sendFeedback.mockResolvedValue({ status: "recorded" });
+    const { result } = renderHook(use, { wrapper });
+    await act(async () => {
+      await result.current.box.queueQuery(Q);
+      await result.current.box.queueFeedback({
+        query_id: "q-old",
+        action: "validate",
+      });
+    });
+    onLine.mockReturnValue(true);
+    act(() => result.current.box.syncNow());
+    await waitFor(() => expect(createQuery).toHaveBeenCalledTimes(1));
+    await act(() => result.current.auth.signOut("idle"));
+    await act(async () => {
+      await result.current.auth.signIn(
+        "b.other@havanahospital.org",
+        "demo-password",
+      );
+    });
+    await waitFor(() => expect(result.current.box.ready).toBe(true));
+    await act(async () => {
+      release({ query_id: "q-a" });
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(result.current.session.items).toEqual([]);
+    expect(result.current.box.resolved).toEqual({});
+    expect(result.current.box.items).toEqual([]);
+    expect(sendFeedback).not.toHaveBeenCalled();
+    expect(createQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes rejected feedback and says so once", async () => {
+    sendFeedback.mockRejectedValue(new ApiError(422, "validation_failed"));
+    const { result } = renderHook(use, { wrapper: withShell });
+    await act(async () => {
+      await result.current.box.queueFeedback({
+        query_id: "a",
+        action: "validate",
+      });
+      await result.current.box.queueFeedback({
+        query_id: "b",
+        action: "validate",
+      });
+    });
+    onLine.mockReturnValue(true);
+    act(() => result.current.box.syncNow());
+    await waitFor(() => expect(sendFeedback).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.box.items).toEqual([]));
+    expect(
+      await screen.findAllByText(
+        "Some feedback couldn't be sent and was removed.",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("keeps a rejected question as couldn't send, and shows it apart from waiting ones", async () => {
+    createQuery.mockRejectedValueOnce(new ApiError(422, "validation_failed"));
+    const { result } = renderHook(use, { wrapper: withShell });
+    await act(async () => void (await result.current.box.queueQuery(Q)));
+    expect(await screen.findByText("1 waiting to send")).toBeInTheDocument();
+    onLine.mockReturnValue(true);
+    act(() => result.current.box.syncNow());
+    await waitFor(() =>
+      expect(result.current.box.items[0]?.status).toBe("failed"),
+    );
+    expect(await screen.findByText("1 couldn't send")).toBeInTheDocument();
+    expect(screen.queryByText(/waiting to send/)).toBeNull();
+  });
+
+  it("stops on 429 and keeps the item waiting", async () => {
+    createQuery.mockRejectedValue(new ApiError(429, "rate_limited"));
+    const { result } = renderHook(use, { wrapper });
+    await act(async () => {
+      await result.current.box.queueQuery(Q);
+      await result.current.box.queueQuery(Q);
+    });
+    onLine.mockReturnValue(true);
+    act(() => result.current.box.syncNow());
+    await waitFor(() => expect(createQuery).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.box.syncing).toBe(false));
+    expect(result.current.box.items.map((i) => i.status)).toEqual([
+      "waiting",
+      "waiting",
+    ]);
+    expect(createQuery).toHaveBeenCalledTimes(1);
   });
 
   it("is inert outside the provider", async () => {

@@ -12,6 +12,7 @@ import {
 } from "react";
 import { getClient } from "../api/client";
 import type { FeedbackIn, QueryCreateIn } from "../api/contract";
+import { useToast } from "@/components/ui/toast";
 import { ApiError } from "../api/errors";
 import { useAuth } from "../auth/auth-context";
 import { shouldRetry, useNetwork } from "../network";
@@ -28,6 +29,8 @@ type Ctx = {
   ready: boolean;
   /** The first read of this user's items has finished. */
   loaded: boolean;
+  /** The last read failed (no usable storage): `items` may be incomplete. */
+  loadError: boolean;
   queueQuery(q: QueryCreateIn): Promise<string>;
   queueFeedback(f: FeedbackIn): Promise<void>;
   /** `id` is the item id or a question's localId. */
@@ -46,6 +49,7 @@ const INERT: Ctx = {
   resolved: NO_IDS,
   ready: false,
   loaded: true,
+  loadError: false,
   queueQuery: notSignedIn,
   queueFeedback: notSignedIn,
   discard: async () => {},
@@ -61,6 +65,7 @@ type Who = { username: string; owner: string };
 type Mine = Who & {
   items: OutboxItem[];
   loaded: boolean;
+  loadError: boolean;
   resolved: Record<string, string>;
 };
 
@@ -91,6 +96,7 @@ function ownerWait(): OwnerWait {
 export function OutboxProvider({ children }: { children: ReactNode }) {
   const { user, status } = useAuth();
   const session = useSession();
+  const toast = useToast();
   const { online } = useNetwork();
   const username = status === "signed_in" && user ? user.username : null;
   const [mine, setMine] = useState<Mine | null>(null);
@@ -102,27 +108,37 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
   const running = useRef(false);
   const again = useRef(false);
   const gen = useRef(0);
+  // Bumped whenever the signed-in user changes: a sync started for someone
+  // else stops at its next step and never touches this user's state.
+  const epoch = useRef(0);
 
   const cur = mine && mine.username === username ? mine : null;
   const owner = cur?.owner ?? null;
   const items = cur?.items ?? EMPTY;
   const resolved = cur?.resolved ?? NO_IDS;
   const loaded = username === null || (cur?.loaded ?? false);
+  const loadError = cur?.loadError ?? false;
+
+  useEffect(() => {
+    epoch.current++;
+  }, [username]);
 
   /** Reads the items again; only the most recent read is applied. */
   const load = useCallback(async (w: Who) => {
     const n = ++gen.current;
     let list: OutboxItem[] = [];
+    let failed = false;
     try {
       list = await box.list(w.owner);
     } catch {
-      // No usable IndexedDB here: nothing can be queued or shown.
+      failed = true; // no usable storage, or the key couldn't be read
     }
     if (n === gen.current)
       setMine((m) => ({
         ...w,
         items: list,
         loaded: true,
+        loadError: failed,
         resolved: m?.username === w.username ? m.resolved : {},
       }));
     return list;
@@ -165,7 +181,7 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
       setMine((m) =>
         m?.username === username && m.loaded
           ? m
-          : { ...w, items: [], loaded: false, resolved: {} },
+          : { ...w, items: [], loaded: false, loadError: false, resolved: {} },
       );
       const list = await load(w);
       if (on) restore(list);
@@ -183,13 +199,18 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
       return;
     }
     const w: Who = { username: cur.username, owner: cur.owner };
+    const start = epoch.current;
+    const stale = () => epoch.current !== start;
+    let droppedFeedback = false;
     running.current = true;
     setSyncing(true);
     try {
+      let stop = false;
       do {
         again.current = false;
-        if (!navigator.onLine) break;
-        for (const item of await box.list(w.owner)) {
+        const list = await box.list(w.owner);
+        for (const item of list) {
+          if (stale() || !navigator.onLine) return;
           if (item.status === "failed") continue;
           try {
             if (item.kind === "query") {
@@ -197,7 +218,11 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
               const { query_id } = await getClient().createQuery(q, {
                 idempotencyKey: item.idempotencyKey,
               });
+              // Signed out meanwhile: leave it for this user's next sign-in
+              // (the same key makes the resend safe).
+              if (stale()) return;
               await box.remove(item.id);
+              if (stale()) return;
               session.replaceId(localId, query_id, {
                 id: query_id,
                 title: titleFor(q),
@@ -214,28 +239,52 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
               await getClient().sendFeedback(item.payload.f, {
                 idempotencyKey: item.idempotencyKey,
               });
+              if (stale()) return;
               await box.remove(item.id);
             }
           } catch (e) {
-            if (e instanceof ApiError && e.status === 401) return; // auth signs out
-            if (shouldRetry(0, e)) break; // network or 5xx: try again later
-            await box.markFailed(item.id, "rejected");
-            if (item.kind === "query")
+            if (stale()) return;
+            const code = e instanceof ApiError ? e.status : 0;
+            if (code === 401) return; // auth signs out
+            // Network, 5xx, timeout or rate limit: try again at the next trigger.
+            if (code === 408 || code === 429 || shouldRetry(0, e)) {
+              stop = true;
+              break;
+            }
+            if (item.kind === "feedback") {
+              // Rejected feedback can't be edited: drop it, and say so.
+              await box.remove(item.id);
+              droppedFeedback = true;
+            } else {
+              await box.markFailed(item.id, "rejected");
+              if (stale()) return;
               session.update(item.payload.localId, { pending: "failed" });
+            }
           }
         }
-      } while (again.current);
+      } while (!stop && again.current && !stale());
     } finally {
       running.current = false;
       setSyncing(false);
-      await load(w);
+      if (!stale()) {
+        if (droppedFeedback)
+          toast.show({
+            title: "Some feedback couldn't be sent and was removed.",
+            tone: "info",
+          });
+        await load(w);
+      } else if (again.current) {
+        // Someone else kicked a sync while this one was stopping.
+        setKick((n) => n + 1);
+      }
     }
   });
 
   // Triggers: sign-in (owner known), reconnect, a new item, syncNow, and
   // every 30 s while items wait. The sync checks navigator.onLine itself.
   useEffect(() => {
-    if (owner) void sync();
+    // A storage failure (read, remove or mark) waits for the next trigger.
+    if (owner) sync().catch(() => {});
   }, [owner, online, kick]);
   useEffect(() => {
     const go = () => setKick((n) => n + 1);
@@ -264,6 +313,7 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
       resolved,
       ready: owner !== null,
       loaded,
+      loadError,
       async queueQuery(q) {
         const w = await (who.current ??= ownerWait()).promise;
         const localId = `local-${crypto.randomUUID()}`;
@@ -294,7 +344,7 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
       },
       syncNow: () => setKick((n) => n + 1),
     }),
-    [items, syncing, resolved, owner, loaded, load],
+    [items, syncing, resolved, owner, loaded, loadError, load],
   );
   return <OutboxCtx.Provider value={value}>{children}</OutboxCtx.Provider>;
 }
