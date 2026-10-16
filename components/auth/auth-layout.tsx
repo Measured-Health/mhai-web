@@ -17,10 +17,10 @@ const TRUST = [
 /** Sign-in screens: the brand panel (desktop) and the form column (design v3, account 1). */
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <main className="grid min-h-[calc(100dvh-var(--demo-h,0px))] bg-white lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+    <main className="grid min-h-[calc(100dvh-var(--demo-h,0px))] bg-white lg:h-[calc(100dvh-var(--demo-h,0px))] lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:overflow-hidden">
       <section
         aria-label="About MHAI"
-        className="relative hidden flex-col justify-between gap-10 overflow-hidden self-start bg-[radial-gradient(520px_380px_at_90%_0%,#15999e40,transparent_65%),radial-gradient(520px_420px_at_0%_100%,#a8499e30,transparent_65%),linear-gradient(160deg,#f7f2f9,#e8f5f5)] p-10 print:hidden lg:sticky lg:top-[var(--demo-h,0px)] lg:flex lg:h-[calc(100dvh-var(--demo-h,0px))]"
+        className="relative hidden flex-col justify-between gap-10 overflow-hidden bg-[radial-gradient(520px_380px_at_90%_0%,#15999e40,transparent_65%),radial-gradient(520px_420px_at_0%_100%,#a8499e30,transparent_65%),linear-gradient(160deg,#f7f2f9,#e8f5f5)] p-10 print:hidden lg:flex"
       >
         <div
           aria-hidden
@@ -66,9 +66,11 @@ export function AuthLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
       </section>
-      <div className="flex flex-col items-center justify-center px-5 py-10 lg:p-10">
-        <Logo className="mb-8 h-10 w-auto print:hidden lg:hidden" />
-        <div className="w-full max-w-[400px]">{children}</div>
+      <div className="flex flex-col items-center px-5 py-10 lg:overflow-y-auto lg:p-10">
+        <div className="my-auto flex w-full flex-col items-center">
+          <Logo className="mb-8 h-10 w-auto print:hidden lg:hidden" />
+          <div className="w-full max-w-[400px]">{children}</div>
+        </div>
       </div>
     </main>
   );

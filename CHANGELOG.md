@@ -72,6 +72,8 @@ All notable changes to this project are documented here. The format follows
 
 - The demo's two-step setup now appears in authenticator apps as
   "MHAI Demo" with the account's email (it showed "MHAI:new.bello").
+- Sign-in screens on desktop: only the form column scrolls, so the brand
+  panel and the form no longer drift out of line while scrolling.
 - The sign-in screens match design v3 again: the light brand panel with
   its grid, heartbeat line and trust cards (it stays in view as the form
   scrolls), the outlined hospital sign-on button and lighter field labels;
