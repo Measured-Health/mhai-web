@@ -245,7 +245,10 @@ test("my feedback & corrections: statuses, the reviewer's reason, withdraw", asy
     'Partly right, needs rewording: Keep "cause unclear"',
   );
   await list
-    .getByRole("button", { name: /^Withdraw ?: Febrile seizure, simple$/ })
+    .getByRole("button", {
+      name: "Withdraw: Febrile seizure, simple",
+      exact: true,
+    })
     .click();
   await page
     .getByRole("dialog", { name: "Withdraw this correction?" })

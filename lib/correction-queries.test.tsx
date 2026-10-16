@@ -155,6 +155,41 @@ describe("correction queries", () => {
     expect(api.withdrawCorrection).toHaveBeenCalledTimes(1);
   });
 
+  it("a decision's own callbacks don't wait for the lists to refresh", async () => {
+    api.rejectCorrection.mockResolvedValue(undefined);
+    api.withdrawCorrection.mockResolvedValue(undefined);
+    const { qc, wrapper } = wrap();
+    // The lists are on screen, and their refetch never comes back.
+    qc.setQueryData(CORRECTION_KEYS.pending, []);
+    qc.setQueryData(CORRECTION_KEYS.mine, []);
+    const { result } = renderHook(
+      () => ({ p: usePendingCorrections(), m: useMyCorrections() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.p.data).toEqual([]));
+    api.listPendingCorrections.mockReturnValue(new Promise(() => {}));
+    api.listMyCorrections.mockReturnValue(new Promise(() => {}));
+    const rejected = vi.fn();
+    const withdrawn = vi.fn();
+    const decided = vi.fn();
+    const r = renderHook(() => useRejectCorrection({ onDecided: decided }), {
+      wrapper,
+    });
+    const w = renderHook(() => useWithdrawCorrection({ onDecided: decided }), {
+      wrapper,
+    });
+    act(() =>
+      r.result.current.mutate(
+        { id: "c1", r: { reason_code: "unsafe" } },
+        { onSuccess: rejected },
+      ),
+    );
+    act(() => w.result.current.mutate({ id: "c2" }, { onSuccess: withdrawn }));
+    await waitFor(() => expect(rejected).toHaveBeenCalled());
+    await waitFor(() => expect(withdrawn).toHaveBeenCalled());
+    expect(decided.mock.calls).toEqual([["c1"], ["c2"]]);
+  });
+
   it("refreshes your corrections after you send a correction", async () => {
     api.sendFeedback.mockResolvedValue({
       status: "pending_review",

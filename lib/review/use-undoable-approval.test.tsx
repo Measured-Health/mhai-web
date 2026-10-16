@@ -150,6 +150,45 @@ describe("useUndoableApproval (Review Focus 2)", () => {
     expect(onSent).not.toHaveBeenCalled();
   });
 
+  it("retries a lost answer twice with the same key, so it isn't put back", async () => {
+    approve.mockRejectedValueOnce(new ApiError(0, "network"));
+    const { result } = setup();
+    act(() => result.current.start(a));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS));
+    expect(approve).toHaveBeenCalledTimes(1);
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(sentIds()).toEqual(["a", "a"]);
+    expect(opts(1).idempotencyKey).toBe(opts(0).idempotencyKey);
+    expect(onSent).toHaveBeenCalledWith(a);
+    expect(onFailed).not.toHaveBeenCalled();
+  });
+
+  it("gives up after two retries, and never retries a refusal", async () => {
+    approve.mockRejectedValue(new ApiError(503, "unavailable"));
+    const { result } = setup();
+    act(() => result.current.start(a));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS + 120_000));
+    expect(approve).toHaveBeenCalledTimes(3);
+    expect(onFailed).toHaveBeenCalledTimes(1);
+
+    approve.mockReset();
+    onFailed.mockReset();
+    approve.mockRejectedValue(new ApiError(409, "already_decided"));
+    act(() => result.current.start(b));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS + 120_000));
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(onFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't retry a send made on leaving the page", async () => {
+    approve.mockRejectedValue(new ApiError(0, "network"));
+    const { result, unmount } = setup();
+    act(() => result.current.start(a));
+    unmount();
+    await act(() => vi.advanceTimersByTimeAsync(120_000));
+    expect(approve).toHaveBeenCalledTimes(1);
+  });
+
   it("StrictMode's double effects send nothing and the timer still sends once", async () => {
     const { result } = renderHook(
       () => useUndoableApproval({ onSent, onFailed }),

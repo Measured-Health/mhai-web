@@ -164,6 +164,36 @@ describe("MyCorrectionsView", () => {
     );
   });
 
+  it("names each row's buttons exactly, in every browser", async () => {
+    const user = userEvent.setup();
+    ui();
+    await list();
+    const view = screen.getByRole("button", {
+      name: "View: Febrile seizure, simple",
+    });
+    expect(view).toHaveAttribute("aria-label", "View: Febrile seizure, simple");
+    await user.click(view);
+    expect(view).toHaveAttribute("aria-label", "Hide: Febrile seizure, simple");
+    expect(
+      screen.getByRole("button", { name: "Withdraw: Febrile seizure, simple" }),
+    ).toHaveAttribute("aria-label", "Withdraw: Febrile seizure, simple");
+    expect(
+      screen.getByRole("button", {
+        name: "Resubmit: Hypokalaemia, cause unclear",
+      }),
+    ).toHaveAttribute("aria-label", "Resubmit: Hypokalaemia, cause unclear");
+  });
+
+  it("says so when a filter has nothing in it", async () => {
+    const user = userEvent.setup();
+    await holder.client.withdrawCorrection("c-seizure");
+    ui();
+    await list();
+    await user.click(screen.getByRole("button", { name: "Waiting · 0" }));
+    expect(screen.getByText("Nothing here.")).toBeVisible();
+    expect(screen.queryByRole("list", { name: "Your corrections" })).toBeNull();
+  });
+
   it("says when there's nothing yet", async () => {
     vi.spyOn(holder.client, "listMyCorrections").mockResolvedValue([]);
     ui();

@@ -35,6 +35,36 @@ const offline = () => {
 const approveButton = () =>
   screen.getByRole("button", { name: "Approve correction" });
 const notice = () => screen.queryByText("Correction approved");
+/** Notes if "decided elsewhere" ever shows, even for a moment. */
+function watchForGone() {
+  let seen = false;
+  const look = (n: Node) => {
+    if (n.textContent?.includes("already decided")) seen = true;
+  };
+  const watch = new MutationObserver((records) =>
+    records.forEach((r) => r.addedNodes.forEach(look)),
+  );
+  watch.observe(document.body, { childList: true, subtree: true });
+  return () => {
+    look(document.body);
+    watch.disconnect();
+    return seen;
+  };
+}
+/** The server decides at once; its answer waits until you call `answer`. */
+function holdAnswer<K extends "rejectCorrection" | "withdrawCorrection">(
+  name: K,
+) {
+  const c = holder.client;
+  const real = c[name].bind(c) as (...a: unknown[]) => Promise<unknown>;
+  const gate = { answer: () => {} };
+  vi.spyOn(c, name).mockImplementation((async (...args: unknown[]) => {
+    const out = await real(...args);
+    await new Promise<void>((r) => (gate.answer = r));
+    return out;
+  }) as never);
+  return gate;
+}
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -186,13 +216,16 @@ describe("ReviewView", () => {
 
   it("a failed send after you moved on leaves you where you are", async () => {
     const user = typing();
-    vi.spyOn(holder.client, "approveCorrection").mockRejectedValueOnce(
+    // Still failing after its retries.
+    vi.spyOn(holder.client, "approveCorrection").mockRejectedValue(
       new ApiError(500, "server"),
     );
     ui();
     await heading("Acute asthma, moderate");
     await user.click(approveButton());
     await user.click(screen.getByRole("button", { name: "Next correction" }));
+    // Two retries, about 2 s and 4 s apart at most; the toast stays 8 s.
+    await act(() => vi.advanceTimersByTimeAsync(6_000));
     expect(await screen.findByText("Your approval wasn't sent")).toBeVisible();
     expect(
       screen.getByText(/Acute asthma, moderate is back in the queue/),
@@ -297,6 +330,68 @@ describe("ReviewView", () => {
       { idempotencyKey: expect.any(String) },
     );
     expect(await heading("Hypokalaemia, cause unclear")).toBeVisible();
+  });
+
+  it("your own reject never shows as decided elsewhere, even if the list refreshes first", async () => {
+    const user = typing();
+    const gate = holdAnswer("rejectCorrection");
+    ui();
+    await heading("Acute asthma, moderate");
+    const seenGone = watchForGone();
+    await user.click(screen.getByRole("button", { name: "Reject" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "Why are you rejecting this?",
+    });
+    await user.click(within(dialog).getByRole("radio", { name: "Unsafe" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Reject with reason" }),
+    );
+    // The queue refreshes before the answer arrives: it has left the list.
+    await act(() => vi.advanceTimersByTimeAsync(REVIEW_POLL_MS));
+    await waitFor(() =>
+      expect(
+        within(
+          screen.getByRole("list", { name: "Waiting corrections" }),
+        ).queryByText("Acute asthma, moderate"),
+      ).toBeNull(),
+    );
+    act(() => gate.answer());
+    expect(await screen.findByText("Correction rejected")).toBeVisible();
+    expect(await heading("Hypokalaemia, cause unclear")).toBeVisible();
+    expect(seenGone()).toBe(false);
+  });
+
+  it("your own withdraw never shows as decided elsewhere, even if the list refreshes first", async () => {
+    const user = typing();
+    const gate = holdAnswer("withdrawCorrection");
+    ui();
+    await user.click(
+      await within(await queue()).findByRole("button", {
+        name: /Febrile seizure, simple/,
+      }),
+    );
+    expect(await heading("Febrile seizure, simple")).toBeVisible();
+    const seenGone = watchForGone();
+    await user.click(
+      screen.getByRole("button", { name: "Withdraw my correction" }),
+    );
+    await user.click(
+      within(
+        screen.getByRole("dialog", { name: "Withdraw this correction?" }),
+      ).getByRole("button", { name: "Withdraw" }),
+    );
+    await act(() => vi.advanceTimersByTimeAsync(REVIEW_POLL_MS));
+    await waitFor(() =>
+      expect(
+        within(
+          screen.getByRole("list", { name: "Waiting corrections" }),
+        ).queryByText("Febrile seizure, simple"),
+      ).toBeNull(),
+    );
+    act(() => gate.answer());
+    expect(await screen.findByText("Correction withdrawn")).toBeVisible();
+    expect(await heading("Hypokalaemia, cause unclear")).toBeVisible();
+    expect(seenGone()).toBe(false);
   });
 
   it("your own: Approve and Reject disabled with the reason; withdraw instead", async () => {

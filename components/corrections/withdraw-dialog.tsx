@@ -65,7 +65,8 @@ export function useWithdrawFlow(opts?: {
   before?: () => Promise<void> | void;
   onDone?: (id: string) => void;
 }): { ask(id: string): void; dialog: ReactNode } {
-  const withdraw = useWithdrawCorrection();
+  // Marked done before the lists refresh, so it never reads as gone (W6).
+  const withdraw = useWithdrawCorrection({ onDecided: opts?.onDone });
   const toast = useToast();
   const { online } = useNetwork();
   const [id, setId] = useState<string | null>(null);
@@ -94,7 +95,6 @@ export function useWithdrawFlow(opts?: {
             body: "It has left the review queue.",
             tone: "info",
           });
-          opts?.onDone?.(id);
         },
         onError: (e) => {
           const err = decisionError(e, "withdraw");

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -145,6 +145,23 @@ describe("ReviewDetail", () => {
     const approve = screen.getByRole("button", { name: "Approve correction" });
     expect(approve).toBeDisabled();
     expect(approve).toHaveAccessibleDescription(/Decisions need a connection/);
+  });
+
+  it("says why Withdraw is disabled: offline, or decided elsewhere", () => {
+    const own = { c: late, mine: true };
+    detail({ item: own, online: false });
+    const withdraw = () =>
+      screen.getByRole("button", { name: "Withdraw my correction" });
+    expect(withdraw()).toBeDisabled();
+    expect(withdraw()).toHaveAccessibleDescription(
+      /Decisions need a connection/,
+    );
+    cleanup();
+    detail({ item: own, gone: true });
+    expect(withdraw()).toBeDisabled();
+    expect(withdraw()).toHaveAccessibleDescription(
+      /Another clinician has already decided this correction/,
+    );
   });
 
   it("cannot be approved again while busy (already in the undo window)", () => {

@@ -119,82 +119,93 @@ export function MyCorrectionsView() {
                   You&apos;re offline. Withdrawing needs a connection.
                 </p>
               )}
-              <ul aria-label="Your corrections" className="card-v3 px-5 py-1.5">
-                {shown.map((c) => {
-                  const title = correctionTitle(c);
-                  const reason = rejectionText(c.rejection);
-                  const expanded = openId === c.id;
-                  const panelId = `${offlineId}-${c.id}`;
-                  return (
-                    <li
-                      key={c.id}
-                      className="border-t border-line py-3.5 first:border-0"
-                    >
-                      <div className="flex flex-wrap items-start gap-3.5">
-                        <StatusChip status={c.status} />
-                        <div className="min-w-0 flex-1">
-                          <b className="block [overflow-wrap:anywhere]">
-                            {title}
-                          </b>
-                          <p className="text-[13px] text-ink-3">
-                            {statusLine(c, now)}
-                          </p>
-                          {isOverdue(c, now) && (
-                            <span className="mt-1 inline-block">
-                              <OverdueChip />
-                            </span>
-                          )}
-                          {reason && (
-                            <p className="mt-1.5 rounded-xl bg-bad-wash px-3 py-2 text-[13px] text-bad-deep [overflow-wrap:anywhere]">
-                              <span className="font-semibold">
-                                Reviewer&apos;s reason:{" "}
-                              </span>
-                              “{reason}”
+              {shown.length === 0 ? (
+                <p className="text-[13.5px] text-ink-3">Nothing here.</p>
+              ) : (
+                <ul
+                  aria-label="Your corrections"
+                  className="card-v3 px-5 py-1.5"
+                >
+                  {shown.map((c) => {
+                    const title = correctionTitle(c);
+                    const reason = rejectionText(c.rejection);
+                    const expanded = openId === c.id;
+                    const panelId = `${offlineId}-${c.id}`;
+                    return (
+                      <li
+                        key={c.id}
+                        className="border-t border-line py-3.5 first:border-0"
+                      >
+                        <div className="flex flex-wrap items-start gap-3.5">
+                          <StatusChip status={c.status} />
+                          <div className="min-w-0 flex-1">
+                            <b className="block [overflow-wrap:anywhere]">
+                              {title}
+                            </b>
+                            <p className="text-[13px] text-ink-3">
+                              {statusLine(c, now)}
                             </p>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-expanded={expanded}
-                            aria-controls={panelId}
-                            onClick={() => setOpenId(expanded ? null : c.id)}
-                          >
-                            {expanded ? "Hide" : "View"}
-                            <span className="sr-only">: {title}</span>
-                          </Button>
-                          {c.status === "pending_review" && (
+                            {isOverdue(c, now) && (
+                              <span className="mt-1 inline-block">
+                                <OverdueChip />
+                              </span>
+                            )}
+                            {reason && (
+                              <p className="mt-1.5 rounded-xl bg-bad-wash px-3 py-2 text-[13px] text-bad-deep [overflow-wrap:anywhere]">
+                                <span className="font-semibold">
+                                  Reviewer&apos;s reason:{" "}
+                                </span>
+                                “{reason}”
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
                             <Button
-                              variant="danger"
+                              variant="ghost"
                               size="sm"
-                              disabled={!online}
-                              aria-describedby={online ? undefined : offlineId}
-                              onClick={() => flow.ask(c.id)}
+                              aria-label={`${expanded ? "Hide" : "View"}: ${title}`}
+                              aria-expanded={expanded}
+                              aria-controls={panelId}
+                              onClick={() => setOpenId(expanded ? null : c.id)}
                             >
-                              Withdraw<span className="sr-only">: {title}</span>
+                              {expanded ? "Hide" : "View"}
                             </Button>
-                          )}
-                          {c.status === "rejected" && (
-                            <Button
-                              variant="soft"
-                              size="sm"
-                              onClick={() => setResubmitFor(c)}
-                            >
-                              Resubmit<span className="sr-only">: {title}</span>
-                            </Button>
-                          )}
+                            {c.status === "pending_review" && (
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                disabled={!online}
+                                aria-label={`Withdraw: ${title}`}
+                                aria-describedby={
+                                  online ? undefined : offlineId
+                                }
+                                onClick={() => flow.ask(c.id)}
+                              >
+                                Withdraw
+                              </Button>
+                            )}
+                            {c.status === "rejected" && (
+                              <Button
+                                variant="soft"
+                                size="sm"
+                                aria-label={`Resubmit: ${title}`}
+                                onClick={() => setResubmitFor(c)}
+                              >
+                                Resubmit
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      {expanded && (
-                        <div id={panelId} className="mt-3.5">
-                          <CorrectionCompare c={c} mine />
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+                        {expanded && (
+                          <div id={panelId} className="mt-3.5">
+                            <CorrectionCompare c={c} mine />
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </>
           )}
         </div>

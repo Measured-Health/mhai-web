@@ -71,6 +71,11 @@ export function ReviewDetail({
       : !online
         ? `${id}-offline`
         : undefined;
+  const withdrawWhy = gone
+    ? `${id}-gone`
+    : !online
+      ? `${id}-offline`
+      : undefined;
 
   return (
     <article aria-labelledby={`${id}-title`} className="mx-auto max-w-[860px]">
@@ -196,6 +201,7 @@ export function ReviewDetail({
           <Button
             variant="ghost"
             disabled={!online || gone || busy}
+            aria-describedby={withdrawWhy}
             onClick={onWithdraw}
             className="max-md:order-3 max-md:w-full"
           >

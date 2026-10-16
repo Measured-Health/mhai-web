@@ -4,6 +4,7 @@ import type { RejectIn } from "@/lib/api/contract";
 import { ApiError } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth/auth-context";
 import {
+  useDecidingIds,
   useMyCorrections,
   useMyReviews,
   usePendingCorrections,
@@ -57,7 +58,15 @@ export function ReviewView() {
   const desktop = useIsDesktop();
   const now = useNow(60_000);
   const toast = useToast();
-  const reject = useRejectCorrection();
+  const reject = useRejectCorrection({
+    // Before the lists refresh, so your own decision never reads as gone.
+    onDecided: (id) => {
+      setHandled((h) => add(h, id));
+      moveOn(id);
+    },
+  });
+  /** Rejected or withdrawn from here, answer not back yet. */
+  const deciding = useDecidingIds();
   const [filter, setFilter] = useState<Filter>("waiting");
   /** A snapshot: it stays on screen until you move on (Review Focus 1). */
   const [selected, setSelected] = useState<QueueItem | null>(null);
@@ -133,9 +142,18 @@ export function ReviewView() {
     : undefined;
   const current = selected && !stale ? (fresh ?? selected) : null;
   // Decided elsewhere: kept on screen with a notice until you move on (W8).
+  // Not while your own decision on it is in flight: a 409 will say so.
   const gone =
-    current !== null && (fresh === undefined || goneIds.has(current.c.id));
+    current !== null &&
+    (goneIds.has(current.c.id) ||
+      (fresh === undefined && !deciding.includes(current.c.id)));
   const index = current ? listed.findIndex((i) => i.c.id === current.c.id) : -1;
+  // Where the one on screen was last listed: a refresh can drop it before
+  // your own decision on it comes back, and the next one is still after it.
+  const lastAt = useRef<{ id: string; at: number } | null>(null);
+  useEffect(() => {
+    if (current && index >= 0) lastAt.current = { id: current.c.id, at: index };
+  });
   const pendingId = approval.pending?.item.id ?? null;
   const inFlight = [...sending].some((id) => id !== pendingId);
   const busy = reject.isPending || inFlight;
@@ -154,12 +172,9 @@ export function ReviewView() {
 
   /** Clear the selection so the one after `id` opens next. */
   function moveOn(id: string) {
-    setResumeAt(
-      Math.max(
-        0,
-        listed.findIndex((i) => i.c.id === id),
-      ),
-    );
+    const at = listed.findIndex((i) => i.c.id === id);
+    const last = lastAt.current?.id === id ? lastAt.current.at : 0;
+    setResumeAt(Math.max(0, at >= 0 ? at : last));
     setSelected((s) => (s?.c.id === id ? null : s));
   }
 
@@ -214,14 +229,12 @@ export function ReviewView() {
       { id: target.c.id, r },
       {
         onSuccess: () => {
-          setHandled((h) => add(h, target.c.id));
           setRejectFor(null);
           toast.show({
             title: "Correction rejected",
             body: `${target.c.submitted_by.display_name} will see your reason.`,
             tone: "info",
           });
-          moveOn(target.c.id);
         },
         onError: (e) => {
           const err = decisionError(e, "reject");
@@ -335,8 +348,10 @@ export function ReviewView() {
 
   const rejectGone =
     rejectFor !== null &&
+    !handled.has(rejectFor.c.id) &&
     (goneIds.has(rejectFor.c.id) ||
-      !all.some((i) => i.c.id === rejectFor.c.id));
+      (!deciding.includes(rejectFor.c.id) &&
+        !all.some((i) => i.c.id === rejectFor.c.id)));
   const dialogs = (
     <>
       <RejectDialog

@@ -6,6 +6,10 @@ import type { CorrectionOut } from "@/lib/api/contract";
 import { ApiError } from "@/lib/api/errors";
 import { refreshCorrections } from "@/lib/correction-queries";
 import { UNDO_WINDOW_MS } from "@/lib/corrections";
+import { isTransient, retryDelay } from "@/lib/network";
+
+/** Like reject and withdraw: a lost answer is tried again with the same key. */
+const RETRIES = 2;
 
 export interface PendingApproval {
   item: CorrectionOut;
@@ -57,8 +61,19 @@ export function useUndoableApproval({
         handlers.current.onFailed(p.item, new ApiError(0, "network"));
         return;
       }
-      getClient()
-        .approveCorrection(p.item.id, { idempotencyKey: p.key, keepalive })
+      // The same key each time, so a retry never approves twice (R8). Not
+      // after leaving the page (keepalive), and never offline.
+      const attempt = (n: number): Promise<unknown> =>
+        getClient()
+          .approveCorrection(p.item.id, { idempotencyKey: p.key, keepalive })
+          .catch((e: unknown) => {
+            if (keepalive || n >= RETRIES || !navigator.onLine) throw e;
+            if (!isTransient(e)) throw e;
+            return new Promise((r) => setTimeout(r, retryDelay(n + 1))).then(
+              () => attempt(n + 1),
+            );
+          });
+      attempt(0)
         .then(
           () => handlers.current.onSent(p.item),
           (e: unknown) => handlers.current.onFailed(p.item, e),

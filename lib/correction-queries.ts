@@ -1,6 +1,7 @@
 "use client";
 import {
   useMutation,
+  useMutationState,
   useQuery,
   useQueryClient,
   type QueryClient,
@@ -97,13 +98,37 @@ const WRITE_RETRY = {
   retryDelay,
 };
 
-export function useRejectCorrection() {
+/** Reject and withdraw, so their ids can be read while they're in flight. */
+const DECIDING_KEY = ["corrections", "deciding"] as const;
+
+/**
+ * Ids being rejected or withdrawn from here, until the answer comes. A list
+ * refresh can land first; it must not read as "decided elsewhere".
+ */
+export function useDecidingIds(): string[] {
+  return useMutationState({
+    filters: { mutationKey: DECIDING_KEY, status: "pending" },
+    select: (m) => (m.state.variables as { id: string }).id,
+  });
+}
+
+/**
+ * `onDecided` runs as soon as the server agrees, before the lists refresh.
+ * The refresh is not awaited, so the caller's own callbacks never wait on it.
+ */
+type DecisionHooks = { onDecided?(id: string): void };
+
+export function useRejectCorrection(opts?: DecisionHooks) {
   const qc = useQueryClient();
   const m = useMutation({
+    mutationKey: DECIDING_KEY,
     mutationFn: ({ id, r, key }: { id: string; r: RejectIn; key: string }) =>
       getClient().rejectCorrection(id, r, { idempotencyKey: key }),
     ...WRITE_RETRY,
-    onSettled: () => refreshCorrections(qc),
+    onSuccess: (_d, v) => opts?.onDecided?.(v.id),
+    onSettled: () => {
+      void refreshCorrections(qc);
+    },
   });
   return {
     ...m,
@@ -114,13 +139,17 @@ export function useRejectCorrection() {
   };
 }
 
-export function useWithdrawCorrection() {
+export function useWithdrawCorrection(opts?: DecisionHooks) {
   const qc = useQueryClient();
   const m = useMutation({
+    mutationKey: DECIDING_KEY,
     mutationFn: ({ id, key }: { id: string; key: string }) =>
       getClient().withdrawCorrection(id, { idempotencyKey: key }),
     ...WRITE_RETRY,
-    onSettled: () => refreshCorrections(qc),
+    onSuccess: (_d, v) => opts?.onDecided?.(v.id),
+    onSettled: () => {
+      void refreshCorrections(qc);
+    },
   });
   return {
     ...m,
