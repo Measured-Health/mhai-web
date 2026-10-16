@@ -88,7 +88,9 @@ describe("AccountView", () => {
   it("lists devices, signs one out, and confirms sign out everywhere", async () => {
     const user = userEvent.setup();
     await signedIn();
-    const devices = await screen.findByRole("region", { name: "Devices" });
+    const devices = await screen.findByRole("region", {
+      name: "Active devices",
+    });
     expect(await within(devices).findByText("This device")).toBeInTheDocument();
     await user.click(
       within(devices).getByRole("button", {
@@ -122,7 +124,7 @@ describe("AccountView", () => {
       TEST_USER,
       client,
     );
-    expect(screen.queryByRole("region", { name: "Devices" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Active devices" })).toBeNull();
   });
 });
 
@@ -173,7 +175,9 @@ describe("AccountView sign out everywhere failing", () => {
       TEST_USER,
       client,
     );
-    const devices = await screen.findByRole("region", { name: "Devices" });
+    const devices = await screen.findByRole("region", {
+      name: "Active devices",
+    });
     await user.click(
       within(devices).getByRole("button", { name: "Sign out everywhere" }),
     );
@@ -207,7 +211,9 @@ describe("AccountView sign out everywhere with unsent items", () => {
       TEST_USER,
       client,
     );
-    const devices = await screen.findByRole("region", { name: "Devices" });
+    const devices = await screen.findByRole("region", {
+      name: "Active devices",
+    });
     await user.click(
       within(devices).getByRole("button", { name: "Sign out everywhere" }),
     );
@@ -248,7 +254,9 @@ describe("AccountView sign out everywhere when the session expired", () => {
       TEST_USER,
       client,
     );
-    const devices = await screen.findByRole("region", { name: "Devices" });
+    const devices = await screen.findByRole("region", {
+      name: "Active devices",
+    });
     await user.click(
       within(devices).getByRole("button", { name: "Sign out everywhere" }),
     );
@@ -279,7 +287,9 @@ describe("AccountView signing out one device", () => {
       TEST_USER,
       client,
     );
-    const devices = await screen.findByRole("region", { name: "Devices" });
+    const devices = await screen.findByRole("region", {
+      name: "Active devices",
+    });
     await userEvent.click(
       await within(devices).findByRole("button", {
         name: "Sign out Safari on iPhone",
@@ -332,7 +342,9 @@ describe("AccountView devices without a usable last-active time", () => {
       TEST_USER,
       client,
     );
-    const devices = await screen.findByRole("region", { name: "Devices" });
+    const devices = await screen.findByRole("region", {
+      name: "Active devices",
+    });
     await within(devices).findByText("Firefox on Linux");
     expect(within(devices).getByText("Lagos")).toBeInTheDocument();
     expect(devices).not.toHaveTextContent(/NaN| ago/);

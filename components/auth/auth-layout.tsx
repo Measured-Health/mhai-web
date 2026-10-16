@@ -14,39 +14,59 @@ const TRUST = [
   },
 ];
 
-/** Sign-in screens: the brand panel (desktop) and the form column. */
+/** Sign-in screens: the brand panel (desktop) and the form column (design v3, account 1). */
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <main className="grid min-h-[calc(100dvh-var(--demo-h,0px))] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+    <main className="grid min-h-[calc(100dvh-var(--demo-h,0px))] bg-white lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
       <section
         aria-label="About MHAI"
-        className="hidden flex-col justify-between gap-10 bg-gradient-to-br from-bloom to-[#2a0f33] p-12 text-white print:hidden lg:flex"
+        className="relative hidden flex-col justify-between gap-10 overflow-hidden self-start bg-[radial-gradient(520px_380px_at_90%_0%,#15999e40,transparent_65%),radial-gradient(520px_420px_at_0%_100%,#a8499e30,transparent_65%),linear-gradient(160deg,#f7f2f9,#e8f5f5)] p-10 print:hidden lg:sticky lg:top-[var(--demo-h,0px)] lg:flex lg:h-[calc(100dvh-var(--demo-h,0px))]"
       >
-        <Logo className="h-11 w-auto self-start brightness-0 invert" />
-        <div>
-          <h2 className="max-w-[480px] font-display text-[52px] font-black leading-[.95]">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(#4603510d_1px,transparent_1px),linear-gradient(90deg,#4603510d_1px,transparent_1px)] bg-[size:30px_30px] [mask-image:radial-gradient(ellipse_at_30%_40%,#000_20%,transparent_75%)]"
+        />
+        <svg
+          aria-hidden
+          viewBox="0 0 900 80"
+          preserveAspectRatio="none"
+          className="pointer-events-none absolute inset-x-0 top-[62%] h-[70px] w-full opacity-35"
+        >
+          <path
+            d="M0 40h300l20-26 26 52 22-66 26 76 18-36h488"
+            className="fill-none stroke-mint stroke-2 [stroke-dasharray:900] motion-safe:animate-[ecg-draw_4s_linear_infinite]"
+          />
+        </svg>
+        <Logo className="relative h-[52px] w-auto self-start" />
+        <div className="relative">
+          <h2 className="mb-3.5 max-w-[520px] font-display text-[58px] font-black leading-[.92] tracking-[-.01em]">
             Better, quicker answers at the bedside.
           </h2>
-          <p className="mt-4 max-w-[440px] text-[15px] leading-relaxed text-white/80">
+          <p className="max-w-[440px] text-base leading-relaxed text-ink-2">
             Evidence-checked clinical decision support for every clinic,
             including the most resource-limited.
           </p>
-          <ul className="mt-8 flex flex-col gap-3 text-[14px]">
+        </div>
+        <div className="relative flex max-w-[440px] flex-col gap-2.5">
+          <ul className="flex flex-col gap-2.5">
             {TRUST.map(({ Icon, text }) => (
-              <li key={text} className="flex items-center gap-3">
-                <span className="grid size-8 place-items-center rounded-full bg-white/15">
+              <li
+                key={text}
+                className="flex items-center gap-3 rounded-[14px] border border-white bg-white/70 px-3.5 py-3 text-[13.5px] backdrop-blur-md"
+              >
+                <span className="grid size-[30px] flex-none place-items-center rounded-[10px] bg-ok-wash text-ok">
                   <Icon aria-hidden className="size-4" />
                 </span>
                 {text}
               </li>
             ))}
           </ul>
-        </div>
-        <div className="self-start rounded-2xl bg-white/95 px-4 py-2.5">
-          <PartnerLine />
+          <div className="mt-3.5">
+            <PartnerLine />
+          </div>
         </div>
       </section>
-      <div className="flex flex-col items-center justify-center px-5 py-10">
+      <div className="flex flex-col items-center justify-center px-5 py-10 lg:p-10">
         <Logo className="mb-8 h-10 w-auto print:hidden lg:hidden" />
         <div className="w-full max-w-[400px]">{children}</div>
       </div>
@@ -63,8 +83,21 @@ export function AuthHeading({
   title: string;
   sub?: ReactNode;
 }) {
+  // First sign-in eyebrows read "Step n of N · …"; they get the design's
+  // segmented progress bar above them (account flows 7a–7c).
+  const step = eyebrow?.match(/^Step (\d+) of (\d+)/);
   return (
     <header className="mb-6">
+      {step && (
+        <div aria-hidden className="mb-4 flex gap-1.5">
+          {Array.from({ length: Number(step[2]) }, (_, i) => (
+            <span
+              key={i}
+              className={`h-1 flex-1 rounded-full ${i < Number(step[1]) ? "bg-mint" : "bg-lilac-2"}`}
+            />
+          ))}
+        </div>
+      )}
       {eyebrow && (
         <p className="mb-1 text-[11px] font-semibold uppercase tracking-[.1em] text-mint">
           {eyebrow}

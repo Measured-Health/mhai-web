@@ -89,9 +89,6 @@ describe("WelcomeFlow", () => {
     expect(screen.getByText("JBSW Y3DP EHPK 3PXP")).toBeInTheDocument();
     await user.click(screen.getByLabelText("Digit 1 of 6"));
     await user.keyboard("123456");
-    await user.click(
-      screen.getByRole("button", { name: "Verify and continue" }),
-    );
 
     expect(
       await screen.findByText("Step 4 of 4 · Just in case"),
@@ -123,9 +120,6 @@ describe("WelcomeFlow", () => {
     await screen.findByRole("img", { name: /QR code/ });
     await user.click(screen.getByLabelText("Digit 1 of 6"));
     await user.keyboard("000000");
-    await user.click(
-      screen.getByRole("button", { name: "Verify and continue" }),
-    );
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "That code didn't work.",
     );
@@ -148,9 +142,6 @@ describe("WelcomeFlow", () => {
     await screen.findByRole("img", { name: /QR code/ });
     await user.click(screen.getByLabelText("Digit 1 of 6"));
     await user.keyboard(await totp(MOCK_TOTP_SECRET, Date.now()));
-    await user.click(
-      screen.getByRole("button", { name: "Verify and continue" }),
-    );
     expect(
       await screen.findByText("Step 2 of 2 · Just in case"),
     ).toBeInTheDocument();

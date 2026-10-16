@@ -37,14 +37,13 @@ test("two-step code, including a wrong one first", async ({ page }) => {
   await signIn(page, "mfa.okafor@havanahospital.org");
   await expect(page).toHaveURL(/\/sign-in\/code$/);
   await page.getByLabel("Digit 1 of 6").click();
+  // The sixth digit submits on its own: no button press.
   await page.keyboard.type("000000");
-  await page.getByRole("button", { name: "Verify" }).click();
   await expect(
     page.getByRole("alert").filter({ hasText: "That code didn't work." }),
   ).toBeVisible();
   await page.getByLabel("Digit 1 of 6").click();
   await page.keyboard.type("123456");
-  await page.getByRole("button", { name: "Verify" }).click();
   await expect(page).toHaveURL(/\/$/);
 });
 
@@ -68,7 +67,6 @@ test("first sign-in: terms, password, two-step, backup codes", async ({
   await expect(page.getByRole("img", { name: /QR code/ })).toBeVisible();
   await page.getByLabel("Digit 1 of 6").click();
   await page.keyboard.type("123456");
-  await page.getByRole("button", { name: "Verify and continue" }).click();
   await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
   await page.getByLabel("I've saved these codes somewhere safe").check();
   await page.getByRole("button", { name: "Finish setup" }).click();

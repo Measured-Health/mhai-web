@@ -16,10 +16,10 @@ const mss = (s: number) =>
   `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 export const BackToSignIn = () => (
-  <p className="mt-6 text-center text-[13px]">
+  <p className="mt-1 text-center text-[13px]">
     <Link
       href="/sign-in"
-      className="inline-flex min-h-11 items-center text-mint-deep"
+      className="inline-flex min-h-11 items-center font-semibold text-mint-deep"
     >
       ← Back to sign in
     </Link>
@@ -84,7 +84,7 @@ export function ForgotPassword() {
       <>
         <div
           aria-hidden
-          className="mb-4 grid size-14 place-items-center rounded-2xl bg-lilac text-bloom"
+          className="mb-4 grid size-14 place-items-center rounded-2xl bg-mint-wash text-mint-deep"
         >
           <Mail className="size-6" />
         </div>
@@ -108,7 +108,10 @@ export function ForgotPassword() {
           {left > 0 && <span className="font-mono tabular">{mss(left)}</span>}
         </Button>
         <p className="mt-4 text-center text-[13px] text-ink-3">
-          Didn&apos;t get it? Check spam, or contact your hospital admin.
+          Didn&apos;t get it? Check spam, or{" "}
+          <b className="font-semibold text-mint-deep">
+            contact your hospital admin
+          </b>
         </p>
         <BackToSignIn />
       </>
@@ -121,7 +124,7 @@ export function ForgotPassword() {
         sub="Enter your work email and we'll send a reset link."
       />
       {banner}
-      <label htmlFor={id} className="mb-1.5 block text-[13px] font-semibold">
+      <label htmlFor={id} className="mb-1.5 block text-[12.5px] text-ink-2">
         Work email
       </label>
       <input
@@ -144,7 +147,10 @@ export function ForgotPassword() {
       </Button>
       {can.sso && (
         <p className="mt-4 text-center text-[13px] text-ink-3">
-          Signing in with your hospital account? Reset it with your hospital IT.
+          Signing in with your hospital account?{" "}
+          <b className="font-semibold text-mint-deep">
+            Reset it with your hospital IT
+          </b>
         </p>
       )}
       <BackToSignIn />

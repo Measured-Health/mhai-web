@@ -19,6 +19,8 @@ const SRC = [...sources("components"), ...sources("app")];
 const ALLOWED_LITERALS: { file: string; hit: string }[] = [
   // ECG line is a continuous loop, not a transition (spec S:115).
   { file: "components/processing/ecg-line.tsx", hit: "animate-[ecg_2.2s" },
+  // The sign-in panel's ECG line loops the same way (design v3 account 1).
+  { file: "components/auth/auth-layout.tsx", hit: "animate-[ecg-draw_4s" },
   // Live-dot pulse is a continuous loop (spec S:127).
   {
     file: "components/processing/stage-list.tsx",

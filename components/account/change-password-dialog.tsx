@@ -67,10 +67,7 @@ export function ChangePasswordDialog({
           />
         )}
         <div>
-          <label
-            htmlFor={id}
-            className="mb-1.5 block text-[13px] font-semibold"
-          >
+          <label htmlFor={id} className="mb-1.5 block text-[12.5px] text-ink-2">
             Current password
           </label>
           <input

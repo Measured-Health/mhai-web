@@ -11,6 +11,7 @@ import { useQueryStatus, useResult, useSubmitQuery } from "@/lib/queries";
 import { toResultView } from "@/lib/result-view";
 import { useSession } from "@/lib/session-store";
 import { EvidenceDock } from "../evidence/evidence-dock";
+import { YourQuestionPanel } from "../form/side-panels";
 import { ExportMenu, type ExportMenuHandle } from "../feedback/export-menu";
 import { FeedbackBar, type FeedbackBarHandle } from "../feedback/feedback-bar";
 import { ProcessingView } from "../processing/processing-view";
@@ -121,6 +122,7 @@ export function ConsultationView({ id }: { id: string }) {
       </>
     );
 
+  const analysing = !failed && !done && st.status !== "completed";
   return (
     <HighlightProvider>
       <TopBar
@@ -148,7 +150,7 @@ export function ConsultationView({ id }: { id: string }) {
       />
       <div
         className={
-          done && panel
+          (done && panel) || analysing
             ? "grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_330px]"
             : "flex min-h-0 flex-1"
         }
@@ -199,6 +201,7 @@ export function ConsultationView({ id }: { id: string }) {
           )}
         </div>
         {done && <EvidenceDock view={view} open={panel} />}
+        {analysing && <YourQuestionPanel query={item.query} />}
       </div>
     </HighlightProvider>
   );

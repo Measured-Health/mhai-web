@@ -94,7 +94,7 @@ export function CodeForm() {
         <div>
           <label
             htmlFor={`${id}-backup`}
-            className="mb-1.5 block text-[13px] font-semibold"
+            className="mb-1.5 block text-[12.5px] text-ink-2"
           >
             Backup code
           </label>
@@ -113,6 +113,7 @@ export function CodeForm() {
         </div>
       ) : (
         <CodeInput
+          autoSubmit
           value={code}
           onChange={setCode}
           label="Code from your app"

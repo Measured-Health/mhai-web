@@ -9,7 +9,11 @@ import { cn } from "../ui/cn";
 
 export const normalizeCode = (s: string) => s.replace(/\D/g, "").slice(0, 6);
 
-/** Six boxes: auto-advance, Backspace goes back, paste fills (design 2). */
+/**
+ * Six boxes: auto-advance, Backspace goes back, paste fills (design 2).
+ * With `autoSubmit`, typing or pasting the sixth digit submits the
+ * surrounding form, so there's no need to press the button.
+ */
 export function CodeInput({
   value,
   onChange,
@@ -17,6 +21,7 @@ export function CodeInput({
   disabled,
   invalid,
   focusKey,
+  autoSubmit,
 }: {
   value: string;
   onChange(v: string): void;
@@ -25,17 +30,29 @@ export function CodeInput({
   invalid?: boolean;
   /** Each new value focuses the first box (e.g. after a wrong code). */
   focusKey?: number;
+  autoSubmit?: boolean;
 }) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
+  const typed = useRef(false);
   const focus = (i: number) =>
     refs.current[Math.max(0, Math.min(5, i))]?.focus();
   useEffect(() => {
     if (focusKey) refs.current[0]?.focus();
   }, [focusKey]);
 
+  // After the render that shows the sixth digit, so the form's submit
+  // handler sees the full code.
+  useEffect(() => {
+    if (!autoSubmit || !typed.current) return;
+    typed.current = false;
+    if (normalizeCode(value).length === 6)
+      refs.current[0]?.form?.requestSubmit();
+  }, [autoSubmit, value]);
+
   const setAt = (i: number, digit: string) => {
     const chars = value.padEnd(6, " ").split("");
     chars[i] = digit || " ";
+    typed.current = true;
     onChange(chars.join("").trimEnd());
   };
 
@@ -57,6 +74,7 @@ export function CodeInput({
   const onPaste = (e: ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const code = normalizeCode(e.clipboardData.getData("text"));
+    typed.current = true;
     onChange(code);
     focus(code.length);
   };
@@ -87,8 +105,8 @@ export function CodeInput({
           onKeyDown={(e) => onKey(i, e)}
           onPaste={onPaste}
           className={cn(
-            "size-12 rounded-xl border border-line bg-white text-center font-mono text-[22px] font-semibold",
-            "focus-visible:outline-2 focus-visible:outline-mint-deep aria-invalid:border-bad",
+            "size-12 rounded-xl border border-lilac-2 bg-white text-center font-mono text-[22px] font-semibold",
+            "focus-visible:border-mint focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-mint/25 aria-invalid:border-bad",
           )}
         />
       ))}

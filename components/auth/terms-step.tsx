@@ -57,9 +57,9 @@ export function TermsStep({
         sub="Please read and confirm. This takes 30 seconds."
       />
       {error && <AuthErrorBanner error={error} />}
-      <ul className="flex flex-col gap-3 text-[14px] leading-normal">
+      <ul className="flex list-disc flex-col gap-2.5 rounded-2xl bg-bg py-4 pl-9 pr-4 text-[13.5px] leading-normal">
         {POINTS.map(([lead, rest]) => (
-          <li key={lead} className="rounded-2xl bg-bg px-4 py-3">
+          <li key={lead}>
             <b>{lead}</b> {rest}
           </li>
         ))}
