@@ -61,8 +61,12 @@ Every PR must pass:
   sent yet:
   - encrypted with AES-GCM under a non-extractable device key;
   - bound to the signed-in user (hashed);
-  - deleted once synced, when the user deletes it or signs out, and after
-    72 hours.
+  - deleted once synced, when the user deletes it, and on a **manual**
+    sign-out (any Sign out button, including Sign out everywhere);
+  - purged on next use once older than 72 hours;
+  - kept after an idle or expired sign-out (still encrypted and bound to
+    the user) until the same user's next sign-in, when it syncs. Other
+    users never see it.
 
   Nothing else (results, history, drafts) is ever stored. Any change to
   the outbox needs `clinical-review`. The hashed owner id
