@@ -18,6 +18,17 @@ describe("labels", () => {
     for (const term of FORBIDDEN_TERMS)
       expect(shown.toLowerCase()).not.toContain(term.toLowerCase());
   });
+  it("forbids the correction codes", () => {
+    for (const code of [
+      "pending_review",
+      "self_approval",
+      "already_decided",
+      "not_supported",
+      "needs_rewording",
+      "out_of_scope",
+    ])
+      expect(FORBIDDEN_TERMS).toContain(code);
+  });
   it("lists the six analysing steps in order", () => {
     expect(STAGES.map((s) => s.label)).toEqual([
       "Protecting patient privacy",

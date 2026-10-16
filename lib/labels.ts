@@ -35,6 +35,12 @@ export const FORBIDDEN_TERMS = [
   "ESCALATE",
   "guardrail",
   "KB",
+  "pending_review",
+  "self_approval",
+  "already_decided",
+  "not_supported",
+  "needs_rewording",
+  "out_of_scope",
 ] as const;
 
 export function citationTag(action: Citation["action"]): {
