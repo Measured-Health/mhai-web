@@ -14,6 +14,27 @@ const MAX_BODY = 64 * 1024;
 const SEGMENT = /^[A-Za-z0-9_-]+$/; // ids are opaque; no dots, slashes or escapes
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9-]{1,64}$/;
 
+const DECISIONS = new Set(["approve", "reject", "withdraw"]);
+const MY_LISTS = new Set(["mine", "reviewed"]);
+
+/** Corrections and feedback only take the shapes the client uses (Plan 3). */
+function shapeAllowed(method: string, path: string[]): boolean {
+  const [first, second, third] = path;
+  if (first === "corrections") {
+    if (method === "GET")
+      return (
+        path.length === 1 || (path.length === 2 && MY_LISTS.has(second ?? ""))
+      );
+    return path.length === 3 && DECISIONS.has(third ?? "");
+  }
+  if (first === "feedback") {
+    if (method === "GET")
+      return path.length === 3 && second === "stats" && third === "mine";
+    return path.length === 1;
+  }
+  return true;
+}
+
 async function refresh(s: ServerSession): Promise<ServerSession> {
   const r = await refreshOnce(s.token);
   if (!r) return s; // still valid for a few minutes; the next call tries again
@@ -25,7 +46,11 @@ async function refresh(s: ServerSession): Promise<ServerSession> {
 /** Same-origin proxy for clinical calls: adds the token the browser never sees. */
 async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   const { path } = await ctx.params;
-  if (!ALLOWED.has(path[0] ?? "") || !path.every((p) => SEGMENT.test(p)))
+  if (
+    !ALLOWED.has(path[0] ?? "") ||
+    !path.every((p) => SEGMENT.test(p)) ||
+    !shapeAllowed(req.method, path)
+  )
     return json(404, { code: "not_found" });
   if (req.method !== "GET" && !sameOrigin(req)) return forbidden();
 

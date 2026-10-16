@@ -217,8 +217,9 @@ straight in:
     to Approve;
   - touch targets are at least 44 px below `sm` (`min-h-11`);
   - motion uses the tokens only and is off under reduced motion and data
-    saver (`lib/motion.test.ts` scans every new file). The undo countdown is
-    text, not a 10-second animation (nothing animates over 700 ms).
+    saver (`lib/motion.test.ts` scans `components/` and `app/`, so animation
+    code goes there, not in `lib/`). The undo countdown is text, not a
+    10-second animation (nothing animates over 700 ms).
 - **Match the design v3 mockups.** Reuse `card-v3`, the colour tokens in
   `app/globals.css`, `Button` (one new `approve` variant in Task 10),
   `Banner`, `Chip`, `Dialog`, `Sheet`, `Skeleton`, `useToast`, `TopBar` and
