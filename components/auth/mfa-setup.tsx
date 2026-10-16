@@ -95,33 +95,45 @@ export function MfaSetup({
           </Button>
         </AuthErrorBanner>
       )}
-      <ol className="mb-4 flex list-decimal flex-col gap-1 pl-5 text-[14px] text-ink-2">
-        <li>Open Google Authenticator, Microsoft Authenticator or similar</li>
-        <li>Scan this code</li>
-        <li>Enter the 6-digit code below</li>
-      </ol>
-      {setup.data && (
-        <div className="mb-4 flex flex-col items-start gap-2">
-          <QrCode
-            text={setup.data.otpauthUri}
-            label="QR code for your authenticator app"
-          />
-          <button
-            type="button"
-            aria-expanded={showKey}
-            className="min-h-11 text-[13px] text-mint-deep"
-            onClick={() => setShowKey((v) => !v)}
-          >
-            Can&apos;t scan? Show key
-          </button>
-          {showKey && (
-            <p className="rounded-xl bg-bg px-3 py-2 font-mono text-[15px] tracking-wider">
-              {grouped(setup.data.secret)}
-            </p>
+      <div className="mb-4 flex items-start gap-4">
+        {setup.data && (
+          <div className="flex-none rounded-2xl border border-lilac-2 bg-white p-2">
+            <QrCode
+              text={setup.data.otpauthUri}
+              label="QR code for your authenticator app"
+            />
+          </div>
+        )}
+        <div className="flex min-w-0 flex-col gap-2 pt-1">
+          <ol className="flex list-decimal flex-col gap-1 pl-4 text-[13px] text-ink-2 marker:font-bold marker:text-ink">
+            <li>
+              Open Google Authenticator, Microsoft Authenticator or similar
+            </li>
+            <li>Scan this code</li>
+            <li>Enter the 6-digit code below</li>
+          </ol>
+          {setup.data && (
+            <button
+              type="button"
+              aria-expanded={showKey}
+              className="min-h-11 self-start text-[13px] font-semibold text-mint-deep"
+              onClick={() => setShowKey((v) => !v)}
+            >
+              Can&apos;t scan? Show key
+            </button>
           )}
         </div>
+      </div>
+      {setup.data && showKey && (
+        <p className="mb-4 break-all rounded-xl bg-bg px-3 py-2 font-mono text-[15px] tracking-wider">
+          {grouped(setup.data.secret)}
+        </p>
       )}
+      <p className="mb-1.5 text-[12.5px] text-ink-2" aria-hidden>
+        Code from your app
+      </p>
       <CodeInput
+        autoSubmit
         value={code}
         onChange={setCode}
         label="Code from your app"

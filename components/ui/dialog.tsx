@@ -39,7 +39,7 @@ export function Dialog({
         e.preventDefault();
         onClose();
       }}
-      className="w-[min(440px,92vw)] rounded-3xl bg-white p-6 text-ink shadow-[0_40px_80px_-30px_#1c0d22aa] backdrop:bg-ink/40 backdrop:backdrop-blur-sm"
+      className="m-auto w-[min(440px,92vw)] rounded-3xl bg-white p-6 text-ink shadow-[0_40px_80px_-30px_#1c0d22aa] backdrop:bg-ink/40 backdrop:backdrop-blur-sm"
     >
       <h2
         id={titleId}

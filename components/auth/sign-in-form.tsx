@@ -92,8 +92,8 @@ export function SignInForm() {
       {can.sso && (
         <>
           <Button
-            variant="soft"
-            className="w-full"
+            variant="ghost"
+            className="w-full rounded-[14px] border-lilac-2 text-[15px] font-semibold text-ink"
             disabled={busy}
             onClick={() => void run(auth.signInWithHospital)}
           >
@@ -111,7 +111,7 @@ export function SignInForm() {
         <div>
           <label
             htmlFor={`${id}-login`}
-            className="mb-1.5 block text-[13px] font-semibold"
+            className="mb-1.5 block text-[12.5px] text-ink-2"
           >
             {can.emailLogin ? "Work email" : "Username"}
           </label>
@@ -138,13 +138,13 @@ export function SignInForm() {
         </div>
         <div>
           <div className="mb-1.5 flex items-baseline justify-between">
-            <label htmlFor={`${id}-pw`} className="text-[13px] font-semibold">
+            <label htmlFor={`${id}-pw`} className="text-[12.5px] text-ink-2">
               Password
             </label>
             {can.passwordReset && (
               <Link
                 href="/forgot-password"
-                className="text-[13px] text-mint-deep"
+                className="text-[12.5px] font-semibold text-mint-deep"
               >
                 Forgot?
               </Link>
@@ -172,7 +172,8 @@ export function SignInForm() {
         </Button>
       </form>
       <p className="mt-5 text-center text-[13px] text-ink-3">
-        Access is for registered clinicians. New here? Ask your hospital admin.
+        Access is for registered clinicians. New here?{" "}
+        <b className="font-semibold text-mint-deep">Ask your hospital admin</b>
       </p>
       <DemoHint
         onPick={(e) => {

@@ -5,7 +5,7 @@ import { passwordError, passwordRules } from "@/lib/auth/password-rules";
 import { cn } from "../ui/cn";
 
 export const inputClass =
-  "min-h-11 w-full rounded-xl border border-line bg-white px-3.5 text-[14.5px] focus-visible:outline-2 focus-visible:outline-mint-deep aria-invalid:border-bad";
+  "min-h-11 w-full rounded-xl border border-lilac-2 bg-white px-3.5 text-[14px] focus-visible:border-mint focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-mint/25 aria-invalid:border-bad";
 
 /** New password + confirm, with the design's live rule ticks (8c). */
 export function PasswordFields({
@@ -27,12 +27,16 @@ export function PasswordFields({
   const rules = passwordRules(next, identity);
   const error = showErrors ? passwordError(next, confirm, identity) : null;
   const mismatch = error === "The passwords don't match.";
+  // The meter (design 8c): one segment per rule met, the fourth for a long
+  // password (16+) that meets them all. The ticks below carry the meaning.
+  const met = rules.filter((r) => r.ok).length;
+  const strength = met + (met === rules.length && next.length >= 16 ? 1 : 0);
   return (
     <div className="flex flex-col gap-3">
       <div>
         <label
           htmlFor={`${id}-new`}
-          className="mb-1.5 block text-[13px] font-semibold"
+          className="mb-1.5 block text-[12.5px] text-ink-2"
         >
           New password
         </label>
@@ -47,13 +51,28 @@ export function PasswordFields({
           className={inputClass}
         />
       </div>
-      <ul id={`${id}-rules`} aria-live="polite" className="flex flex-col gap-1">
+      <div aria-hidden className="-mt-1 flex gap-1.5">
+        {Array.from({ length: 4 }, (_, i) => (
+          <span
+            key={i}
+            className={cn(
+              "h-1 flex-1 rounded-full",
+              i < strength ? "bg-mint" : "bg-lilac-2",
+            )}
+          />
+        ))}
+      </div>
+      <ul
+        id={`${id}-rules`}
+        aria-live="polite"
+        className="-mt-1 flex flex-wrap gap-x-3 gap-y-1"
+      >
         {rules.map((r) => (
           <li
             key={r.id}
             aria-label={`${r.label}: ${r.ok ? "met" : "not met"}`}
             className={cn(
-              "flex items-center gap-2 text-[13px]",
+              "flex items-center gap-1 text-[12px]",
               r.ok ? "text-ok-deep" : "text-ink-3",
             )}
           >
@@ -69,7 +88,7 @@ export function PasswordFields({
       <div>
         <label
           htmlFor={`${id}-confirm`}
-          className="mb-1.5 block text-[13px] font-semibold"
+          className="mb-1.5 block text-[12.5px] text-ink-2"
         >
           Confirm password
         </label>

@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Two-step codes verify on their own once the sixth digit is typed or
+  pasted, at sign-in and during setup; no need to press the button.
+- The right panel on the new consultation page ("How it works", a good
+  question, examples to try) and while analysing (your question, as sent),
+  as in design v3.
 - Sign-in and accounts (Plan 2, design v3), mock first: sign-in with
   sample accounts, hospital sign-on, generic errors and a lockout
   countdown; two-step codes (authenticator apps including Google
@@ -60,6 +65,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The sign-in screens match design v3 again: the light brand panel with
+  its grid, heartbeat line and trust cards (it stays in view as the form
+  scrolls), the outlined hospital sign-on button and lighter field labels;
+  the first sign-in progress bar, single terms box and QR code beside the
+  steps; the password strength meter; and the Profile & security layout
+  (section menu, Close, profile fields in boxes).
+- Dialogs (keyboard shortcuts, change password, backup codes) open in the
+  middle of the screen, not the top-left corner.
 - The signed-out notice now says why: inactivity, signing out yourself, or
   an ended session. It no longer says "inactivity" after a manual sign-out.
 - Missing pages say what was missing: an unknown address reads "This page

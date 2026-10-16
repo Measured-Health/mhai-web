@@ -69,16 +69,14 @@ export function DevicesSection() {
   return (
     <>
       <section
+        id="devices"
         aria-labelledby="devices-h"
-        className="rounded-3xl bg-white p-5 ring-1 ring-line"
+        className="card-v3 scroll-mt-4 px-[22px] py-5"
       >
-        <h2
-          id="devices-h"
-          className="font-display text-[26px] font-black leading-none"
-        >
-          Devices
+        <h2 id="devices-h" className="text-base font-semibold">
+          Active devices
         </h2>
-        <p className="mb-3 mt-1 text-[13.5px] text-ink-2">
+        <p className="mb-3.5 mt-1 text-[13px] text-ink-3">
           Sign out anything you don&apos;t recognise.
         </p>
         {failed && (

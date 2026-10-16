@@ -40,9 +40,8 @@ describe("CodeForm", () => {
     const verify = screen.getByRole("button", { name: "Verify" });
     expect(verify).toBeDisabled();
     await userEvent.click(screen.getByLabelText("Digit 1 of 6"));
+    // The sixth digit submits on its own.
     await userEvent.keyboard("123456");
-    expect(verify).toBeEnabled();
-    await userEvent.click(verify);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
   });
 
@@ -50,7 +49,6 @@ describe("CodeForm", () => {
     await pending();
     await userEvent.click(screen.getByLabelText("Digit 1 of 6"));
     await userEvent.keyboard("000000");
-    await userEvent.click(screen.getByRole("button", { name: "Verify" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "That code didn't work.",
     );

@@ -4,7 +4,7 @@ import { emptyForm } from "@/lib/form-schema";
 import { Button } from "../ui/button";
 
 // Synthetic examples only: no real patient data.
-const EXAMPLES: { title: string; hint: string; v: FormValues }[] = [
+export const EXAMPLES: { title: string; hint: string; v: FormValues }[] = [
   {
     title: "Febrile child",
     hint: "3 F, fever 3 days, rash. Dengue?",
