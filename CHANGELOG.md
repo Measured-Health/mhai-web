@@ -65,6 +65,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Sign-in screens on desktop: only the form column scrolls, so the brand
+  panel and the form no longer drift out of line while scrolling.
 - The sign-in screens match design v3 again: the light brand panel with
   its grid, heartbeat line and trust cards (it stays in view as the form
   scrolls), the outlined hospital sign-on button and lighter field labels;
