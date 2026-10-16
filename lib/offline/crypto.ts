@@ -7,7 +7,7 @@
  *   still decrypt them. Owner binding hides items from other users in the
  *   UI, and the 72 h TTL bounds how long anything sits on a shared ward PC.
  */
-import { idbGet, idbPut } from "./db";
+import { idbAddOrGet, idbGet } from "./db";
 
 const KEY_ID = "device-key-v1";
 
@@ -20,8 +20,9 @@ export async function deviceKey(): Promise<CryptoKey> {
     false,
     ["encrypt", "decrypt"],
   );
-  await idbPut("keys", key, KEY_ID);
-  return key;
+  // Another tab may have stored one meanwhile: theirs wins, never overwritten
+  // (overwriting would make that tab's saved items unreadable).
+  return idbAddOrGet("keys", key, KEY_ID);
 }
 
 export interface Sealed {

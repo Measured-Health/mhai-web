@@ -53,3 +53,39 @@ export const idbPut = async (
 export const idbDelete = async (store: Store, key: IDBValidKey) => {
   await run(store, "readwrite", (s) => s.delete(key));
 };
+
+/**
+ * Stores `value` under `key` unless something is already there, in one
+ * readwrite transaction, and returns whichever value is stored. Two tabs
+ * racing get the same value; neither overwrites the other.
+ */
+export async function idbAddOrGet<T>(
+  store: Store,
+  value: T,
+  key: IDBValidKey,
+): Promise<T> {
+  const db = await open();
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      const tx = db.transaction(store, "readwrite");
+      const s = tx.objectStore(store);
+      let result: T = value;
+      const add = s.add(value, key);
+      add.onerror = (e) => {
+        if (add.error?.name !== "ConstraintError") return; // aborts the tx
+        // Already there: keep the transaction (no abort, no error on the
+        // transaction) and read what's stored.
+        e.preventDefault();
+        e.stopPropagation();
+        const get = s.get(key);
+        get.onsuccess = () => {
+          result = get.result as T;
+        };
+      };
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = tx.onabort = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}

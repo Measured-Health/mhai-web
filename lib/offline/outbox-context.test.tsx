@@ -5,6 +5,7 @@ import { ApiError } from "../api/errors";
 import { useAuth } from "../auth/auth-context";
 import { AuthTestProvider, TEST_USER } from "@/tests/auth-wrapper";
 import { useSession } from "../session-store";
+import { ownerId } from "./crypto";
 import { OutboxProvider, useOutbox } from "./outbox-context";
 import { ToastProvider } from "@/components/ui/toast";
 import { OutboxIndicator } from "@/components/states/outbox-indicator";
@@ -14,6 +15,10 @@ const sendFeedback = vi.fn();
 vi.mock("@/lib/api/client", () => ({
   getClient: () => ({ createQuery, sendFeedback }),
 }));
+vi.mock("./crypto", async (orig) => {
+  const real = await orig<typeof import("./crypto")>();
+  return { ...real, ownerId: vi.fn(real.ownerId) };
+});
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
@@ -159,6 +164,26 @@ describe("OutboxProvider", () => {
 
     const again = renderHook(use, { wrapper });
     await waitFor(() => expect(again.result.current.box.items).toHaveLength(1));
+  });
+
+  it("drops the decrypted items from memory at sign-out", async () => {
+    const { result } = renderHook(use, { wrapper });
+    await act(async () => void (await result.current.box.queueQuery(Q)));
+    await waitFor(() => expect(result.current.box.items).toHaveLength(1));
+    await act(() => result.current.auth.signOut("idle"));
+    expect(result.current.box.items).toEqual([]);
+    // Same user back, owner not known yet: nothing from before may show,
+    // because the provider no longer holds it.
+    vi.mocked(ownerId).mockImplementationOnce(() => new Promise(() => {}));
+    await act(async () => {
+      await result.current.auth.signIn(
+        "a.reyes@havanahospital.org",
+        "demo-password",
+      );
+    });
+    expect(result.current.auth.status).toBe("signed_in");
+    expect(result.current.box.ready).toBe(false);
+    expect(result.current.box.items).toEqual([]);
   });
 
   it("deletes everything of mine on request", async () => {

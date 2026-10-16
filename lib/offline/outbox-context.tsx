@@ -112,6 +112,16 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
   // else stops at its next step and never touches this user's state.
   const epoch = useRef(0);
 
+  // The signed-in user changed (sign-out included): drop the previous user's
+  // decrypted items now, during render, so nothing of theirs stays in memory.
+  const [mineFor, setMineFor] = useState(username);
+  if (mineFor !== username) {
+    setMineFor(username);
+    setMine(null);
+  }
+  // Latest signed-in user, for async work that finishes after a change.
+  const current = useRef(username);
+
   const cur = mine && mine.username === username ? mine : null;
   const owner = cur?.owner ?? null;
   const items = cur?.items ?? EMPTY;
@@ -121,6 +131,8 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     epoch.current++;
+    current.current = username;
+    gen.current++; // a read started for the previous user is never applied
   }, [username]);
 
   /** Reads the items again; only the most recent read is applied. */
@@ -133,7 +145,8 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
     } catch {
       failed = true; // no usable storage, or the key couldn't be read
     }
-    if (n === gen.current)
+    // Only for the user still signed in: never bring back someone's items.
+    if (n === gen.current && w.username === current.current)
       setMine((m) => ({
         ...w,
         items: list,
