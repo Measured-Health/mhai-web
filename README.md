@@ -88,7 +88,7 @@ The app is built for slow and unreliable links. It slows its polling,
 pauses while offline, retries safely (writes carry an `Idempotency-Key`),
 holds a finished question until the connection returns, switches to data
 saver on 2G, and has a slow-3G end-to-end test. The backend's side is in
-[spec section 10](docs/specs/2026-10-13-ui-design-v3.md), items 15 to 17.
+[spec section 10](docs/specs/2026-10-13-ui-design-v3.md), items 15 to 19.
 
 ### Offline
 
