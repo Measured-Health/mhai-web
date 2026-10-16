@@ -1,7 +1,14 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus, Search, Stethoscope, CircleHelp } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Plus,
+  Search,
+  Stethoscope,
+  CircleHelp,
+} from "lucide-react";
+import { useReviewBadge } from "@/lib/correction-queries";
 import { historyStatus, type SessionItem } from "@/lib/session-store";
 import { useNow } from "@/lib/hooks/use-now";
 import { ago } from "@/lib/time";
@@ -17,6 +24,52 @@ const DOT = {
   review: "bg-bad",
   failed: "bg-ink-3",
 } as const;
+
+/** The queue with others' waiting count (R4); hidden if you can't review (R3). */
+function ReviewLink({ rail, on }: { rail: boolean; on: boolean }) {
+  const { count, forbidden } = useReviewBadge();
+  if (forbidden) return null;
+  const name = count
+    ? `Review corrections, ${count} waiting`
+    : "Review corrections";
+  return (
+    <Link
+      href="/review"
+      title="Review corrections"
+      aria-label={name}
+      aria-current={on ? "page" : undefined}
+      className={cn(
+        "mt-2.5 flex min-h-11 items-center gap-2.5 rounded-xl text-[13.5px] font-semibold",
+        rail ? "relative w-11 justify-center" : "px-2.5",
+        on
+          ? "bg-mint-wash text-mint-deep shadow-[inset_3px_0_0_var(--color-mint)]"
+          : "text-ink-2 hover:bg-bg",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "grid size-7 shrink-0 place-items-center rounded-lg",
+          on ? "bg-white" : "bg-lilac text-bloom",
+        )}
+      >
+        <ArrowLeftRight className="size-3.5" />
+      </span>
+      <span className={rail ? "sr-only" : ""}>Review corrections</span>
+      {count ? (
+        <span
+          aria-hidden
+          className={cn(
+            "rounded-full bg-warn-deep px-2 py-0.5 font-mono text-[11px] font-bold text-white",
+            rail ? "absolute -right-1 -top-1" : "ml-auto",
+          )}
+        >
+          {count}
+        </span>
+      ) : null}
+    </Link>
+  );
+}
 
 /** `rail` hides labels (tablet). Labels stay in the accessibility tree via sr-only. */
 export function Sidebar({
@@ -81,6 +134,7 @@ export function Sidebar({
           </kbd>
         )}
       </button>
+      <ReviewLink rail={rail} on={path === "/review"} />
       <div className="mt-2 flex-1 overflow-y-auto">
         {groupHistory(items, now).map((g) => (
           <section key={g.label} aria-label={g.label}>

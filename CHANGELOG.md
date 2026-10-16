@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- "Review corrections" in the sidebar (and the tablet rail and phone menu),
+  with how many corrections are waiting for you.
 - Review corrections: the queue (anything waiting over 4 hours flagged),
   what the system said beside the suggested correction with the changes
   marked, who suggested it and why, the evidence on file and the
