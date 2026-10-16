@@ -71,7 +71,7 @@ item 1 in Task 2 so the backend team can match it or tell us what changed.
 **Rulings** (open points in the spec, decided here so the build can go
 ahead; each is recorded in the docs by the task named):
 
-- **R1 · When the approval is sent.** Pressing Approve starts a 10-second
+- **R1 · When the approval is sent.** Pressing Approve starts a 60-second
   window (`UNDO_WINDOW_MS`). Nothing is sent during it, and Undo simply
   cancels. The request is sent, exactly once and with one
   `Idempotency-Key`, at the first of:
@@ -126,7 +126,7 @@ ahead; each is recorded in the docs by the task named):
   in never toasts old decisions. The bell keeps at most 50 decisions, in
   memory, and forgets them on sign-out (the shell unmounts).
 - **R10 · Placeholders are named:** `REVIEW_OVERDUE_MS` (4 h, spec §11),
-  `UNDO_WINDOW_MS` (10 s), `NOTE_MAX` (500), `REVIEW_POLL_MS` (60 s),
+  `UNDO_WINDOW_MS` (60 s), `NOTE_MAX` (500), `REVIEW_POLL_MS` (60 s),
   `DECISION_POLL_MS` (30 s).
 - **R11 · Mobile.** As `mobile-account-review.html`: cards instead of the
   split view, a detail screen with Back and "1 of 3", Approve and Reject
@@ -1943,7 +1943,7 @@ git commit -m "Forward only the correction routes the app uses; list the asks"
   `RejectReasonCode` (Task 1); `ApiError`; `ResultKind` (`lib/labels.ts`).
 - Produces (`lib/corrections.ts`):
   - constants `REVIEW_OVERDUE_MS` (4 h), `OVERDUE_LABEL` ("Over 4 h"),
-    `UNDO_WINDOW_MS` (10 000), `NOTE_MAX` (500);
+    `UNDO_WINDOW_MS` (60 000), `NOTE_MAX` (500);
   - `REJECT_REASONS: readonly { code: RejectReasonCode; label: string }[]`;
   - `STATUS_VIEW: Record<CorrectionStatus, { label: string; tone: "warn" | "ok" | "bad" | "brand" }>`;
   - `originalKind(o: Pick<CorrectionOriginalOut, "decision" | "degraded">): ResultKind`;
@@ -2347,7 +2347,7 @@ import type { ResultKind } from "./labels";
 export const REVIEW_OVERDUE_MS = 4 * 60 * 60_000;
 export const OVERDUE_LABEL = `Over ${REVIEW_OVERDUE_MS / 3_600_000} h`;
 /** After Approve, this long to undo before the approval is sent (ruling R1). */
-export const UNDO_WINDOW_MS = 10_000;
+export const UNDO_WINDOW_MS = 60_000;
 /** The longest reviewer note the API takes (spec §10 item 1). */
 export const NOTE_MAX = 500;
 

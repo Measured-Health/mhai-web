@@ -11,6 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { flushPendingApprovals } from "../review/pending-approvals";
 import { useSession } from "../session-store";
 import { getAuthClient } from "./client";
 import { onUnauthorized } from "./events";
@@ -121,6 +122,10 @@ export function AuthProvider({
     async (why: SignOutReason) => {
       if (!live.current.signedIn && !live.current.mfaPending) return;
       live.current = { signedIn: false, mfaPending: false };
+      // A waiting approval goes first, while the session still works (it
+      // takes the approval, so leaving the page can't send it twice). An
+      // expired session can't send it: it stays waiting.
+      const sent = why === "expired" ? null : flushPendingApprovals();
       startTransition(() => {
         history.clear();
         setState(SIGNED_OUT);
@@ -128,6 +133,7 @@ export function AuthProvider({
         setReason(why);
         router.replace("/sign-in");
       });
+      await sent;
       await client.signOut().catch(() => {});
     },
     [client, history, router],

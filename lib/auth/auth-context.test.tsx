@@ -1,7 +1,14 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { makeCorrection } from "@/tests/corrections";
+
+const approve = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/api/client", () => ({
+  getClient: () => ({ approveCorrection: approve }),
+}));
+import { useUndoableApproval } from "../review/use-undoable-approval";
 import { createMockAuthClient } from "./mock";
 import { AuthProvider, homeFor, useAuth } from "./auth-context";
 import type { AuthClient } from "./types";
@@ -25,12 +32,26 @@ function Probe() {
   });
   return <p data-testid="status">{a.status}</p>;
 }
-const mount = (client: AuthClient, initialUser?: typeof TEST_USER | null) =>
+let approval: ReturnType<typeof useUndoableApproval>;
+/** The review page: an approval can be waiting in its undo window. */
+function Reviewer() {
+  const a = useUndoableApproval({ onSent: () => {}, onFailed: () => {} });
+  useEffect(() => {
+    approval = a;
+  });
+  return null;
+}
+const mount = (
+  client: AuthClient,
+  initialUser?: typeof TEST_USER | null,
+  extra?: ReactNode,
+) =>
   render(
     <QueryClientProvider client={new QueryClient()}>
       <SessionProvider>
         <AuthProvider client={client} initialUser={initialUser}>
           <Probe />
+          {extra}
         </AuthProvider>
       </SessionProvider>
     </QueryClientProvider>,
@@ -87,6 +108,46 @@ describe("AuthProvider", () => {
     expect(spy).toHaveBeenCalledTimes(1);
     act(() => api.dismissNotice());
     expect(api.signedOutReason).toBeNull();
+  });
+});
+
+describe("signing out with an approval waiting", () => {
+  beforeEach(() => {
+    approve.mockReset();
+    approve.mockResolvedValue(undefined);
+  });
+
+  it.each(["manual", "idle"] as const)(
+    "%s: sends it first, with its key, then ends the session",
+    async (why) => {
+      const client = createMockAuthClient();
+      const end = vi.spyOn(client, "signOut");
+      const { unmount } = mount(client, TEST_USER, <Reviewer />);
+      act(() => approval.start(makeCorrection({ id: "a" })));
+      const key = approval.pending?.key;
+      await act(() => api.signOut(why));
+      expect(approve).toHaveBeenCalledTimes(1);
+      expect(approve).toHaveBeenCalledWith("a", {
+        idempotencyKey: key,
+        keepalive: false,
+      });
+      expect(end).toHaveBeenCalledTimes(1);
+      expect(approve.mock.invocationCallOrder[0]).toBeLessThan(
+        end.mock.invocationCallOrder[0]!,
+      );
+      unmount();
+      expect(approve).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("an expired session doesn't try; leaving the page still does once", async () => {
+    const client = createMockAuthClient();
+    const { unmount } = mount(client, TEST_USER, <Reviewer />);
+    act(() => approval.start(makeCorrection({ id: "a" })));
+    await act(() => api.signOut("expired"));
+    unmount();
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(approve.mock.calls[0]?.[1]).toMatchObject({ keepalive: true });
   });
 });
 

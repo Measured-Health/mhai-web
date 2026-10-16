@@ -14,6 +14,11 @@ import { AccountView } from "./account-view";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as MhaiClient }));
 vi.mock("@/lib/api/client", () => ({ getClient: () => holder.client }));
+const flush = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("@/lib/review/pending-approvals", () => ({
+  flushPendingApprovals: flush,
+  registerPendingFlush: () => () => {},
+}));
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace }),
@@ -95,7 +100,8 @@ describe("AccountView", () => {
 
   it("lists devices, signs one out, and confirms sign out everywhere", async () => {
     const user = userEvent.setup();
-    await signedIn();
+    const client = await signedIn();
+    const everywhere = vi.spyOn(client, "signOutEverywhere");
     const devices = await screen.findByRole("region", {
       name: "Active devices",
     });
@@ -118,6 +124,11 @@ describe("AccountView", () => {
       within(confirm).getByRole("button", { name: "Sign out everywhere" }),
     );
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
+    // A waiting approval is sent before the sessions end.
+    expect(flush).toHaveBeenCalled();
+    expect(flush.mock.invocationCallOrder[0]).toBeLessThan(
+      everywhere.mock.invocationCallOrder[0]!,
+    );
   });
 
   it("hides devices when the backend can't list them", async () => {

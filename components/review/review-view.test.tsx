@@ -107,7 +107,7 @@ describe("ReviewView", () => {
     expect(screen.getByText("Dr. Chidi Okafor")).toBeVisible();
   });
 
-  it("approve: the undo notice for 10 seconds, then the next one loads (W20)", async () => {
+  it("approve: the undo notice for 60 seconds, then the next one loads (W20)", async () => {
     const user = typing();
     const approve = vi.spyOn(holder.client, "approveCorrection");
     ui();

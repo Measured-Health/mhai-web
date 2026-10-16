@@ -10,6 +10,7 @@ vi.mock("@/lib/api/client", () => ({
 }));
 import { ApiError } from "@/lib/api/errors";
 import { UNDO_WINDOW_MS } from "@/lib/corrections";
+import { flushPendingApprovals } from "./pending-approvals";
 import { useUndoableApproval } from "./use-undoable-approval";
 
 const a = makeCorrection({ id: "a" });
@@ -57,6 +58,16 @@ describe("useUndoableApproval (Review Focus 2)", () => {
     expect(onSent).toHaveBeenCalledWith(a);
     await act(() => vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS * 3));
     expect(approve).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives a whole minute to undo (product ruling)", async () => {
+    const { result } = setup();
+    act(() => result.current.start(a));
+    expect(result.current.pending?.endsAt).toBe(Date.now() + 60_000);
+    await act(() => vi.advanceTimersByTimeAsync(59_999));
+    expect(approve).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(sentIds()).toEqual(["a"]);
   });
 
   it("undo inside the window sends nothing and gives the item back", async () => {
@@ -187,6 +198,32 @@ describe("useUndoableApproval (Review Focus 2)", () => {
     unmount();
     await act(() => vi.advanceTimersByTimeAsync(120_000));
     expect(approve).toHaveBeenCalledTimes(1);
+  });
+
+  it("a sign-out sends the waiting one first, once, with its key", async () => {
+    const { result, unmount } = setup();
+    act(() => result.current.start(a));
+    const key = result.current.pending?.key;
+    await act(() => flushPendingApprovals());
+    expect(sentIds()).toEqual(["a"]);
+    expect(opts(0)).toEqual({ idempotencyKey: key, keepalive: false });
+    expect(onSent).toHaveBeenCalledWith(a);
+    unmount();
+    await act(() => flushPendingApprovals());
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS * 2));
+    expect(approve).toHaveBeenCalledTimes(1);
+  });
+
+  it("a sign-out never waits long for a slow send", async () => {
+    approve.mockReturnValue(new Promise(() => {}));
+    const { result } = setup();
+    act(() => result.current.start(a));
+    let done = false;
+    void flushPendingApprovals().then(() => (done = true));
+    await act(() => vi.advanceTimersByTimeAsync(4_999));
+    expect(done).toBe(false);
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(done).toBe(true);
   });
 
   it("StrictMode's double effects send nothing and the timer still sends once", async () => {

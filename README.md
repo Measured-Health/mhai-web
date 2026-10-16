@@ -44,7 +44,7 @@ arrives after about 9 seconds.
 sample account (Dr. Reyes). **Review corrections** in the sidebar holds
 sample corrections from Dr. Okafor and Nurse Bello, some waiting over 4
 hours, and one of your own, which you can withdraw but not approve.
-Approve gives you 10 seconds to undo; Reject needs a reason, which the
+Approve gives you 60 seconds to undo; Reject needs a reason, which the
 person who suggested it sees. **My feedback & corrections** (account menu)
 lists your corrections as waiting, approved or rejected, with the
 reviewer's reason, and Profile & security shows your counts. A correction

@@ -35,7 +35,7 @@ const backToQueue = async (page: Page) => {
     await page.getByRole("button", { name: "Back to the queue" }).click();
 };
 /**
- * Stops the page's clock (after `page.clock.install()`), so a 10-second undo
+ * Stops the page's clock (after `page.clock.install()`), so a 60-second undo
  * window can't run out while the test acts in it. `page.clock.resume()` lets
  * time flow again.
  */
@@ -57,7 +57,7 @@ test("the sidebar counts what's waiting for you", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("approve, undo, approve again: sent after 10 seconds", async ({
+test("approve, undo, approve again: sent after 60 seconds", async ({
   page,
 }) => {
   await page.clock.install();
@@ -65,7 +65,7 @@ test("approve, undo, approve again: sent after 10 seconds", async ({
   await row(page, "Acute asthma, moderate").click();
   await expect(title(page, "Acute asthma, moderate")).toBeVisible();
   await page.getByRole("button", { name: "Approve correction" }).click();
-  // The notice takes the detail's place for the 10 seconds.
+  // The notice takes the detail's place for the 60 seconds.
   await expect(undoNotice(page)).toBeVisible();
   await holdClock(page);
   await expect(
@@ -82,7 +82,7 @@ test("approve, undo, approve again: sent after 10 seconds", async ({
 
   await page.getByRole("button", { name: "Approve correction" }).click();
   await expect(undoNotice(page)).toBeVisible();
-  await page.clock.fastForward(10_000);
+  await page.clock.fastForward(60_000);
   await expect(undoNotice(page)).toBeHidden();
   // The next one opens once the window ends.
   await expect(
@@ -126,7 +126,7 @@ test("leaving during the undo window sends the approval at once", async ({
   await row(page, "Dengue fever, likely").click();
   await page.getByRole("button", { name: "Approve correction" }).click();
   await expect(undoNotice(page)).toBeVisible();
-  // The 10 seconds can't run out: only leaving can send it.
+  // The 60 seconds can't run out: only leaving can send it.
   await holdClock(page);
   await openSidebarOnPhones(page);
   await page

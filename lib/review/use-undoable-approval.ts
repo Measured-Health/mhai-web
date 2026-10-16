@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api/errors";
 import { refreshCorrections } from "@/lib/correction-queries";
 import { UNDO_WINDOW_MS } from "@/lib/corrections";
 import { isTransient, retryDelay } from "@/lib/network";
+import { registerPendingFlush } from "./pending-approvals";
 
 /** Like reject and withdraw: a lost answer is tried again with the same key. */
 const RETRIES = 2;
@@ -33,8 +34,8 @@ function take(live: { current: Live }): PendingApproval | null {
 
 /**
  * Approve with a grace period (ruling R1). Nothing is sent until the window
- * ends, another decision starts, the page unmounts or the tab is hidden for
- * good (pagehide). Leaving confirms; only Undo cancels.
+ * ends, another decision starts, the page unmounts, the tab is hidden for
+ * good (pagehide) or you sign out. Leaving confirms; only Undo cancels.
  */
 export function useUndoableApproval({
   windowMs = UNDO_WINDOW_MS,
@@ -55,11 +56,11 @@ export function useUndoableApproval({
   });
 
   const send = useCallback(
-    (p: PendingApproval, keepalive: boolean) => {
+    (p: PendingApproval, keepalive: boolean): Promise<void> => {
       // Decisions are never queued offline (R8): not sent, nothing changed.
       if (!navigator.onLine) {
         handlers.current.onFailed(p.item, new ApiError(0, "network"));
-        return;
+        return Promise.resolve();
       }
       // The same key each time, so a retry never approves twice (R8). Not
       // after leaving the page (keepalive), and never offline.
@@ -73,7 +74,7 @@ export function useUndoableApproval({
               () => attempt(n + 1),
             );
           });
-      attempt(0)
+      return attempt(0)
         .then(
           () => handlers.current.onSent(p.item),
           (e: unknown) => handlers.current.onFailed(p.item, e),
@@ -84,16 +85,16 @@ export function useUndoableApproval({
   );
 
   const flushWith = useCallback(
-    (keepalive: boolean) => {
+    (keepalive: boolean): Promise<void> => {
       const p = take(live);
-      if (!p) return;
+      if (!p) return Promise.resolve();
       setPending(null);
-      send(p, keepalive);
+      return send(p, keepalive);
     },
     [send],
   );
 
-  const flush = useCallback(() => flushWith(false), [flushWith]);
+  const flush = useCallback(() => void flushWith(false), [flushWith]);
 
   const start = useCallback(
     (item: CorrectionOut) => {
@@ -116,9 +117,12 @@ export function useUndoableApproval({
     return p.item;
   }, []);
 
+  // Signing out sends it first, while the session still works.
+  useEffect(() => registerPendingFlush(() => flushWith(false)), [flushWith]);
+
   // Leaving the page confirms: in-app (unmount) or the tab going away.
   useEffect(() => {
-    const leave = () => flushWith(true);
+    const leave = () => void flushWith(true);
     window.addEventListener("pagehide", leave);
     return () => {
       window.removeEventListener("pagehide", leave);

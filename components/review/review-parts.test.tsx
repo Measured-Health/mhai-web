@@ -210,7 +210,7 @@ describe("UndoNotice", () => {
     const onUndo = vi.fn();
     render(
       <UndoNotice
-        pending={{ item: okafor, key: "k", endsAt: Date.now() + 10_000 }}
+        pending={{ item: okafor, key: "k", endsAt: Date.now() + 60_000 }}
         onUndo={onUndo}
       />,
     );
@@ -220,9 +220,9 @@ describe("UndoNotice", () => {
       "Dengue fever, likely. Dr. Okafor will be told",
     );
     const undo = screen.getByRole("button", { name: "Undo approval" });
-    expect(undo).toHaveTextContent("Undo (10 s)");
+    expect(undo).toHaveTextContent("Undo (60 s)");
     await act(() => vi.advanceTimersByTimeAsync(3_000));
-    expect(undo).toHaveTextContent("Undo (7 s)");
+    expect(undo).toHaveTextContent("Undo (57 s)");
     await userEvent
       .setup({ advanceTimers: vi.advanceTimersByTime })
       .click(undo);
@@ -230,7 +230,7 @@ describe("UndoNotice", () => {
   });
 
   it("offers Next correction only when asked, and keeps Undo's name", async () => {
-    const pending = { item: okafor, key: "k", endsAt: T0 + 10_000 };
+    const pending = { item: okafor, key: "k", endsAt: T0 + 60_000 };
     const { unmount } = render(
       <UndoNotice pending={pending} onUndo={() => {}} />,
     );

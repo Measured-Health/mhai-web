@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { AuthError } from "@/lib/auth/types";
 import { useNow } from "@/lib/hooks/use-now";
+import { flushPendingApprovals } from "@/lib/review/pending-approvals";
 import { AuthErrorBanner } from "../auth/auth-error-banner";
 import { errorCode } from "../auth/auth-error-copy";
 import { Button } from "../ui/button";
@@ -50,6 +51,8 @@ export function DevicesSection() {
     setConfirm(false);
     setFailed(null);
     try {
+      // A waiting approval goes first, while this session still works.
+      await flushPendingApprovals();
       await client.signOutEverywhere();
     } catch (e) {
       const ae = errorCode(e);

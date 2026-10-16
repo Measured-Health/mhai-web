@@ -15,7 +15,7 @@ export { ageLabel };
 export const REVIEW_OVERDUE_MS = 4 * 60 * 60_000;
 export const OVERDUE_LABEL = `Over ${REVIEW_OVERDUE_MS / 3_600_000} h`;
 /** After Approve, this long to undo before the approval is sent (ruling R1). */
-export const UNDO_WINDOW_MS = 10_000;
+export const UNDO_WINDOW_MS = 60_000;
 /** The longest reviewer note the API takes (spec §10 item 1). */
 export const NOTE_MAX = 500;
 
