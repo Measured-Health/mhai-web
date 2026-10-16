@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Review corrections: the queue (anything waiting over 4 hours flagged),
+  what the system said beside the suggested correction with the changes
+  marked, who suggested it and why, the evidence on file and the
+  consultation. Approve with a 10-second undo, then the next one loads;
+  reject with a required reason the suggester sees, skip, and the A and R
+  shortcuts. Your own corrections can only be withdrawn. Works on phones,
+  with the reject form as a bottom sheet.
 - My feedback & corrections (account menu): your corrections as waiting,
   approved or rejected with the reviewer's reason; withdraw a waiting one,
   or change a rejected one and send it again.

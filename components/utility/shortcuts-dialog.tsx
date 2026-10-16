@@ -19,6 +19,8 @@ export function ShortcutsDialog({
     ["Suggest correction", "C"],
     ["Copy result", "⇧ C"],
     ["Print / export", `${mod} P`],
+    ["Approve correction (in review)", "A"],
+    ["Reject correction (in review)", "R"],
     ["Show shortcuts", "?"],
   ];
   return (

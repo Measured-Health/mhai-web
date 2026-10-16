@@ -173,7 +173,7 @@ export function decisionError(
       title:
         action === "withdraw"
           ? "This correction was already decided"
-          : "Another clinician decided this one first",
+          : "Another clinician has already decided this correction",
       body: "Nothing was changed by you. It has left the queue.",
       gone: true,
       own: false,

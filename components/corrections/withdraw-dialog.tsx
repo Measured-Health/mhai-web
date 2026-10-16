@@ -2,6 +2,7 @@
 import { useState, type ReactNode } from "react";
 import { useWithdrawCorrection } from "@/lib/correction-queries";
 import { decisionError, type DecisionError } from "@/lib/corrections";
+import { useNetwork } from "@/lib/network";
 import { Banner } from "../ui/banner";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
@@ -14,12 +15,15 @@ export function WithdrawDialog({
   onConfirm,
   busy,
   error,
+  offline = false,
 }: {
   open: boolean;
   onClose(): void;
   onConfirm(): void;
   busy: boolean;
   error: DecisionError | null;
+  /** The connection dropped while the dialog was open: nothing can be sent. */
+  offline?: boolean;
 }) {
   return (
     <Dialog open={open} onClose={onClose} title="Withdraw this correction?">
@@ -27,6 +31,11 @@ export function WithdrawDialog({
         It leaves the review queue and nothing changes. You can suggest a new
         correction later.
       </p>
+      {offline && (
+        <p className="mt-3 text-[13px] text-ink-3">
+          You&apos;re offline. Withdrawing needs a connection.
+        </p>
+      )}
       {error && (
         <div className="mt-3">
           <Banner tone="bad" title={error.title}>
@@ -38,7 +47,7 @@ export function WithdrawDialog({
         <Button variant="ghost" onClick={onClose}>
           Keep it
         </Button>
-        <Button variant="danger" disabled={busy} onClick={onConfirm}>
+        <Button variant="danger" disabled={busy || offline} onClick={onConfirm}>
           Withdraw
         </Button>
       </div>
@@ -58,13 +67,14 @@ export function useWithdrawFlow(opts?: {
 }): { ask(id: string): void; dialog: ReactNode } {
   const withdraw = useWithdrawCorrection();
   const toast = useToast();
+  const { online } = useNetwork();
   const [id, setId] = useState<string | null>(null);
   const [error, setError] = useState<DecisionError | null>(null);
   const [working, setWorking] = useState(false);
 
   const close = () => setId(null);
   async function confirm() {
-    if (!id) return;
+    if (!id || !navigator.onLine) return;
     setError(null);
     setWorking(true);
     try {
@@ -109,6 +119,7 @@ export function useWithdrawFlow(opts?: {
         onConfirm={() => void confirm()}
         busy={working || withdraw.isPending}
         error={error}
+        offline={!online}
       />
     ),
   };

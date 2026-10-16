@@ -128,7 +128,7 @@ describe("correction rules", () => {
     expect(
       decisionError(new ApiError(409, "already_decided"), "reject"),
     ).toMatchObject({
-      title: "Another clinician decided this one first",
+      title: "Another clinician has already decided this correction",
       gone: true,
     });
     expect(
