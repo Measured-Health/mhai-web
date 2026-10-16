@@ -10391,9 +10391,8 @@ sealed in an `httpOnly` cookie and never reaches browser JavaScript. Set:
   admin app" points.
 
 The API itself is still being built (mhai-multiagent, gateway Plan 2).
-Until it lands, use mock mode. Features its design doesn't include yet
-(hospital single sign-on, email login, password reset, devices, "trust
-this device") are hidden in live mode.
+Live mode switches every feature on, using the assumed backend contract
+(spec section 10 item 14), so use mock mode until the API catches up.
 ```
 
 `CHANGELOG.md`: under _Unreleased_ → Added:
@@ -10554,7 +10553,6 @@ once back online, and a data-saver mode."
     out everywhere): Task 9.
 - **Deferred within §5.5:**
   - feedback stats and "My feedback" (Plan 3);
-  - backup-code view and regeneration (backend §10 item 7);
   - "Request a change" (no backend; the page says to ask the hospital
     admin).
 - **ARCHITECTURE §4.2–4.3:**
@@ -10563,8 +10561,9 @@ once back online, and a data-saver mode."
   - username and password with the MFA branch: Tasks 11–12;
   - refresh while active: Task 12;
   - the 13/15-minute idle sign-out: Plan 1, now wired to auth in Task 3;
-  - the OIDC branch waits for backend Plan 3, and the capability hides
-    it.
+  - the OIDC branch (hospital sign-on) is built in Task 13 and switched
+    on in live mode against the assumed contract; backup-code view and
+    regeneration are built in Tasks 9 and 12.
 - **The 403 "wrong app"** from the plan's scope: Task 8. AuthGate
   coverage is in Task 3.
 - **Types from OpenAPI:** blocked. The backend has no `openapi.json`

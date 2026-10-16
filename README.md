@@ -49,12 +49,53 @@ The server appends each message to a file for the team to review (see
 message and an optional name or role, it carries only the page path (ids
 masked) and the screen size, never anything else typed or shown.
 
+The demo starts at a sign-in page (sample accounts, memory only, so a
+reload signs you out). Any email and password works. The page lists sample
+accounts you can fill in with one tap: a clinician who signs straight in, a
+clinician with two-step (code `123456`, or a real authenticator app using
+the secret shown in the demo), a new account (first sign-in), a hospital
+admin (the 403 page) and a locked account. The password `wrong` counts
+down to a lock, and "Continue with hospital account" signs in through the
+demo's hospital sign-on.
+
 - **On your machine:** `NEXT_PUBLIC_USE_MOCK=true npm run build && npx next start`
   (the flag is read at build time, so it must be set for the build).
   Feedback is saved to `.feedback/feedback.jsonl` in development.
 - **For the team:** https://demo.measured-health.org (open, not listed
   by search engines). Every merge to `main` that passes CI deploys there; see
   [deploy/README.md](deploy/README.md).
+
+### Live mode
+
+With `NEXT_PUBLIC_USE_MOCK` unset, the app talks to the MHAI API through
+its own server routes (`/api/auth/*`, `/api/v1/*`). The API token is
+sealed in an `httpOnly` cookie and never reaches browser JavaScript. Set:
+
+- `MHAI_API_URL`: the API base, without `/api/v1`;
+- `SESSION_SECRET`: at least 32 characters (`openssl rand -base64 48`);
+- `NEXT_PUBLIC_ADMIN_APP_URL` (optional): where the 403 page's "Go to
+  admin app" points.
+
+Live mode switches every feature on, including hospital sign-on, password
+reset, devices, "trust this device", terms and backup codes. It uses an
+assumed backend contract (the plan header and spec section 10 item 14),
+so calls to endpoints the API doesn't have yet will fail until it
+catches up. Use mock mode until then.
+
+### Weak networks
+
+The app is built for slow and unreliable links. It slows its polling,
+pauses while offline, retries safely (writes carry an `Idempotency-Key`),
+holds a finished question until the connection returns, switches to data
+saver on 2G, and has a slow-3G end-to-end test. The backend's side is in
+[spec section 10](docs/specs/2026-10-13-ui-design-v3.md), items 15 to 17.
+
+### Offline
+
+Questions and feedback written while offline are kept encrypted on the
+device and sent when the connection returns. This is the one exception to
+the "nothing in browser storage" rule; see [CONTRIBUTING.md](CONTRIBUTING.md)
+for the exception and its limits. It needs clinical and privacy sign-off.
 
 ### Tests
 

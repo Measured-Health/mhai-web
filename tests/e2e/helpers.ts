@@ -22,6 +22,13 @@ export async function signIn(page: Page, email = "a.reyes@havanahospital.org") {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 }
 
+/** Opens the account menu (inside the drawer on small screens). */
+export async function openAccountMenu(page: Page) {
+  if (isMobile(page))
+    await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: /^Account:/ }).click();
+}
+
 /** On the signed-in home page: opens the form and fills it. */
 export async function fillForm(page: Page, question: string) {
   await page.getByRole("button", { name: /Start a consultation/ }).click();
