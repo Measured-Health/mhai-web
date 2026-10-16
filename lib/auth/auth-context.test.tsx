@@ -192,6 +192,36 @@ describe("signing out with an approval waiting to retry", () => {
     expect(approve).toHaveBeenCalledTimes(before);
   });
 
+  it("a sign-in waits for the last sign-out to finish (Sign out first)", async () => {
+    const client = await lostAnswer();
+    // Its last try hangs, so the sign-out takes its full 5 s.
+    approve.mockReturnValueOnce(new Promise(() => {}));
+    const out = vi.spyOn(client, "signOut");
+    const into = vi.spyOn(client, "signIn");
+    let signingOut!: Promise<void>;
+    let signingIn!: Promise<unknown>;
+    act(() => {
+      signingOut = api.signOut("manual");
+      signingIn = api.signIn("new.bello@havanahospital.org", "pw");
+    });
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    await act(() => Promise.all([signingOut, signingIn]));
+    expect(out).toHaveBeenCalledTimes(1);
+    expect(into).toHaveBeenCalledTimes(1);
+    expect(out.mock.invocationCallOrder[0]).toBeLessThan(
+      into.mock.invocationCallOrder[0]!,
+    );
+    expect(api.status).toBe("signed_in");
+    expect(api.user?.email).toBe("new.bello@havanahospital.org");
+    // An approval the new person makes is sent, not dropped.
+    approve.mockReset();
+    approve.mockResolvedValue(undefined);
+    act(() => approval.start(makeCorrection({ id: "b" })));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS));
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(approve.mock.calls[0]?.[0]).toBe("b");
+  });
+
   it("an expired session cancels the retry without trying", async () => {
     await lostAnswer();
     await act(() => api.signOut("expired"));

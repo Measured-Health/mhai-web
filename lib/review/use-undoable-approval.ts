@@ -81,8 +81,14 @@ export function useUndoableApproval({
       let timer: ReturnType<typeof setTimeout> | null = null;
       let wake: (() => void) | null = null;
       let last = keepalive;
-      const stopWaiting = () => {
-        last = true;
+      /** Waiting for the attempt that is running, or about to run. */
+      let waiting: (() => void)[] = [];
+      const settled = () => {
+        const w = waiting;
+        waiting = [];
+        w.forEach((f) => f());
+      };
+      const tryNow = () => {
         if (timer) clearTimeout(timer);
         wake?.();
       };
@@ -101,6 +107,7 @@ export function useUndoableApproval({
             const retry =
               !last && n < RETRIES && navigator.onLine && isTransient(e);
             if (!retry) return handlers.current.onFailed(p.item, e);
+            settled();
             await new Promise<void>((r) => {
               wake = r;
               timer = setTimeout(r, retryDelay(n + 1));
@@ -111,13 +118,25 @@ export function useUndoableApproval({
         }
       };
       let job: Promise<void> | null = null;
-      // Signing out: one last try now, inside its wait; a new session: none.
-      const unregister = registerPendingFlush(() => {
-        stopWaiting();
-        return job ?? Promise.resolve();
-      }, stopWaiting);
+      // Signing out: try now rather than wait, and settle once that try has
+      // (retries go on, with the key, if the sign-out doesn't go ahead).
+      // A new session: no more tries.
+      const unregister = registerPendingFlush(
+        () =>
+          job
+            ? new Promise<void>((r) => {
+                waiting.push(r);
+                tryNow();
+              })
+            : Promise.resolve(),
+        () => {
+          last = true;
+          tryNow();
+        },
+      );
       job = run().finally(() => {
         unregister();
+        settled();
         void refreshCorrections(qc);
       });
       return job;

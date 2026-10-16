@@ -123,6 +123,15 @@ export function AuthProvider({
     return r;
   }, []);
 
+  // A sign-out still finishing (sending a waiting approval, then ending the
+  // session): a sign-in waits for it, so it can't end the next session or
+  // drop the next person's approvals. At most about 5 s (the flush cap).
+  const signingOut = useRef<Promise<void> | null>(null);
+  const afterSignOut = useCallback(
+    async () => void (await signingOut.current),
+    [],
+  );
+
   const signOut = useCallback(
     async (why: SignOutReason) => {
       if (!live.current.signedIn && !live.current.mfaPending) return;
@@ -140,11 +149,16 @@ export function AuthProvider({
         setReason(why);
         router.replace("/sign-in");
       });
-      if (sent) {
-        await sent;
-        endApprovalSession();
-      }
-      await client.signOut().catch(() => {});
+      const finish = (async () => {
+        if (sent) {
+          await sent;
+          endApprovalSession();
+        }
+        await client.signOut().catch(() => {});
+      })();
+      signingOut.current = finish;
+      await finish;
+      if (signingOut.current === finish) signingOut.current = null;
     },
     [client, history, router],
   );
@@ -160,13 +174,22 @@ export function AuthProvider({
       client,
       signedOutReason: reason,
       dismissNotice: () => setReason(null),
-      signIn: async (login, password) =>
-        apply(await client.signIn(login, password)),
-      signInWithHospital: async () => apply(await client.signInWithHospital()),
-      completeHospitalSignIn: async (code) =>
-        apply(await client.completeHospitalSignIn(code)),
-      verifyCode: async (code, opts) =>
-        apply(await client.verifyCode(code, opts)),
+      signIn: async (login, password) => {
+        await afterSignOut();
+        return apply(await client.signIn(login, password));
+      },
+      signInWithHospital: async () => {
+        await afterSignOut();
+        return apply(await client.signInWithHospital());
+      },
+      completeHospitalSignIn: async (code) => {
+        await afterSignOut();
+        return apply(await client.completeHospitalSignIn(code));
+      },
+      verifyCode: async (code, opts) => {
+        await afterSignOut();
+        return apply(await client.verifyCode(code, opts));
+      },
       cancelMfa: () => setMfaPending(false),
       completeStep: (step) =>
         setState((s) => ({ ...s, steps: s.steps.filter((x) => x !== step) })),
@@ -174,7 +197,7 @@ export function AuthProvider({
         setState((s) => (s.user ? { ...s, user: { ...s.user, ...patch } } : s)),
       signOut,
     }),
-    [state, mfaPending, client, reason, apply, signOut],
+    [state, mfaPending, client, reason, apply, afterSignOut, signOut],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

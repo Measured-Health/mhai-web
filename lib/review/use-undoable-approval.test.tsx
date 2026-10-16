@@ -223,10 +223,30 @@ describe("useUndoableApproval (Review Focus 2)", () => {
     await act(() => flushPendingApprovals());
     expect(approve).toHaveBeenCalledTimes(2);
     expect(opts(1).idempotencyKey).toBe(opts(0).idempotencyKey);
-    expect(onFailed).toHaveBeenCalledTimes(1);
     act(() => endApprovalSession());
     await act(() => vi.advanceTimersByTimeAsync(30_000));
     expect(approve).toHaveBeenCalledTimes(2);
+    // Still on screen: told it wasn't sent.
+    expect(onFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it("a sign-out that doesn't go ahead leaves its retries, with the key", async () => {
+    approve
+      .mockRejectedValueOnce(new ApiError(0, "network"))
+      .mockRejectedValueOnce(new ApiError(0, "network"))
+      .mockResolvedValueOnce(undefined);
+    const { result } = setup();
+    act(() => result.current.start(a));
+    await act(() => vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS));
+    // "Sign out everywhere" flushes, then fails: you stay signed in.
+    await act(() => flushPendingApprovals());
+    expect(approve).toHaveBeenCalledTimes(2);
+    expect(onFailed).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(approve).toHaveBeenCalledTimes(3);
+    expect(opts(2).idempotencyKey).toBe(opts(0).idempotencyKey);
+    expect(onSent).toHaveBeenCalledWith(a);
+    expect(onFailed).not.toHaveBeenCalled();
   });
 
   it("a new session drops a retry; only a view still open hears of it", async () => {
