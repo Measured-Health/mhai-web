@@ -16,6 +16,7 @@ import { CommandPalette } from "../utility/command-palette";
 import { ShortcutsDialog } from "../utility/shortcuts-dialog";
 import { DegradedStrip } from "../states/degraded-strip";
 import { OfflineStrip } from "../states/offline-strip";
+import { DecisionsProvider } from "../corrections/decisions-provider";
 import { MobileDrawer } from "./mobile-drawer";
 import { Sidebar } from "./sidebar";
 
@@ -98,32 +99,38 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
   return (
     <Ctx.Provider value={ctx}>
-      <div className="grid h-[calc(100dvh-var(--demo-h,0px))] grid-cols-1 md:grid-cols-[76px_minmax(0,1fr)] xl:grid-cols-[256px_minmax(0,1fr)]">
-        {/* Sidebar reads usePathname(); with cacheComponents it must sit in Suspense. */}
-        <div className="hidden md:block xl:hidden">
-          <Suspense fallback={null}>
-            <Sidebar items={items} rail onOpenSearch={openSearch} />
-          </Suspense>
+      {/* Polls your corrections and toasts decisions while signed in (R9). */}
+      <DecisionsProvider>
+        <div className="grid h-[calc(100dvh-var(--demo-h,0px))] grid-cols-1 md:grid-cols-[76px_minmax(0,1fr)] xl:grid-cols-[256px_minmax(0,1fr)]">
+          {/* Sidebar reads usePathname(); with cacheComponents it must sit in Suspense. */}
+          <div className="hidden md:block xl:hidden">
+            <Suspense fallback={null}>
+              <Sidebar items={items} rail onOpenSearch={openSearch} />
+            </Suspense>
+          </div>
+          <div className="hidden xl:block">
+            <Suspense fallback={null}>
+              <Sidebar items={items} onOpenSearch={openSearch} />
+            </Suspense>
+          </div>
+          <main className="canvas-v3 relative flex min-w-0 flex-col overflow-hidden">
+            <OfflineStrip />
+            <DegradedStrip />
+            {children}
+          </main>
         </div>
-        <div className="hidden xl:block">
-          <Suspense fallback={null}>
-            <Sidebar items={items} onOpenSearch={openSearch} />
-          </Suspense>
-        </div>
-        <main className="canvas-v3 relative flex min-w-0 flex-col overflow-hidden">
-          <OfflineStrip />
-          <DegradedStrip />
-          {children}
-        </main>
-      </div>
-      <MobileDrawer
-        open={drawer}
-        onClose={() => setDrawer(false)}
-        items={items}
-        onOpenSearch={openSearch}
-      />
-      <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <ShortcutsDialog open={keysOpen} onClose={() => setKeysOpen(false)} />
+        <MobileDrawer
+          open={drawer}
+          onClose={() => setDrawer(false)}
+          items={items}
+          onOpenSearch={openSearch}
+        />
+        <CommandPalette
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+        />
+        <ShortcutsDialog open={keysOpen} onClose={() => setKeysOpen(false)} />
+      </DecisionsProvider>
     </Ctx.Provider>
   );
 }

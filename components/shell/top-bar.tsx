@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Urgency } from "@/lib/api/contract";
+import { DecisionBell } from "../corrections/decision-bell";
 import { cn } from "../ui/cn";
 
 const URG = {
@@ -38,7 +39,10 @@ export function TopBar({
           {urgency}
         </span>
       )}
-      <div className="ml-auto flex gap-2">{actions}</div>
+      <div className="ml-auto flex items-center gap-2">
+        {actions}
+        <DecisionBell />
+      </div>
     </header>
   );
 }

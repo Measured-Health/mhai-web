@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Decisions on your corrections reach you while you work: a toast when a
+  reviewer approves or rejects one (with their reason), and a bell in the
+  top bar that keeps this session's decisions, in memory only.
 - Two-step codes verify on their own once the sixth digit is typed or
   pasted, at sign-in and during setup; no need to press the button.
 - The right panel on the new consultation page ("How it works", a good
