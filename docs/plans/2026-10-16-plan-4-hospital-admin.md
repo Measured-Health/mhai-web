@@ -11893,3 +11893,12 @@ This overrides Tasks 3, 4, 10 and 17 where they differ.
 - **Tests:** unit — remove sends the code; wrong code keeps the row and shows the error; no
   two-step → blocked with the link; backup code path. E2E (Task 17) — the remove flow enters
   123456.
+
+## Amendment (product owner, 2026-10-16): admin-only people see the terms on first sign-in
+
+Overrides Tasks 1–2 where they differ. Every new account, including a hospital admin who is not a
+clinician, gets the "Before you start" terms step on first sign-in (then password and two-step as
+today). The sample hospital admin and medical director accounts in the demo keep their current
+state (terms already accepted) so they sign straight in; the "New account" sample shows the steps.
+Test: an admin-only account with `terms` pending goes to /welcome and, after accepting, lands on
+/admin/staff.
