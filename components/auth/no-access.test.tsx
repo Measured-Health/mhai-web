@@ -1,7 +1,9 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { OutboxProvider } from "@/lib/offline/outbox-context";
 import { renderWithAuth, TEST_USER } from "@/tests/auth-wrapper";
+import { outboxCount, resetOutbox, seedOutbox } from "@/tests/outbox";
 import { NoAccess } from "./no-access";
 
 const replace = vi.fn();
@@ -9,7 +11,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace }),
 }));
 beforeEach(() => replace.mockClear());
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 const ADMIN = { ...TEST_USER, role: "admin" as const };
 
 describe("NoAccess", () => {
@@ -22,6 +27,20 @@ describe("NoAccess", () => {
     expect(screen.queryByRole("link", { name: "Go to admin app" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
+  });
+  it("Sign out deletes this user's unsent items from the device", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false); // no sync
+    await resetOutbox();
+    await seedOutbox(ADMIN.username);
+    renderWithAuth(
+      <OutboxProvider>
+        <NoAccess />
+      </OutboxProvider>,
+      ADMIN,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
+    expect(await outboxCount(ADMIN.username)).toBe(0);
   });
   it("links to the admin app when its address is set", () => {
     vi.stubEnv("NEXT_PUBLIC_ADMIN_APP_URL", "https://admin.example.org");

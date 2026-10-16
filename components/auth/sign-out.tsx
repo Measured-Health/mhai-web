@@ -12,7 +12,7 @@ import { Dialog } from "../ui/dialog";
  */
 export function SignOut() {
   const { status, signOut } = useAuth();
-  const { items, loaded, clearMine } = useOutbox();
+  const { items, loaded, loadError, clearMine } = useOutbox();
   const router = useRouter();
   // signOut already lands on /sign-in; don't send a second replace after it.
   // Also set by "Sign out and delete", so emptying the outbox can't sign out twice.
@@ -23,11 +23,15 @@ export function SignOut() {
       // Wait for the outbox, and ask first when something is still unsent.
       if (started.current || !loaded || unsent > 0) return;
       started.current = true;
-      void signOut("manual");
+      void (async () => {
+        // Couldn't read the outbox: still try to delete this user's items.
+        if (loadError) await clearMine().catch(() => {});
+        await signOut("manual");
+      })();
     } else if (status === "signed_out" && !started.current) {
       router.replace("/sign-in");
     }
-  }, [status, signOut, router, loaded, unsent]);
+  }, [status, signOut, router, loaded, unsent, loadError, clearMine]);
 
   if (status !== "signed_in" || !loaded || unsent === 0) return null;
   return (
@@ -46,7 +50,7 @@ export function SignOut() {
           onClick={async () => {
             if (started.current) return;
             started.current = true;
-            await clearMine();
+            await clearMine().catch(() => {});
             await signOut("manual");
           }}
         >

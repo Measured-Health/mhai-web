@@ -2,10 +2,12 @@
 import { Lock } from "lucide-react";
 import { homeFor, useAuth } from "@/lib/auth/auth-context";
 import { useRedirect } from "@/lib/auth/use-redirect";
+import { useOutbox } from "@/lib/offline/outbox-context";
 import { Button } from "../ui/button";
 
 export function NoAccess() {
   const auth = useAuth();
+  const { clearMine } = useOutbox();
   const target =
     auth.status === "signed_out"
       ? "/sign-in"
@@ -40,7 +42,14 @@ export function NoAccess() {
               Go to admin app
             </a>
           )}
-          <Button variant="ghost" onClick={() => void auth.signOut("manual")}>
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              // A manual sign-out deletes this user's unsent items (best effort).
+              await clearMine().catch(() => {});
+              await auth.signOut("manual");
+            }}
+          >
             Sign out
           </Button>
         </div>

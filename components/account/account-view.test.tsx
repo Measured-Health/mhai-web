@@ -2,7 +2,9 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockAuthClient } from "@/lib/auth/mock";
+import { OutboxProvider } from "@/lib/offline/outbox-context";
 import { renderWithAuth, TEST_USER } from "@/tests/auth-wrapper";
+import { outboxCount, resetOutbox, seedOutbox } from "@/tests/outbox";
 import { ToastProvider } from "../ui/toast";
 import { AccountView } from "./account-view";
 
@@ -184,5 +186,43 @@ describe("AccountView sign out everywhere failing", () => {
       await screen.findByText("We couldn't sign out your other devices."),
     ).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
+  });
+});
+
+describe("AccountView sign out everywhere with unsent items", () => {
+  it("warns about them, then deletes them from this device", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    await resetOutbox();
+    await seedOutbox(TEST_USER.username);
+    const user = userEvent.setup();
+    const client = createMockAuthClient();
+    await client.signIn(TEST_USER.email!, "pw");
+    renderWithAuth(
+      <ToastProvider>
+        <OutboxProvider>
+          <AccountView />
+        </OutboxProvider>
+      </ToastProvider>,
+      TEST_USER,
+      client,
+    );
+    const devices = await screen.findByRole("region", { name: "Devices" });
+    await user.click(
+      within(devices).getByRole("button", { name: "Sign out everywhere" }),
+    );
+    const confirm = screen.getByRole("dialog", {
+      name: "Sign out everywhere?",
+    });
+    expect(
+      await within(confirm).findByText(
+        "Your 1 unsent item on this device will be deleted.",
+      ),
+    ).toBeInTheDocument();
+    await user.click(
+      within(confirm).getByRole("button", { name: "Sign out everywhere" }),
+    );
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
+    expect(await outboxCount(TEST_USER.username)).toBe(0);
+    vi.restoreAllMocks();
   });
 });

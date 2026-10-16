@@ -92,4 +92,24 @@ describe("SignOut", () => {
     expect(replace).toHaveBeenCalledWith("/sign-in");
     expect(replace).toHaveBeenCalledTimes(1);
   });
+  it("still tries to delete unsent items when the outbox couldn't be read", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false); // no sync
+    const dbs = vi
+      .spyOn(indexedDB, "databases")
+      .mockRejectedValue(new Error("broken"));
+    render(
+      <AuthTestProvider>
+        <OutboxProvider>
+          <Status />
+          <SignOut />
+        </OutboxProvider>
+      </AuthTestProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("auth")).toHaveTextContent("signed_out"),
+    );
+    // Once for the first read, once more for the best-effort delete.
+    expect(dbs).toHaveBeenCalledTimes(2);
+    expect(replace).toHaveBeenCalledWith("/sign-in");
+  });
 });

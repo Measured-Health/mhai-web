@@ -9,6 +9,7 @@ import { AuthErrorBanner } from "../auth/auth-error-banner";
 import { errorCode } from "../auth/auth-error-copy";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
+import { useOutbox } from "@/lib/offline/outbox-context";
 
 const ago = (t: number, now: number) => {
   const m = Math.max(0, Math.round((now - t) / 60_000));
@@ -19,6 +20,8 @@ const ago = (t: number, now: number) => {
 
 export function DevicesSection() {
   const { client, signOut } = useAuth();
+  const outbox = useOutbox();
+  const unsent = outbox.items.length;
   const qc = useQueryClient();
   const now = useNow();
   const devices = useQuery({
@@ -43,6 +46,8 @@ export function DevicesSection() {
       setFailed(ae);
       return;
     }
+    // A manual sign-out deletes this user's unsent items (best effort).
+    await outbox.clearMine().catch(() => {});
     await signOut("manual");
   };
 
@@ -119,6 +124,12 @@ export function DevicesSection() {
         <p className="mb-[18px] text-[14.5px] text-ink-2">
           You&apos;ll be signed out on every device, including this one.
         </p>
+        {unsent > 0 && (
+          <p className="-mt-2.5 mb-[18px] text-[14.5px] text-ink-2">
+            Your {unsent} unsent {unsent === 1 ? "item" : "items"} on this
+            device will be deleted.
+          </p>
+        )}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setConfirm(false)}>
             Cancel
