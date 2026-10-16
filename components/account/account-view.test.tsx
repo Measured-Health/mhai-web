@@ -1,6 +1,9 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MhaiClient } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/errors";
+import { createMockClient } from "@/lib/api/mock";
 import { createMockAuthClient } from "@/lib/auth/mock";
 import { AuthError } from "@/lib/auth/types";
 import { OutboxProvider } from "@/lib/offline/outbox-context";
@@ -9,12 +12,17 @@ import { outboxCount, resetOutbox, seedOutbox } from "@/tests/outbox";
 import { ToastProvider } from "../ui/toast";
 import { AccountView } from "./account-view";
 
+const holder = vi.hoisted(() => ({ client: null as unknown as MhaiClient }));
+vi.mock("@/lib/api/client", () => ({ getClient: () => holder.client }));
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace }),
   usePathname: () => "/account",
 }));
-beforeEach(() => replace.mockClear());
+beforeEach(() => {
+  replace.mockClear();
+  holder.client = createMockClient();
+});
 
 async function signedIn(user = TEST_USER) {
   const client = createMockAuthClient();
@@ -125,6 +133,51 @@ describe("AccountView", () => {
       client,
     );
     expect(screen.queryByRole("region", { name: "Active devices" })).toBeNull();
+  });
+});
+
+describe("AccountView feedback", () => {
+  it("shows your feedback counts and links to My feedback & corrections", async () => {
+    await signedIn();
+    const section = await screen.findByRole("region", { name: "My feedback" });
+    const agreed = await within(section).findByText("Results agreed");
+    expect(agreed.parentElement).toHaveTextContent("Results agreed42");
+    expect(
+      within(section).getByText("Corrections waiting").parentElement,
+    ).toHaveTextContent("Corrections waiting1");
+    expect(
+      within(section).getByText("Corrections approved").parentElement,
+    ).toHaveTextContent("Corrections approved1");
+    expect(
+      within(section).getByText("Corrections rejected").parentElement,
+    ).toHaveTextContent("Corrections rejected1");
+    expect(
+      within(section).getByRole("link", {
+        name: /See my feedback & corrections/,
+      }),
+    ).toHaveAttribute("href", "/my-feedback");
+    expect(
+      within(
+        screen.getByRole("navigation", { name: "Account sections" }),
+      ).getByRole("link", { name: "My feedback" }),
+    ).toHaveAttribute("href", "#feedback");
+  });
+
+  it("says the numbers aren't available, and keeps the link", async () => {
+    holder.client.getMyFeedbackStats = () =>
+      Promise.reject(new ApiError(404, "gone"));
+    await signedIn();
+    const section = await screen.findByRole("region", { name: "My feedback" });
+    expect(
+      await within(section).findByText(
+        "Your feedback numbers aren't available right now.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByRole("link", {
+        name: /See my feedback & corrections/,
+      }),
+    ).toHaveAttribute("href", "/my-feedback");
   });
 });
 

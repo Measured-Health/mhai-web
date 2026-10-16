@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Profile & security shows your feedback: results you agreed with, and
+  your corrections waiting, approved and rejected, with a link to My
+  feedback & corrections.
 - "Review corrections" in the sidebar (and the tablet rail and phone menu),
   with how many corrections are waiting for you.
 - Review corrections: the queue (anything waiting over 4 hours flagged),
