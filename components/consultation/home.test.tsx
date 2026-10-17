@@ -14,9 +14,10 @@ import { ALERT_NOW, makeAlert } from "@/tests/alerts";
 import { TEST_USER } from "@/tests/auth-wrapper";
 
 const push = vi.fn();
+const replace = vi.fn();
 let search = new URLSearchParams();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push, replace: vi.fn() }),
+  useRouter: () => ({ push, replace }),
   usePathname: () => "/",
   useSearchParams: () => search,
 }));
@@ -66,6 +67,7 @@ const mount = async (node: ReactNode) => {
 beforeEach(() => {
   search = new URLSearchParams();
   push.mockClear();
+  replace.mockClear();
   createQuery.mockClear();
 });
 afterEach(() => vi.restoreAllMocks());
@@ -286,6 +288,106 @@ describe("Home from a patient alert", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/Filled in from a patient alert/)).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("takes the token out of the address once it has been read", async () => {
+    arrive();
+    await mount(<Page />);
+    expect(replace).toHaveBeenCalledWith("/");
+    expect(replace).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes an unknown token out of the address too", async () => {
+    search = new URLSearchParams({ prefill: "unknown12345" });
+    await mount(<Page />);
+    expect(replace).toHaveBeenCalledWith("/");
+  });
+
+  it("an edit wins over a prefill, and the prefill is forgotten", async () => {
+    const token = stashPrefill(values());
+    search = new URLSearchParams({ edit: "q1", prefill: token });
+    await mount(
+      <Seeded>
+        <Page />
+      </Seeded>,
+    );
+    expect(screen.getByLabelText(/^Age/)).toHaveValue("54");
+    expect(screen.queryByText(/Filled in from a patient alert/)).toBeNull();
+    expect(readPrefill(token)).toBeNull();
+    expect(replace).toHaveBeenCalledWith("/?edit=q1");
+  });
+
+  describe("with an unsaved draft on the kept-alive page", () => {
+    const open = async () => {
+      const tree = () => (
+        <Providers>
+          <Seeded>
+            <Page />
+          </Seeded>
+        </Providers>
+      );
+      let view!: ReturnType<typeof render>;
+      await act(async () => {
+        view = render(tree());
+      });
+      const ask = (age: number) => {
+        const t = stashPrefill(askFromAlert(makeAlert({ age }), ALERT_NOW));
+        search = new URLSearchParams({ prefill: t });
+        view.rerender(tree());
+        return t;
+      };
+      return { ask };
+    };
+
+    it("asks first, and Keep my draft leaves it untouched", async () => {
+      const { ask } = await open();
+      await userEvent.type(screen.getByLabelText(/^Clinical question/), "xyz");
+      const draft = (screen.getByLabelText(/^Age/) as HTMLInputElement).value;
+      const q = (
+        screen.getByLabelText(/^Clinical question/) as HTMLInputElement
+      ).value;
+      const t = ask(71);
+      expect(
+        screen.getByRole("dialog", { name: "Replace your draft?" }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Age/)).toHaveValue(draft);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Keep my draft" }),
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.getByLabelText(/^Age/)).toHaveValue(draft);
+      expect(screen.getByLabelText(/^Clinical question/)).toHaveValue(q);
+      expect(screen.queryByText(/Filled in from a patient alert/)).toBeNull();
+      expect(readPrefill(t)).toBeNull();
+      expect(replace).toHaveBeenCalledWith("/");
+    });
+
+    it("Replace applies the alert's details", async () => {
+      const { ask } = await open();
+      await userEvent.type(screen.getByLabelText(/^Clinical question/), "xyz");
+      ask(71);
+      await userEvent.click(screen.getByRole("button", { name: "Replace" }));
+      expect(screen.getByLabelText(/^Age/)).toHaveValue("71");
+      expect(screen.getByLabelText(/^Clinical question/)).toHaveValue(
+        values().question,
+      );
+      expect(screen.getByText(/Filled in from a patient alert/)).toBeVisible();
+    });
+
+    it("with no draft the alert applies at once; a second alert asks", async () => {
+      const { ask } = await open();
+      ask(60);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.getByLabelText(/^Age/)).toHaveValue("60");
+      await userEvent.type(screen.getByLabelText(/^Clinical question/), " ok");
+      ask(72);
+      expect(
+        screen.getByRole("dialog", { name: "Replace your draft?" }),
+      ).toBeVisible();
+      expect(screen.getByLabelText(/^Age/)).toHaveValue("60");
+      await userEvent.click(screen.getByRole("button", { name: "Replace" }));
+      expect(screen.getByLabelText(/^Age/)).toHaveValue("72");
+    });
   });
 
   it("signing out forgets the prefill", async () => {

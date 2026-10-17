@@ -9,6 +9,8 @@ import { TopBar } from "@/components/shell/top-bar";
 import { FirstVisit } from "@/components/states/first-visit";
 import { UnsavedGuard } from "@/components/states/unsaved-guard";
 import { Banner } from "@/components/ui/banner";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { QueryCreateIn } from "@/lib/api/contract";
 import { emptyForm, fromQuery, type FormValues } from "@/lib/form-schema";
@@ -56,6 +58,11 @@ function Home({
     editing ? fromQuery(editing.query) : (prefill ?? emptyForm),
   );
   const [fromAlert, setFromAlert] = useState(Boolean(prefill) && !editing);
+  // An alert's form that arrived while a draft was open, waiting for a yes or no.
+  const [asking, setAsking] = useState<FormValues | null>(null);
+  // The last `?prefill=` token looked at (the one from first render counts).
+  const [seen, setSeen] = useState(prefillToken);
+  const handled = useRef<string | null>(null);
   // Remounts the form for a new starting point (an example, or after Discard).
   const [formKey, setFormKey] = useState(0);
   const [dirty, setDirty] = useState(false);
@@ -70,6 +77,33 @@ function Home({
     clearPrefill();
   };
 
+  // The page stays mounted, so a later `?prefill=` arrives here, not at mount.
+  // Never replace an unsaved draft without asking.
+  if (prefillToken && prefillToken !== seen) {
+    setSeen(prefillToken);
+    const found = readPrefill(prefillToken);
+    if (found && !editing) {
+      if (dirty) setAsking(found);
+      else {
+        setInitial(found);
+        setFormKey((k) => k + 1);
+        setStarted(true);
+        setFromAlert(true);
+      }
+    }
+  }
+  // Once read, the token leaves the address so Back/Forward can't apply it
+  // again; with an edit open the alert's form is not wanted at all.
+  useEffect(() => {
+    if (!prefillToken || handled.current === prefillToken) return;
+    handled.current = prefillToken;
+    if (editing) clearPrefill();
+    const rest = new URLSearchParams();
+    if (editId) rest.set("edit", editId);
+    if (waitingId) rest.set("waiting", waitingId);
+    router.replace(rest.size ? `/?${rest}` : "/");
+  }, [prefillToken, editing, editId, waitingId, router]);
+
   const save = async (q: QueryCreateIn) => {
     const localId = await outbox.queueQuery(q);
     session.add({
@@ -83,6 +117,17 @@ function Home({
     dismissNotice();
     restart(emptyForm);
     window.history.pushState(null, "", `/?waiting=${localId}`);
+  };
+
+  const keepDraft = () => {
+    setAsking(null);
+    clearPrefill();
+  };
+  const replaceDraft = () => {
+    if (!asking) return;
+    restart(asking);
+    setFromAlert(true);
+    setAsking(null);
   };
 
   if (real) return null; // synced: on the way to /c/<real id>
@@ -206,6 +251,22 @@ function Home({
         </div>
         {started && <HowItWorksPanel onExample={restart} />}
       </div>
+      <Dialog
+        open={asking !== null}
+        onClose={keepDraft}
+        title="Replace your draft?"
+      >
+        <p className="mb-[18px] text-[14.5px] leading-normal text-ink-2">
+          Replace your draft with the details from the alert? What you typed
+          will be lost.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button onClick={keepDraft}>Keep my draft</Button>
+          <Button variant="danger" onClick={replaceDraft}>
+            Replace
+          </Button>
+        </div>
+      </Dialog>
       <UnsavedGuard
         dirty={dirty && !submit.isPending}
         onDiscard={() => restart(emptyForm)}
@@ -224,7 +285,7 @@ function HomeRoute() {
   const prefillToken = params.get("prefill");
   return (
     <Home
-      key={`${editId ?? ""}|${waitingId ?? ""}|${prefillToken ?? ""}`}
+      key={`${editId ?? ""}|${waitingId ?? ""}`}
       editId={editId}
       waitingId={waitingId}
       prefillToken={prefillToken}
