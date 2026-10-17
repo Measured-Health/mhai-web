@@ -29,6 +29,15 @@ All notable changes to this project are documented here. The format follows
   are read out at once and stay until you hide them; a burst shows at most
   three pop-ups and a summary. Pop-ups never take the focus and go when you
   sign out. The panel and pop-ups are left out when printing.
+- Notifications page, Patient alerts tab (on sample data): each alert shows
+  its severity in words and an icon, the abnormal result with its unit,
+  normal range and time, up to three likely causes suggested by MHAI with a
+  confidence word, the patient's name, MRN and where they are, and the
+  hospital's own label for the system it came from when there are several.
+  Acknowledge it, dismiss it with a reason, or open the patient's record in
+  the hospital's system. An alert someone else handled first says who and
+  when. Filters for New, Handled, Dismissed, severity and source; cards on
+  phones; nothing is printed or exported.
 - Review oversight for hospital admins: corrections waiting with their
   specialty, how long they've waited and how many people can review them;
   specialties short of reviewers are flagged; remind the reviewers or
