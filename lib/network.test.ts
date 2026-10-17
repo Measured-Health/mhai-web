@@ -1,7 +1,13 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./api/errors";
-import { pollDelay, retryDelay, shouldRetry, useNetwork } from "./network";
+import {
+  pollDelay,
+  retryDelay,
+  shouldRetry,
+  useNetwork,
+  usePollEvery,
+} from "./network";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -61,5 +67,14 @@ describe("useNetwork", () => {
     const { result } = renderHook(() => useNetwork());
     expect(result.current).toMatchObject({ slow: true, saveData: true });
     Reflect.deleteProperty(navigator, "connection");
+  });
+});
+
+describe("usePollEvery", () => {
+  it("polls only while online", () => {
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    expect(renderHook(() => usePollEvery(30_000)).result.current).toBe(30_000);
+    online.mockReturnValue(false);
+    expect(renderHook(() => usePollEvery(30_000)).result.current).toBe(false);
   });
 });

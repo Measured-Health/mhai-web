@@ -18,7 +18,7 @@ import type {
 } from "./api/admin-contract";
 import { ApiError } from "./api/errors";
 import { useKeyedMutation } from "./keyed-mutation";
-import { retryDelay, shouldRetry, useNetwork } from "./network";
+import { READ_RETRY, useNetwork } from "./network";
 
 /** Review oversight refresh, like the clinicians' queue. */
 export const OVERSIGHT_POLL_MS = 60_000;
@@ -40,11 +40,6 @@ export const ADMIN_KEYS = {
   reviewers: (id: string) => ["admin", "reviewers", id] as const,
 };
 
-// A 4xx won't change on retry; a 401 has already signed out.
-const READ = {
-  retry: (n: number, e: unknown) => shouldRetry(n, e),
-  retryDelay,
-};
 const statusOf = (e: unknown) => (e instanceof ApiError ? e.status : 0);
 
 /**
@@ -61,7 +56,7 @@ export const useStaff = ({ enabled = true }: { enabled?: boolean } = {}) =>
     queryKey: ADMIN_KEYS.staff,
     queryFn: () => getAdminClient().listStaff(),
     enabled,
-    ...READ,
+    ...READ_RETRY,
   });
 
 export const useHospitalSettings = () =>
@@ -69,14 +64,14 @@ export const useHospitalSettings = () =>
     queryKey: ADMIN_KEYS.settings,
     queryFn: () => getAdminClient().getSettings(),
     staleTime: 60_000,
-    ...READ,
+    ...READ_RETRY,
   });
 
 export const useUsage = (period: UsagePeriod) =>
   useQuery({
     queryKey: ADMIN_KEYS.usage(period),
     queryFn: () => getAdminClient().getUsage(period),
-    ...READ,
+    ...READ_RETRY,
   });
 
 export function useActivity(f: ActivityFilter) {
@@ -89,7 +84,7 @@ export function useActivity(f: ActivityFilter) {
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor,
-    ...READ,
+    ...READ_RETRY,
   });
 }
 
@@ -100,7 +95,7 @@ export function useStaffActivity(id: string | null) {
     queryFn: async () =>
       (await getAdminClient().listActivity({ staff_id: id!, limit: 5 })).events,
     enabled: id !== null,
-    ...READ,
+    ...READ_RETRY,
   });
 }
 
@@ -115,7 +110,7 @@ export function useOversight() {
     queryKey: ADMIN_KEYS.oversight,
     queryFn: () => getAdminClient().getOversight(),
     refetchInterval: every,
-    ...READ,
+    ...READ_RETRY,
   });
 }
 
@@ -124,7 +119,7 @@ export function useEligibleReviewers(correctionId: string | null) {
     queryKey: ADMIN_KEYS.reviewers(correctionId ?? ""),
     queryFn: () => getAdminClient().listEligibleReviewers(correctionId!),
     enabled: correctionId !== null,
-    ...READ,
+    ...READ_RETRY,
   });
 }
 

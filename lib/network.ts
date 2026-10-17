@@ -75,3 +75,16 @@ export function isTransient(e: unknown): boolean {
 
 export const retryDelay = (attempt: number) =>
   Math.min(30_000, 1_000 * 2 ** attempt) * (0.5 + Math.random() / 2);
+
+/** A poll interval: only while online, twice as long on 2G or data saver. */
+export function usePollEvery(ms: number): number | false {
+  const net = useNetwork();
+  if (!net.online) return false;
+  return net.slow || net.saveData ? ms * 2 : ms;
+}
+
+/** Read queries retry network errors and 5xx; a 4xx won't change on retry, and a 401 has already signed out. */
+export const READ_RETRY = {
+  retry: (n: number, e: unknown) => shouldRetry(n, e),
+  retryDelay,
+};
