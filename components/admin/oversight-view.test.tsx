@@ -247,8 +247,10 @@ describe("OversightView", () => {
   });
 
   it("offers Try again on a first load that fails", async () => {
+    // A 4xx isn't retried, so the banner shows at once. (A 5xx is retried
+    // with backoff, 3.5 s or more, which made this test flaky.)
     vi.spyOn(holder.client, "getOversight").mockRejectedValue(
-      new ApiError(500, "boom"),
+      new ApiError(403, "forbidden"),
     );
     renderAdmin(<OversightView />);
     const alert = await screen.findByRole("alert");
