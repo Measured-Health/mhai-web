@@ -1,8 +1,12 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CorrectionOut } from "@/lib/api/contract";
 import { ApiError } from "@/lib/api/errors";
 import { CORRECTION_KEYS } from "@/lib/correction-queries";
@@ -17,7 +21,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 import CorrectionsPage from "@/app/(clinical)/(clinician)/notifications/corrections/page";
-import { DecisionsProvider } from "../corrections/decisions-provider";
+import {
+  DecisionsProvider,
+  useDecisions,
+} from "../corrections/decisions-provider";
 
 const reviewer = {
   display_name: "Dr. Bello",
@@ -59,11 +66,19 @@ function ui(children: ReactNode) {
   return qc;
 }
 
-beforeEach(() =>
+beforeEach(() => {
+  seenCounts.length = 0;
   listMine
     .mockReset()
-    .mockResolvedValue([approved, rejected, waiting, withdrawn]),
-);
+    .mockResolvedValue([approved, rejected, waiting, withdrawn]);
+});
+afterEach(() => onlineManager.setOnline(true));
+
+const seenCounts: number[] = [];
+function Probe() {
+  seenCounts.push(useDecisions()!.unseen);
+  return null;
+}
 
 describe("Notifications: Corrections", () => {
   it("lists decided corrections, newest decision first, with the reviewer's reason", async () => {
@@ -126,6 +141,7 @@ describe("Notifications: Corrections", () => {
     ]);
     const qc = ui(
       <DecisionsProvider>
+        <Probe />
         <CorrectionsPage />
       </DecisionsProvider>,
     );
@@ -138,10 +154,45 @@ describe("Notifications: Corrections", () => {
       name: "Decisions on your corrections",
     });
     expect(await within(list).findByText("New")).toBeVisible();
+    expect(seenCounts).toContain(1);
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: /^Notifications/ }),
       ).toHaveAccessibleName("Notifications"),
     );
+    expect(seenCounts.at(-1)).toBe(0);
+  });
+
+  it("sorts a decision with an unreadable time last", async () => {
+    listMine.mockResolvedValue([
+      { ...approved, decided_at: "not a date" },
+      rejected,
+    ]);
+    ui(<CorrectionsPage />);
+    const list = await screen.findByRole("list", {
+      name: "Decisions on your corrections",
+    });
+    const items = within(list).getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent("Rejected");
+    expect(items[1]).toHaveTextContent("Approved");
+  });
+
+  it("says it is offline instead of loading forever", async () => {
+    onlineManager.setOnline(false);
+    ui(<CorrectionsPage />);
+    expect(await screen.findByText(/You're offline/)).toBeVisible();
+    expect(screen.queryByText("Loading decisions")).toBeNull();
+    expect(screen.queryByText(/No decisions yet/)).toBeNull();
+  });
+
+  it("disables Try again while retrying", async () => {
+    listMine.mockRejectedValueOnce(new ApiError(404, "not_found"));
+    ui(<CorrectionsPage />);
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    listMine.mockReturnValueOnce(new Promise(() => {}));
+    await userEvent.click(retry);
+    expect(
+      await screen.findByRole("button", { name: "Trying again…" }),
+    ).toBeDisabled();
   });
 });

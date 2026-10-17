@@ -24,6 +24,7 @@ export function CorrectionsTab() {
   const q = useMyCorrections();
   const d = useDecisions();
   const now = useNow(60_000);
+  // A retry after a failed first load goes back to "pending"; keep the error up.
   const unseen = d?.unseen ?? 0;
   const markSeen = d?.markSeen;
   useEffect(() => {
@@ -41,7 +42,11 @@ export function CorrectionsTab() {
       <p className="mb-3 text-[13.5px] text-ink-2">
         What reviewers decided about corrections you suggested.
       </p>
-      {q.isPending ? (
+      {q.isPending && q.fetchStatus === "paused" ? (
+        <p className="text-[13.5px] text-ink-3">
+          You&apos;re offline. Your decisions will load when you reconnect.
+        </p>
+      ) : q.isPending && !q.errorUpdateCount ? (
         <div aria-busy="true" className="flex flex-col gap-3">
           <span className="sr-only">Loading decisions</span>
           {[0, 1].map((i) => (
@@ -56,9 +61,10 @@ export function CorrectionsTab() {
           <Button
             variant="ghost"
             className="mt-3"
+            disabled={q.isFetching}
             onClick={() => void q.refetch()}
           >
-            Try again
+            {q.isFetching ? "Trying again…" : "Try again"}
           </Button>
         </div>
       ) : decided.length === 0 ? (
@@ -99,7 +105,7 @@ export function CorrectionsTab() {
       )}
       <Link
         href="/my-feedback"
-        className="mt-4 inline-flex min-h-11 items-center text-[13.5px] font-semibold text-mint-deep"
+        className="mt-4 inline-flex min-h-11 items-center text-[13.5px] font-semibold text-mint-deep focus-visible:outline-2 focus-visible:outline-mint-deep"
       >
         My feedback &amp; corrections ›
       </Link>
