@@ -12,6 +12,8 @@ export interface BarItem {
   /** Under the small-group rule: writes "Fewer than 5" and draws no bar. */
   hidden?: boolean;
   icon?: ReactNode;
+  /** A line under the label, e.g. the change against the previous period. Never with a hidden value. */
+  note?: ReactNode;
   /** Bar colour class; `bg-mint` by default. */
   barClass?: string;
 }
@@ -54,6 +56,11 @@ export function BarList({
               <b className="font-mono">{i.text}</b>
             )}
           </span>
+          {i.note && !i.hidden && (
+            <span className="mt-0.5 block text-[12px] text-ink-2 [overflow-wrap:anywhere]">
+              {i.note}
+            </span>
+          )}
           {drawn(i) && (
             <span
               aria-hidden

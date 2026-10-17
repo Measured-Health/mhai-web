@@ -93,6 +93,37 @@ describe("BarList", () => {
       "motion-safe:animate-[grow_var(--t-story)_var(--e-out)_both]",
     );
   });
+  it("writes a note under the label, never beside a hidden group (F8)", () => {
+    render(
+      <BarList
+        label="Outcomes"
+        items={[
+          {
+            key: "a",
+            label: "Acknowledged",
+            value: 0.82,
+            text: "82%",
+            note: "down 3 points vs last month",
+          },
+          {
+            key: "d",
+            label: "Dismissed",
+            value: null,
+            text: "",
+            hidden: true,
+            note: "up 3 points vs last month",
+          },
+        ]}
+      />,
+    );
+    const rows = within(screen.getByRole("list", { name: "Outcomes" }))
+      .getAllByRole("listitem")
+      .map((li) => li.textContent);
+    expect(rows).toEqual([
+      "Acknowledged82%down 3 points vs last month",
+      "DismissedFewer than 5",
+    ]);
+  });
 });
 
 const COLUMNS: Column[] = [

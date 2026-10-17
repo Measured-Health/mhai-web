@@ -59,6 +59,14 @@ const FLAG_WORD: Record<string, string> = {
   abnormal: "abnormal",
 };
 
+/** A finding's direction in words. An unknown flag is still a flag: it reads "abnormal", never as normal (F4). */
+export const flagWord = (flag: string | null | undefined): string | null =>
+  flag
+    ? Object.hasOwn(FLAG_WORD, flag)
+      ? FLAG_WORD[flag]
+      : FLAG_WORD.abnormal
+    : null;
+
 /**
  * "Potassium 2.9 mmol/L (low; normal 3.5–5.1)". The range is the source's,
  * as given. Missing parts are left out, never guessed (R9).
@@ -68,12 +76,7 @@ export function findingLine(f: FindingOut): string {
   const value = f.value?.trim() || null;
   const unit = value ? f.unit?.trim() || null : null;
   const head = [name, value, unit].filter(Boolean).join(" ");
-  // An unknown flag is still a flag: it reads "abnormal", never as normal (F4).
-  const flag = f.flag
-    ? Object.hasOwn(FLAG_WORD, f.flag)
-      ? FLAG_WORD[f.flag]
-      : FLAG_WORD.abnormal
-    : null;
+  const flag = flagWord(f.flag);
   const range = f.reference_range?.trim()
     ? `normal ${f.reference_range.trim()}`
     : null;

@@ -18,7 +18,7 @@ import {
 } from "@/lib/notifications/alert-view";
 import { Chip } from "../ui/chip";
 
-const SEVERITY_ICON = {
+export const SEVERITY_ICON = {
   critical: OctagonAlert,
   urgent: AlertTriangle,
   info: Info,

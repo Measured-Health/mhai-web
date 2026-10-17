@@ -6,7 +6,7 @@ import {
   TriangleAlert,
   XCircle,
 } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useState } from "react";
 import type { ConfidenceLevel, UsagePeriod } from "@/lib/api/admin-contract";
 import { useUsage } from "@/lib/admin-queries";
 import { csvName, downloadCsv, usageCsv } from "@/lib/admin/csv";
@@ -21,13 +21,14 @@ import {
 import { adminError } from "@/lib/admin/errors";
 import { useAuth } from "@/lib/auth/auth-context";
 import { RESULT_LABEL } from "@/lib/labels";
-import { Banner } from "../ui/banner";
 import { Button } from "../ui/button";
 import { BarList } from "../ui/charts/bar-list";
 import { cn } from "../ui/cn";
 import { Skeleton } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
 import { AdminFrame } from "./admin-frame";
+import { UsageAlerts } from "./usage-alerts";
+import { Card, RetryBanner, Tile } from "./usage-parts";
 
 const LEVEL: Record<
   ConfidenceLevel,
@@ -38,29 +39,6 @@ const LEVEL: Record<
   review: { Icon: OctagonAlert, bar: "bg-bad", text: "text-bad-deep" },
   failed: { Icon: XCircle, bar: "bg-ink-3", text: "text-ink-2" },
 };
-
-function Tile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="card-v3 px-5 py-4">
-      <b className="block font-display text-[34px] font-black leading-none">
-        {value}
-      </b>
-      <span className="mt-1 block text-[12.5px] text-ink-3">{label}</span>
-    </div>
-  );
-}
-
-function Card({ title, children }: { title: string; children: ReactNode }) {
-  const id = useId();
-  return (
-    <section aria-labelledby={id} className="card-v3 px-[22px] py-4">
-      <h3 id={id} className="mb-3 text-[14px] font-semibold">
-        {title}
-      </h3>
-      {children}
-    </section>
-  );
-}
 
 /** Usage in counts only (hospital-admin.html tab 5). */
 export function UsageView() {
@@ -127,18 +105,9 @@ export function UsageView() {
     >
       {failed && (
         <div className="mb-4">
-          <Banner tone="bad" title={failed.title}>
+          <RetryBanner title={failed.title} onRetry={() => void q.refetch()}>
             {failed.body}
-            <span className="mt-2 block">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => void q.refetch()}
-              >
-                Try again
-              </Button>
-            </span>
-          </Banner>
+          </RetryBanner>
         </div>
       )}
       {!u ? (
@@ -209,6 +178,10 @@ export function UsageView() {
               />
             </Card>
           </div>
+          {/* Hidden while Usage is failing: no stale alert numbers under the banner (spec §2). */}
+          {!q.isError && (
+            <UsageAlerts usage={u} onRetry={() => void q.refetch()} />
+          )}
         </div>
       )}
       <p className="mt-4 text-[12.5px] text-ink-3">

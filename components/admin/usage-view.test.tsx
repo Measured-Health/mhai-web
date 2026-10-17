@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/errors";
 import type { AdminClient } from "@/lib/api/admin";
 import { DEMO_EMAILS } from "@/lib/auth/mock";
-import { screenAdminAs } from "@/tests/admin";
+import { mockAdminAs, mockAdminWith, screenAdminAs } from "@/tests/admin";
 import { renderAdmin } from "@/tests/admin-render";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as AdminClient }));
@@ -177,5 +177,102 @@ describe("UsageView", () => {
     renderAdmin(<UsageView />);
     await screen.findByText("1,284");
     expect(screen.getByLabelText("Period").className).toContain("min-h-11");
+  });
+});
+
+describe("UsageView: patient alerts", () => {
+  beforeEach(() => {
+    holder.client = mockAdminAs(DEMO_EMAILS.director);
+  });
+
+  it("shows the Patient alerts group below the numbers", async () => {
+    renderAdmin(<UsageView />);
+    const group = await screen.findByRole("region", { name: "Patient alerts" });
+    expect(
+      within(group).getByRole("region", { name: "What changed" }),
+    ).toHaveTextContent("Critical within 15 min: 71%, down from 88%");
+    const bySpecialty = screen.getByRole("region", { name: "By specialty" });
+    expect(
+      bySpecialty.compareDocumentPosition(group) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("follows the period picker", async () => {
+    renderAdmin(<UsageView />);
+    await screen.findByRole("region", { name: "Patient alerts" });
+    await userEvent.selectOptions(
+      screen.getByLabelText("Period"),
+      "last_90_days",
+    );
+    expect(
+      await screen.findByText("Not enough data to compare"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Most alerts in the week of 3 Oct: 45"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no alerts group when alerts aren't switched on (Review Focus 5)", async () => {
+    holder.client = mockAdminWith("off");
+    renderAdmin(<UsageView />);
+    await screen.findByText("1,284");
+    expect(screen.queryByRole("region", { name: "Patient alerts" })).toBeNull();
+    expect(screen.queryByText(/patient alerts/i)).toBeNull();
+  });
+
+  it("offers Try again, not zeros, when alerts couldn't load (Review Focus 1)", async () => {
+    const good = await mockAdminAs(DEMO_EMAILS.director).getUsage("this_month");
+    holder.client = mockAdminWith("unavailable");
+    renderAdmin(<UsageView />);
+    const group = await screen.findByRole("region", { name: "Patient alerts" });
+    expect(
+      within(group).getByText("Couldn't load patient alerts"),
+    ).toBeInTheDocument();
+    expect(within(group).queryByText("Nothing unusual this period")).toBeNull();
+    // The rest of Usage is unaffected.
+    expect(screen.getByText("1,284")).toBeInTheDocument();
+    vi.spyOn(holder.client, "getUsage").mockResolvedValue(good);
+    await userEvent.click(
+      within(group).getByRole("button", { name: "Try again" }),
+    );
+    expect(
+      await screen.findByText("Critical within 15 min: 71%, down from 88%"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no alerts group when Usage itself fails", async () => {
+    vi.spyOn(holder.client, "getUsage").mockRejectedValue(
+      new ApiError(403, "forbidden"),
+    );
+    renderAdmin(<UsageView />);
+    expect(await screen.findByText("You can't do this")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Patient alerts" })).toBeNull();
+    expect(screen.queryByText("Nothing unusual this period")).toBeNull();
+  });
+
+  it("drops the alerts group, not just its banner, when a refresh fails (F18)", async () => {
+    renderAdmin(<UsageView />);
+    await screen.findByRole("region", { name: "Patient alerts" });
+    vi.spyOn(holder.client, "getUsage").mockRejectedValue(
+      new ApiError(403, "forbidden"),
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText("Period"),
+      "last_month",
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText("Period"),
+      "this_month",
+    );
+    // A 403 isn't retried, so the refresh fails at once. The page keeps its
+    // numbers under the error banner; old alert numbers (or a stale
+    // "Nothing unusual") don't stay with them.
+    await waitFor(() => {
+      expect(screen.getByText("You can't do this")).toBeInTheDocument();
+      expect(screen.getByText("1,284")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("region", { name: "Patient alerts" })).toBeNull();
+    expect(screen.getByText("1,284")).toBeInTheDocument();
   });
 });
