@@ -18,7 +18,7 @@ import type {
 } from "./api/admin-contract";
 import { ApiError } from "./api/errors";
 import { useKeyedMutation } from "./keyed-mutation";
-import { READ_RETRY, useNetwork } from "./network";
+import { READ_RETRY, usePollEvery } from "./network";
 
 /** Review oversight refresh, like the clinicians' queue. */
 export const OVERSIGHT_POLL_MS = 60_000;
@@ -100,12 +100,7 @@ export function useStaffActivity(id: string | null) {
 }
 
 export function useOversight() {
-  const net = useNetwork();
-  const every = !net.online
-    ? false
-    : net.slow || net.saveData
-      ? OVERSIGHT_POLL_MS * 2
-      : OVERSIGHT_POLL_MS;
+  const every = usePollEvery(OVERSIGHT_POLL_MS);
   return useQuery({
     queryKey: ADMIN_KEYS.oversight,
     queryFn: () => getAdminClient().getOversight(),

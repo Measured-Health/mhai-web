@@ -28,6 +28,8 @@ export const FEED_SIZE = 20;
  * Every new Critical alert is fetched on each check, following cursors. The
  * cap keeps one check bounded if the backend holds a flood of them: 5 pages
  * is 100 Critical alerts, far more than anyone can act on from a pop-up.
+ * Criticals beyond the cap are not in the feed, but the bell count (the
+ * unread count) still counts them.
  */
 const CRITICAL_MAX_PAGES = 5;
 /** Pop-ups stay on until the saved settings say otherwise (R5). */
@@ -51,8 +53,18 @@ export const NOTIFY_KEYS = {
 export const alertsOff = (e: unknown) =>
   e instanceof ApiError && (e.status === 404 || e.status === 403);
 
-const newestFirst = (x: AlertOut, y: AlertOut) =>
-  Date.parse(y.created_at) - Date.parse(x.created_at);
+/** Milliseconds for sorting; an unreadable time becomes -Infinity, so it goes last. */
+const timeOf = (a: AlertOut) => {
+  const t = Date.parse(a.created_at);
+  return Number.isNaN(t) ? -Infinity : t;
+};
+/** Newest first; equal or unreadable times fall back to the id, so the order is stable. */
+const newestFirst = (x: AlertOut, y: AlertOut) => {
+  const tx = timeOf(x);
+  const ty = timeOf(y);
+  if (tx !== ty) return ty > tx ? 1 : -1;
+  return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
+};
 
 /**
  * The first FEED_SIZE new alerts plus every new Critical one, so a Critical
@@ -71,7 +83,7 @@ async function fetchFeed(): Promise<AlertPageOut> {
         ...(cursor ? { cursor } : {}),
       });
       found.push(...p.alerts);
-      if (!p.next_cursor) break;
+      if (!p.next_cursor || p.alerts.length === 0) break;
       cursor = p.next_cursor;
     }
     return found;
@@ -82,7 +94,12 @@ async function fetchFeed(): Promise<AlertPageOut> {
   ]);
   const byId = new Map<string, AlertOut>();
   for (const a of [...first.alerts, ...critical]) byId.set(a.id, a);
-  return { ...first, alerts: [...byId.values()].sort(newestFirst) };
+  // The feed is not pageable: the merged list has no single cursor.
+  return {
+    ...first,
+    alerts: [...byId.values()].sort(newestFirst),
+    next_cursor: null,
+  };
 }
 
 /** New alerts, newest first: the pop-ups and the bell (polled). */
@@ -205,6 +222,8 @@ const SETTINGS_WRITE = ["notification-settings", "write"] as const;
 /** Saves at once on screen (B3); a failed save puts the old value back. */
 export function useUpdateNotificationSettings() {
   const qc = useQueryClient();
+  // True while this is the only settings save still running.
+  const last = () => qc.isMutating({ mutationKey: SETTINGS_WRITE }) <= 1;
   return useKeyedMutation(
     (p: NotificationSettingsPatchIn, key) =>
       getAlertsClient().updateNotificationSettings(p, { idempotencyKey: key }),
@@ -221,13 +240,20 @@ export function useUpdateNotificationSettings() {
         }));
         return { before };
       },
-      onSuccess: (s) => qc.setQueryData(NOTIFY_KEYS.settings, s),
+      // With saves overlapping, only the last to finish writes the cache;
+      // an earlier one leaves the newer optimistic value alone.
+      onSuccess: (s) => {
+        if (last()) qc.setQueryData(NOTIFY_KEYS.settings, s);
+      },
       onError: (_e, _p, ctx) => {
-        if (ctx) qc.setQueryData(NOTIFY_KEYS.settings, ctx.before ?? undefined);
+        if (!ctx || !last()) return;
+        // With nothing saved before, forget the guess: pop-ups fall back to on (R5).
+        if (ctx.before) qc.setQueryData(NOTIFY_KEYS.settings, ctx.before);
+        else void qc.resetQueries({ queryKey: NOTIFY_KEYS.settings });
       },
       onSettled: () => {
         // Re-read once the last save is done, so a quick second change isn't overwritten by an older read.
-        if (qc.isMutating({ mutationKey: SETTINGS_WRITE }) <= 1)
+        if (last())
           void qc.invalidateQueries({ queryKey: NOTIFY_KEYS.settings });
       },
     },

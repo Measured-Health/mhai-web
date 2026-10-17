@@ -4,7 +4,10 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockAlerts } from "@/lib/api/mock-alerts";
 import { createMockAlerts, MOCK_ALERT_EVERY_MS } from "@/lib/api/mock-alerts";
-import type { AlertOut } from "@/lib/api/alerts-contract";
+import type {
+  AlertOut,
+  NotificationSettingsPatchIn,
+} from "@/lib/api/alerts-contract";
 import { ALERT_NOW, makeAlert, mockAlerts } from "@/tests/alerts";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as MockAlerts }));
@@ -118,6 +121,42 @@ describe("alert queries", () => {
     );
     expect(critical).toHaveLength(5);
     expect(result.current.data!.alerts).toHaveLength(FEED_SIZE * 5);
+  });
+
+  it("puts alerts with an unreadable time last, in a steady order", async () => {
+    const rows = [
+      makeAlert({ id: "b-bad", created_at: "not a time" }),
+      makeAlert({ id: "a-bad", created_at: "" }),
+      makeAlert({ id: "good", created_at: new Date(ALERT_NOW).toISOString() }),
+    ];
+    vi.spyOn(holder.client, "listAlerts").mockImplementation(async () => ({
+      alerts: rows,
+      next_cursor: null,
+      sources: [],
+    }));
+    const { result } = renderHook(() => useAlertFeed(), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data!.alerts.map((a) => a.id)).toEqual([
+      "good",
+      "a-bad",
+      "b-bad",
+    ]);
+  });
+
+  it("stops following Critical cursors on an empty page, and the feed is not pageable", async () => {
+    const list = vi
+      .spyOn(holder.client, "listAlerts")
+      .mockImplementation(async () => ({
+        alerts: [],
+        next_cursor: "more",
+        sources: [],
+      }));
+    const { result } = renderHook(() => useAlertFeed(), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(
+      list.mock.calls.filter((c) => c[0].severity === "critical"),
+    ).toHaveLength(1);
+    expect(result.current.data!.next_cursor).toBeNull();
   });
 
   it("lists by filter and pages with the cursor", async () => {
@@ -357,5 +396,95 @@ describe("notification settings", () => {
     await waitFor(() =>
       expect(result.current.s.data).toEqual(DEFAULT_SETTINGS),
     );
+  });
+  describe("overlapping saves", () => {
+    const setup = () => {
+      const calls: {
+        patch: NotificationSettingsPatchIn;
+        ok: () => void;
+        fail: () => void;
+      }[] = [];
+      const real = holder.client.updateNotificationSettings.bind(holder.client);
+      vi.spyOn(holder.client, "updateNotificationSettings").mockImplementation(
+        (p, o) =>
+          new Promise((resolve, reject) => {
+            calls.push({
+              patch: p,
+              ok: () => resolve(real(p, o)),
+              fail: () => reject(new ApiError(400, "error")),
+            });
+          }),
+      );
+      return calls;
+    };
+    const hooks = () =>
+      renderHook(
+        () => ({
+          s: useNotificationSettings(),
+          save: useUpdateNotificationSettings(),
+        }),
+        { wrapper },
+      );
+
+    it("keeps the later save's value when the earlier one answers first", async () => {
+      const calls = setup();
+      const { result } = hooks();
+      await waitFor(() =>
+        expect(result.current.s.data).toEqual(DEFAULT_SETTINGS),
+      );
+      act(() => result.current.save.mutate({ alert_popups: false }));
+      act(() => result.current.save.mutate({ correction_popups: false }));
+      await waitFor(() => expect(calls).toHaveLength(2));
+      await act(async () => calls[0]!.ok());
+      expect(qc.getQueryData(NOTIFY_KEYS.settings)).toEqual({
+        alert_popups: false,
+        correction_popups: false,
+      });
+      await act(async () => calls[1]!.ok());
+      await waitFor(() =>
+        expect(result.current.s.data).toEqual({
+          alert_popups: false,
+          correction_popups: false,
+        }),
+      );
+    });
+
+    it("doesn't wipe the later save's value when the earlier one fails", async () => {
+      const calls = setup();
+      const { result } = hooks();
+      await waitFor(() =>
+        expect(result.current.s.data).toEqual(DEFAULT_SETTINGS),
+      );
+      act(() => result.current.save.mutate({ alert_popups: false }));
+      act(() => result.current.save.mutate({ correction_popups: false }));
+      await waitFor(() => expect(calls).toHaveLength(2));
+      await act(async () => calls[0]!.fail());
+      expect(qc.getQueryData(NOTIFY_KEYS.settings)).toEqual({
+        alert_popups: false,
+        correction_popups: false,
+      });
+    });
+  });
+
+  it("falls back to both on when a save fails before the settings loaded (R5)", async () => {
+    vi.spyOn(holder.client, "getNotificationSettings").mockImplementation(
+      () => new Promise(() => {}),
+    );
+    let fail!: () => void;
+    vi.spyOn(holder.client, "updateNotificationSettings").mockImplementation(
+      () =>
+        new Promise((_, rej) => {
+          fail = () => rej(new ApiError(400, "error"));
+        }),
+    );
+    const { result } = renderHook(
+      () => ({ p: usePopupSettings(), save: useUpdateNotificationSettings() }),
+      { wrapper },
+    );
+    act(() => result.current.save.mutate({ alert_popups: false }));
+    await waitFor(() => expect(result.current.p.alert_popups).toBe(false));
+    act(() => fail());
+    await waitFor(() => expect(result.current.save.isError).toBe(true));
+    await waitFor(() => expect(result.current.p).toEqual(DEFAULT_SETTINGS));
   });
 });
