@@ -29,16 +29,46 @@ async function asHospitalAdmin(page: Page) {
 
 /**
  * A client-side visit to `href`, as a typed address would be, without the
- * reload that ends the memory-only demo session. Uses the router handle
- * Next.js puts on `window.next` (for debugging; fine in tests).
+ * reload that ends the memory-only demo session. It calls
+ * `window.next.router`, a Next.js-internal handle (set "for debugging" in
+ * next/dist/client/components/app-router-instance.js), not a public API: if
+ * a Next.js upgrade removes it, `push` is undefined and this throws, so the
+ * test fails loudly rather than passing without visiting anything.
+ *
+ * Resolves once the browser has actually been at `href` (the router
+ * committed it, however briefly), so a gate that then sends the person
+ * elsewhere is a navigation attempted and refused, never one that didn't
+ * happen.
  */
 async function visitInApp(page: Page, href: string) {
+  const reached = page.waitForEvent("framenavigated", {
+    predicate: (f) =>
+      f === page.mainFrame() && new URL(f.url()).pathname === href,
+    timeout: 15_000,
+  });
   await page.evaluate((to) => {
     const w = window as unknown as {
       next: { router: { push(href: string): void } };
     };
     w.next.router.push(to);
   }, href);
+  await reached;
+}
+
+/** Nothing from the clinical side is on screen. */
+async function expectNoClinicalScreen(page: Page) {
+  await expect(
+    page.getByRole("button", { name: /Start a consultation/ }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Review corrections" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "My feedback & corrections" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /^Decisions on your corrections/ }),
+  ).toHaveCount(0);
 }
 
 test("a hospital admin signs in straight to Staff, with nothing clinical", async ({
@@ -85,16 +115,23 @@ test("an admin who isn't a clinician can't reach clinical screens", async ({
   await expect(page).toHaveURL(/\/admin\/staff$/);
   await expect(manage(page, "Dr. Kofi Mensah")).toBeVisible();
 
-  // A direct visit to a clinical screen is sent back to Staff.
+  // A direct visit to a clinical screen is sent back to Staff. Each one
+  // starts on another admin page (reached by a visit, which proves the
+  // visits work), so landing on Staff is a real redirect.
   for (const clinical of ["/review", "/", "/my-feedback"]) {
+    await visitInApp(page, "/admin/settings");
+    await expect(page).toHaveURL(/\/admin\/settings$/);
+    await expect(
+      page.getByRole("heading", { name: "Hospital settings", level: 2 }),
+    ).toBeVisible();
     await visitInApp(page, clinical);
     await expect(page).toHaveURL(/\/admin\/staff$/);
+    await expect(
+      page.getByRole("heading", { name: "Staff", level: 2 }),
+    ).toBeVisible();
     await expect(manage(page, "Dr. Kofi Mensah")).toBeVisible();
+    await expectNoClinicalScreen(page);
   }
-  await expect(
-    page.getByRole("button", { name: /Start a consultation/ }),
-  ).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: /Review/ })).toHaveCount(0);
 });
 
 test("a new hospital admin accepts the terms, sets a password and two-step, then lands on Staff", async ({
@@ -108,9 +145,15 @@ test("a new hospital admin accepts the terms, sets a password and two-step, then
   await page.getByLabel("Confirm password").fill("tram-lantern-okra");
   await page.getByRole("button", { name: "Save password" }).click();
   await expect(page.getByRole("img", { name: /QR code/ })).toBeVisible();
-  // Two-step can't be skipped by a hospital admin: Staff is still out of reach.
+  // Two-step can't be skipped by a hospital admin: a visit to Staff (which
+  // the browser does reach, see visitInApp) is sent back to the setup step.
   await visitInApp(page, "/admin/staff");
   await expect(page).toHaveURL(/\/welcome$/);
+  await expect(page.getByRole("img", { name: /QR code/ })).toBeVisible();
+  await expect(manage(page, "Dr. Kofi Mensah")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Staff", level: 2 }),
+  ).toHaveCount(0);
   await typeCode(page, "123456");
   await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
   await page.getByLabel("I've saved these codes somewhere safe").check();
