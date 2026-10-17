@@ -1,0 +1,147 @@
+"use client";
+import { useId } from "react";
+import type { HospitalSettingsOut, StaffOut } from "@/lib/api/admin-contract";
+import {
+  useHospitalSettings,
+  useStaff,
+  useStaffActivity,
+} from "@/lib/admin-queries";
+import { actorName, describeEvent, eventClock } from "@/lib/admin/activity";
+import { inviteNote, policyBroken, sortName } from "@/lib/admin/staff";
+import { useNow } from "@/lib/hooks/use-now";
+import { Avatar } from "../shell/account-menu";
+import { Banner } from "../ui/banner";
+import { Button } from "../ui/button";
+import { SidePanel } from "../ui/side-panel";
+import { Skeleton } from "../ui/skeleton";
+import { AccessEditor } from "./access-editor";
+import { StaffStatusChip } from "./chips";
+
+const JOINED = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+function joined(s: StaffOut): string | null {
+  const t = s.joined_at ? Date.parse(s.joined_at) : NaN;
+  return Number.isFinite(t) ? `joined ${JOINED.format(t)}` : null;
+}
+
+/** The staff member side panel (hospital-admin.html tab 3). */
+export function StaffPanel({
+  staffId,
+  onClose,
+}: {
+  staffId: string | null;
+  onClose(): void;
+}) {
+  const staff = useStaff();
+  const settings = useHospitalSettings();
+  const now = useNow(60_000);
+  const list = staff.data ?? [];
+  const row = list.find((s) => s.id === staffId) ?? null;
+  return (
+    <SidePanel open={staffId !== null} onClose={onClose} title="Staff member">
+      {row ? (
+        <Member row={row} list={list} settings={settings.data} now={now} />
+      ) : staff.isSuccess ? (
+        <div role="status">
+          <b className="block text-[15px]">
+            This person is no longer on the staff list
+          </b>
+          <p className="mt-1 text-[13.5px] text-ink-2">
+            Someone else may have removed them. Nothing was changed.
+          </p>
+          <Button variant="ghost" className="mt-4" onClick={onClose}>
+            Back to staff
+          </Button>
+        </div>
+      ) : (
+        <Skeleton className="h-40" />
+      )}
+    </SidePanel>
+  );
+}
+
+function Member({
+  row,
+  list,
+  settings,
+  now,
+}: {
+  row: StaffOut;
+  list: StaffOut[];
+  settings: HospitalSettingsOut | undefined;
+  now: number;
+}) {
+  const activity = useStaffActivity(row.id);
+  const recentId = useId();
+  const note = inviteNote(row, now);
+  return (
+    <div className="flex flex-col gap-5">
+      <header className="flex items-start gap-3">
+        <Avatar name={sortName(row.full_name)} className="size-11 text-sm" />
+        <div className="min-w-0 [overflow-wrap:anywhere]">
+          <b className="block text-[16px]">{row.full_name}</b>
+          {row.is_you && <span className="text-[13px] text-ink-3">(you)</span>}
+          <small className="block text-[12.5px] text-ink-3">
+            {[row.email, joined(row)].filter(Boolean).join(" · ")}
+          </small>
+          <div className="mt-2">
+            <StaffStatusChip staff={row} now={now} />
+          </div>
+        </div>
+      </header>
+
+      {policyBroken(row, settings?.require_mfa_for_clinicians ?? true) && (
+        <Banner tone="warn" title="Two-step verification isn't set up">
+          Hospital policy requires it. {row.display_name} will be asked at next
+          sign-in.
+        </Banner>
+      )}
+      {note && <p className="text-[13px] text-ink-2">{note}</p>}
+
+      {settings ? (
+        <AccessEditor
+          key={row.id}
+          row={row}
+          list={list}
+          specialties={settings.specialties}
+        />
+      ) : (
+        <Skeleton className="h-48" />
+      )}
+
+      <section aria-labelledby={recentId}>
+        <h3 id={recentId} className="mb-2 text-[13px] font-semibold">
+          Recent activity
+        </h3>
+        {activity.isPending ? (
+          <Skeleton className="h-16" />
+        ) : activity.isError ? (
+          <p className="text-[13px] text-ink-3">
+            Couldn&apos;t load recent activity.
+          </p>
+        ) : activity.data.length ? (
+          <ul className="flex flex-col gap-1.5 text-[13px] text-ink-2">
+            {activity.data.map((e) => (
+              <li key={e.id} className="[overflow-wrap:anywhere]">
+                <span className="font-mono text-[11.5px] text-ink-3">
+                  {eventClock(e.at, now)}
+                </span>{" "}
+                · {describeEvent(e)}
+                {e.actor ? ` · by ${actorName(e)}` : ""}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[13px] text-ink-3">Nothing recorded yet.</p>
+        )}
+      </section>
+      <p className="text-[12px] text-ink-3">
+        Every change is recorded in the activity log.
+      </p>
+    </div>
+  );
+}

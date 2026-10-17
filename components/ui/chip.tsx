@@ -7,6 +7,7 @@ const TONE = {
   warn: "bg-warn-wash text-warn-deep",
   bad: "bg-bad-wash text-bad-deep",
   mint: "bg-mint-wash text-mint-deep",
+  muted: "bg-lilac-2 text-ink-2",
 } as const;
 
 export function Chip({

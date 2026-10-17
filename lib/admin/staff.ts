@@ -171,3 +171,9 @@ export function lastActiveLabel(
 
 export const rolesText = (roles: StaffRole[]) =>
   roles.map((r) => ROLE_LABEL[r]).join(" · ");
+
+/** Two-step missing where the hospital requires it; hospital admins always need it. */
+export const policyBroken = (s: StaffOut, requireForClinicians: boolean) =>
+  s.status === "active" &&
+  s.issues.includes("mfa_not_set_up") &&
+  (s.roles.includes("hospital_admin") || requireForClinicians);

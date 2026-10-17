@@ -8,6 +8,7 @@ import {
   guardFor,
   inviteNote,
   lastActiveLabel,
+  policyBroken,
   rolesText,
   staffCounts,
   staffState,
@@ -242,5 +243,21 @@ describe("sign-in labels", () => {
       password_mfa: "Password + two-step",
       password: "Password",
     });
+  });
+});
+
+describe("policyBroken", () => {
+  it("warns when 2-step is missing and the hospital requires it", () => {
+    const missing = makeStaff({ issues: ["mfa_not_set_up"] });
+    expect(policyBroken(missing, true)).toBe(true);
+    expect(policyBroken(missing, false)).toBe(false);
+    // Hospital admins always need it (spec section 10 item 7).
+    expect(policyBroken({ ...missing, roles: ["hospital_admin"] }, false)).toBe(
+      true,
+    );
+    expect(policyBroken({ ...missing, status: "deactivated" }, true)).toBe(
+      false,
+    );
+    expect(policyBroken(makeStaff(), true)).toBe(false);
   });
 });

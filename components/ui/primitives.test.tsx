@@ -151,6 +151,48 @@ describe("Sheet (preflight R3)", () => {
   });
 });
 
+describe("Sheet side panel", () => {
+  it("is a dialog from the right, mounted only while open, with a 44 px Close", async () => {
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <Sheet side="right" open={false} onClose={onClose} title="Staff member">
+        <button>Save</button>
+      </Sheet>,
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    rerender(
+      <Sheet side="right" open onClose={onClose} title="Staff member">
+        <button>Save</button>
+      </Sheet>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Staff member" });
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(close.className).toMatch(/size-11/);
+    expect(close).toHaveFocus();
+    expect(dialog.className).toMatch(/md:right-0/);
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves Esc to a modal dialog opened on top", async () => {
+    const onClose = vi.fn();
+    render(
+      <>
+        <Sheet side="right" open onClose={onClose} title="Staff member">
+          <button>Save</button>
+        </Sheet>
+        <dialog open>
+          <button>Confirm</button>
+        </dialog>
+      </>,
+    );
+    const d = document.querySelector("dialog")!;
+    d.matches = (q: string) => q === ":modal";
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
 describe("Button", () => {
   it("defaults to type=button so it never submits a form, but can be overridden", () => {
     const onSubmit = vi.fn((e) => e.preventDefault());

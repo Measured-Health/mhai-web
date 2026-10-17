@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, type RefObject } from "react";
+import { modalDialogOpen } from "./modal-dialog";
 
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -21,6 +22,9 @@ export function useFocusTrap(
     (items()[0] ?? panel).focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Tab") return;
+      // A modal <dialog> opened on top owns the keyboard (the browser keeps
+      // focus inside it, even when it is rendered inside this panel).
+      if (modalDialogOpen(panel)) return;
       const els = items();
       if (els.length === 0) {
         e.preventDefault();
