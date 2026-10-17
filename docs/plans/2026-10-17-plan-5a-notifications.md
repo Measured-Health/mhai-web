@@ -2028,7 +2028,8 @@ In `docs/specs/2026-10-13-ui-design-v3.md` §10, after item 19, add:
 20. **Patient alerts and notification settings.** **Assumed contract**
     (Plan 5a; notifications design §9). The frontend calls these until the
     backend defines them, so please match them or tell us what changed.
-    Alerts are raised from the EMR/EHR feed on MHAI's canonical model (ADR 0003) with a clinician always in the loop, and nothing is sent to
+    Alerts are raised from the EMR/EHR feed on MHAI's canonical model
+    (ADR 0003) with a clinician always in the loop, and nothing is sent to
     patients. Every route is for the signed-in clinician (clinicians only),
     scoped to their hospital and routing (set by the hospital admin later):
     - `GET /alerts?status=new|handled|dismissed&severity=critical|urgent|info&source=<label>&cursor&limit`

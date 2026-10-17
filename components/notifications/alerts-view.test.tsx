@@ -77,9 +77,13 @@ describe("Notifications: Patient alerts", () => {
     expect(all[0]).toHaveTextContent("Maryam Abdullahi");
     expect(all[5]).toHaveTextContent("Blessing Uche");
     expect(within(all[1]!).getByText("Results system")).toBeVisible();
+    // The top bar's h1 says "Notifications"; the page heading doesn't repeat it (F11).
     expect(
-      screen.getByRole("heading", { name: "Notifications", level: 2 }),
+      screen.getByRole("heading", { name: "Your notifications", level: 2 }),
     ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Notifications", level: 2 }),
+    ).toBeNull();
     expect(
       screen.getByRole("link", { name: "Patient alerts" }),
     ).toHaveAttribute("aria-current", "page");

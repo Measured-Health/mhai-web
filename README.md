@@ -77,15 +77,17 @@ clinician sees the same sample alerts). The bell in the top bar counts new
 patient alerts and decisions on your corrections together; its panel shows
 the latest of both, and **See all** opens Notifications, with a **Patient
 alerts** tab (New, Handled, Dismissed, severity and source) and a
-**Corrections** tab. Eight sample alerts are there at sign-in (they don't pop
-up, but the bell counts them), and a new one arrives every 2 minutes: Urgent,
+**Corrections** tab. Eight sample alerts, six of them new, are there at
+sign-in (they don't pop up, but the bell counts the new ones), and a new one
+arrives every 2 minutes: Urgent,
 then Critical, then Info, again and again. Acknowledge one, dismiss one with
 a reason, or choose **Ask MHAI about it** to start a consultation filled in
 from the alert without the patient's name or MRN. Turn pop-ups off in Profile
 & security → Notifications: Critical alerts still pop up. The sample hospital
 has two connected systems, "Main record" and "Results system", so each alert
 says which one it came from. Every name and MRN is synthetic, and like the
-rest of the demo it is all in memory only.
+rest of the demo it is all in memory only: the sample alerts and pop-up
+settings start afresh at each sign-in.
 
 ### Share the demo
 

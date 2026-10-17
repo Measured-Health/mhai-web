@@ -411,6 +411,7 @@ describe("notification settings", () => {
       expect(result.current.s.data).toEqual(DEFAULT_SETTINGS),
     );
   });
+
   describe("overlapping saves", () => {
     const setup = () => {
       const calls: {

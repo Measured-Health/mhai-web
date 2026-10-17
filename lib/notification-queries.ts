@@ -41,7 +41,6 @@ export const DEFAULT_SETTINGS: NotificationSettingsOut = {
 export type AlertFilter = Omit<AlertQuery, "cursor" | "limit">;
 
 export const NOTIFY_KEYS = {
-  alerts: ["alerts"] as const,
   feed: ["alerts", "feed"] as const,
   unread: ["alerts", "unread"] as const,
   lists: ["alerts", "list"] as const,

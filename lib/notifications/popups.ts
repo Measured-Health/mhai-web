@@ -36,8 +36,9 @@ export function baselineFrom(first: AlertOut[]): number | null {
 
 /**
  * New alerts since the last check: status "new", id not in `seen`, and
- * created after the baseline watermark (Critical is exempt from the watermark). Both times are the server's; the
- * device clock is never used (A7). The first check (`seen` null) is a
+ * created after the baseline watermark (Critical is exempt from the
+ * watermark). Both times are the server's; the device clock is never used
+ * (A7). The first check (`seen` null) is a
  * baseline and pops nothing (spec §4). With no readable `created_at` or no
  * watermark, the alert counts as new (fail safe). A repeated id (including a
  * reopened alert) never pops twice, and duplicates in `next` collapse.

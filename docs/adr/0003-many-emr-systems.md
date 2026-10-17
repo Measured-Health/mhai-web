@@ -13,8 +13,8 @@ then others. They differ in almost every way:
   database or file exports;
 - **delivery:** push (webhooks, FHIR subscriptions, HL7 v2 over MLLP) or pull (polling,
   bulk export);
-- **codes:** LOINC or local lab codes, SNOMED CT, ICD-10 or local diagnosis lists, different
-  units;
+- **codes:** LOINC or local result codes, SNOMED CT, ICD-10 or local diagnosis lists,
+  different units;
 - **identity:** each has its own patient IDs, MRN formats and location models (wards, beds,
   clinics, emergency);
 - **auth:** OAuth 2 / SMART on FHIR backend services, API keys, VPN or mutual TLS.
@@ -35,8 +35,8 @@ when a new hospital or a new EMR vendor is added.
    Observation, Condition, MedicationStatement, DiagnosticReport), stored in MHAI's own
    tables. Every record keeps its **provenance**: source system, connector version, source
    ID, received-at.
-3. **Normalisation in one place:** codes mapped to LOINC (labs, vitals), SNOMED CT and ICD-10
-   (conditions), RxNorm or ATC (medications); units converted to UCUM; reference ranges kept
+3. **Normalisation in one place:** codes mapped to LOINC (results, vitals), SNOMED CT and
+   ICD-10 (conditions), RxNorm or ATC (medications); units converted to UCUM; reference ranges kept
    per source. Unmapped codes are kept with their local code and flagged for a mapping table
    (managed per hospital) — never guessed.
 4. **Patient identity per hospital:** a master patient index maps each source's IDs to one
@@ -63,15 +63,15 @@ when a new hospital or a new EMR vendor is added.
    the code or the API types. An alert or finding carries an `emr_link` the backend
    provides; the UI shows a generic "Open patient record" and follows the link, never
    building EMR URLs. Where a hospital has more than one connected system, each has a
-   hospital-chosen label (e.g. "Main record", "Lab system"), returned by the API as
+   hospital-chosen label (e.g. "Main record", "Results system"), returned by the API as
    `source_label`; the UI shows that label only, never the vendor.
 3. **Locations, codes and units come already normalised** (with a display label); the UI
    never maps codes. A finding shows the source's reference range as given.
 4. **Unknown or partial data degrades gracefully:** a missing location shows "Location not
    recorded"; an unmapped finding shows its source label with "Not standardised" — never
    hidden, never guessed.
-5. **Many systems per hospital** are possible (e.g. a lab system and a separate EMR); lists
-   and analysis filters include **Source** (by `source_label`) when more than one is
+5. **Many systems per hospital** are possible (e.g. a results system and a separate EMR);
+   lists and analysis filters include **Source** (by `source_label`) when more than one is
    connected.
 6. **Admin screens are driven by the API:** connection status (hospital admin, read-only)
    shows the hospital's labels and health, not vendors. Connection setup lives only in the

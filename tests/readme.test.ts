@@ -40,6 +40,7 @@ describe("README demo instructions", () => {
   it("documents the notifications demo, the pop-up rule and the sign-off gate", () => {
     expect(readme).toMatch(/\*\*Notifications and patient alerts\.\*\*/);
     expect(readme).toMatch(/a\s+new\s+one\s+arrives\s+every\s+2\s+minutes/);
+    expect(readme).toMatch(/Eight\s+sample\s+alerts,\s+six\s+of\s+them\s+new/);
     expect(readme).toMatch(/Critical\s+alerts\s+still\s+pop\s+up/);
   });
 

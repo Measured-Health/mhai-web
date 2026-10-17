@@ -42,10 +42,11 @@ export function NotificationsFrame({
       <div className="flex-1 overflow-auto px-4 pb-10 pt-7 md:px-[26px]">
         <div className="mx-auto max-w-[860px]">
           <p className="text-[11px] font-semibold uppercase tracking-[.1em] text-mint">
-            Your notifications
+            Alerts and decisions
           </p>
+          {/* The top bar's h1 already says "Notifications". */}
           <h2 className="mb-4 font-display text-[40px] font-black leading-none">
-            Notifications
+            Your notifications
           </h2>
           <LinkTabs
             label="Notification sections"
