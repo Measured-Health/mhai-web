@@ -1,3 +1,4 @@
+import { isClinical } from "@/lib/auth/types";
 import { apiBase } from "@/lib/server/api";
 import { forbidden, json, sameOrigin } from "@/lib/server/http";
 import { refreshOnce } from "@/lib/server/refresh";
@@ -60,7 +61,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     return json(401, { code: "session_expired" });
   }
   // Clinical calls are for clinicians who finished first sign-in only.
-  if (s.user.role !== "clinician" || s.steps.length > 0) return forbidden();
+  if (!isClinical(s.user) || s.steps.length > 0) return forbidden();
   if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
 
   const body = req.method === "GET" ? undefined : await req.text();

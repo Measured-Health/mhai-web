@@ -135,7 +135,7 @@ describe("clinical API proxy", () => {
     await writeSession({
       token: "tok",
       expiresAt: Date.now() + 10 * 60_000,
-      user: { ...TEST_USER, role: "admin" },
+      user: { ...TEST_USER, roles: ["admin"] },
       steps: [],
     });
     for (const res of [

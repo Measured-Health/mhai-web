@@ -87,7 +87,7 @@ describe("session cookies", () => {
     const r = await startSession(LOGIN, 1_000);
     expect(r).toMatchObject({
       status: "signed_in",
-      user: { role: "clinician" },
+      user: { roles: ["clinician"] },
       steps: [],
     });
     const raw = jar.values.get(SESSION_COOKIE)!;
@@ -102,6 +102,18 @@ describe("session cookies", () => {
       token: "tok",
       expiresAt: 901_000,
     });
+  });
+  it("reads a session sealed before roles combined (one role)", async () => {
+    jar.values.set(
+      SESSION_COOKIE,
+      seal({
+        token: "tok",
+        expiresAt: Date.now() + 60_000,
+        user: { username: "a.reyes", role: "clinician" },
+        steps: [],
+      }),
+    );
+    expect((await readSession())?.user.roles).toEqual(["clinician"]);
   });
   it("treats an expired session as none", async () => {
     await startSession(LOGIN, 0);

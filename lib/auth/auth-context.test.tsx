@@ -13,7 +13,7 @@ import { UNDO_WINDOW_MS } from "../corrections";
 import { useUndoableApproval } from "../review/use-undoable-approval";
 import { createMockAuthClient } from "./mock";
 import { AuthProvider, homeFor, useAuth } from "./auth-context";
-import type { AuthClient } from "./types";
+import type { AuthClient, User } from "./types";
 import { SessionProvider, useSession } from "../session-store";
 import { TEST_USER } from "@/tests/auth-wrapper";
 
@@ -231,11 +231,25 @@ describe("signing out with an approval waiting to retry", () => {
 });
 
 describe("homeFor", () => {
+  const as = (...roles: User["roles"]) => ({ ...TEST_USER, roles });
   it("sends people where they belong", () => {
     expect(homeFor({ user: TEST_USER, steps: ["terms"] })).toBe("/welcome");
-    expect(homeFor({ user: { ...TEST_USER, role: "admin" }, steps: [] })).toBe(
+    expect(homeFor({ user: TEST_USER, steps: [] })).toBe("/");
+    expect(
+      homeFor({ user: as("clinician", "hospital_admin"), steps: [] }),
+    ).toBe("/");
+    expect(homeFor({ user: as("hospital_admin"), steps: [] })).toBe(
+      "/admin/staff",
+    );
+    expect(homeFor({ user: as("admin"), steps: [] })).toBe("/no-access");
+    expect(homeFor({ user: as("auditor", "clinician"), steps: [] })).toBe(
       "/no-access",
     );
-    expect(homeFor({ user: TEST_USER, steps: [] })).toBe("/");
+    expect(homeFor({ user: as("researcher"), steps: [] })).toBe("/no-access");
+  });
+  it("first sign-in comes first for a hospital admin too", () => {
+    expect(homeFor({ user: as("hospital_admin"), steps: ["mfa"] })).toBe(
+      "/welcome",
+    );
   });
 });

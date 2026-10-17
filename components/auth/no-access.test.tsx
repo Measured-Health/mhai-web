@@ -15,7 +15,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
-const ADMIN = { ...TEST_USER, role: "admin" as const };
+const ADMIN = { ...TEST_USER, roles: ["admin" as const] };
 
 describe("NoAccess", () => {
   it("explains the 403 and offers sign out", async () => {

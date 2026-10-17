@@ -29,7 +29,7 @@ describe("mock auth client", () => {
     if (r.status !== "signed_in") throw new Error();
     expect(r.user).toMatchObject({
       email: "a.reyes@havanahospital.org",
-      role: "clinician",
+      roles: ["clinician"],
       displayName: "Dr. Reyes",
       mfaEnabled: true,
     });
@@ -126,7 +126,7 @@ describe("mock auth client", () => {
     const c = createMockAuthClient();
     const r = await c.signIn("admin@h.org", "pw");
     if (r.status !== "signed_in") throw new Error();
-    expect(r.user.role).toBe("admin");
+    expect(r.user.roles).toEqual(["admin"]);
     expect(isClinical(r.user)).toBe(false);
   });
 

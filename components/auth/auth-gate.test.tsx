@@ -37,7 +37,7 @@ describe("AuthGate", () => {
   });
   it("sends an admin to the 403 page, mounting nothing clinical", async () => {
     Clinical.mockClear();
-    renderWithAuth(gated(), { ...TEST_USER, role: "admin" });
+    renderWithAuth(gated(), { ...TEST_USER, roles: ["admin"] });
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/no-access"));
     expect(Clinical).not.toHaveBeenCalled();
   });

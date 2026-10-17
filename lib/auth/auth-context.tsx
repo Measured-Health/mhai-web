@@ -19,7 +19,9 @@ import { useSession } from "../session-store";
 import { getAuthClient } from "./client";
 import { onUnauthorized } from "./events";
 import {
+  ADMIN_HOME,
   isClinical,
+  isHospitalAdmin,
   type AuthClient,
   type Capabilities,
   type FirstStep,
@@ -53,10 +55,12 @@ export interface AuthCtx extends State {
 const SIGNED_OUT: State = { status: "signed_out", user: null, steps: [] };
 const Ctx = createContext<AuthCtx | null>(null);
 
-/** Where a signed-in person belongs right now. */
+/** Where a signed-in person belongs right now (R2). */
 export function homeFor(s: { user: User | null; steps: FirstStep[] }) {
   if (s.steps.length) return "/welcome";
-  return isClinical(s.user) ? "/" : "/no-access";
+  if (isClinical(s.user)) return "/";
+  if (isHospitalAdmin(s.user)) return ADMIN_HOME;
+  return "/no-access";
 }
 
 /**

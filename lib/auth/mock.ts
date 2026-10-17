@@ -105,12 +105,12 @@ const REYES = {
   specialty: "Internal Medicine",
 };
 
-function userFor(login: string, role: Role, mfaEnabled: boolean): User {
+function userFor(login: string, roles: Role[], mfaEnabled: boolean): User {
   return {
     username: login.split("@")[0]!,
     email: login.includes("@") ? login : null,
     ...(PEOPLE[trigger(login)] ?? REYES),
-    role,
+    roles: [...roles],
     hospital: "Havana Hospital",
     mfaEnabled,
     backupCodesLeft: mfaEnabled ? 8 : null,
@@ -197,28 +197,28 @@ export function createMockAuthClient({
       }
       failures.delete(key);
       if (word === "mfa") {
-        pending = userFor(key, "clinician", true);
+        pending = userFor(key, ["clinician"], true);
         return { status: "mfa_required" };
       }
       if (word === "new") {
-        const u = userFor(key, "clinician", false);
+        const u = userFor(key, ["clinician"], false);
         const owed: FirstStep[] = ["terms", "password", "mfa"];
         startSession(u, owed);
         return { status: "signed_in", user: u, steps: [...owed] };
       }
-      const role: Role =
+      const roles: Role[] =
         word === "admin"
-          ? "admin"
+          ? ["admin"]
           : word === "auditor"
-            ? "auditor"
-            : "clinician";
-      const u = userFor(key, role, true);
+            ? ["auditor"]
+            : ["clinician"];
+      const u = userFor(key, roles, true);
       startSession(u);
       return { status: "signed_in", user: u, steps: [] };
     },
 
     async signInWithHospital() {
-      const u = userFor("a.reyes@havanahospital.org", "clinician", true);
+      const u = userFor("a.reyes@havanahospital.org", ["clinician"], true);
       startSession(u);
       return { status: "signed_in", user: u, steps: [] };
     },
@@ -245,7 +245,7 @@ export function createMockAuthClient({
 
     async completeHospitalSignIn(code) {
       if (code !== MOCK_SSO_CODE) throw new AuthError("sso_failed");
-      const u = userFor("a.reyes@havanahospital.org", "clinician", true);
+      const u = userFor("a.reyes@havanahospital.org", ["clinician"], true);
       startSession(u);
       return { status: "signed_in", user: u, steps: [] };
     },
