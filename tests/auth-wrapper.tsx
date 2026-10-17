@@ -11,7 +11,7 @@ export const TEST_USER: User = {
   email: "a.reyes@havanahospital.org",
   displayName: "Dr. Reyes",
   fullName: "Dr. Ana Reyes",
-  role: "clinician",
+  roles: ["clinician"],
   roleTitle: "Attending physician",
   specialty: "Internal Medicine",
   hospital: "Havana Hospital",

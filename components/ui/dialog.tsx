@@ -1,5 +1,11 @@
 "use client";
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useEscape } from "@/lib/hooks/use-escape";
 
 export function Dialog({
@@ -7,11 +13,17 @@ export function Dialog({
   onClose,
   title,
   children,
+  initialFocus,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
+  /**
+   * Gets the focus on open, e.g. the safe button of a destructive dialog
+   * that has a field above it. Otherwise the first control does.
+   */
+  initialFocus?: RefObject<HTMLElement | null>;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -22,15 +34,16 @@ export function Dialog({
     if (open && !d.open) {
       if (typeof d.showModal === "function") d.showModal();
       else d.setAttribute("open", "");
-      d.querySelector<HTMLElement>(
-        "button, [href], input, textarea, select",
+      (
+        initialFocus?.current ??
+        d.querySelector<HTMLElement>("button, [href], input, textarea, select")
       )?.focus();
     }
     if (!open && d.open) {
       if (typeof d.close === "function") d.close();
       else d.removeAttribute("open");
     }
-  }, [open]);
+  }, [open, initialFocus]);
   return (
     <dialog
       ref={ref}

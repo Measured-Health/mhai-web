@@ -17,7 +17,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
-import { initials } from "@/lib/auth/types";
+import { initials, isAdminOnly, isHospitalAdmin } from "@/lib/auth/types";
 import { cn } from "../ui/cn";
 import { useShell } from "./app-shell";
 
@@ -67,7 +67,16 @@ export function AccountMenu({ rail }: { rail: boolean }) {
   }, [open]);
 
   if (!user) return null;
-  const role = [user.roleTitle, user.specialty].filter(Boolean).join(" · ");
+  const adminOnly = isAdminOnly(user);
+  // "Medical director · Hospital admin" (mockup footer); clinicians keep their specialty.
+  const role = [
+    user.roleTitle,
+    isHospitalAdmin(user) && user.roleTitle !== "Hospital admin"
+      ? "Hospital admin"
+      : user.specialty,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   // Esc closes only the menu, so an open mobile drawer stays put.
   const onEscape = (e: KeyboardEvent) => {
@@ -173,42 +182,47 @@ export function AccountMenu({ rail }: { rail: boolean }) {
             <UserRound aria-hidden className="size-4" />
             Profile &amp; security
           </Link>
-          <Link
-            role="menuitem"
-            href="/my-feedback"
-            className={ITEM}
-            onClick={() => {
-              close(false);
-              closeDrawer();
-            }}
-          >
-            <PenLine aria-hidden className="size-4" />
-            My feedback &amp; corrections
-          </Link>
-          <button
-            role="menuitem"
-            type="button"
-            className={ITEM}
-            onClick={() => {
-              close(false);
-              openShortcuts();
-            }}
-          >
-            <Keyboard aria-hidden className="size-4" />
-            Keyboard shortcuts
-          </button>
-          <Link
-            role="menuitem"
-            href="/help"
-            className={ITEM}
-            onClick={() => {
-              close(false);
-              closeDrawer();
-            }}
-          >
-            <CircleHelp aria-hidden className="size-4" />
-            Help &amp; guide
-          </Link>
+          {/* An admin who isn't a clinician has no feedback, shortcuts or clinical help (R3). */}
+          {!adminOnly && (
+            <>
+              <Link
+                role="menuitem"
+                href="/my-feedback"
+                className={ITEM}
+                onClick={() => {
+                  close(false);
+                  closeDrawer();
+                }}
+              >
+                <PenLine aria-hidden className="size-4" />
+                My feedback &amp; corrections
+              </Link>
+              <button
+                role="menuitem"
+                type="button"
+                className={ITEM}
+                onClick={() => {
+                  close(false);
+                  openShortcuts();
+                }}
+              >
+                <Keyboard aria-hidden className="size-4" />
+                Keyboard shortcuts
+              </button>
+              <Link
+                role="menuitem"
+                href="/help"
+                className={ITEM}
+                onClick={() => {
+                  close(false);
+                  closeDrawer();
+                }}
+              >
+                <CircleHelp aria-hidden className="size-4" />
+                Help &amp; guide
+              </Link>
+            </>
+          )}
           <button
             role="menuitem"
             type="button"

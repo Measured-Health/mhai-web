@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { useRef } from "react";
 import { ConfidencePill } from "./confidence-pill";
 import { Button } from "./button";
 import { Banner } from "./banner";
@@ -44,6 +45,25 @@ describe("Dialog", () => {
     expect(screen.getByText("Keep editing")).toHaveFocus();
     await userEvent.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("can give the first focus to a chosen element over an earlier input", () => {
+    function Ask() {
+      const keep = useRef<HTMLButtonElement>(null);
+      return (
+        <Dialog
+          open
+          onClose={() => {}}
+          title="Remove this account?"
+          initialFocus={keep}
+        >
+          <input aria-label="Code" />
+          <button ref={keep}>Keep account</button>
+        </Dialog>
+      );
+    }
+    render(<Ask />);
+    expect(screen.getByText("Keep account")).toHaveFocus();
   });
 });
 
@@ -148,6 +168,48 @@ describe("Sheet (preflight R3)", () => {
         document.activeElement as HTMLElement,
       );
     }
+  });
+});
+
+describe("Sheet side panel", () => {
+  it("is a dialog from the right, mounted only while open, with a 44 px Close", async () => {
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <Sheet side="right" open={false} onClose={onClose} title="Staff member">
+        <button>Save</button>
+      </Sheet>,
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    rerender(
+      <Sheet side="right" open onClose={onClose} title="Staff member">
+        <button>Save</button>
+      </Sheet>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Staff member" });
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(close.className).toMatch(/size-11/);
+    expect(close).toHaveFocus();
+    expect(dialog.className).toMatch(/md:right-0/);
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves Esc to a modal dialog opened on top", async () => {
+    const onClose = vi.fn();
+    render(
+      <>
+        <Sheet side="right" open onClose={onClose} title="Staff member">
+          <button>Save</button>
+        </Sheet>
+        <dialog open>
+          <button>Confirm</button>
+        </dialog>
+      </>,
+    );
+    const d = document.querySelector("dialog")!;
+    d.matches = (q: string) => q === ":modal";
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
 

@@ -6,8 +6,48 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The 403 page is now only for Measured Health platform admin and auditor
+  accounts, and points them to the platform admin app. Hospital admins use
+  the hospital admin side instead.
+- The demo's sign-in page lists a hospital admin (Grace Nwosu), a medical
+  director (Dr. Obi, clinician and hospital admin), a platform admin (the
+  403 page), and a new hospital admin (Chike Okoro) who accepts the terms,
+  sets a password and sets up two-step before reaching Staff. In the demo,
+  removing staff takes the code `123456`.
+
 ### Added
 
+- Review oversight for hospital admins: corrections waiting with their
+  specialty, how long they've waited and how many people can review them;
+  specialties short of reviewers are flagged; remind the reviewers or
+  assign one. No clinical content is shown, and only clinicians can
+  approve or reject.
+
+- The hospital's activity log: sign-ins, consultations (specialty and
+  confidence only), feedback, review decisions, account changes and flagged
+  security events, with filters and a CSV export made on the device.
+- Usage for hospital admins, in counts only: consultations, active
+  clinicians, agreement rate, median review time, the confidence mix and
+  the specialty breakdown, with a CSV export made on the device.
+- Hospital settings: review turnaround, whether reviewers must share the
+  specialty, two-step for clinicians, the idle timeout and "trust this
+  device"; hospital sign-on and allowed email domains are shown read-only.
+- Hospital admins can manage each person from the staff member panel:
+  change roles, specialty and who can review corrections; send a password
+  reset; reset two-step verification; remind them to set it up; send a new
+  invite; deactivate and reactivate; or remove the account (or cancel an
+  invite). Removing someone needs your own two-step code (or a backup
+  code). Destructive actions ask first, with "Keep" as the default, and
+  nobody can lock themselves or the hospital out.
+- Hospital admins: a "Hospital admin" group in the sidebar (Staff,
+  Hospital settings, Activity, Usage). A medical director who is also a
+  clinician sees both sides; a hospital admin who isn't a clinician signs
+  straight in to Staff and never sees clinical screens.
+- Every hospital admin, including a medical director, must turn on
+  two-step verification: without it, the first sign-in setup step comes
+  before any page.
 - Profile & security shows your feedback: results you agreed with, and
   your corrections waiting, approved and rejected, with a link to My
   feedback & corrections.
@@ -85,6 +125,17 @@ All notable changes to this project are documented here. The format follows
   - Prettier, Node version pin, Dependabot, CODEOWNERS;
   - PR and issue templates, `SECURITY.md`, `CONTRIBUTING.md`, ADRs and an
     agent guide.
+
+### Security
+
+- Removing a staff member (or cancelling an invite) needs the hospital
+  admin's own two-step code or a backup code; a wrong code removes no one.
+- Every hospital admin must use two-step verification. An admin without it
+  is sent to the setup step before any page, and the app's server refuses
+  hospital admin requests from a session without two-step.
+- The app's server forwards hospital admin requests only for hospital
+  admins, and clinical requests only for clinicians, each only after first
+  sign-in.
 
 ### Fixed
 

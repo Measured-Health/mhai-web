@@ -5,7 +5,7 @@ import {
   randomBytes,
 } from "node:crypto";
 import { cookies } from "next/headers";
-import type { FirstStep, SignInResult, User } from "../auth/types";
+import type { FirstStep, Role, SignInResult, User } from "../auth/types";
 import { stepsFor, toUser, type ApiLoginOk } from "./map-user";
 
 export const SESSION_COOKIE = "mhai_session";
@@ -74,8 +74,14 @@ export const cookieOptions = (maxAgeS: number) => ({
 export async function readSession(
   now = Date.now(),
 ): Promise<ServerSession | null> {
-  const s = unseal<ServerSession>((await cookies()).get(SESSION_COOKIE)?.value);
-  return s && s.expiresAt > now ? s : null;
+  const s = unseal<ServerSession & { user: { role?: Role } }>(
+    (await cookies()).get(SESSION_COOKIE)?.value,
+  );
+  if (!s || s.expiresAt <= now) return null;
+  // Sealed before roles combined (Plan 4): one `role`.
+  if (!Array.isArray(s.user.roles))
+    s.user = { ...s.user, roles: s.user.role ? [s.user.role] : [] };
+  return s;
 }
 
 export async function writeSession(s: ServerSession, now = Date.now()) {

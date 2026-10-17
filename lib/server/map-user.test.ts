@@ -8,7 +8,7 @@ describe("toUser", () => {
       email: null,
       displayName: "a.reyes",
       fullName: null,
-      role: "clinician",
+      roles: ["clinician"],
       roleTitle: null,
       specialty: null,
       hospital: null,
@@ -21,7 +21,32 @@ describe("toUser", () => {
     ).toBe("Dr. Ana Reyes");
   });
   it("treats an unknown role as non-clinical", () => {
-    expect(toUser({ username: "u", role: "system" }).role).toBe("researcher");
+    expect(toUser({ username: "u", role: "system" }).roles).toEqual([
+      "researcher",
+    ]);
+  });
+  it("reads combined roles and keeps only known ones (R1)", () => {
+    expect(
+      toUser({
+        username: "u",
+        role: "clinician",
+        roles: ["clinician", "hospital_admin", "root"],
+      }).roles,
+    ).toEqual(["clinician", "hospital_admin"]);
+  });
+  it("falls back to the single role when roles is missing", () => {
+    expect(toUser({ username: "u", role: "hospital_admin" }).roles).toEqual([
+      "hospital_admin",
+    ]);
+  });
+  it("never repeats a role", () => {
+    expect(
+      toUser({
+        username: "u",
+        role: "clinician",
+        roles: ["clinician", "clinician"],
+      }).roles,
+    ).toEqual(["clinician"]);
   });
 });
 
