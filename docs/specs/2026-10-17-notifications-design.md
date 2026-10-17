@@ -49,7 +49,7 @@ Each alert shows, in this order:
    - **Ask MHAI about it**: starts a consultation pre-filled from the alert (age, sex, the
      abnormal values and the finding as the question). The patient's name and MRN are **not**
      copied into the consultation.
-   - **Open in EMR**: opens the patient's record in the hospital EMR (a link from the API).
+   - **Open patient record**: opens the patient's record in the hospital's system (a link from the API; no vendor named).
    - **Dismiss**: a required reason (Not clinically relevant · Already known · Wrong patient ·
      Other) and an optional note; the reason is recorded to tune alerts.
 
@@ -100,12 +100,11 @@ seen. All names and MRNs are synthetic.
 
 ## 8. Many EMR systems
 
-The frontend never depends on a particular EMR (ADR 0003): alerts arrive in MHAI's canonical
-shape; each carries its `source` (display name) and an `emr_link`, so "Open in EMR" reads
-"Open in {source}". Locations, codes and units come normalised with display labels; a
+The frontend never depends on, or names, a particular EMR vendor (ADR 0003): alerts arrive in
+MHAI's canonical shape with an `emr_link`, shown as "Open patient record". Locations, codes and units come normalised with display labels; a
 missing location shows "Location not recorded", an unmapped finding shows its source label
 with "Not standardised". When a hospital has more than one connected system, the alerts page
-can filter by source.
+can filter by the hospital's own label for each (`source_label`), never a vendor name.
 
 ## 9. Backend this design needs (assumed contract)
 
@@ -121,6 +120,6 @@ Add to spec §10 of the UI design:
 - Alert fields: id, severity, finding (name, value, unit, flag, reference range, recorded
   at, code system, standardised or not), likely causes (label, confidence), patient (name,
   MRN, location: admitted ward/bed, outpatient clinic, emergency, or not recorded), age, sex,
-  source (display name), EMR link, status, handled by/at, created at.
+  source_label (hospital-chosen, never a vendor name), EMR link, status, handled by/at, created at.
 - Alerts are produced from the EMR feed with a clinician always in the loop; nothing is sent
   to patients.
