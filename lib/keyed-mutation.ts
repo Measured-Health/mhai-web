@@ -20,32 +20,38 @@ type Keyed<V> = { v: V; key: string };
  * reused on that call's retries. `send` receives the key; the callbacks see
  * the plain variables. `extra` passes cache options such as `gcTime`.
  */
-export function useKeyedMutation<V, R>(
+export function useKeyedMutation<V, R, C = unknown>(
   send: (v: V, key: string) => Promise<R>,
   cb: {
+    /** Runs first; what it returns reaches `onError` as `ctx` (for a rollback). */
+    onMutate?(v: V): C | Promise<C>;
     onSuccess?(data: R, v: V): void;
-    onError?(e: Error, v: V): void;
+    onError?(e: Error, v: V, ctx: C | undefined): void;
     onSettled?(): void;
   } = {},
-  extra: Pick<UseMutationOptions<R, Error, Keyed<V>>, "gcTime"> = {},
-): Omit<UseMutationResult<R, Error, Keyed<V>>, "mutate" | "mutateAsync"> & {
+  extra: Pick<
+    UseMutationOptions<R, Error, Keyed<V>, C>,
+    "gcTime" | "mutationKey"
+  > = {},
+): Omit<UseMutationResult<R, Error, Keyed<V>, C>, "mutate" | "mutateAsync"> & {
   mutate: (
     v: V,
-    options?: Parameters<UseMutationResult<R, Error, Keyed<V>>["mutate"]>[1],
+    options?: Parameters<UseMutationResult<R, Error, Keyed<V>, C>["mutate"]>[1],
   ) => void;
   mutateAsync: (
     v: V,
     options?: Parameters<
-      UseMutationResult<R, Error, Keyed<V>>["mutateAsync"]
+      UseMutationResult<R, Error, Keyed<V>, C>["mutateAsync"]
     >[1],
   ) => Promise<R>;
 } {
-  const opts: UseMutationOptions<R, Error, Keyed<V>> = {
+  const opts: UseMutationOptions<R, Error, Keyed<V>, C> = {
     mutationFn: ({ v, key }) => send(v, key),
     ...WRITE_RETRY,
     ...extra,
+    onMutate: ({ v }) => cb.onMutate?.(v) as C | Promise<C>,
     onSuccess: (d, { v }) => cb.onSuccess?.(d, v),
-    onError: (e, { v }) => cb.onError?.(e, v),
+    onError: (e, { v }, ctx) => cb.onError?.(e, v, ctx),
     onSettled: () => cb.onSettled?.(),
   };
   const m = useMutation(opts);

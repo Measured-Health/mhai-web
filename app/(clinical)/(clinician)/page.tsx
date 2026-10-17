@@ -7,11 +7,13 @@ import { HowItWorksPanel } from "@/components/form/side-panels";
 import { MenuButton } from "@/components/shell/menu-button";
 import { TopBar } from "@/components/shell/top-bar";
 import { FirstVisit } from "@/components/states/first-visit";
+import { DiscardDialog } from "@/components/states/discard-dialog";
 import { UnsavedGuard } from "@/components/states/unsaved-guard";
 import { Banner } from "@/components/ui/banner";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { QueryCreateIn } from "@/lib/api/contract";
 import { emptyForm, fromQuery, type FormValues } from "@/lib/form-schema";
+import { clearPrefill, readPrefill } from "@/lib/notifications/ask";
 import { useOutbox } from "@/lib/offline/outbox-context";
 import { useSubmitQuery } from "@/lib/queries";
 import { titleFor, useSession } from "@/lib/session-store";
@@ -26,9 +28,11 @@ import { titleFor, useSession } from "@/lib/session-store";
 function Home({
   editId,
   waitingId,
+  prefillToken,
 }: {
   editId: string | null;
   waitingId: string | null;
+  prefillToken: string | null;
 }) {
   const router = useRouter();
   const session = useSession();
@@ -38,6 +42,8 @@ function Home({
   const editing = editId ? session.get(editId) : undefined;
   const waiting = waitingId ? session.get(waitingId) : undefined;
   const real = waitingId ? outbox.resolved[waitingId] : undefined;
+  // "Ask MHAI about it": a form waiting in memory, found by its token (R3).
+  const prefill = readPrefill(prefillToken);
   const [saveError, setSaveError] = useState(false);
   // Written only in the submit handler.
   const saving = useRef(false);
@@ -45,11 +51,17 @@ function Home({
     if (real) router.replace(`/c/${real}`);
   }, [real, router]);
   const [started, setStarted] = useState(
-    session.items.length > 0 || Boolean(editing),
+    session.items.length > 0 || Boolean(editing) || Boolean(prefill),
   );
   const [initial, setInitial] = useState<FormValues>(() =>
-    editing ? fromQuery(editing.query) : emptyForm,
+    editing ? fromQuery(editing.query) : (prefill ?? emptyForm),
   );
+  const [fromAlert, setFromAlert] = useState(Boolean(prefill) && !editing);
+  // An alert's form that arrived while a draft was open, waiting for a yes or no.
+  const [asking, setAsking] = useState<FormValues | null>(null);
+  // The last `?prefill=` token looked at (the one from first render counts).
+  const [seen, setSeen] = useState(prefillToken);
+  const handled = useRef<string | null>(null);
   // Remounts the form for a new starting point (an example, or after Discard).
   const [formKey, setFormKey] = useState(0);
   const [dirty, setDirty] = useState(false);
@@ -59,7 +71,37 @@ function Home({
     setFormKey((k) => k + 1);
     setDirty(false);
     setStarted(true);
+    // Sent, discarded or replaced: the alert's prefill is done with.
+    setFromAlert(false);
+    clearPrefill();
   };
+
+  // The page stays mounted, so a later `?prefill=` arrives here, not at mount.
+  // Never replace an unsaved draft without asking.
+  if (prefillToken && prefillToken !== seen) {
+    setSeen(prefillToken);
+    const found = readPrefill(prefillToken);
+    if (found && !editing) {
+      if (dirty) setAsking(found);
+      else {
+        setInitial(found);
+        setFormKey((k) => k + 1);
+        setStarted(true);
+        setFromAlert(true);
+      }
+    }
+  }
+  // Once read, the token leaves the address so Back/Forward can't apply it
+  // again; with an edit open the alert's form is not wanted at all.
+  useEffect(() => {
+    if (!prefillToken || handled.current === prefillToken) return;
+    handled.current = prefillToken;
+    if (editing) clearPrefill();
+    const rest = new URLSearchParams();
+    if (editId) rest.set("edit", editId);
+    if (waitingId) rest.set("waiting", waitingId);
+    router.replace(rest.size ? `/?${rest}` : "/");
+  }, [prefillToken, editing, editId, waitingId, router]);
 
   const save = async (q: QueryCreateIn) => {
     const localId = await outbox.queueQuery(q);
@@ -74,6 +116,18 @@ function Home({
     dismissNotice();
     restart(emptyForm);
     window.history.pushState(null, "", `/?waiting=${localId}`);
+  };
+
+  const keepDraft = () => {
+    setAsking(null);
+    clearPrefill();
+  };
+  const replaceDraft = () => {
+    // A question on its way out would land on top of the alert's form.
+    if (!asking || submit.isPending) return;
+    restart(asking);
+    setFromAlert(true);
+    setAsking(null);
   };
 
   if (real) return null; // synced: on the way to /c/<real id>
@@ -130,6 +184,13 @@ function Home({
                 Three quick sections. The more detail you give, the better the
                 answer.
               </p>
+              {fromAlert && (
+                <p className="mb-4 rounded-xl bg-mint-wash px-3.5 py-2.5 text-[13px] text-mint-deep">
+                  Filled in from a patient alert. The patient&apos;s name and
+                  record number weren&apos;t copied. Check the details before
+                  you analyse.
+                </p>
+              )}
               {saveError && (
                 <div className="mb-4">
                   <Banner tone="bad" title="Couldn't save your question">
@@ -190,6 +251,20 @@ function Home({
         </div>
         {started && <HowItWorksPanel onExample={restart} />}
       </div>
+      <DiscardDialog
+        open={asking !== null}
+        title="Replace your draft?"
+        body="Replace your draft with the details from the alert? What you typed will be lost."
+        keepLabel="Keep my draft"
+        discardLabel="Replace"
+        onKeep={keepDraft}
+        onDiscard={replaceDraft}
+        blocked={
+          submit.isPending
+            ? "Your question is being sent. Wait for it to finish."
+            : undefined
+        }
+      />
       <UnsavedGuard
         dirty={dirty && !submit.isPending}
         onDiscard={() => restart(emptyForm)}
@@ -201,14 +276,17 @@ function Home({
 function HomeRoute() {
   // `?edit=<id>` comes from "Edit question" on a result that couldn't complete.
   // `?waiting=<localId>`: a question just saved offline (see Home).
+  // `?prefill=<token>`: "Ask MHAI about it" on a patient alert (Plan 5a).
   const params = useSearchParams();
   const editId = params.get("edit");
   const waitingId = params.get("waiting");
+  const prefillToken = params.get("prefill");
   return (
     <Home
       key={`${editId ?? ""}|${waitingId ?? ""}`}
       editId={editId}
       waitingId={waitingId}
+      prefillToken={prefillToken}
     />
   );
 }

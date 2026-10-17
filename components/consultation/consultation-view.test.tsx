@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Component, useEffect, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Providers } from "@/app/providers";
+import { TEST_USER } from "@/tests/auth-wrapper";
 import type { ClinicalResultOut, QueryCreateIn } from "@/lib/api/contract";
 import { ApiError } from "@/lib/api/errors";
 import { FIXTURES } from "@/lib/api/fixtures";
@@ -97,7 +98,7 @@ class Boundary extends Component<{ children: ReactNode }, { err: boolean }> {
 
 const mountInShell = (id = "q1") =>
   render(
-    <Providers>
+    <Providers auth={{ initialUser: TEST_USER }}>
       <AppShell>
         <Seeded>
           <ConsultationView id={id} />
@@ -107,7 +108,7 @@ const mountInShell = (id = "q1") =>
   );
 const mount = (id = "q1") =>
   render(
-    <Providers>
+    <Providers auth={{ initialUser: TEST_USER }}>
       <Seeded>
         <ConsultationView id={id} />
       </Seeded>
@@ -141,7 +142,7 @@ describe("ConsultationView", () => {
     }
     status.mockClear();
     render(
-      <Providers>
+      <Providers auth={{ initialUser: TEST_USER }}>
         <SeedLocal>
           <ConsultationView id="local-1" />
         </SeedLocal>
@@ -285,7 +286,7 @@ describe("ConsultationView", () => {
   it("shows the 404 page for an unknown or ended consultation", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     render(
-      <Providers>
+      <Providers auth={{ initialUser: TEST_USER }}>
         <Boundary>
           <ConsultationView id="nope" />
         </Boundary>

@@ -52,7 +52,7 @@ flowchart LR
     hadm --> hside
     padm --> aapp
     aud --> aapp
-    cside -- "queries, results, feedback, corrections" --> gw
+    cside -- "queries, results, feedback, corrections, alerts" --> gw
     hside -- "staff, hospital settings, usage (one hospital)" --> gw
     aapp -- "hospitals, health, DLQ, settings, audit" --> gw
     capp -. "sign in" .-> idp
@@ -416,6 +416,34 @@ spec §10 item 3.
 
 Every hospital admin action is written to the audit log with the actor
 and the hospital.
+
+### 4.8 Notifications and patient alerts
+
+Spec: `docs/specs/2026-10-17-notifications-design.md`. Clinicians only.
+
+- **One bell** in the top bar: new patient alerts plus decisions on your
+  corrections, in one count. Its panel shows the latest of both and "See
+  all".
+- **Routes:** `/notifications` (Patient alerts: New, Handled, Dismissed,
+  severity and, with more than one connected system, source) and
+  `/notifications/corrections` (decisions on your corrections).
+- **Calls:** through the same-origin proxy to `/api/v1/alerts*` and
+  `/api/v1/me/notification-settings`, exactly the shapes the alerts client
+  uses, for clinicians only. Until the backend defines them, they follow the
+  assumed contract in the UI design spec
+  (`docs/specs/2026-10-13-ui-design-v3.md`) §10 item 20 and the
+  notifications design §9. A 409 `already_handled` keeps only who and
+  when.
+- **Pop-ups:** the first check after sign-in is a baseline. Critical always
+  pops up (assertive live region); Urgent, Info and decisions follow the two
+  switches in Profile & security → Notifications.
+- **EMR-agnostic** ([ADR 0003](docs/adr/0003-many-emr-systems.md)): the
+  frontend never talks to an EMR, names a vendor or builds a record link; it
+  follows the backend's `emr_link` ("Open patient record") and shows the
+  hospital's `source_label`.
+- **Privacy:** patient names and MRNs stay in memory (query cache, React
+  state, pop-ups), never in storage or the URL, and clear on sign-out. "Ask
+  MHAI about it" copies no identifiers into the consultation.
 
 ## 5. Platform admin app (planned)
 

@@ -738,3 +738,243 @@ describe("hospital admin routes", () => {
     expect(text).not.toContain("user 7");
   });
 });
+
+describe("patient alert and notification settings routes", () => {
+  const as = (roles: Role[]) =>
+    writeSession({
+      token: "tok",
+      expiresAt: Date.now() + 10 * 60_000,
+      user: { ...TEST_USER, roles },
+      steps: [],
+    });
+  const write = (
+    method: string,
+    body?: string,
+    origin = "http://demo.test",
+    extra: Record<string, string> = {},
+  ) =>
+    new Request("http://demo.test/api/v1/alerts?x=1", {
+      method,
+      headers: {
+        host: "demo.test",
+        origin,
+        ...(body ? { "content-type": "application/json" } : {}),
+        ...extra,
+      },
+      body,
+    });
+  const handlers = { GET, POST, PATCH, DELETE } as const;
+  const send = (method: string, path: string[]) =>
+    handlers[method as keyof typeof handlers](
+      method === "GET"
+        ? get()
+        : write(method, method === "DELETE" ? undefined : "{}"),
+      ctx(...path),
+    );
+
+  it.each([
+    ["GET", ["alerts"]],
+    ["GET", ["alerts", "unread-count"]],
+    ["GET", ["me", "notification-settings"]],
+    ["POST", ["alerts", "al-1", "acknowledge"]],
+    ["POST", ["alerts", "al-1", "dismiss"]],
+    ["PATCH", ["me", "notification-settings"]],
+  ])("forwards %s %j for a clinician", async (method, path) => {
+    await session();
+    fetchMock.mockResolvedValueOnce(Response.json({}));
+    const res = await send(method, path);
+    expect(res.status).toBe(200);
+    // Writes never forward a query string.
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(
+      `http://api.test/api/v1/${path.join("/")}`,
+    );
+  });
+
+  it.each([
+    ["GET", ["alerts", "al-1"]],
+    ["GET", ["alerts", "al-1", "acknowledge"]],
+    ["POST", ["alerts"]],
+    ["POST", ["alerts", "al-1"]],
+    ["POST", ["alerts", "al-1", "delete"]],
+    ["POST", ["alerts", "unread-count", "acknowledge"]],
+    ["POST", ["alerts", "al-1", "dismiss", "x"]],
+    ["POST", ["alerts", "al.1", "acknowledge"]],
+    ["PATCH", ["alerts", "al-1"]],
+    ["DELETE", ["alerts", "al-1"]],
+    ["GET", ["me"]],
+    ["GET", ["me", "profile"]],
+    ["POST", ["me", "notification-settings"]],
+    ["DELETE", ["me", "notification-settings"]],
+  ])("refuses %s %j without calling the API", async (method, path) => {
+    await session();
+    const res = await send(method, path);
+    expect(res.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an admin-only or platform session, without calling the API", async () => {
+    for (const roles of [
+      ["hospital_admin"],
+      ["admin"],
+      ["auditor"],
+    ] as Role[][]) {
+      await as(roles);
+      for (const [method, path] of [
+        ["GET", ["alerts"]],
+        ["GET", ["alerts", "unread-count"]],
+        ["POST", ["alerts", "al-1", "acknowledge"]],
+        ["PATCH", ["me", "notification-settings"]],
+      ] as [string, string[]][])
+        expect((await send(method, path)).status).toBe(403);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("lets a medical director use them", async () => {
+    await as(["clinician", "hospital_admin"]);
+    fetchMock.mockResolvedValueOnce(Response.json({ count: 2 }));
+    expect((await send("GET", ["alerts", "unread-count"])).status).toBe(200);
+  });
+
+  it("refuses a clinician who still owes first sign-in steps, without calling the API", async () => {
+    await writeSession({
+      token: "tok",
+      expiresAt: Date.now() + 10 * 60_000,
+      user: TEST_USER,
+      steps: ["terms"],
+    });
+    for (const [method, path] of [
+      ["GET", ["alerts"]],
+      ["GET", ["me", "notification-settings"]],
+      ["POST", ["alerts", "al-1", "dismiss"]],
+      ["PATCH", ["me", "notification-settings"]],
+    ] as [string, string[]][])
+      expect((await send(method, path)).status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("passes an alert's body through untouched, record link included", async () => {
+    await session();
+    const page = {
+      alerts: [{ id: "al-1", emr_link: "https://record.example/p/1" }],
+      next_cursor: null,
+      sources: [],
+    };
+    fetchMock.mockResolvedValueOnce(Response.json(page));
+    const res = await send("GET", ["alerts"]);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(await res.json()).toEqual(page);
+  });
+
+  it("guards the writes from other sites and forwards the idempotency key", async () => {
+    await session();
+    expect(
+      (
+        await POST(
+          write("POST", "{}", "http://evil.test"),
+          ctx("alerts", "al-1", "acknowledge"),
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await PATCH(
+          write("PATCH", "{}", "http://evil.test"),
+          ctx("me", "notification-settings"),
+        )
+      ).status,
+    ).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockResolvedValueOnce(Response.json({}));
+    await POST(
+      write("POST", "{}", "http://demo.test", { "idempotency-key": "k-1" }),
+      ctx("alerts", "al-1", "acknowledge"),
+    );
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://api.test/api/v1/alerts/al-1/acknowledge");
+    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBe(
+      "k-1",
+    );
+  });
+
+  it("passes the list filters through", async () => {
+    await session();
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ alerts: [], next_cursor: null, sources: [] }),
+    );
+    await GET(
+      get(
+        "http://demo.test/api/v1/alerts?status=new&severity=critical&cursor=20",
+      ),
+      ctx("alerts"),
+    );
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(
+      "http://api.test/api/v1/alerts?status=new&severity=critical&cursor=20",
+    );
+  });
+
+  it("keeps only who and when from a 409 already_handled (Review Focus 1)", async () => {
+    await session();
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        {
+          code: "already_handled",
+          status: "dismissed",
+          handled_by: {
+            display_name: "Nurse Bello",
+            id: "u-9",
+            email: "nurse.bello@hospital.example",
+          },
+          handled_at: "2026-10-17T08:59:00.000Z",
+          patient: { full_name: "Someone Else" },
+          detail: "upstream text",
+        },
+        { status: 409 },
+      ),
+    );
+    const res = await POST(
+      write("POST", "{}"),
+      ctx("alerts", "al-1", "dismiss"),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      code: "already_handled",
+      status: "dismissed",
+      handled_by: { display_name: "Nurse Bello" },
+      handled_at: "2026-10-17T08:59:00.000Z",
+    });
+  });
+
+  it("drops a malformed who-and-when, and keeps only the code for any other 409", async () => {
+    await session();
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        {
+          code: "already_handled",
+          status: "weird",
+          handled_by: { display_name: 42 },
+          handled_at: "not a date",
+        },
+        { status: 409 },
+      ),
+    );
+    const odd = await POST(
+      write("POST", "{}"),
+      ctx("alerts", "al-1", "acknowledge"),
+    );
+    expect(await odd.json()).toEqual({
+      code: "already_handled",
+      status: "handled",
+      handled_by: null,
+      handled_at: null,
+    });
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { code: "already_decided", handled_by: { display_name: "X" } },
+        { status: 409 },
+      ),
+    );
+    const other = await POST(post("{}"), ctx("corrections", "c-1", "approve"));
+    expect(await other.json()).toEqual({ code: "already_decided" });
+  });
+});

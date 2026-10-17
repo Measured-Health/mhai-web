@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Providers } from "@/app/providers";
+import { TEST_USER } from "@/tests/auth-wrapper";
 import { AppShell, useShell } from "../shell/app-shell";
 import { useSession, type SessionItem } from "@/lib/session-store";
 import { CommandPalette, searchItems } from "./command-palette";
@@ -93,7 +94,7 @@ function Seed({
   );
 }
 const ui = (guard?: (h: string) => boolean) => (
-  <Providers>
+  <Providers auth={{ initialUser: TEST_USER }}>
     <AppShell>
       <Seed guard={guard} />
     </AppShell>
@@ -150,7 +151,7 @@ describe("CommandPalette", () => {
 
   it("renders nothing when closed", () => {
     render(
-      <Providers>
+      <Providers auth={{ initialUser: TEST_USER }}>
         <CommandPalette open={false} onClose={() => {}} />
       </Providers>,
     );
@@ -180,7 +181,7 @@ describe("mobile drawer", () => {
       );
     }
     render(
-      <Providers>
+      <Providers auth={{ initialUser: TEST_USER }}>
         <AppShell>
           <Open />
         </AppShell>
@@ -201,7 +202,7 @@ describe("mobile drawer", () => {
       return null;
     }
     render(
-      <Providers>
+      <Providers auth={{ initialUser: TEST_USER }}>
         <AppShell>
           <SeedNone />
         </AppShell>

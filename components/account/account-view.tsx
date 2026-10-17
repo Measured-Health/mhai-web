@@ -15,6 +15,7 @@ import { ChangePasswordDialog } from "./change-password-dialog";
 import { NewBackupCodesDialog } from "./new-backup-codes-dialog";
 import { DevicesSection } from "./devices-section";
 import { FeedbackSection } from "./feedback-section";
+import { NotificationsSection } from "./notifications-section";
 
 const row =
   "flex min-h-14 items-center gap-3 border-t border-line py-3 text-[14px]";
@@ -38,6 +39,7 @@ export function AccountView() {
   const sections = [
     ["profile", "Profile"],
     ["security", "Security"],
+    ...(clinical ? [["notifications", "Notifications"]] : []),
     ...(capabilities.devices ? [["devices", "Devices"]] : []),
     ...(clinical ? [["feedback", "My feedback"]] : []),
   ];
@@ -184,6 +186,7 @@ export function AccountView() {
               )}
             </section>
 
+            {clinical && <NotificationsSection />}
             {capabilities.devices && <DevicesSection />}
             {clinical && <FeedbackSection />}
           </div>

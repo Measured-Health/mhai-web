@@ -282,12 +282,15 @@ test("a reviewer's decision arrives as a toast and stays in the bell", async ({
   await expect(page.getByText(/sent for review/)).toBeVisible();
   // The demo reviewer decides two minutes later; polling picks it up.
   await page.clock.fastForward("02:30");
-  await expect(page.getByText("Your correction was approved")).toBeVisible();
+  // The pop-up is also read out through a live region: match the visible title.
+  await expect(
+    page.getByText("Your correction was approved", { exact: true }),
+  ).toBeVisible();
   await page
-    .getByRole("button", { name: "Decisions on your corrections, 1 new" })
+    .getByRole("button", { name: /^Notifications, \d+ unread$/ })
     .filter({ visible: true })
     .click();
   await expect(
-    page.getByRole("region", { name: "Decisions this session" }),
+    page.getByRole("region", { name: "Recent notifications" }),
   ).toContainText("Dengue fever, likely");
 });

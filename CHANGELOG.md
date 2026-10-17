@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The decisions bell is now the notification bell, shared with patient
+  alerts.
 - The 403 page is now only for Measured Health platform admin and auditor
   accounts, and points them to the platform admin app. Hospital admins use
   the hospital admin side instead.
@@ -19,6 +21,34 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- One notification centre for clinicians: the bell in the top bar counts
+  new patient alerts and decisions on your corrections together
+  ("Notifications, 3 unread"), and its panel shows the latest of both with
+  "See all". New alerts and decisions pop up with a View button. Alerts
+  that were already there when you signed in don't pop up; Critical alerts
+  are read out at once and stay until you hide them; a burst shows at most
+  three pop-ups and a summary, and every one is read out. Pop-ups never
+  take the focus and go when you sign out. When the bell can't check for
+  new alerts it says so, with a warning mark, and never shows "no new
+  alerts" while they're loading or failed. The panel and pop-ups are left
+  out when printing.
+- Notifications page, Patient alerts tab (on sample data): each alert shows
+  its severity in words and an icon, the abnormal result with its unit,
+  normal range and time, up to three likely causes suggested by MHAI with a
+  confidence word, the patient's name, MRN and where they are, and the
+  hospital's own label for the system it came from when there are several.
+  Acknowledge it, dismiss it with a reason, or open the patient's record in
+  the hospital's system. An alert someone else handled first says who and
+  when. Filters for New, Handled, Dismissed, severity and source; cards on
+  phones; nothing is printed or exported.
+- "Ask MHAI about it" on a patient alert starts a consultation filled in
+  with the patient's age and sex, a priority from the alert's severity and
+  the abnormal result as the question. The patient's name, record number
+  and location are never copied.
+- Profile & security → Notifications: switch off pop-ups for patient alerts
+  or for decisions on your corrections. The bell and the Notifications page
+  still update, and Critical alerts always pop up. The settings are saved
+  with your account (in the demo, for this session).
 - Review oversight for hospital admins: corrections waiting with their
   specialty, how long they've waited and how many people can review them;
   specialties short of reviewers are flagged; remind the reviewers or

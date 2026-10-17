@@ -7,10 +7,10 @@ import {
   FLAG_LABEL,
   actorName,
   describeEvent,
-  eventClock,
   rangeStart,
   typeLabel,
 } from "./activity";
+import { eventClock } from "../time";
 
 const who = (display_name: string) => ({ display_name });
 

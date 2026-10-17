@@ -33,6 +33,24 @@ describe("labels", () => {
     for (const code of ["mfa_required", "mfa_invalid", "mfa_locked"])
       expect(FORBIDDEN_TERMS).toContain(code);
   });
+  it("forbids the alert and notification codes", () => {
+    for (const code of [
+      "already_handled",
+      "not_relevant",
+      "already_known",
+      "wrong_patient",
+      "not_recorded",
+      "alert_popups",
+      "correction_popups",
+      "emr_link",
+      "source_label",
+      "code_system",
+      "invalid_reason",
+      "note_too_long",
+      "invalid_cursor",
+    ])
+      expect(FORBIDDEN_TERMS).toContain(code);
+  });
   it("lists the six analysing steps in order", () => {
     expect(STAGES.map((s) => s.label)).toEqual([
       "Protecting patient privacy",

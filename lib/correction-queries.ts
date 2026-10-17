@@ -9,7 +9,7 @@ import {
 import { getClient } from "./api/client";
 import type { RejectIn } from "./api/contract";
 import { ApiError } from "./api/errors";
-import { retryDelay, shouldRetry, useNetwork } from "./network";
+import { READ_RETRY, retryDelay, shouldRetry, usePollEvery } from "./network";
 
 /** The queue and the sidebar badge. */
 export const REVIEW_POLL_MS = 60_000;
@@ -25,19 +25,6 @@ export const CORRECTION_KEYS = {
 };
 
 const forbidden = (e: unknown) => e instanceof ApiError && e.status === 403;
-// A 4xx won't change on retry; a 401 has already signed out.
-const READ_RETRY = {
-  retry: (n: number, e: unknown) => shouldRetry(n, e),
-  retryDelay,
-};
-
-/** Only while online; half as often on 2G or data saver. */
-function usePollEvery(ms: number): number | false {
-  const net = useNetwork();
-  if (!net.online) return false;
-  return net.slow || net.saveData ? ms * 2 : ms;
-}
-
 export async function refreshCorrections(qc: QueryClient): Promise<void> {
   await Promise.all([
     qc.invalidateQueries({ queryKey: CORRECTION_KEYS.all }),

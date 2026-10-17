@@ -7,6 +7,8 @@ import { Button } from "./button";
 import { Banner } from "./banner";
 import { Dialog } from "./dialog";
 import { Sheet } from "./sheet";
+import { LinkTabs } from "./link-tabs";
+import { Switch } from "./switch";
 import { ToastProvider, useToast } from "./toast";
 
 describe("ConfidencePill", () => {
@@ -92,14 +94,14 @@ describe("Toast", () => {
 });
 
 describe("Toast placement", () => {
-  it("sits below the demo ribbon (offset by --demo-h, 0 without the ribbon)", () => {
+  it("sits below the top bar and the demo ribbon (offset by --demo-h)", () => {
     const { container } = render(
       <ToastProvider>
         <p>x</p>
       </ToastProvider>,
     );
     const stack = container.querySelector(".fixed")!;
-    expect(stack.className).toContain("top-[calc(var(--demo-h,0px)+1.25rem)]");
+    expect(stack.className).toContain("top-[calc(var(--demo-h,0px)+4.75rem)]");
     expect(stack.className).not.toMatch(/(^|\s)top-5(\s|$)/);
   });
 });
@@ -224,5 +226,69 @@ describe("Button", () => {
     );
     expect(screen.getByText("Plain")).toHaveAttribute("type", "button");
     expect(screen.getByText("Send")).toHaveAttribute("type", "submit");
+  });
+});
+
+describe("Switch", () => {
+  it("says On or Off in words, and can be described and disabled", async () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <>
+        <Switch
+          label="Pop-ups for patient alerts"
+          checked
+          onChange={onChange}
+          describedBy="hint"
+        />
+        <p id="hint">Critical alerts will still pop up.</p>
+      </>,
+    );
+    const sw = screen.getByRole("switch", {
+      name: "Pop-ups for patient alerts",
+    });
+    expect(sw).toBeChecked();
+    expect(sw).toHaveAccessibleDescription(
+      "Critical alerts will still pop up.",
+    );
+    expect(screen.getByText("On")).toBeInTheDocument();
+    await userEvent.click(sw);
+    expect(onChange).toHaveBeenCalledWith(false);
+    rerender(
+      <Switch
+        label="Pop-ups for patient alerts"
+        checked={false}
+        onChange={onChange}
+        disabled
+      />,
+    );
+    expect(screen.getByRole("switch")).toBeDisabled();
+    expect(screen.getByText("Off")).toBeInTheDocument();
+  });
+});
+
+describe("LinkTabs", () => {
+  it("marks the current tab as the page", () => {
+    render(
+      <LinkTabs
+        label="Notifications"
+        current="alerts"
+        tabs={[
+          { id: "alerts", href: "/notifications", label: "Patient alerts" },
+          {
+            id: "corrections",
+            href: "/notifications/corrections",
+            label: "Corrections",
+          },
+        ]}
+      />,
+    );
+    const nav = screen.getByRole("navigation", { name: "Notifications" });
+    expect(nav).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Patient alerts" }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      screen.getByRole("link", { name: "Corrections" }),
+    ).not.toHaveAttribute("aria-current");
   });
 });

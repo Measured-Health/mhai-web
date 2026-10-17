@@ -77,6 +77,19 @@ export const FORBIDDEN_TERMS = [
   "reviewer_assigned",
   "policy_breach",
   "self_role_change",
+  "already_handled",
+  "not_relevant",
+  "already_known",
+  "wrong_patient",
+  "not_recorded",
+  "alert_popups",
+  "correction_popups",
+  "emr_link",
+  "source_label",
+  "code_system",
+  "invalid_reason",
+  "note_too_long",
+  "invalid_cursor",
 ] as const;
 
 export function citationTag(action: Citation["action"]): {
