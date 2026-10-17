@@ -28,7 +28,7 @@ function Probe({ guard }: { guard?: (href: string) => boolean }) {
   );
 }
 const ui = (guard?: (href: string) => boolean) => (
-  <Providers>
+  <Providers auth={{ initialUser: TEST_USER }}>
     <AppShell>
       <Probe guard={guard} />
     </AppShell>
@@ -74,7 +74,7 @@ describe("useShell().navigate", () => {
       return <button onClick={() => navigate("/z")}>nav</button>;
     }
     render(
-      <Providers>
+      <Providers auth={{ initialUser: TEST_USER }}>
         <AppShell>
           <Host />
         </AppShell>
@@ -108,7 +108,7 @@ describe("useShell().openShortcuts", () => {
       return <button onClick={openShortcuts}>keys</button>;
     }
     render(
-      <Providers>
+      <Providers auth={{ initialUser: TEST_USER }}>
         <AppShell>
           <Keys />
         </AppShell>

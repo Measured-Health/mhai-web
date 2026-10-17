@@ -225,8 +225,8 @@ everything). Every name and MRN is synthetic.
   reads "Location not recorded" / "Not standardised" (R9).
 - **Privacy (spec §5, §8, CONTRIBUTING).** Patient names and MRNs live in
   memory only: the TanStack cache (cleared on sign-out by
-  `SessionProvider.clear()`), React state and the toast stack (cleared when
-  the shell unmounts at sign-out, R4). Never `localStorage`,
+  `SessionProvider.clear()`), React state and the toast stack (cleared by
+  `NotificationsProvider` on unmount, R4). Never `localStorage`,
   `sessionStorage`, IndexedDB, cookies, the URL, the document title,
   `console.*` or analytics. "Ask MHAI about it" never copies identifiers into
   the consultation (R11). Nothing is printed or exported from the alerts page

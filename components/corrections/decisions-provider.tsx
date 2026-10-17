@@ -13,6 +13,9 @@ import {
 import type { CorrectionOut, CorrectionStatus } from "@/lib/api/contract";
 import { CORRECTION_KEYS, useMyCorrections } from "@/lib/correction-queries";
 import { correctionTitle, parseTime, rejectionText } from "@/lib/corrections";
+import { usePopupSettings } from "@/lib/notification-queries";
+import { CORRECTIONS_HREF, NOTIFICATION_TAG } from "@/lib/notifications/popups";
+import { useShell } from "../shell/shell-context";
 import { useToast } from "../ui/toast";
 
 export interface DecisionNote {
@@ -82,16 +85,26 @@ export function toastFor(d: DecisionNote) {
 /**
  * Watches your corrections while you're signed in (it lives in AppShell) and
  * tells you when a reviewer decides. Memory only: the history goes when the
- * shell unmounts at sign-out.
+ * shell unmounts at sign-out. Pop-ups follow "Pop-ups for decisions on my
+ * corrections"; the bell counts decisions either way (spec §4).
  */
 export function DecisionsProvider({ children }: { children: ReactNode }) {
   useMyCorrections(); // keeps the poll running on every clinical screen
   const qc = useQueryClient();
   const { show } = useToast();
+  const { navigate } = useShell();
+  const { correction_popups } = usePopupSettings();
   const [since] = useState(() => Date.now());
   const [notes, setNotes] = useState<DecisionNote[]>([]);
   const [unseen, setUnseen] = useState(0);
   const prev = useRef<Map<string, CorrectionStatus> | null>(null);
+  // Read inside the cache subscription, which outlives renders.
+  const popups = useRef(correction_popups);
+  const go = useRef(navigate);
+  useEffect(() => {
+    popups.current = correction_popups;
+    go.current = navigate;
+  }, [correction_popups, navigate]);
 
   useEffect(() => {
     const snapshot = (list: CorrectionOut[]) =>
@@ -111,7 +124,18 @@ export function DecisionsProvider({ children }: { children: ReactNode }) {
       if (!fresh.length) return;
       setNotes((n) => [...fresh, ...n].slice(0, NOTES_KEPT));
       setUnseen((u) => u + fresh.length);
-      for (const d of fresh) show(toastFor(d));
+      if (!popups.current) return;
+      for (const d of fresh)
+        show({
+          ...toastFor(d),
+          live: "polite",
+          tag: NOTIFICATION_TAG,
+          action: {
+            label: "View",
+            name: `View decision: ${d.title}`,
+            onClick: () => go.current(CORRECTIONS_HREF),
+          },
+        });
     });
   }, [qc, show, since]);
 

@@ -1,9 +1,7 @@
 "use client";
 import {
   Suspense,
-  createContext,
   useCallback,
-  useContext,
   useMemo,
   useRef,
   useState,
@@ -11,54 +9,28 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/auth-context";
-import { isAdminOnly } from "@/lib/auth/types";
+import { isClinical } from "@/lib/auth/types";
 import { useShortcuts } from "@/lib/hooks/use-shortcuts";
 import { useSession } from "@/lib/session-store";
 import { CommandPalette } from "../utility/command-palette";
 import { ShortcutsDialog } from "../utility/shortcuts-dialog";
 import { DegradedStrip } from "../states/degraded-strip";
 import { OfflineStrip } from "../states/offline-strip";
-import { DecisionsProvider } from "../corrections/decisions-provider";
+import { NotificationsProvider } from "../notifications/notifications-provider";
 import { MobileDrawer } from "./mobile-drawer";
 import { Sidebar } from "./sidebar";
+import {
+  ShellContext,
+  type NavigationGuard,
+  type ShellCtx,
+} from "./shell-context";
 
-/** Returns true to allow navigation, false to block it (the guard handles the block itself). */
-export type NavigationGuard = (href: string) => boolean;
-
-type ShellCtx = {
-  openDrawer(): void;
-  openSearch(): void;
-  openShortcuts(): void;
-  closeDrawer(): void;
-  searchOpen: boolean;
-  closeSearch(): void;
-  navigate(href: string): void;
-  setNavigationGuard(guard: NavigationGuard | null): void;
-};
-const Ctx = createContext<ShellCtx | null>(null);
-
-/** Outside an AppShell the shell UI actions are no-ops, but `navigate` still routes. */
-export function useShell(): ShellCtx {
-  const ctx = useContext(Ctx);
-  const router = useRouter();
-  return (
-    ctx ?? {
-      openDrawer() {},
-      openSearch() {},
-      openShortcuts() {},
-      closeDrawer() {},
-      searchOpen: false,
-      closeSearch() {},
-      navigate: (href) => router.push(href),
-      setNavigationGuard() {},
-    }
-  );
-}
+export { useShell, type NavigationGuard } from "./shell-context";
 
 export function AppShell({ children }: { children: ReactNode }) {
   // A hospital admin who isn't a clinician gets no clinical tools (R3).
   const { user } = useAuth();
-  const clinical = !isAdminOnly(user);
+  const clinical = isClinical(user);
   const { items } = useSession();
   const router = useRouter();
   const [drawer, setDrawer] = useState(false);
@@ -141,9 +113,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     </>
   );
   return (
-    <Ctx.Provider value={ctx}>
-      {/* Polls your corrections and toasts decisions, for clinicians (R9, Plan 3). */}
-      {clinical ? <DecisionsProvider>{body}</DecisionsProvider> : body}
-    </Ctx.Provider>
+    <ShellContext.Provider value={ctx}>
+      {/* Patient alerts and decisions, with their pop-ups, for clinicians (spec §2). */}
+      {clinical ? <NotificationsProvider>{body}</NotificationsProvider> : body}
+    </ShellContext.Provider>
   );
 }
