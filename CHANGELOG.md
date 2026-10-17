@@ -42,6 +42,10 @@ All notable changes to this project are documented here. The format follows
   with the patient's age and sex, a priority from the alert's severity and
   the abnormal result as the question. The patient's name, record number
   and location are never copied.
+- Profile & security → Notifications: switch off pop-ups for patient alerts
+  or for decisions on your corrections. The bell and the Notifications page
+  still update, and Critical alerts always pop up. The settings are saved
+  with your account (in the demo, for this session).
 - Review oversight for hospital admins: corrections waiting with their
   specialty, how long they've waited and how many people can review them;
   specialties short of reviewers are flagged; remind the reviewers or

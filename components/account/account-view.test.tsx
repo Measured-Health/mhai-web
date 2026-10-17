@@ -429,3 +429,32 @@ describe("AccountView devices without a usable last-active time", () => {
     expect(devices).not.toHaveTextContent(/NaN| ago/);
   });
 });
+
+describe("AccountView notifications", () => {
+  it("has a Notifications section for clinicians, after Security", async () => {
+    await signedIn();
+    expect(
+      await screen.findByRole("region", { name: "Notifications" }),
+    ).toBeInTheDocument();
+    const links = within(
+      screen.getByRole("navigation", { name: "Account sections" }),
+    ).getAllByRole("link");
+    expect(links.map((l) => l.textContent)).toEqual([
+      "Profile",
+      "Security",
+      "Notifications",
+      "Devices",
+      "My feedback",
+    ]);
+    expect(
+      await screen.findByRole("switch", { name: "Pop-ups for patient alerts" }),
+    ).toBeChecked();
+  });
+
+  it("has none for a hospital admin who isn't a clinician", async () => {
+    await signedIn({ ...TEST_USER, roles: ["hospital_admin"] });
+    expect(screen.getByRole("region", { name: "Profile" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Notifications" })).toBeNull();
+  });
+});
