@@ -340,6 +340,7 @@ describe("notification settings", () => {
       update.mock.calls[1]![1]?.idempotencyKey,
     );
   });
+
   it("shows a change at once, before the server answers (B3)", async () => {
     let release!: () => void;
     const real = holder.client.updateNotificationSettings.bind(holder.client);
