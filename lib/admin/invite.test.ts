@@ -75,4 +75,48 @@ describe("parseInviteList (Review Focus 3)", () => {
   it("caps a send at 200", () => {
     expect(INVITE_MAX).toBe(200);
   });
+
+  it("gives each space-separated address its own line", () => {
+    const L = (t: string) =>
+      parseInviteList(t, ctx).map((l) => [l.email, l.status]);
+    const want = [
+      ["a@havanahospital.org", "ok"],
+      ["b@havanahospital.org", "ok"],
+    ];
+    expect(L("a@havanahospital.org b@havanahospital.org")).toEqual(want);
+    expect(L("a@havanahospital.org\u00A0b@havanahospital.org")).toEqual(want);
+    expect(L("a@havanahospital.org b@gmail.com a@havanahospital.org")).toEqual([
+      ["a@havanahospital.org", "ok"],
+      ["b@gmail.com", "domain_not_allowed"],
+      ["a@havanahospital.org", "duplicate"],
+    ]);
+    expect(L("a@havanahospital.org b@havanahospital")).toEqual([
+      ["a@havanahospital.org", "ok"],
+      ["b@havanahospital", "invalid"],
+    ]);
+  });
+
+  it("treats fullwidth separators as separators", () => {
+    for (const sep of ["\uFF0C", "\uFF1B", "\u3001"])
+      expect(
+        okEmails(
+          parseInviteList(
+            `a@havanahospital.org${sep}b@havanahospital.org`,
+            ctx,
+          ),
+        ),
+      ).toEqual(["a@havanahospital.org", "b@havanahospital.org"]);
+  });
+
+  it("never drops stray text before an <address> silently", () => {
+    expect(
+      parseInviteList("junk, Ann <a@havanahospital.org>", ctx).map((l) => [
+        l.email,
+        l.status,
+      ]),
+    ).toEqual([
+      ["junk", "invalid"],
+      ["a@havanahospital.org", "ok"],
+    ]);
+  });
 });

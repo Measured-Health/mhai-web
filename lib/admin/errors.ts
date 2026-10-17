@@ -59,14 +59,20 @@ export function adminError(e: unknown): AdminError {
         "Invites only go to your hospital's email addresses.",
       );
     case "mfa_invalid":
-      return E("That code didn't work. Try again.", "");
+      return E(
+        "That code didn't work. Try again.",
+        "Check the code in your authenticator app.",
+      );
     case "mfa_required":
       return E(
         "Turn on two-step verification in Profile & security to remove staff.",
-        "",
+        "Then come back and try again.",
       );
     case "mfa_locked":
-      return E("Too many tries. Wait 15 minutes, then try again.", "");
+      return E(
+        "Too many tries. Wait 15 minutes, then try again.",
+        "This keeps the account safe.",
+      );
     case "rate_limited":
       return E("Too many changes at once", "Wait a minute and try again.");
   }

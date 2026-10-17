@@ -32,6 +32,15 @@ export const SKIP_REASON: Record<InviteSkipReason, string> = {
 
 const ANGLE = /<([^<>]*)>/;
 
+/** "a@x.org b@x.org": addresses separated only by spaces each get a line. */
+function splitWords(chunk: string): string[] {
+  if (/[<"]/.test(chunk)) return [chunk];
+  const words = chunk.split(/\s+/);
+  return words.filter((w) => w.includes("@")).length >= 2
+    ? words.filter((w) => w.includes("@"))
+    : [chunk];
+}
+
 function extract(chunk: string): string {
   const angle = ANGLE.exec(chunk);
   let t = (angle ? angle[1]! : chunk).trim();
@@ -56,13 +65,16 @@ export function parseInviteList(
   const domains = ctx.domains.map((d) => d.toLowerCase());
   const seen = new Set<string>();
   const chunks = text
-    .split(/[,;\n\r\t]+/)
+    .split(/[,;\n\r\t\uFF0C\uFF1B\u3001]+/)
     .map((c) => c.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .flatMap(splitWords);
   const out: InviteLine[] = [];
   chunks.forEach((chunk, i) => {
     const next = chunks[i + 1];
-    if (!chunk.includes("@") && next && /<[^<>]*@[^<>]*>/.test(next)) return;
+    // Only the opening half of a quoted name ("Obi, Ngozi" <…>) joins the
+    // address after it; any other stray text stays as its own invalid line.
+    if (/^"[^"]*$/.test(chunk) && next && /<[^<>]*@[^<>]*>/.test(next)) return;
     const email = extract(chunk);
     let status: InviteLineStatus = "ok";
     if (!EMAIL_RE.test(email)) status = "invalid";

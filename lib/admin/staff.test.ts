@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ADMIN_NOW as NOW, makeStaff } from "@/tests/admin";
 import {
   LAST_ADMIN,
+  SIGN_IN_LABEL,
   attentionLabel,
   filterStaff,
   guardFor,
@@ -197,6 +198,19 @@ describe("guardFor", () => {
     expect(guardFor("deactivate", other, withInvite).ok).toBe(false);
   });
 
+  it("doesn't count a deactivated admin, and lets a non-admin go", () => {
+    const gone = makeStaff({
+      id: "g",
+      roles: ["hospital_admin"],
+      status: "deactivated",
+    });
+    expect(guardFor("remove", gone, [me, gone])).toEqual({ ok: true });
+    expect(guardFor("drop_admin", clinician, [other, clinician])).toEqual({
+      ok: true,
+    });
+    expect(guardFor("deactivate", other, [other, me])).toEqual({ ok: true });
+  });
+
   it("allows the rest", () => {
     expect(guardFor("deactivate", other, [me, other])).toEqual({ ok: true });
     expect(guardFor("remove", clinician, [me, clinician])).toEqual({
@@ -218,5 +232,15 @@ describe("labels", () => {
     expect(rolesText(["clinician", "hospital_admin"])).toBe(
       "Clinician · Hospital admin",
     );
+  });
+});
+
+describe("sign-in labels", () => {
+  it("uses two-step wording", () => {
+    expect(SIGN_IN_LABEL).toEqual({
+      sso: "Hospital account",
+      password_mfa: "Password + two-step",
+      password: "Password",
+    });
   });
 });

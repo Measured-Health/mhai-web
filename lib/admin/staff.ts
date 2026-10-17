@@ -118,7 +118,7 @@ export function filterStaff(
         ),
     )
     .sort((a, b) =>
-      sortName(a.full_name).localeCompare(sortName(b.full_name), undefined, {
+      sortName(a.full_name).localeCompare(sortName(b.full_name), "en", {
         sensitivity: "base",
       }),
     );
