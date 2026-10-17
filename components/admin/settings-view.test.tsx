@@ -31,7 +31,7 @@ describe("SettingsView", () => {
     expect(screen.getByLabelText("Flag as overdue after")).toHaveValue("4");
     expect(
       screen.getByRole("switch", {
-        name: "Require 2-step verification for clinicians",
+        name: "Require two-step verification for clinicians",
       }),
     ).toBeChecked();
     expect(
@@ -215,6 +215,31 @@ describe("SettingsView", () => {
     expect(
       screen.getByRole("switch", { name: 'Allow "trust this device"' }),
     ).not.toBeChecked();
+  });
+
+  it("never writes two-step as 2-step", async () => {
+    const { container } = renderAdmin(<SettingsView />);
+    await ready();
+    expect(container.textContent).not.toMatch(/2-step/i);
+    expect(
+      screen.getByText("Skips two-step for 30 days on a personal device"),
+    ).toBeInTheDocument();
+  });
+
+  it("only says Connected to a domain when sign-on is connected", async () => {
+    const real = await holder.client.getSettings();
+    vi.spyOn(holder.client, "getSettings").mockResolvedValue({
+      ...real,
+      sso: { status: "error", domain: "havanahospital.org" },
+    });
+    renderAdmin(<SettingsView />);
+    await ready();
+    const signIn = screen.getByRole("region", { name: "Sign-in" });
+    expect(within(signIn).getByText("Needs attention")).toBeInTheDocument();
+    expect(within(signIn).queryByText(/Connected to/)).toBeNull();
+    expect(
+      within(signIn).getByText(/Domain: havanahospital\.org/),
+    ).toBeInTheDocument();
   });
 });
 

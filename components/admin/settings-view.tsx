@@ -128,6 +128,7 @@ export function SettingsView() {
   const online = useOnline();
   const overdueId = useId();
   const idleId = useId();
+  const offlineId = useId();
   const [changes, setChanges] = useState<Changes>({});
   const [error, setError] = useState<AdminError | null>(null);
 
@@ -168,7 +169,10 @@ export function SettingsView() {
   const set = <K extends keyof SettingsEditable>(
     k: K,
     v: SettingsEditable[K],
-  ) => setChanges((c) => ({ ...c, [k]: v }));
+  ) => {
+    setError(null);
+    setChanges((c) => ({ ...c, [k]: v }));
+  };
   const patch = settingsPatch(data, changes);
   const sso = SSO[data.sso.status];
 
@@ -192,7 +196,7 @@ export function SettingsView() {
             ? {
                 ...err,
                 title: "Someone else saved the settings just now",
-                body: "We've loaded their changes. Yours are still here: check them and save again.",
+                body: "Another admin changed these settings. We've loaded their latest values; your changes are kept. Check them and save again.",
               }
             : err,
         );
@@ -242,11 +246,11 @@ export function SettingsView() {
 
         <Section title="Security">
           <Setting
-            title="Require 2-step verification for clinicians"
+            title="Require two-step verification for clinicians"
             sub="Hospital admins always need it"
           >
             <Switch
-              label="Require 2-step verification for clinicians"
+              label="Require two-step verification for clinicians"
               checked={value("require_mfa_for_clinicians")}
               onChange={(v) => set("require_mfa_for_clinicians", v)}
             />
@@ -272,7 +276,7 @@ export function SettingsView() {
           </Setting>
           <Setting
             title='Allow "trust this device"'
-            sub="Skips 2-step for 30 days on a personal device"
+            sub="Skips two-step for 30 days on a personal device"
           >
             <Switch
               label='Allow "trust this device"'
@@ -287,7 +291,9 @@ export function SettingsView() {
             title="Hospital single sign-on"
             sub={
               data.sso.domain
-                ? `Connected to ${data.sso.domain} · managed by Measured Health`
+                ? data.sso.status === "connected"
+                  ? `Connected to ${data.sso.domain} · managed by Measured Health`
+                  : `Domain: ${data.sso.domain} · managed by Measured Health`
                 : "Managed by Measured Health"
             }
           >
@@ -324,7 +330,7 @@ export function SettingsView() {
         <div className="flex flex-wrap items-center gap-3">
           <Button
             disabled={!patch || !online || save.isPending}
-            aria-describedby={online ? undefined : "settings-offline"}
+            aria-describedby={online ? undefined : offlineId}
             onClick={submit}
           >
             {save.isPending ? "Saving…" : "Save changes"}
@@ -341,7 +347,7 @@ export function SettingsView() {
             </Button>
           )}
           <span
-            id={online ? undefined : "settings-offline"}
+            id={online ? undefined : offlineId}
             className="text-[12.5px] text-ink-3"
           >
             {online
