@@ -52,8 +52,13 @@ describe("seal / unseal", () => {
   });
   it("rejects tampering and garbage", () => {
     const a = seal({ n: 1 });
-    const flipped = a.slice(0, -2) + (a.endsWith("A") ? "BB" : "AA");
-    expect(unseal(flipped)).toBeNull();
+    // Flip a real bit of the last byte. Swapping the last characters isn't
+    // enough: their spare base64 bits decode to the same bytes about once in
+    // a thousand seals, so the test flaked.
+    const raw = Buffer.from(a, "base64url");
+    const last = raw.length - 1;
+    raw[last] = raw[last]! ^ 1;
+    expect(unseal(raw.toString("base64url"))).toBeNull();
     expect(unseal("not-a-cookie")).toBeNull();
     expect(unseal(undefined)).toBeNull();
   });
