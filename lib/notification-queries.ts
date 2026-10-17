@@ -49,9 +49,21 @@ export const NOTIFY_KEYS = {
   settings: ["notification-settings"] as const,
 };
 
-/** The hospital has no patient alerts yet (404, or 403 for the route): stop asking (R12). */
+/** The hospital has no patient alerts yet (404): stop asking (R12). */
 export const alertsOff = (e: unknown) =>
-  e instanceof ApiError && (e.status === 404 || e.status === 403);
+  e instanceof ApiError && e.status === 404;
+
+/** After a 403, alerts are checked again this slowly: it's an error, not "switched off" (F2). */
+export const ALERT_SLOW_MS = 600_000;
+
+/** The next check: none once switched off, slowly after a 403, else the usual poll. */
+export function alertsRecheck(
+  e: unknown,
+  every: number | false,
+): number | false {
+  if (every === false || alertsOff(e)) return false;
+  return e instanceof ApiError && e.status === 403 ? ALERT_SLOW_MS : every;
+}
 
 /** Milliseconds for sorting; an unreadable time becomes -Infinity, so it goes last. */
 const timeOf = (a: AlertOut) => {
@@ -108,7 +120,7 @@ export function useAlertFeed() {
   return useQuery({
     queryKey: NOTIFY_KEYS.feed,
     queryFn: fetchFeed,
-    refetchInterval: (q) => (alertsOff(q.state.error) ? false : every),
+    refetchInterval: (q) => alertsRecheck(q.state.error, every),
     ...READ_RETRY,
   });
 }
@@ -120,7 +132,7 @@ export function useUnreadAlerts() {
     queryKey: NOTIFY_KEYS.unread,
     queryFn: () => getAlertsClient().getUnreadCount(),
     select: (d) => d.count,
-    refetchInterval: (q) => (alertsOff(q.state.error) ? false : every),
+    refetchInterval: (q) => alertsRecheck(q.state.error, every),
     ...READ_RETRY,
   });
 }

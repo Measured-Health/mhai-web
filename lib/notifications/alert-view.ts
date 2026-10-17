@@ -68,8 +68,12 @@ export function findingLine(f: FindingOut): string {
   const value = f.value?.trim() || null;
   const unit = value ? f.unit?.trim() || null : null;
   const head = [name, value, unit].filter(Boolean).join(" ");
-  const flag =
-    f.flag && Object.hasOwn(FLAG_WORD, f.flag) ? FLAG_WORD[f.flag] : null;
+  // An unknown flag is still a flag: it reads "abnormal", never as normal (F4).
+  const flag = f.flag
+    ? Object.hasOwn(FLAG_WORD, f.flag)
+      ? FLAG_WORD[f.flag]
+      : FLAG_WORD.abnormal
+    : null;
   const range = f.reference_range?.trim()
     ? `normal ${f.reference_range.trim()}`
     : null;

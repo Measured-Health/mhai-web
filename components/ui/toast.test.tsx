@@ -187,6 +187,35 @@ describe("Toast pop-ups", () => {
     expect(polite()).toHaveTextContent("Emeka Nnamdi");
   });
 
+  it("announces every pop-up in a burst; hiding one removes only its text (F1)", () => {
+    ui();
+    const ids: number[] = [];
+    act(() => {
+      for (const name of ["Halima Garba", "Emeka Nnamdi", "Tunde Bello"])
+        ids.push(
+          box.api.show(
+            popup({
+              title: "Critical patient alert",
+              body: name,
+              severity: "critical",
+              live: "assertive",
+              ms: null,
+            }),
+          ),
+        );
+    });
+    expect(assertive().querySelectorAll("span")).toHaveLength(3);
+    expect(assertive()).toHaveTextContent("Halima Garba");
+    expect(assertive()).toHaveTextContent("Emeka Nnamdi");
+    expect(assertive()).toHaveTextContent("Tunde Bello");
+    act(() => box.api.dismiss(ids[1]));
+    expect(assertive().querySelectorAll("span")).toHaveLength(2);
+    expect(assertive()).not.toHaveTextContent("Emeka Nnamdi");
+    expect(assertive()).toHaveTextContent("Halima Garba");
+    expect(assertive()).toHaveTextContent("Tunde Bello");
+    expect(polite()).toBeEmptyDOMElement();
+  });
+
   it("shows the new plain toast and drops the oldest non-critical when full of persistent ones (A11)", () => {
     ui();
     act(() => {

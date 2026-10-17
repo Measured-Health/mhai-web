@@ -14,10 +14,12 @@ const holder = vi.hoisted(() => ({ client: null as unknown as MockAlerts }));
 vi.mock("@/lib/api/alerts", () => ({ getAlertsClient: () => holder.client }));
 import { ApiError } from "./api/errors";
 import {
+  ALERT_SLOW_MS,
   DEFAULT_SETTINGS,
   FEED_SIZE,
   NOTIFY_KEYS,
   alertsOff,
+  alertsRecheck,
   useAcknowledgeAlert,
   useAlertFeed,
   useAlertList,
@@ -273,7 +275,6 @@ describe("alert queries", () => {
 
   it("stops asking when alerts aren't switched on (R12)", async () => {
     expect(alertsOff(new ApiError(404, "not_found"))).toBe(true);
-    expect(alertsOff(new ApiError(403, "forbidden"))).toBe(true);
     expect(alertsOff(new ApiError(503, "error"))).toBe(false);
     const list = vi
       .spyOn(holder.client, "listAlerts")
@@ -282,6 +283,18 @@ describe("alert queries", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     // One check is two reads (the feed and the Criticals); neither is retried.
     expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats a 403 as an error, not as switched off, and re-checks slowly (F2)", () => {
+    const forbidden = new ApiError(403, "forbidden");
+    expect(alertsOff(forbidden)).toBe(false);
+    expect(alertsRecheck(forbidden, 30_000)).toBe(ALERT_SLOW_MS);
+    expect(ALERT_SLOW_MS).toBe(600_000);
+    expect(alertsRecheck(new ApiError(404, "not_found"), 30_000)).toBe(false);
+    expect(alertsRecheck(new ApiError(503, "error"), 30_000)).toBe(30_000);
+    expect(alertsRecheck(null, 30_000)).toBe(30_000);
+    // Offline stays offline, whatever the error.
+    expect(alertsRecheck(forbidden, false)).toBe(false);
   });
 });
 

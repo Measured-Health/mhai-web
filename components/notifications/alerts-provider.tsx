@@ -37,6 +37,10 @@ type Ctx = {
   unread: number;
   /** False when the hospital has no patient alerts yet (R12). */
   available: boolean;
+  /** The unread count couldn't be checked: the bell says so (F3). */
+  countFailed: boolean;
+  /** Whether the newest alerts have loaded, so "none" is never said early (F3). */
+  feed: "loading" | "error" | "ready";
   /** The newest new alerts, for the bell. */
   latest: AlertOut[];
   /** The alert a "View" asked for, until the page shows it. Memory only (R3). */
@@ -138,13 +142,26 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     () => ({
       unread: unread.data ?? 0,
       available: !alertsOff(feed.error),
+      countFailed: unread.isError && !alertsOff(unread.error),
+      feed: feed.isError ? "error" : feed.isPending ? "loading" : "ready",
       latest: (feed.data?.alerts ?? []).filter((a) => a.status === "new"),
       focusId: focus.id,
       focusSeq: focus.seq,
       openAlert,
       focusDone,
     }),
-    [unread.data, feed.error, feed.data, focus, openAlert, focusDone],
+    [
+      unread.data,
+      unread.isError,
+      unread.error,
+      feed.error,
+      feed.isError,
+      feed.isPending,
+      feed.data,
+      focus,
+      openAlert,
+      focusDone,
+    ],
   );
   return <AlertsCtx.Provider value={value}>{children}</AlertsCtx.Provider>;
 }

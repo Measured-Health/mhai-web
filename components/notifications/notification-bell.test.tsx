@@ -185,6 +185,76 @@ describe("NotificationBell", () => {
     ).toBeVisible();
   });
 
+  it("says when the count couldn't be checked, with a warning mark (F3)", async () => {
+    alerts.getUnreadCount.mockRejectedValue(new ApiError(400, "bad"));
+    ui();
+    const b = await bell("Notifications, couldn't check for new alerts");
+    const mark = b.querySelector("[data-count-failed]");
+    expect(mark).toBeTruthy();
+    expect(mark!.querySelector("svg")).toBeTruthy();
+  });
+
+  it("shows loading in the panel until the alerts arrive, never 'no alerts' (F3)", async () => {
+    const user = userEvent.setup();
+    // One check is two reads (the feed and the Criticals): hold both.
+    const held: (() => void)[] = [];
+    const release = () => held.forEach((r) => r());
+    alerts.listAlerts.mockImplementation(
+      () =>
+        new Promise((r) => {
+          held.push(() => r({ alerts: [], next_cursor: null, sources: [] }));
+        }),
+    );
+    ui();
+    await user.click(await bell("Notifications, 6 unread"));
+    const list = screen.getByRole("region", { name: "Patient alerts" });
+    expect(within(list).getByText("Loading…")).toBeVisible();
+    expect(within(list).queryByText("No new patient alerts.")).toBeNull();
+    await act(async () => release());
+    expect(
+      await within(list).findByText("No new patient alerts."),
+    ).toBeVisible();
+  });
+
+  it("says the alerts couldn't load in the panel, never 'no alerts' (F3)", async () => {
+    const user = userEvent.setup();
+    alerts.listAlerts.mockRejectedValue(new ApiError(400, "bad"));
+    const qc = ui();
+    await vi.waitFor(() =>
+      expect(qc.getQueryState(NOTIFY_KEYS.feed)?.status).toBe("error"),
+    );
+    await user.click(await bell("Notifications, 6 unread"));
+    const list = screen.getByRole("region", { name: "Patient alerts" });
+    expect(
+      within(list).getByText("Couldn't load patient alerts"),
+    ).toBeVisible();
+    expect(within(list).queryByText("No new patient alerts.")).toBeNull();
+  });
+
+  it("points at the panel only while it's open (F3)", async () => {
+    const user = userEvent.setup();
+    ui();
+    const b = await bell("Notifications, 6 unread");
+    expect(b).not.toHaveAttribute("aria-controls");
+    await user.click(b);
+    const panel = screen.getByRole("region", { name: "Recent notifications" });
+    expect(b).toHaveAttribute("aria-controls", panel.id);
+  });
+
+  it("closes with Esc when focus is on the panel itself (F3)", async () => {
+    const user = userEvent.setup();
+    ui();
+    const b = await bell("Notifications, 6 unread");
+    await user.click(b);
+    const panel = screen.getByRole("region", { name: "Recent notifications" });
+    await user.click(within(panel).getByText("Recent notifications"));
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByRole("region", { name: "Recent notifications" }),
+    ).toBeNull();
+    expect(b).toHaveFocus();
+  });
+
   it("caps the badge at 99+ but says the number", async () => {
     alerts.getUnreadCount.mockResolvedValue({ count: 140 });
     ui();

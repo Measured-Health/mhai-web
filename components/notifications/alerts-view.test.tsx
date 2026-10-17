@@ -169,20 +169,28 @@ describe("Notifications: Patient alerts", () => {
     );
   });
 
-  it.each([404, 403])(
-    "says when alerts aren't switched on (R12, %i)",
-    async (status) => {
-      vi.spyOn(holder.client, "listAlerts").mockRejectedValue(
-        new ApiError(status, "off"),
-      );
-      renderWithAuth(<NotificationsPage />);
-      expect(
-        await screen.findByText(
-          "Patient alerts aren't switched on for your hospital yet",
-        ),
-      ).toBeVisible();
-    },
-  );
+  it("says when alerts aren't switched on (R12, 404)", async () => {
+    vi.spyOn(holder.client, "listAlerts").mockRejectedValue(
+      new ApiError(404, "off"),
+    );
+    renderWithAuth(<NotificationsPage />);
+    expect(
+      await screen.findByText(
+        "Patient alerts aren't switched on for your hospital yet",
+      ),
+    ).toBeVisible();
+  });
+
+  it("reads a 403 as couldn't load, never as switched off (F2)", async () => {
+    vi.spyOn(holder.client, "listAlerts").mockRejectedValue(
+      new ApiError(403, "forbidden"),
+    );
+    renderWithAuth(<NotificationsPage />);
+    expect(
+      await screen.findByText("Couldn't load patient alerts"),
+    ).toBeVisible();
+    expect(screen.queryByText(/aren't switched on/)).toBeNull();
+  });
 
   it("offers a retry when the alerts can't load", async () => {
     vi.spyOn(holder.client, "listAlerts")
@@ -329,13 +337,11 @@ describe("Notifications: Patient alerts", () => {
   it("clears the request when the list can't load", async () => {
     const user = userEvent.setup();
     vi.spyOn(holder.client, "listAlerts").mockRejectedValue(
-      new ApiError(403, "off"),
+      new ApiError(403, "forbidden"),
     );
     renderWithAuth(withAlerts("al-105"));
     expect(
-      await screen.findByText(
-        "Patient alerts aren't switched on for your hospital yet",
-      ),
+      await screen.findByText("Couldn't load patient alerts"),
     ).toBeVisible();
     await user.click(screen.getByRole("button", { name: "open al-105" }));
     await waitFor(() =>

@@ -31,12 +31,11 @@ export interface ToastInput {
 }
 
 type Item = ToastInput & { id: number };
-type Said = { text: string; n: number; id: number };
+type Said = { text: string; id: number };
 
 /** At most this many on screen; the oldest that can expire goes first, never a Critical (R4, A11). */
 export const TOAST_MAX = 4;
 const DEFAULT_MS = 3200;
-const QUIET: Said = { text: "", n: 0, id: 0 };
 
 type Ctx = {
   show(t: ToastInput): number;
@@ -63,8 +62,9 @@ const RING = {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<Item[]>([]);
-  const [polite, setPolite] = useState<Said>(QUIET);
-  const [assertive, setAssertive] = useState<Said>(QUIET);
+  // One line per pop-up, so a burst is read out in full (F1).
+  const [polite, setPolite] = useState<Said[]>([]);
+  const [assertive, setAssertive] = useState<Said[]>([]);
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const itemsRef = useRef<Item[]>([]);
   const seq = useRef(0);
@@ -88,7 +88,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }
     itemsRef.current = itemsRef.current.filter((i) => !ids.has(i.id));
     setItems(itemsRef.current);
-    const quiet = (s: Said) => (ids.has(s.id) ? QUIET : s);
+    const quiet = (s: Said[]) =>
+      s.some((x) => ids.has(x.id)) ? s.filter((x) => !ids.has(x.id)) : s;
     setPolite(quiet);
     setAssertive(quiet);
   }, []);
@@ -116,14 +117,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       itemsRef.current = next;
       setItems(next);
       if (t.live) {
-        // A fresh key re-announces even the same words.
-        const said = {
-          text: [t.title, t.body].filter(Boolean).join(". "),
-          n: id,
-          id,
-        };
-        if (t.live === "assertive") setAssertive(said);
-        else setPolite(said);
+        // Each pop-up adds its own line, keyed by id, so even the same
+        // words are read again and a burst is read in full.
+        const said = { text: [t.title, t.body].filter(Boolean).join(". "), id };
+        const add = (s: Said[]) => [...s, said];
+        if (t.live === "assertive") setAssertive(add);
+        else setPolite(add);
       }
       if (t.ms !== null)
         timers.current.set(
@@ -148,11 +147,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastCtx.Provider value={value}>
       {children}
       {/* Always in the page, so screen readers hear what's added (spec §6). */}
-      <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {polite.text && <span key={polite.n}>{polite.text}</span>}
+      {/* Only additions are read, so lines already said aren't repeated. */}
+      <div aria-live="polite" aria-relevant="additions" className="sr-only">
+        {polite.map((s) => (
+          <span key={s.id}>{s.text}</span>
+        ))}
       </div>
-      <div aria-live="assertive" aria-atomic="true" className="sr-only">
-        {assertive.text && <span key={assertive.n}>{assertive.text}</span>}
+      <div aria-live="assertive" aria-relevant="additions" className="sr-only">
+        {assertive.map((s) => (
+          <span key={s.id}>{s.text}</span>
+        ))}
       </div>
       {/* Below the top bar, so a pop-up never covers the bell (R4). */}
       <div className="pointer-events-none fixed right-5 print:hidden top-[calc(var(--demo-h,0px)+4.75rem)] z-50 flex w-[340px] max-w-[calc(100vw-2.5rem)] flex-col gap-2">

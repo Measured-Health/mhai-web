@@ -130,9 +130,17 @@ describe("alert wording", () => {
     expect(findingLine({ ...f, unit: null })).toBe(
       "Potassium 2.9 (low; normal 3.5–5.1)",
     );
+    // An unknown flag is still out of range: it never reads as normal (F4).
     expect(findingLine({ ...f, flag: "sideways" as never })).toBe(
-      "Potassium 2.9 mmol/L (normal 3.5–5.1)",
+      "Potassium 2.9 mmol/L (abnormal; normal 3.5–5.1)",
     );
+    expect(
+      findingLine({
+        ...f,
+        flag: "constructor" as never,
+        reference_range: null,
+      }),
+    ).toBe("Potassium 2.9 mmol/L (abnormal)");
     expect(recordedLabel({ recorded_at: null }, ALERT_NOW)).toBeNull();
     expect(recordedLabel({ recorded_at: "garbage" }, ALERT_NOW)).toBeNull();
     expect(severityOf("critical")).toBe("critical");

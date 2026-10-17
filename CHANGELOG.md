@@ -27,8 +27,11 @@ All notable changes to this project are documented here. The format follows
   "See all". New alerts and decisions pop up with a View button. Alerts
   that were already there when you signed in don't pop up; Critical alerts
   are read out at once and stay until you hide them; a burst shows at most
-  three pop-ups and a summary. Pop-ups never take the focus and go when you
-  sign out. The panel and pop-ups are left out when printing.
+  three pop-ups and a summary, and every one is read out. Pop-ups never
+  take the focus and go when you sign out. When the bell can't check for
+  new alerts it says so, with a warning mark, and never shows "no new
+  alerts" while they're loading or failed. The panel and pop-ups are left
+  out when printing.
 - Notifications page, Patient alerts tab (on sample data): each alert shows
   its severity in words and an icon, the abnormal result with its unit,
   normal range and time, up to three likely causes suggested by MHAI with a

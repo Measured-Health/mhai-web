@@ -1,5 +1,5 @@
 "use client";
-import { Bell } from "lucide-react";
+import { AlertTriangle, Bell } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { ageLabel } from "@/lib/corrections";
@@ -57,7 +57,13 @@ export function NotificationBell() {
 
   if (!d && !a) return null;
   const count = (a?.unread ?? 0) + (d?.unseen ?? 0);
-  const label = count ? `Notifications, ${count} unread` : "Notifications";
+  // A failed count is never shown as a number, or as nothing new (F3).
+  const failed = !!a?.countFailed;
+  const label = failed
+    ? "Notifications, couldn't check for new alerts"
+    : count
+      ? `Notifications, ${count} unread`
+      : "Notifications";
   const alerts = a?.available ? bellAlerts(a.latest) : [];
   const notes = (d?.notes ?? []).slice(0, BELL_DECISIONS);
   const close = (refocus: boolean) => {
@@ -78,7 +84,7 @@ export function NotificationBell() {
         type="button"
         aria-label={label}
         aria-expanded={open}
-        aria-controls={panelId}
+        aria-controls={open ? panelId : undefined}
         onClick={() => {
           setOpen((o) => !o);
           d?.markSeen();
@@ -86,13 +92,23 @@ export function NotificationBell() {
         className="relative grid size-11 place-items-center rounded-xl border border-line bg-white text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint-deep md:size-[34px] md:rounded-[10px]"
       >
         <Bell aria-hidden className="size-4" />
-        {count > 0 && (
+        {failed ? (
           <span
             aria-hidden
-            className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-bad-deep px-1 font-mono text-[10px] font-bold text-white"
+            data-count-failed
+            className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-warn-wash text-warn-deep ring-1 ring-warn-line"
           >
-            {count > 99 ? "99+" : count}
+            <AlertTriangle className="size-2.5" />
           </span>
+        ) : (
+          count > 0 && (
+            <span
+              aria-hidden
+              className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-bad-deep px-1 font-mono text-[10px] font-bold text-white"
+            >
+              {count > 99 ? "99+" : count}
+            </span>
+          )
         )}
       </button>
       {open && (
@@ -100,8 +116,10 @@ export function NotificationBell() {
           id={panelId}
           data-panel
           role="region"
+          // Focusable, so Esc still works after a click on the padding (F3).
+          tabIndex={-1}
           aria-label="Recent notifications"
-          className="absolute right-0 top-[calc(100%+8px)] z-30 print:hidden w-[min(360px,92vw)] rounded-2xl bg-white p-3 text-left shadow-[0_30px_60px_-20px_#46035166] ring-1 ring-line"
+          className="absolute right-0 top-[calc(100%+8px)] z-30 outline-none print:hidden w-[min(360px,92vw)] rounded-2xl bg-white p-3 text-left shadow-[0_30px_60px_-20px_#46035166] ring-1 ring-line"
         >
           <h2 className="px-1 text-[13px] font-semibold">
             Recent notifications
@@ -111,6 +129,12 @@ export function NotificationBell() {
               <h3 id={`${panelId}-alerts`} className={HEADING}>
                 Patient alerts
               </h3>
+              {a.feed === "error" && (
+                <p className="mt-1 flex items-center gap-1.5 px-1 text-[13px] text-bad-deep">
+                  <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
+                  Couldn&apos;t load patient alerts
+                </p>
+              )}
               {alerts.length ? (
                 <ul className="mt-1 flex max-h-[34vh] flex-col overflow-auto">
                   {alerts.map((al) => (
@@ -148,10 +172,14 @@ export function NotificationBell() {
                     </li>
                   ))}
                 </ul>
+              ) : a.feed === "loading" ? (
+                <p className="mt-1 px-1 text-[13px] text-ink-3">Loading…</p>
               ) : (
-                <p className="mt-1 px-1 text-[13px] text-ink-3">
-                  No new patient alerts.
-                </p>
+                a.feed === "ready" && (
+                  <p className="mt-1 px-1 text-[13px] text-ink-3">
+                    No new patient alerts.
+                  </p>
+                )
               )}
             </section>
           )}
