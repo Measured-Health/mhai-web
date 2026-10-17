@@ -10,10 +10,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { NotificationSettingsOut } from "@/lib/api/alerts-contract";
 import type { CorrectionOut, CorrectionStatus } from "@/lib/api/contract";
 import { CORRECTION_KEYS, useMyCorrections } from "@/lib/correction-queries";
 import { correctionTitle, parseTime, rejectionText } from "@/lib/corrections";
-import { usePopupSettings } from "@/lib/notification-queries";
+import {
+  DEFAULT_SETTINGS,
+  NOTIFY_KEYS,
+  useNotificationSettings,
+} from "@/lib/notification-queries";
 import { CORRECTIONS_HREF, NOTIFICATION_TAG } from "@/lib/notifications/popups";
 import { useShell } from "../shell/shell-context";
 import { useToast } from "../ui/toast";
@@ -93,18 +98,17 @@ export function DecisionsProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const { show } = useToast();
   const { navigate } = useShell();
-  const { correction_popups } = usePopupSettings();
+  // Loaded here so the settings are in the cache when a pop-up is planned.
+  useNotificationSettings();
   const [since] = useState(() => Date.now());
   const [notes, setNotes] = useState<DecisionNote[]>([]);
   const [unseen, setUnseen] = useState(0);
   const prev = useRef<Map<string, CorrectionStatus> | null>(null);
   // Read inside the cache subscription, which outlives renders.
-  const popups = useRef(correction_popups);
   const go = useRef(navigate);
   useEffect(() => {
-    popups.current = correction_popups;
     go.current = navigate;
-  }, [correction_popups, navigate]);
+  }, [navigate]);
 
   useEffect(() => {
     const snapshot = (list: CorrectionOut[]) =>
@@ -124,7 +128,12 @@ export function DecisionsProvider({ children }: { children: ReactNode }) {
       if (!fresh.length) return;
       setNotes((n) => [...fresh, ...n].slice(0, NOTES_KEPT));
       setUnseen((u) => u + fresh.length);
-      if (!popups.current) return;
+      // The settings as they are now, read from the cache: a change made a
+      // moment ago counts. Both on until they load (R5).
+      const settings =
+        qc.getQueryData<NotificationSettingsOut>(NOTIFY_KEYS.settings) ??
+        DEFAULT_SETTINGS;
+      if (!settings.correction_popups) return;
       for (const d of fresh)
         show({
           ...toastFor(d),

@@ -518,6 +518,40 @@ describe("decision pop-ups", () => {
     expect(push).toHaveBeenCalledWith("/notifications/corrections");
   });
 
+  it("follows a settings change mid-session: the next decision stays quiet", async () => {
+    alerts.getNotificationSettings.mockResolvedValue({
+      alert_popups: true,
+      correction_popups: true,
+    });
+    listMine.mockResolvedValueOnce([makeCorrection({ id: "c1" })]);
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <ToastProvider>
+          <NotificationsProvider>
+            <Decisions />
+          </NotificationsProvider>
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    await vi.waitFor(() => {
+      expect(qc.getQueryState(CORRECTION_KEYS.mine)?.status).toBe("success");
+      expect(qc.getQueryState(NOTIFY_KEYS.settings)?.status).toBe("success");
+    });
+    act(() =>
+      qc.setQueryData(NOTIFY_KEYS.settings, {
+        alert_popups: true,
+        correction_popups: false,
+      }),
+    );
+    listMine.mockResolvedValueOnce([decided]);
+    await act(() => qc.invalidateQueries({ queryKey: CORRECTION_KEYS.mine }));
+    // Still counted on the bell, but no pop-up.
+    await screen.findByText("unseen 1");
+    expect(screen.queryByText("Your correction was approved")).toBeNull();
+    expect(live("polite")).toBeEmptyDOMElement();
+  });
+
   it("keeps decisions quiet when decision pop-ups are off, but still counts them", async () => {
     await decide(false);
     expect(screen.queryByText("Your correction was approved")).toBeNull();
