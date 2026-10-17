@@ -99,6 +99,29 @@ describe("describeEvent (R9)", () => {
         { kind: "settings_changed", type: "admin" },
         "Changed hospital settings",
       ],
+      [
+        {
+          kind: "self_role_change",
+          type: "security",
+          actor: who("Grace Nwosu"),
+          target: who("Grace Nwosu"),
+          roles_added: ["clinician"],
+          flag: "alert",
+        },
+        "Gave themselves the Clinician role",
+      ],
+      [
+        {
+          kind: "self_role_change",
+          type: "security",
+          roles_added: ["clinician", "hospital_admin"],
+        },
+        "Gave themselves the Clinician and Hospital admin roles",
+      ],
+      [
+        { kind: "self_role_change", type: "security", roles_added: [] },
+        "Changed their own roles",
+      ],
     ];
     for (const [over, text] of cases)
       expect(describeEvent(makeEvent(over))).toBe(text);
@@ -185,6 +208,7 @@ const KINDS = [
   "reviewers_reminded",
   "reviewer_assigned",
   "policy_breach",
+  "self_role_change",
 ];
 
 // Same matching rule as the e2e scan: upper-case terms are case-sensitive.

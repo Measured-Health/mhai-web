@@ -3,9 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
 import { DEMO_EMAILS, MOCK_CODE } from "@/lib/auth/mock";
+import { ApiError } from "@/lib/api/errors";
 import { LAST_ADMIN } from "@/lib/admin/staff";
 import { screenAdminAs } from "@/tests/admin";
-import { renderAdmin } from "@/tests/admin-render";
+import { HOSPITAL_ADMIN, renderAdmin } from "@/tests/admin-render";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as AdminClient }));
 vi.mock("@/lib/api/admin", () => ({ getAdminClient: () => holder.client }));
@@ -208,5 +209,63 @@ describe("StaffPanel", () => {
     );
     expect(name.closest("[class*='overflow-wrap']")).not.toBeNull();
     expect(name.className).not.toMatch(/truncate/);
+  });
+
+  it("lets an admin give themselves a role, saying it is recorded (product decision)", async () => {
+    holder.client = screenAdminAs(DEMO_EMAILS.hospitalAdmin);
+    const update = vi.spyOn(holder.client, "updateStaff");
+    renderAdmin(
+      <StaffPanel staffId="s-nwosu" onClose={onClose} />,
+      HOSPITAL_ADMIN,
+    );
+    const panel = await screen.findByRole("dialog", { name: "Staff member" });
+    const notice = "This change is recorded in the activity log.";
+    const clinician = await within(panel).findByRole("checkbox", {
+      name: "Clinician",
+    });
+    expect(within(panel).queryByText(notice)).toBeNull();
+    await userEvent.click(clinician);
+    expect(within(panel).getByText(notice)).toBeInTheDocument();
+    const save = within(panel).getByRole("button", { name: "Save changes" });
+    expect(save).toHaveAccessibleDescription(notice);
+    await userEvent.click(save);
+    expect(await screen.findByText("Changes saved")).toBeInTheDocument();
+    expect(update).toHaveBeenCalledWith(
+      "s-nwosu",
+      expect.objectContaining({ roles: ["clinician", "hospital_admin"] }),
+      expect.anything(),
+    );
+    expect(
+      await within(panel).findByText(
+        /Gave themselves the Clinician role · by Grace Nwosu/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("no notice for someone else's roles", async () => {
+    const panel = await open("s-okafor");
+    await userEvent.click(
+      await within(panel).findByRole("checkbox", { name: "Hospital admin" }),
+    );
+    expect(
+      within(panel).queryByText("This change is recorded in the activity log."),
+    ).toBeNull();
+  });
+
+  it("offers Try again, not an endless skeleton, when the list can't load", async () => {
+    const list = vi
+      .spyOn(holder.client, "listStaff")
+      .mockRejectedValueOnce(new ApiError(403, "forbidden"));
+    const panel = await open("s-mensah");
+    expect(
+      await within(panel).findByText("You can't do this"),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "Try again" }),
+    );
+    expect(
+      await within(panel).findByText("Dr. Kofi Mensah"),
+    ).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(2);
   });
 });

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/errors";
-import { DEMO_EMAILS } from "@/lib/auth/mock";
+import { DEMO_EMAILS, MOCK_CODE } from "@/lib/auth/mock";
 import { screenAdminAs } from "@/tests/admin";
 import { HOSPITAL_ADMIN, renderAdmin } from "@/tests/admin-render";
 
@@ -313,5 +313,28 @@ describe("StaffView", () => {
     const panel = await screen.findByRole("dialog", { name: "Staff member" });
     await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
     expect(manage).toHaveFocus();
+  });
+
+  it("after a removal, focus goes to the search field (the row is gone)", async () => {
+    renderAdmin(<StaffView />);
+    const t = await table();
+    await userEvent.click(
+      within(t).getByRole("button", { name: "Manage Dr. Tunde Bello" }),
+    );
+    const panel = await screen.findByRole("dialog", { name: "Staff member" });
+    const account = await within(panel).findByRole("region", {
+      name: "Account",
+    });
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Remove" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Remove this account?" });
+    await userEvent.click(within(dialog).getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard(MOCK_CODE);
+    expect(await screen.findByText("Account removed")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Staff member" })).toBeNull(),
+    );
+    expect(screen.getByRole("searchbox")).toHaveFocus();
   });
 });

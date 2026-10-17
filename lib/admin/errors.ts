@@ -65,7 +65,7 @@ export function adminError(e: unknown): AdminError {
       );
     case "mfa_required":
       return E(
-        "Turn on two-step verification in Profile & security to remove staff.",
+        "Turn on two-step verification in Profile & security to use the admin pages.",
         "Then come back and try again.",
       );
     case "mfa_locked":

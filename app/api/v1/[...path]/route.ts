@@ -123,7 +123,9 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     return json(413, { code: "too_large" });
 
   const key = req.headers.get("idempotency-key");
-  const url = `${apiBase()}/${path.map(encodeURIComponent).join("/")}${new URL(req.url).search}`;
+  // Only reads carry filters; a write's query string is never forwarded.
+  const search = req.method === "GET" ? new URL(req.url).search : "";
+  const url = `${apiBase()}/${path.map(encodeURIComponent).join("/")}${search}`;
   let res: Response;
   try {
     res = await fetch(url, {

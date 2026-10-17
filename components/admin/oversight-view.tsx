@@ -327,7 +327,15 @@ export function OversightView() {
       ) : (
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Tile label="Waiting" value={String(items.length)} />
+            <Tile
+              label="Waiting"
+              value={String(
+                Math.max(
+                  0,
+                  o.waiting - o.items.filter((i) => decided.has(i.id)).length,
+                ),
+              )}
+            />
             <Tile
               label={`Overdue (over ${o.overdue_after_hours} h)`}
               value={String(

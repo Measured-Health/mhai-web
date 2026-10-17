@@ -215,7 +215,9 @@ export function useStaffAction() {
 
 /**
  * Needs the admin's two-step code. A wrong or missing code (mfa_invalid,
- * mfa_required, mfa_locked) is a 4xx: not retried, and the row stays.
+ * mfa_required, mfa_locked) is a 4xx: not retried, and the row stays. The
+ * code is in the variables, so the cache forgets the call as soon as nobody
+ * is watching it (`gcTime: 0`).
  */
 export function useRemoveStaff() {
   const qc = useQueryClient();
@@ -226,6 +228,7 @@ export function useRemoveStaff() {
       ...staffRowCallbacks(qc),
       onSuccess: (_d, v) => dropStaff(qc, v.id),
     },
+    { gcTime: 0 },
   );
 }
 

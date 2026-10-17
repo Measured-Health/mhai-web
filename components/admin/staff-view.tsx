@@ -1,7 +1,9 @@
 "use client";
 import { Search, UserPlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useStaff } from "@/lib/admin-queries";
+import { useQueryClient } from "@tanstack/react-query";
+import type { StaffOut } from "@/lib/api/admin-contract";
+import { ADMIN_KEYS, useStaff } from "@/lib/admin-queries";
 import {
   STAFF_FILTERS,
   filterStaff,
@@ -25,6 +27,7 @@ import { StaffCards, StaffTable } from "./staff-list";
 /** The hospital admin's home (hospital-admin.html tab 1). */
 export function StaffView() {
   const q = useStaff();
+  const qc = useQueryClient();
   const now = useNow(60_000);
   const desktop = useIsDesktop();
   const { user } = useAuth();
@@ -34,19 +37,28 @@ export function StaffView() {
   const [inviting, setInviting] = useState(false);
   const online = useOnline();
   const lastOpened = useRef<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  // Held in memory only (never the URL); focus goes back to that person's row.
+  // Held in memory only (never the URL); focus goes back to that person's
+  // row, or to the search field when the row is gone (removed).
   useEffect(() => {
     if (openId) {
       lastOpened.current = openId;
     } else if (lastOpened.current) {
       const id = lastOpened.current;
       lastOpened.current = null;
-      document
-        .querySelector<HTMLElement>(`[data-staff-id="${CSS.escape(id)}"]`)
-        ?.focus();
+      // The cache is already up to date, even if the list hasn't re-rendered.
+      const here = qc
+        .getQueryData<StaffOut[]>(ADMIN_KEYS.staff)
+        ?.some((s) => s.id === id);
+      const row = here
+        ? document.querySelector<HTMLElement>(
+            `[data-staff-id="${CSS.escape(id)}"]`,
+          )
+        : null;
+      (row ?? searchRef.current)?.focus();
     }
-  }, [openId]);
+  }, [openId, qc]);
 
   const list = q.data ?? [];
   const counts = staffCounts(list, now);
@@ -84,6 +96,7 @@ export function StaffView() {
             <Search aria-hidden className="absolute left-3 size-4 text-ink-3" />
             <span className="sr-only">Search staff</span>
             <input
+              ref={searchRef}
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}

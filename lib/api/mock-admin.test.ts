@@ -88,6 +88,38 @@ describe("the sample hospital", () => {
     ).toBe("ok");
   });
 
+  it("lets an admin give themselves a role, recorded as a flagged security event", async () => {
+    const a = mockAdminAs(DEMO_EMAILS.hospitalAdmin);
+    const me = await row(a, "s-nwosu");
+    const next = await a.updateStaff("s-nwosu", {
+      version: me.version,
+      roles: ["clinician", "hospital_admin"],
+    });
+    expect(next.roles).toEqual(["clinician", "hospital_admin"]);
+    const [e] = (await a.listActivity({})).events;
+    expect(e).toMatchObject({
+      type: "security",
+      kind: "self_role_change",
+      actor: { display_name: "Grace Nwosu" },
+      target: { display_name: "Grace Nwosu" },
+      roles_added: ["clinician"],
+      flag: "alert",
+    });
+    expect(
+      (await a.listActivity({ flagged: true })).events.some(
+        (x) => x.kind === "self_role_change",
+      ),
+    ).toBe(true);
+    // Changing someone else's roles is not flagged.
+    const okafor = await row(a, "s-okafor");
+    await a.updateStaff("s-okafor", {
+      version: okafor.version,
+      roles: ["clinician", "hospital_admin"],
+    });
+    const [other] = (await a.listActivity({})).events;
+    expect(other).toMatchObject({ kind: "roles_changed", flag: null });
+  });
+
   it("keeps at least one active hospital admin (409 last_admin)", async () => {
     // An admin who isn't on the list, so "yourself" never applies here.
     const a = mockAdminAs(null);

@@ -1,10 +1,19 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/errors";
 import { DEMO_EMAILS, MOCK_BACKUP_CODES, MOCK_CODE } from "@/lib/auth/mock";
 import { LAST_ADMIN } from "@/lib/admin/staff";
+import { useAuth } from "@/lib/auth/auth-context";
 import { screenAdminAs } from "@/tests/admin";
 import { DIRECTOR, renderAdmin } from "@/tests/admin-render";
 
@@ -367,5 +376,194 @@ describe("AccountActions", () => {
     ).toBeInTheDocument();
     for (const b of within(account).getAllByRole("button"))
       expect(b).toBeDisabled();
+  });
+
+  it("while a removal is in flight, Keep is off and Esc is ignored; the toast still shows", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const real = holder.client.removeStaff.bind(holder.client);
+    vi.spyOn(holder.client, "removeStaff").mockImplementation(async (...a) => {
+      await gate;
+      return real(...a);
+    });
+    // A parent that really closes the panel, as the Staff page does.
+    function Host() {
+      const [id, setId] = useState<string | null>("s-eze");
+      return (
+        <StaffPanel
+          staffId={id}
+          onClose={() => {
+            onClose();
+            setId(null);
+          }}
+        />
+      );
+    }
+    renderAdmin(<Host />, DIRECTOR);
+    const panel = await screen.findByRole("dialog", { name: "Staff member" });
+    const account = await within(panel).findByRole("region", {
+      name: "Account",
+    });
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Remove" }),
+    );
+    const dialog = confirmIn("Remove this account?") as HTMLDialogElement;
+    // jsdom has no top layer; say what a browser would for showModal().
+    const matches = dialog.matches.bind(dialog);
+    dialog.matches = (q: string) => q === ":modal" || matches(q);
+    await userEvent.click(within(dialog).getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard(MOCK_CODE);
+    const keep = within(dialog).getByRole("button", { name: "Keep account" });
+    await waitFor(() => expect(keep).toBeDisabled());
+    await userEvent.keyboard("{Escape}");
+    expect(confirmIn("Remove this account?")).toBeInTheDocument();
+    await act(async () => release());
+    expect(await screen.findByText("Account removed")).toBeInTheDocument();
+    expect(onClose).toHaveBeenCalled();
+    expect(screen.queryByText(/Someone else may have removed them/)).toBeNull();
+  });
+
+  it("forgets the two-step code once the dialog closes", async () => {
+    let qc!: QueryClient;
+    function Probe() {
+      qc = useQueryClient();
+      return null;
+    }
+    const withCode = () =>
+      qc
+        .getMutationCache()
+        .getAll()
+        .filter((m) =>
+          /mfaCode|backupCode/.test(JSON.stringify(m.state.variables ?? {})),
+        );
+    renderAdmin(
+      <>
+        <StaffPanel staffId="s-bello" onClose={onClose} />
+        <Probe />
+      </>,
+    );
+    const panel = await screen.findByRole("dialog", { name: "Staff member" });
+    const account = await within(panel).findByRole("region", {
+      name: "Account",
+    });
+    // A wrong code, then Keep account.
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Remove" }),
+    );
+    let dialog = confirmIn("Remove this account?");
+    await userEvent.click(within(dialog).getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard("000000");
+    await within(dialog).findByText("That code didn't work. Try again.");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Keep account" }),
+    );
+    await waitFor(() => expect(withCode()).toEqual([]));
+    // A right code: the person is removed and the panel's actions go away.
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Remove" }),
+    );
+    dialog = confirmIn("Remove this account?");
+    await userEvent.click(within(dialog).getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard(MOCK_CODE);
+    expect(await screen.findByText("Account removed")).toBeInTheDocument();
+    await waitFor(() => expect(withCode()).toEqual([]));
+  });
+
+  it("the sixth digit and a quick Enter or click send one request", async () => {
+    const remove = vi.spyOn(holder.client, "removeStaff");
+    const dialog = await askRemove();
+    await userEvent.click(within(dialog).getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard("12345");
+    const confirm = within(dialog).getByRole("button", {
+      name: "Remove account",
+    });
+    // The sixth digit submits on its own; a click lands before the re-render.
+    act(() => {
+      fireEvent.change(within(dialog).getByLabelText("Digit 6 of 6"), {
+        target: { value: "6" },
+      });
+    });
+    fireEvent.click(confirm);
+    expect(await screen.findByText("Account removed")).toBeInTheDocument();
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("two submits in the same moment send one request (one key)", async () => {
+    const remove = vi.spyOn(holder.client, "removeStaff");
+    const dialog = await askRemove();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Use a backup code" }),
+    );
+    await userEvent.type(
+      within(dialog).getByLabelText("Backup code"),
+      MOCK_BACKUP_CODES[3]!,
+    );
+    const confirm = within(dialog).getByRole("button", {
+      name: "Remove account",
+    });
+    // A click and an Enter that land before React re-renders.
+    act(() => {
+      confirm.click();
+      confirm.click();
+    });
+    expect(await screen.findByText("Account removed")).toBeInTheDocument();
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("Esc and open again: the code boxes are empty", async () => {
+    const { account } = await open("s-bello");
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Remove" }),
+    );
+    const d = confirmIn("Remove this account?") as HTMLDialogElement;
+    d.matches = (q: string) => q === ":modal";
+    await userEvent.click(within(d).getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard("123");
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Remove this account?" }),
+      ).toBeNull(),
+    );
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Remove" }),
+    );
+    const again = confirmIn("Remove this account?");
+    for (let i = 1; i <= 6; i++)
+      expect(within(again).getByLabelText(`Digit ${i} of 6`)).toHaveValue("");
+  });
+
+  it("removing with a backup code lowers your backup codes left", async () => {
+    function Left() {
+      const { user } = useAuth();
+      return <p>Backup codes left: {user?.backupCodesLeft}</p>;
+    }
+    renderAdmin(
+      <>
+        <StaffPanel staffId="s-bello" onClose={onClose} />
+        <Left />
+      </>,
+    );
+    expect(screen.getByText("Backup codes left: 8")).toBeInTheDocument();
+    const panel = await screen.findByRole("dialog", { name: "Staff member" });
+    const account = await within(panel).findByRole("region", {
+      name: "Account",
+    });
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Remove" }),
+    );
+    const dialog = confirmIn("Remove this account?");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Use a backup code" }),
+    );
+    await userEvent.type(
+      within(dialog).getByLabelText("Backup code"),
+      MOCK_BACKUP_CODES[1]!,
+    );
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Remove account" }),
+    );
+    expect(await screen.findByText("Account removed")).toBeInTheDocument();
+    expect(await screen.findByText("Backup codes left: 7")).toBeInTheDocument();
   });
 });

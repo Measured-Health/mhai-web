@@ -571,6 +571,44 @@ describe("hospital admin routes", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("refuses a clinician without two-step as forbidden, not as needing two-step", async () => {
+    await as(["clinician"], false);
+    for (const res of [
+      await GET(get(), ctx("hospital", "staff")),
+      await DELETE(send("DELETE", CODE), ctx("hospital", "staff", "s-1")),
+    ]) {
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ code: "forbidden" });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("forwards a query string only on reads", async () => {
+    await as(["hospital_admin"]);
+    fetchMock.mockImplementation(
+      async () => new Response(null, { status: 204 }),
+    );
+    const write = (method: string, body: string) =>
+      new Request("http://demo.test/api/v1/hospital/staff/s-1?x=1&y=2", {
+        method,
+        headers: {
+          host: "demo.test",
+          origin: "http://demo.test",
+          "content-type": "application/json",
+        },
+        body,
+      });
+    await DELETE(write("DELETE", CODE), ctx("hospital", "staff", "s-1"));
+    await PATCH(write("PATCH", "{}"), ctx("hospital", "staff", "s-1"));
+    await POST(
+      write("POST", "{}"),
+      ctx("hospital", "staff", "s-1", "deactivate"),
+    );
+    for (const [url] of fetchMock.mock.calls as [string][])
+      expect(url).not.toContain("?");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it("refuses a platform account the same way whether or not two-step is on", async () => {
     await as(["admin", "hospital_admin"], false);
     const res = await GET(get(), ctx("hospital", "staff"));

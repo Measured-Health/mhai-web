@@ -70,6 +70,19 @@ export function AssignDialog({
         </legend>
         {reviewers.isPending ? (
           <p className="text-[13px] text-ink-3">Loading reviewers…</p>
+        ) : reviewers.isError && !reviewers.data ? (
+          <Banner tone="bad" title={adminError(reviewers.error).title}>
+            {adminError(reviewers.error).body}
+            <span className="mt-2 block">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void reviewers.refetch()}
+              >
+                Try again
+              </Button>
+            </span>
+          </Banner>
         ) : reviewers.data?.length ? (
           reviewers.data.map((r) => (
             <label

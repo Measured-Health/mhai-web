@@ -105,6 +105,9 @@ describe("UsageView", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Export CSV" })).toBeDisabled(),
     );
+    expect(
+      screen.getByRole("button", { name: "Export CSV" }),
+    ).toHaveAccessibleDescription("Loading…");
   });
 
   it("exports only the counts shown", async () => {

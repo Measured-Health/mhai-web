@@ -130,7 +130,9 @@ export type ActivityKind =
   | "settings_changed"
   | "reviewers_reminded"
   | "reviewer_assigned"
-  | "policy_breach";
+  | "policy_breach"
+  /** An admin changed their own roles: allowed, audited, flagged `alert`. */
+  | "self_role_change";
 
 /** One audit event. Structured fields only; never free text (R9). */
 export interface ActivityEventOut {
@@ -149,6 +151,8 @@ export interface ActivityEventOut {
   /** e.g. failed sign-ins before a lock. */
   count: number | null;
   flag: "policy" | "alert" | null;
+  /** On a self role change: the roles they gave themselves. */
+  roles_added?: StaffRole[];
 }
 
 export interface ActivityQuery {

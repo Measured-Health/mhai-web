@@ -692,7 +692,14 @@ export function createMockAdmin({
           : {}),
       });
       const target = who(s.display_name);
-      if (p.roles) await log("admin", "roles_changed", { target });
+      // Allowed, but audited and flagged (product decision, 2026-10-17).
+      if (p.roles && (await isYou(s)))
+        await log("security", "self_role_change", {
+          target,
+          flag: "alert",
+          roles_added: p.roles.filter((r) => !s.roles.includes(r)),
+        });
+      else if (p.roles) await log("admin", "roles_changed", { target });
       if (p.specialty !== undefined)
         await log("admin", "specialty_changed", {
           target,

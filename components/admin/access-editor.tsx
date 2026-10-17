@@ -69,6 +69,7 @@ export function AccessEditor({
   const heading = useId();
   const lockId = useId();
   const offlineId = useId();
+  const selfId = useId();
   const [draft, setDraft] = useState(() => fromRow(row));
   const [seen, setSeen] = useState(row.version);
   const [error, setError] = useState<AdminError | null>(null);
@@ -85,6 +86,8 @@ export function AccessEditor({
   const patch = patchFor(row, draft);
   const problem = problemOf(draft);
   const clinician = draft.roles.includes("clinician");
+  // Your own roles: allowed, but recorded and flagged in the activity log.
+  const selfRoles = row.is_you && !!patch?.roles;
   const options =
     row.specialty && !specialties.includes(row.specialty)
       ? [row.specialty, ...specialties]
@@ -221,10 +224,19 @@ export function AccessEditor({
           {error.body}
         </Banner>
       )}
+      {selfRoles && (
+        <p id={selfId} className="text-[13px] text-ink-2">
+          This change is recorded in the activity log.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           disabled={!patch || !!problem || !online || update.isPending}
-          aria-describedby={!online ? offlineId : undefined}
+          aria-describedby={
+            [!online && offlineId, selfRoles && selfId]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
           onClick={save}
         >
           {update.isPending ? "Saving…" : "Save changes"}

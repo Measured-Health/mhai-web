@@ -1,5 +1,6 @@
 import type { ActivityEventOut, ActivityType } from "../api/admin-contract";
 import { RESULT_LABEL } from "../labels";
+import { ROLE_LABEL } from "./staff";
 
 export const ACTIVITY_TYPE_LABEL: Record<ActivityType, string> = {
   sign_in: "Sign-in",
@@ -87,6 +88,14 @@ export function describeEvent(e: ActivityEventOut): string {
       return join(`Asked ${t} to review a correction`, e.specialty);
     case "policy_breach":
       return "Hospital policy not met";
+    case "self_role_change": {
+      const added = (e.roles_added ?? [])
+        .map((r) => ROLE_LABEL[r])
+        .filter(Boolean);
+      return added.length
+        ? `Gave themselves the ${added.join(" and ")} role${added.length > 1 ? "s" : ""}`
+        : "Changed their own roles";
+    }
     default:
       return `${typeLabel(e)} activity`;
   }

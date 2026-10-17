@@ -80,6 +80,21 @@ describe("ActivityView", () => {
     expect(document.body.textContent).not.toMatch(/2-step/i);
   });
 
+  it("flags an admin giving themselves a role, in plain words", async () => {
+    holder.client = screenAdminAs(DEMO_EMAILS.hospitalAdmin);
+    const me = (await holder.client.listStaff()).find((s) => s.is_you)!;
+    await holder.client.updateStaff(me.id, {
+      version: me.version,
+      roles: ["clinician", "hospital_admin"],
+    });
+    renderAdmin(<ActivityView />);
+    const row = await rowWith("Gave themselves the Clinician role");
+    expect(row).toHaveTextContent("Grace Nwosu");
+    expect(row).toHaveTextContent("Alert");
+    expect(row.querySelector("svg")).not.toBeNull();
+    expect(document.body.textContent).not.toMatch(/self_role_change/);
+  });
+
   it("filters by type and by flagged only", async () => {
     renderAdmin(<ActivityView />);
     await log();
@@ -246,6 +261,19 @@ describe("ActivityView", () => {
     act(() => onlineManager.setOnline(true));
     expect(await screen.findByRole("alert")).toHaveTextContent("Try again");
     expect(rows(await log())).toHaveLength(before);
+  });
+
+  it("keeps Export on when a refresh fails but the rows are still shown", async () => {
+    const spy = vi.spyOn(holder.client, "listActivity");
+    renderAdmin(<ActivityView />);
+    await log();
+    const exportButton = screen.getByRole("button", { name: "Export CSV" });
+    await waitFor(() => expect(exportButton).toBeEnabled());
+    spy.mockRejectedValue(new ApiError(403, "forbidden"));
+    act(() => onlineManager.setOnline(false));
+    act(() => onlineManager.setOnline(true));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Try again");
+    expect(screen.getByRole("button", { name: "Export CSV" })).toBeEnabled();
   });
 
   it("shows phone cards with the same words", async () => {

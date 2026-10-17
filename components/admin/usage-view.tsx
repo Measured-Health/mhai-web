@@ -68,9 +68,12 @@ export function UsageView() {
   const { user } = useAuth();
   const toast = useToast();
   const periodId = useId();
+  const loadingId = useId();
   const hospital = user?.hospital ?? "Hospital";
   const u = q.data;
   const failed = q.isError ? adminError(q.error) : null;
+  // Export waits for the numbers; say so instead of a silent disabled button.
+  const loading = !u && !q.isError;
   const mix = u ? shares(u.confidence) : null;
   const top = u
     ? Math.max(1, ...u.by_specialty.map((s) => s.consultations))
@@ -99,6 +102,7 @@ export function UsageView() {
           <Button
             variant="ghost"
             disabled={!u}
+            aria-describedby={loading ? loadingId : undefined}
             onClick={() => {
               if (!u) return;
               downloadCsv(
@@ -115,6 +119,11 @@ export function UsageView() {
             <Download aria-hidden className="size-4" />
             Export CSV
           </Button>
+          {loading && (
+            <span id={loadingId} className="text-[12px] text-ink-3">
+              Loading…
+            </span>
+          )}
         </>
       }
     >

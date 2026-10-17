@@ -174,6 +174,30 @@ describe("admin queries", () => {
     );
   });
 
+  it("mutateAsync takes the plain variables and adds a key, like mutate", async () => {
+    const rm = vi.spyOn(holder.client, "removeStaff");
+    const { result } = renderHook(() => useRemoveStaff(), { wrapper });
+    await act(() =>
+      result.current.mutateAsync({ id: "s-eze", auth: { mfaCode: "123456" } }),
+    );
+    expect(rm).toHaveBeenCalledWith(
+      "s-eze",
+      { mfaCode: "123456" },
+      { idempotencyKey: expect.any(String) },
+    );
+  });
+
+  it("a finished removal leaves no two-step code in the cache", async () => {
+    const { result, unmount } = renderHook(() => useRemoveStaff(), {
+      wrapper,
+    });
+    await act(() =>
+      result.current.mutateAsync({ id: "s-eze", auth: { mfaCode: "123456" } }),
+    );
+    unmount();
+    await waitFor(() => expect(qc.getMutationCache().getAll()).toEqual([]));
+  });
+
   it.each([
     [403, "mfa_invalid"],
     [403, "mfa_required"],

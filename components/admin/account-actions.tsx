@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { StaffAction } from "@/lib/api/admin";
-import type { StaffOut } from "@/lib/api/admin-contract";
+import type { StaffOut, StaffRemoveAuth } from "@/lib/api/admin-contract";
 import { ApiError } from "@/lib/api/errors";
 import {
   isMfaRequired,
@@ -143,77 +143,49 @@ export function RemindButton({ row }: { row: StaffOut }) {
 /**
  * Remove (or cancel an invite) with the admin's own two-step code
  * (amendment 1): a 6-digit code that submits on its last digit, or a backup
- * code. A wrong code keeps the dialog open and the person on the list.
+ * code. A wrong code keeps the dialog open and the person on the list. The
+ * request and its answer belong to AccountActions, which stays mounted.
  */
 function RemoveDialog({
   row,
   hospital,
   offline,
+  busy,
+  error,
+  required,
   onKeep,
-  onGone,
-  onRemoved,
+  onClearError,
+  onConfirm,
 }: {
   row: StaffOut;
   hospital: string;
   offline: boolean;
+  busy: boolean;
+  error: AdminError | null;
+  /** The API said this admin has no two-step (403 mfa_required). */
+  required: boolean;
   onKeep(): void;
-  onGone(e: AdminError): void;
-  onRemoved(): void;
+  onClearError(): void;
+  /** Sends the code; `onWrong` runs when the API refuses it (mfa_invalid). */
+  onConfirm(auth: StaffRemoveAuth, onWrong: () => void): void;
 }) {
-  const remove = useRemoveStaff();
-  const toast = useToast();
   const { user } = useAuth();
   const id = useId();
   const c = useCodeOrBackup();
-  const [error, setError] = useState<AdminError | null>(null);
-  const [required, setRequired] = useState(false);
   const [focusKey, setFocusKey] = useState(0);
   const backupRef = useRef<HTMLInputElement>(null);
   const copy = copyFor("remove", row, hospital);
-  const invited = row.status === "invited";
   // Every admin has two-step (amendment 3), so this is only ever stale state.
   const blocked = required || user?.mfaEnabled === false;
 
   function confirm() {
     if (!c.ready || blocked) return;
-    setError(null);
-    remove.mutate(
-      {
-        id: row.id,
-        auth: c.backup ? { backupCode: c.value } : { mfaCode: c.value },
-      },
-      {
-        onSuccess: () => {
-          if (invited)
-            toast.show({
-              title: "Invite cancelled",
-              body: `${row.email} can't use the invite now.`,
-              tone: "ok",
-            });
-          else
-            toast.show({
-              title: "Account removed",
-              body: `${row.full_name} is no longer on the staff list.`,
-              tone: "ok",
-            });
-          onRemoved();
-        },
-        onError: (e) => {
-          const err = adminError(e);
-          if (err.gone) return onGone(err);
-          if (isMfaRequired(e)) return setRequired(true);
-          const wrong = e instanceof ApiError && e.code === "mfa_invalid";
-          setError(
-            wrong && c.backup ? { ...err, body: BACKUP_FAILED_BODY } : err,
-          );
-          if (wrong) {
-            c.setCode("");
-            if (c.backup) backupRef.current?.focus();
-            else setFocusKey((k) => k + 1);
-          }
-        },
-      },
-    );
+    const backup = c.backup;
+    onConfirm(backup ? { backupCode: c.value } : { mfaCode: c.value }, () => {
+      c.setCode("");
+      if (backup) backupRef.current?.focus();
+      else setFocusKey((k) => k + 1);
+    });
   }
 
   return (
@@ -224,7 +196,7 @@ function RemoveDialog({
       confirmLabel={copy.confirm}
       onKeep={onKeep}
       onConfirm={confirm}
-      busy={remove.isPending}
+      busy={busy}
       error={error}
       offline={offline}
       ready={c.ready && !blocked}
@@ -255,7 +227,7 @@ function RemoveDialog({
               inputRef={backupRef}
               value={c.code}
               onChange={c.setCode}
-              disabled={remove.isPending}
+              disabled={busy}
             />
           ) : (
             <CodeInput
@@ -263,7 +235,7 @@ function RemoveDialog({
               value={c.code}
               onChange={c.setCode}
               label="Your two-step code"
-              disabled={remove.isPending}
+              disabled={busy}
               invalid={error !== null}
               focusKey={focusKey}
             />
@@ -273,7 +245,7 @@ function RemoveDialog({
               backup={c.backup}
               onChange={(b) => {
                 c.setBackup(b);
-                setError(null);
+                onClearError();
               }}
             />
           </p>
@@ -294,14 +266,20 @@ export function AccountActions({
   onRemoved(): void;
 }) {
   const act = useStaffAction();
+  const remove = useRemoveStaff();
   const toast = useToast();
   const { online } = useNetwork();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const heading = useId();
   const deactivateNote = useId();
   const removeNote = useId();
   const [pending, setPending] = useState<Confirmable | null>(null);
   const [error, setError] = useState<AdminError | null>(null);
+  const [removeError, setRemoveError] = useState<AdminError | null>(null);
+  const [removeRequired, setRemoveRequired] = useState(false);
+  // One confirmation sends one request (one key), even if a click and the
+  // last digit land before the next render.
+  const removing = useRef(false);
 
   const hospital = user?.hospital ?? "the hospital";
   const name = row.display_name;
@@ -350,6 +328,55 @@ export function AccountActions({
   const keep = () => {
     setPending(null);
     setError(null);
+    setRemoveError(null);
+    setRemoveRequired(false);
+    // Forget the call, and with it the code in its variables.
+    remove.reset();
+    removing.current = false;
+  };
+
+  const confirmRemove = (auth: StaffRemoveAuth, onWrong: () => void) => {
+    if (removing.current) return;
+    removing.current = true;
+    setRemoveError(null);
+    const backup = "backupCode" in auth;
+    remove.mutate(
+      { id: row.id, auth },
+      {
+        onSuccess: () => {
+          if (invited)
+            ok("Invite cancelled", `${row.email} can't use the invite now.`);
+          else
+            ok(
+              "Account removed",
+              `${row.full_name} is no longer on the staff list.`,
+            );
+          // A backup code works once; Profile & security shows what's left.
+          if (backup && user?.backupCodesLeft != null)
+            updateUser({
+              backupCodesLeft: Math.max(0, user.backupCodesLeft - 1),
+            });
+          setPending(null);
+          onRemoved();
+        },
+        onError: (e) => {
+          const err = adminError(e);
+          if (err.gone) {
+            keep();
+            return setError(err);
+          }
+          if (isMfaRequired(e)) return setRemoveRequired(true);
+          const wrong = e instanceof ApiError && e.code === "mfa_invalid";
+          setRemoveError(
+            wrong && backup ? { ...err, body: BACKUP_FAILED_BODY } : err,
+          );
+          if (wrong) onWrong();
+        },
+        onSettled: () => {
+          removing.current = false;
+        },
+      },
+    );
   };
   const ask = (c: Confirmable) => {
     setError(null);
@@ -489,15 +516,12 @@ export function AccountActions({
           row={row}
           hospital={hospital}
           offline={!online}
+          busy={remove.isPending}
+          error={removeError}
+          required={removeRequired}
           onKeep={keep}
-          onGone={(e) => {
-            setPending(null);
-            setError(e);
-          }}
-          onRemoved={() => {
-            setPending(null);
-            onRemoved();
-          }}
+          onClearError={() => setRemoveError(null)}
+          onConfirm={confirmRemove}
         />
       )}
       {copy && pending && pending !== "remove" && (

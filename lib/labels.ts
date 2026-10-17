@@ -76,6 +76,7 @@ export const FORBIDDEN_TERMS = [
   "reviewers_reminded",
   "reviewer_assigned",
   "policy_breach",
+  "self_role_change",
 ] as const;
 
 export function citationTag(action: Citation["action"]): {

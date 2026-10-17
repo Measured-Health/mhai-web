@@ -268,4 +268,74 @@ describe("OversightView", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Try again");
     expect(await rowFor("C-118")).toBeInTheDocument();
   });
+
+  it("says when the reviewers can't load, with Try again, not 'Nobody can review'", async () => {
+    const list = vi
+      .spyOn(holder.client, "listEligibleReviewers")
+      .mockRejectedValueOnce(new ApiError(403, "forbidden"));
+    renderAdmin(<OversightView />);
+    const row = await rowFor("C-118");
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Assign a reviewer to C-118" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Assign a reviewer",
+    });
+    expect(
+      await within(dialog).findByText("You can't do this"),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Nobody can review this yet/)).toBeNull();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Try again" }),
+    );
+    expect(
+      await within(dialog).findByRole("radio", { name: /Dr. Udo/ }),
+    ).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it("the Waiting tile counts what the API says is waiting, less what was decided here", async () => {
+    const real = await holder.client.getOversight();
+    vi.spyOn(holder.client, "getOversight").mockResolvedValue({
+      ...real,
+      waiting: real.items.length + 10,
+    });
+    vi.spyOn(holder.client, "remindReviewers").mockRejectedValueOnce(
+      new ApiError(409, "already_decided"),
+    );
+    renderAdmin(<OversightView />);
+    const waiting = () =>
+      screen.getByText("Waiting", { selector: "span" }).closest("div");
+    await table();
+    expect(waiting()).toHaveTextContent(String(real.items.length + 10));
+    await userEvent.click(
+      within(await rowFor("C-116")).getByRole("button", {
+        name: "Remind reviewers about C-116",
+      }),
+    );
+    await waitFor(() =>
+      expect(waiting()).toHaveTextContent(String(real.items.length + 9)),
+    );
+  });
+
+  it("the Waiting tile never goes below 0", async () => {
+    const real = await holder.client.getOversight();
+    vi.spyOn(holder.client, "getOversight").mockResolvedValue({
+      ...real,
+      waiting: 0,
+    });
+    vi.spyOn(holder.client, "remindReviewers").mockRejectedValueOnce(
+      new ApiError(409, "already_decided"),
+    );
+    renderAdmin(<OversightView />);
+    await userEvent.click(
+      within(await rowFor("C-116")).getByRole("button", {
+        name: "Remind reviewers about C-116",
+      }),
+    );
+    await screen.findByText("This correction has already been decided");
+    expect(
+      screen.getByText("Waiting", { selector: "span" }).closest("div"),
+    ).toHaveTextContent(/^0Waiting$/);
+  });
 });

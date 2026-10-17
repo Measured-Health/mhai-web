@@ -7,6 +7,7 @@ import {
   useStaffActivity,
 } from "@/lib/admin-queries";
 import { actorName, describeEvent, eventClock } from "@/lib/admin/activity";
+import { adminError } from "@/lib/admin/errors";
 import { inviteNote, policyBroken, sortName } from "@/lib/admin/staff";
 import { useNow } from "@/lib/hooks/use-now";
 import { Avatar } from "../shell/account-menu";
@@ -64,6 +65,19 @@ export function StaffPanel({
             Back to staff
           </Button>
         </div>
+      ) : staff.isError ? (
+        <Banner tone="bad" title={adminError(staff.error).title}>
+          {adminError(staff.error).body}
+          <span className="mt-2 block">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void staff.refetch()}
+            >
+              Try again
+            </Button>
+          </span>
+        </Banner>
       ) : (
         <Skeleton className="h-40" />
       )}

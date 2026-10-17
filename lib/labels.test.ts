@@ -74,6 +74,7 @@ describe("labels", () => {
       "mfa_required",
       "mfa_invalid",
       "mfa_locked",
+      "self_role_change",
     ])
       expect(FORBIDDEN_TERMS).toContain(t);
   });

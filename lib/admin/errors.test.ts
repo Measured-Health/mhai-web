@@ -36,7 +36,7 @@ describe("adminError", () => {
     );
   });
 
-  it("words the two-step refusals plainly (remove staff)", () => {
+  it("words the two-step refusals plainly", () => {
     expect(adminError(new ApiError(403, "mfa_invalid"))).toMatchObject({
       title: "That code didn't work. Try again.",
       body: "Check the code in your authenticator app.",
@@ -45,7 +45,7 @@ describe("adminError", () => {
     });
     expect(adminError(new ApiError(403, "mfa_required"))).toMatchObject({
       title:
-        "Turn on two-step verification in Profile & security to remove staff.",
+        "Turn on two-step verification in Profile & security to use the admin pages.",
       body: "Then come back and try again.",
     });
     expect(adminError(new ApiError(429, "mfa_locked"))).toMatchObject({

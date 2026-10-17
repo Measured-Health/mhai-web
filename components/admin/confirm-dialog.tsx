@@ -9,7 +9,8 @@ import { Dialog } from "../ui/dialog";
  * A destructive confirmation (spec §7): the safe button comes first and has
  * the focus, even when a field (a two-step code) sits above it. The content
  * is a form, so a code box that submits on its last digit confirms; nothing
- * is confirmed until `ready`.
+ * is confirmed until `ready`. While `busy` it stays open (no Keep, no Esc),
+ * so the answer is always shown.
  */
 export function ConfirmDialog({
   open,
@@ -39,8 +40,11 @@ export function ConfirmDialog({
 }) {
   const keep = useRef<HTMLButtonElement>(null);
   const can = ready && !busy && !offline;
+  const close = () => {
+    if (!busy) onKeep();
+  };
   return (
-    <Dialog open={open} onClose={onKeep} title={title} initialFocus={keep}>
+    <Dialog open={open} onClose={close} title={title} initialFocus={keep}>
       <form
         noValidate
         onSubmit={(e) => {
@@ -64,7 +68,7 @@ export function ConfirmDialog({
           </div>
         )}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <Button ref={keep} variant="ghost" onClick={onKeep}>
+          <Button ref={keep} variant="ghost" disabled={busy} onClick={close}>
             {keepLabel}
           </Button>
           <Button type="submit" variant="danger" disabled={!can}>

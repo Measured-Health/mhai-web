@@ -125,7 +125,7 @@ export function ActivityView() {
       actions={
         <Button
           variant="ghost"
-          disabled={!online || exporting || !q.isSuccess}
+          disabled={!online || exporting || !q.data}
           aria-describedby={online ? undefined : offlineId}
           onClick={() => void exportCsv()}
         >

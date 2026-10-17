@@ -97,6 +97,24 @@ describe("CSV (R10)", () => {
     ]);
   });
 
+  it("exports a self role change with its flag", () => {
+    const csv = activityCsv([
+      makeEvent({
+        kind: "self_role_change",
+        type: "security",
+        actor: { display_name: "Grace Nwosu" },
+        target: { display_name: "Grace Nwosu" },
+        roles_added: ["clinician"],
+        flag: "alert",
+        at: "2026-10-17T09:00:00.000Z",
+      }),
+    ]);
+    expect(csv.split("\r\n")[1]).toBe(
+      "2026-10-17T09:00:00.000Z,Grace Nwosu,Security,Gave themselves the Clinician role,Alert",
+    );
+    expect(csv).not.toContain("self_role_change");
+  });
+
   it("names the file after the hospital and the day", () => {
     expect(csvName("activity", "Havana Hospital", NOW)).toBe(
       "havana-hospital-activity-2026-10-16.csv",
