@@ -1,5 +1,6 @@
 import type {
   AlertSeriesOut,
+  ChangeDirection,
   ChangeOut,
   GuardedOut,
   MeasureOut,
@@ -218,7 +219,27 @@ export function readAlerts(u: Pick<UsageOut, "alerts">): AlertsState {
     worseningOk(a.worsening);
   if (!ok) return { state: "failed" };
   const alerts = a as unknown as UsageAlertsOut;
-  return safeSets(alerts) ? { state: "ready", alerts } : { state: "failed" };
+  return safeSets(alerts) && flagsShowable(alerts)
+    ? { state: "ready", alerts }
+    : { state: "failed" };
+}
+
+/**
+ * Every flag the server sent can be shown. A flag the guards would drop
+ * (worsening beside a hidden or missing share change, or one that isn't a
+ * drop; a rising group under 5) would leave What changed reading "Nothing
+ * unusual this period": the block reads as couldn't load instead. Without a
+ * previous period flags are ignored, not refused (R5, Review Focus 3).
+ */
+function flagsShowable(a: UsageAlertsOut): boolean {
+  if (!a.has_previous) return true;
+  const w = a.worsening;
+  if (w) {
+    const c = changeFor(a.critical_within_target, "share", true);
+    if (!c || shownDirection(c) !== "down" || !(w.value < w.previous))
+      return false;
+  }
+  return a.rising.every(bigEnough);
 }
 
 /**
@@ -267,26 +288,39 @@ export function changeFor(
 ): ChangeOut | null {
   const c = m?.change;
   if (!hasPrevious || !c || shown(m, kind).kind !== "value") return null;
+  // Belt and braces: readAlerts has already refused an unreadable change.
   if (!DIRECTIONS.has(c.direction) || !Number.isFinite(c.amount)) return null;
   if (!Number.isFinite(c.previous)) return null;
-  if (kind === "count" && isSmallCount(c.previous)) return null;
+  // A hidden previous count, or a percentage from 0 (spec §5.1).
+  if (kind === "count" && (isSmallCount(c.previous) || c.previous === 0))
+    return null;
   return c;
 }
+
+/**
+ * The direction as shown: "same" when the amount rounds to 0, so the arrow,
+ * the words and better/worse never contradict each other.
+ */
+export const shownDirection = (c: ChangeOut): ChangeDirection =>
+  c.direction === "same" || Math.round(Math.abs(c.amount)) === 0
+    ? "same"
+    : c.direction;
 
 export function changeText(
   c: ChangeOut,
   kind: MeasureKind,
   p: UsagePeriod,
 ): string {
+  const d = shownDirection(c);
+  if (d === "same") return `no change ${compareLabel(p)}`;
   const n = Math.round(Math.abs(c.amount));
-  if (c.direction === "same" || n === 0) return `no change ${compareLabel(p)}`;
   const amount =
     kind === "count"
       ? `${n}%`
       : kind === "minutes"
         ? minutesLabel(n)
         : `${n} ${n === 1 ? "point" : "points"}`;
-  return `${c.direction} ${amount} ${compareLabel(p)}`;
+  return `${d} ${amount} ${compareLabel(p)}`;
 }
 
 /** Only response times read better or worse; volumes and outcomes are neutral (R4). */
@@ -294,8 +328,9 @@ export function verdict(
   c: ChangeOut,
   better: Better,
 ): "better" | "worse" | null {
-  if (!better || c.direction === "same") return null;
-  return (c.direction === "down") === (better === "lower") ? "better" : "worse";
+  const d = shownDirection(c);
+  if (!better || d === "same") return null;
+  return (d === "down") === (better === "lower") ? "better" : "worse";
 }
 
 export const criticalTargetLabel = (min: number) =>
@@ -375,6 +410,7 @@ export const risingLine = (r: RisingOut) =>
 export const worseningLine = (w: WorseningOut, target: number) =>
   `Critical within ${target} min: ${percentLabel(w.value)}, down from ${percentLabel(w.previous)}`;
 
+// The finite checks are belt and braces: readAlerts has checked them.
 const bigEnough = (r: RisingOut) =>
   Number.isFinite(r.count) &&
   Number.isFinite(r.previous) &&
@@ -388,6 +424,7 @@ export function whatChanged(a: UsageAlertsOut): WhatChanged {
   const w = a.worsening;
   // Only beside a shown change: the server sends none when the previous
   // period's share was hidden, and "down from 88%" would reveal it (F6).
+  // Belt and braces: readAlerts refuses a block where this would drop it.
   if (
     w &&
     Number.isFinite(w.value) &&
@@ -407,6 +444,7 @@ export function whatChanged(a: UsageAlertsOut): WhatChanged {
         text: unusualLine(b, a.series.bucket),
       });
   for (const kind of ["finding", "location"] as const)
+    // bigEnough is belt and braces here too (readAlerts refuses small ones).
     a.rising
       .filter((r) => r.kind === kind && bigEnough(r))
       .forEach((r, i) =>

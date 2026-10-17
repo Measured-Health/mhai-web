@@ -19,6 +19,7 @@ import {
   risingLine,
   seriesSummary,
   shown,
+  shownDirection,
   unusualLine,
   valueText,
   verdict,
@@ -180,10 +181,64 @@ describe("readAlerts", () => {
     ).toBe("failed");
   });
 
+  it("refuses a flag the guards would drop, never reading as Nothing unusual", async () => {
+    const a = await sampleAlerts();
+    const share = (change: ChangeOut | null) => ({
+      critical_within_target: m(0.71, change),
+    });
+    const down = (amount: number, previous: number): ChangeOut => ({
+      direction: "down",
+      amount,
+      previous,
+    });
+    // Worsening beside a hidden share, or one with no change to show.
+    expect(
+      stateOf(
+        broken(a, {
+          critical_within_target: hidden(),
+        }),
+      ),
+    ).toBe("failed");
+    expect(stateOf(broken(a, share(null)))).toBe("failed");
+    // Worsening that isn't a drop.
+    expect(stateOf(broken(a, share(up(17, 0.54))))).toBe("failed");
+    expect(stateOf(broken(a, share(down(0.3, 0.713))))).toBe("failed");
+    expect(
+      stateOf(broken(a, { worsening: { value: 0.88, previous: 0.71 } })),
+    ).toBe("failed");
+    expect(
+      stateOf(broken(a, { worsening: { value: 0.71, previous: 0.71 } })),
+    ).toBe("failed");
+    // A rising group under 5 on either side.
+    for (const [count, previous] of [
+      [3, 9],
+      [12, 2],
+    ])
+      expect(
+        stateOf(
+          broken(a, {
+            rising: [{ kind: "location", location: null, count, previous }],
+          }),
+        ),
+      ).toBe("failed");
+    // Without a previous period, flags are ignored, not refused (Review Focus 3).
+    expect(
+      stateOf(
+        broken(a, {
+          has_previous: false,
+          ...share(null),
+          rising: [{ kind: "location", location: null, count: 3, previous: 9 }],
+        }),
+      ),
+    ).toBe("ready");
+    expect(stateOf(a)).toBe("ready");
+    expect(stateOf(broken(a, share(down(17, 0.88))))).toBe("ready");
+  });
+
   it("refuses a block whose hidden values could be worked out from the rest (F7)", async () => {
     const a = await sampleAlerts();
-    // Info 3 with Alerts 128, Critical 17, Urgent 46: shown as "Fewer than 5"
-    // it would still be 128 - 17 - 46 - ... on screen. Nothing is shown.
+    // Info sent as a raw 3: even written "Fewer than 5", it would still be
+    // Alerts - Critical - Urgent on screen. Nothing is shown.
     expect(
       stateOf(
         broken(a, {
@@ -322,6 +377,32 @@ describe("changes", () => {
     ).toBeNull();
   });
 
+  it("reads a change that rounds to nothing as no change, everywhere", () => {
+    const tiny = up(0.3, 22);
+    expect(shownDirection(tiny)).toBe("same");
+    expect(shownDirection(up(0.6, 22))).toBe("up");
+    expect(changeText(tiny, "minutes", "this_month")).toBe(
+      "no change vs last month",
+    );
+    expect(verdict(tiny, "lower")).toBeNull();
+    expect(
+      verdict({ direction: "down", amount: 0.4, previous: 0.8 }, "higher"),
+    ).toBeNull();
+  });
+
+  it("shows no count change from a previous 0 (spec §5.1)", () => {
+    expect(changeFor(m(9, up(100, 0)), "count", true)).toBeNull();
+    expect(
+      changeFor(
+        m(0, { direction: "same", amount: 0, previous: 0 }),
+        "count",
+        true,
+      ),
+    ).toBeNull();
+    // Minutes and shares from 0 are real amounts, not percentages.
+    expect(changeFor(m(0.2, up(20, 0)), "share", true)).toEqual(up(20, 0));
+  });
+
   it("shows no change beside a hidden or missing value (Review Focus 4)", () => {
     expect(changeFor(m(40, up(10, 36)), "count", true)).toEqual(up(10, 36));
     expect(changeFor(m(null, up(10, 36), true), "count", true)).toBeNull();
@@ -455,7 +536,7 @@ describe("whatChanged", () => {
     expect(ALERTS_FAILED).toBe("Couldn't load patient alerts");
   });
 
-  it("drops small rising groups (Review Focus 2)", async () => {
+  it("drops small rising groups, belt and braces behind readAlerts (Review Focus 2)", async () => {
     const a = await sampleAlerts("this_month");
     const w = whatChanged({
       ...a,
@@ -469,7 +550,7 @@ describe("whatChanged", () => {
     expect(w).toEqual({ kind: "nothing" });
   });
 
-  it("drops worsening when the Critical share is hidden", async () => {
+  it("drops worsening when the Critical share is hidden, belt and braces", async () => {
     const a = await sampleAlerts("this_month");
     const w = whatChanged({ ...a, critical_within_target: hidden() });
     expect(w.kind === "items" && w.items.map((i) => i.kind)).toEqual([
@@ -479,7 +560,7 @@ describe("whatChanged", () => {
     ]);
   });
 
-  it("drops worsening when the previous share isn't shown (F6)", async () => {
+  it("drops worsening when the previous share isn't shown, belt and braces (F6)", async () => {
     // The server sends no change when the previous period's share was hidden:
     // "down from 88%" would reveal it.
     const a = await sampleAlerts("this_month");

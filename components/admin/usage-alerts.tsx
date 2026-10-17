@@ -36,6 +36,7 @@ import {
   readAlerts,
   seriesSummary,
   shown,
+  shownDirection,
   valueText,
   verdict,
   whatChanged,
@@ -64,13 +65,10 @@ function ChangeLine({
   better?: Better;
   period: UsagePeriod;
 }) {
+  // One shown direction for the arrow, the words and the verdict.
+  const d = shownDirection(c);
   const v = verdict(c, better);
-  const Arrow =
-    c.direction === "up"
-      ? ArrowUp
-      : c.direction === "down"
-        ? ArrowDown
-        : ArrowRight;
+  const Arrow = d === "up" ? ArrowUp : d === "down" ? ArrowDown : ArrowRight;
   return (
     <span
       className={cn(

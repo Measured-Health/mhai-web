@@ -233,6 +233,27 @@ describe("UsageAlerts", () => {
       }),
       () => ({ worsening: { value: 0.71 } }),
       () => ({ critical_target_minutes: Number.NaN }),
+      // Flags the guards would drop: never "Nothing unusual".
+      () => ({
+        critical_within_target: {
+          value: 0.71,
+          suppressed: false,
+          change: null,
+        },
+      }),
+      () => ({ worsening: { value: 0.9, previous: 0.88 } }),
+      () => ({
+        worsening: null,
+        rising: [
+          {
+            kind: "finding",
+            name: "Sodium",
+            flag: "low",
+            count: 3,
+            previous: 9,
+          },
+        ],
+      }),
     ]) {
       const { container, unmount } = render(
         <UsageAlerts usage={await withAlerts(over)} onRetry={vi.fn()} />,
@@ -281,15 +302,6 @@ describe("UsageAlerts", () => {
               count: { value: 2, suppressed: false },
             },
           ],
-          rising: [
-            {
-              kind: "finding",
-              name: "Sodium",
-              flag: "low",
-              count: 3,
-              previous: 9,
-            },
-          ],
         }))}
         onRetry={vi.fn()}
       />,
@@ -301,11 +313,47 @@ describe("UsageAlerts", () => {
       /^Fewer than 5Still unhandled$/,
     );
     expect(items("Top findings")).toEqual(["Sodium · lowFewer than 5"]);
-    expect(within(changed()).queryByText(/Sodium/)).toBeNull();
+  });
+
+  it("writes a change that rounds to nothing as no change, with no arrow up and no verdict", async () => {
+    render(
+      <UsageAlerts
+        usage={await withAlerts(() => ({
+          median_ack_minutes: {
+            value: 22,
+            suppressed: false,
+            change: { direction: "up", amount: 0.3, previous: 21.7 },
+          },
+        }))}
+        onRetry={vi.fn()}
+      />,
+    );
+    const t = tile("Median time to acknowledge");
+    expect(t).toHaveTextContent("no change vs last month");
+    expect(t).not.toHaveTextContent(/worse|better|up /);
+    expect(t.querySelector(".lucide-arrow-up")).toBeNull();
+    expect(t.querySelector(".lucide-arrow-right")).not.toBeNull();
+  });
+
+  it("shows no count change from a previous 0 (spec §5.1)", async () => {
+    render(
+      <UsageAlerts
+        usage={await withAlerts(() => ({
+          unhandled: {
+            value: 9,
+            suppressed: false,
+            change: { direction: "up", amount: 100, previous: 0 },
+          },
+        }))}
+        onRetry={vi.fn()}
+      />,
+    );
+    expect(tile("Still unhandled")).toHaveTextContent(/^9Still unhandled$/);
   });
 
   it("shows nothing at all when a hidden value could be worked out from the totals (F7)", async () => {
-    // Info 3 beside Alerts 128, Critical 17 and Urgent 46 is 128 - 17 - 46 - 62.
+    // Info sent as a raw 3: even written "Fewer than 5", it is still
+    // Alerts - Critical - Urgent from the tiles beside it.
     for (const over of [
       (a: UsageAlertsOut) => ({
         by_severity: {
