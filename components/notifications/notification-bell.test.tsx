@@ -103,7 +103,7 @@ describe("NotificationBell", () => {
   it("lists the latest of both, and opening it clears only the decisions (R1)", async () => {
     const user = userEvent.setup();
     await user.click(await withDecision());
-    const panel = screen.getByRole("region", { name: "Notifications" });
+    const panel = screen.getByRole("region", { name: "Recent notifications" });
     const list = within(panel).getByRole("region", { name: "Patient alerts" });
     expect(within(list).getAllByRole("button")).toHaveLength(BELL_ALERTS);
     expect(within(list).getByText("Maryam Abdullahi")).toBeVisible();
@@ -128,7 +128,9 @@ describe("NotificationBell", () => {
     await user.click(await bell("Notifications, 6 unread"));
     await user.click(screen.getByRole("button", { name: /Esther Okoye/ }));
     expect(push).toHaveBeenCalledWith("/notifications");
-    expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Recent notifications" }),
+    ).toBeNull();
   });
 
   it("moves focus in, closes with Esc back to the bell, and on a click elsewhere", async () => {
@@ -140,11 +142,15 @@ describe("NotificationBell", () => {
       screen.getByRole("button", { name: /Maryam Abdullahi/ }),
     ).toHaveFocus();
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Recent notifications" }),
+    ).toBeNull();
     expect(b).toHaveFocus();
     await user.click(b);
     await user.click(screen.getByRole("button", { name: "elsewhere" }));
-    expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Recent notifications" }),
+    ).toBeNull();
   });
 
   it("says when there's nothing yet", async () => {
@@ -261,9 +267,9 @@ describe("NotificationBell", () => {
     const user = userEvent.setup();
     ui();
     await user.click(await bell("Notifications, 6 unread"));
-    expect(screen.getByRole("region", { name: "Notifications" })).toHaveClass(
-      "print:hidden",
-    );
+    expect(
+      screen.getByRole("region", { name: "Recent notifications" }),
+    ).toHaveClass("print:hidden");
   });
 
   it("renders nothing outside the notification centre", () => {

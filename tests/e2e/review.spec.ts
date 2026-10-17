@@ -291,6 +291,6 @@ test("a reviewer's decision arrives as a toast and stays in the bell", async ({
     .filter({ visible: true })
     .click();
   await expect(
-    page.getByRole("region", { name: "Notifications" }),
+    page.getByRole("region", { name: "Recent notifications" }),
   ).toContainText("Dengue fever, likely");
 });

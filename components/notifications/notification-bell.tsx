@@ -100,10 +100,12 @@ export function NotificationBell() {
           id={panelId}
           data-panel
           role="region"
-          aria-label="Notifications"
+          aria-label="Recent notifications"
           className="absolute right-0 top-[calc(100%+8px)] z-30 print:hidden w-[min(360px,92vw)] rounded-2xl bg-white p-3 text-left shadow-[0_30px_60px_-20px_#46035166] ring-1 ring-line"
         >
-          <h2 className="px-1 text-[13px] font-semibold">Notifications</h2>
+          <h2 className="px-1 text-[13px] font-semibold">
+            Recent notifications
+          </h2>
           {a?.available && (
             <section aria-labelledby={`${panelId}-alerts`} className="mt-2">
               <h3 id={`${panelId}-alerts`} className={HEADING}>

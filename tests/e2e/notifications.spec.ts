@@ -31,6 +31,8 @@ async function asClinician(page: Page) {
   await signIn(page);
   await expect(page).toHaveURL(/\/$/);
   await expect(bell(page)).toHaveAccessibleName("Notifications, 6 unread");
+  // The kept-alive copies of the sign-in page are out of the accessibility tree.
+  await expect(page.getByRole("main")).toHaveCount(1);
 }
 
 test("a new alert pops up, opens from View, and is acknowledged", async ({
@@ -65,7 +67,6 @@ test("a new alert pops up, opens from View, and is acknowledged", async ({
     .click();
   await expect(page).toHaveURL(/\/notifications$/);
   await expect(page).toHaveTitle("Notifications · MHAI");
-  expect(page.url()).toMatch(/\/notifications$/);
   expect(await page.title()).not.toMatch(/Emeka|Nnamdi|318552/);
   const c = card(page, "Emeka Nnamdi");
   await expect(c).toBeFocused();
@@ -151,10 +152,8 @@ test("with alert pop-ups off, Urgent stays quiet but Critical still pops up", as
   await expect(bell(page)).toHaveAccessibleName("Notifications, 7 unread");
   await bell(page).click();
   await expect(
-    page
-      .getByRole("region", { name: "Notifications" })
-      .filter({ hasText: "Emeka Nnamdi" }),
-  ).toBeVisible();
+    page.getByRole("region", { name: "Recent notifications" }),
+  ).toContainText("Emeka Nnamdi");
   await page.keyboard.press("Escape");
   await expect(
     page.getByText("Urgent patient alert", { exact: true }),

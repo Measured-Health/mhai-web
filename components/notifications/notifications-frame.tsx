@@ -47,7 +47,11 @@ export function NotificationsFrame({
           <h2 className="mb-4 font-display text-[40px] font-black leading-none">
             Notifications
           </h2>
-          <LinkTabs label="Notifications" tabs={tabs} current={current} />
+          <LinkTabs
+            label="Notification sections"
+            tabs={tabs}
+            current={current}
+          />
           {children}
         </div>
       </div>

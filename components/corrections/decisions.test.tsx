@@ -129,7 +129,7 @@ describe("decision pop-ups and the bell", () => {
       name: "Notifications, 1 unread",
     });
     await user.click(bell);
-    const panel = screen.getByRole("region", { name: "Notifications" });
+    const panel = screen.getByRole("region", { name: "Recent notifications" });
     expect(within(panel).getByText("Approved")).toBeVisible();
     expect(within(panel).getByText("Dengue fever, likely")).toBeVisible();
     expect(
@@ -140,7 +140,9 @@ describe("decision pop-ups and the bell", () => {
     ).toBeVisible();
     expect(bell).toHaveAccessibleName("Notifications");
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Recent notifications" }),
+    ).toBeNull();
     expect(bell).toHaveFocus();
   });
 
@@ -167,9 +169,9 @@ describe("decision pop-ups and the bell", () => {
     ).toBeVisible();
     await user.click(screen.getByRole("button", { name: /1 unread/ }));
     expect(
-      within(screen.getByRole("region", { name: "Notifications" })).getByText(
-        "Reason: Unsafe: Dose too high.",
-      ),
+      within(
+        screen.getByRole("region", { name: "Recent notifications" }),
+      ).getByText("Reason: Unsafe: Dose too high."),
     ).toBeVisible();
   });
 
@@ -182,7 +184,9 @@ describe("decision pop-ups and the bell", () => {
     );
     expect(screen.getByText(/No decisions yet/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "elsewhere" }));
-    expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Recent notifications" }),
+    ).toBeNull();
   });
 
   it("keeps the history in memory only", async () => {
