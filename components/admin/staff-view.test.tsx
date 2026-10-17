@@ -1,4 +1,5 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
+import { onlineManager } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
@@ -165,8 +166,15 @@ describe("StaffView", () => {
     const mensah = within(cards).getByRole("button", {
       name: "Manage Dr. Kofi Mensah",
     });
-    expect(mensah).toHaveTextContent("Two-step not set up");
-    expect(mensah).toHaveTextContent("Cardiology");
+    const card = mensah.closest("li")!;
+    expect(card).toHaveTextContent("Two-step not set up");
+    expect(card).toHaveTextContent("Cardiology");
+    expect(card).toHaveTextContent("k.mensah@havanahospital.org");
+    expect(mensah).toHaveTextContent("Manage");
+    await userEvent.click(mensah);
+    expect(
+      await screen.findByRole("dialog", { name: "Staff member" }),
+    ).toBeInTheDocument();
   });
 
   it("offers Try again when the list can't load", async () => {
@@ -174,9 +182,7 @@ describe("StaffView", () => {
       new ApiError(403, "forbidden"),
     );
     renderAdmin(<StaffView />);
-    expect(
-      await screen.findByText("Couldn't load the staff list"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("You can't do this")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     await table();
   });
@@ -234,5 +240,78 @@ describe("StaffView", () => {
         window.dispatchEvent(new Event("online"));
       });
     }
+  });
+
+  it("exposes the status word on a phone card to screen readers", async () => {
+    vi.stubGlobal("matchMedia", (q: string) => ({
+      matches: false,
+      media: q,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    renderAdmin(<StaffView />);
+    const cards = await screen.findByRole("list", {
+      name: "Staff at the hospital",
+    });
+    const items = within(cards).getAllByRole("listitem");
+    expect(items).toHaveLength(13);
+    expect(within(items[0]).getAllByRole("button")).toHaveLength(1);
+    expect(within(cards).getByText("Two-step not set up")).toBeInTheDocument();
+  });
+
+  it("says so, not a skeleton, when first opened offline", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    onlineManager.setOnline(false);
+    try {
+      renderAdmin(<StaffView />);
+      expect(
+        await screen.findByText(
+          "You're offline. Staff will load when you reconnect.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("table")).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("hides search and chips on a failed first load, with plain wording", async () => {
+    vi.spyOn(holder.client, "listStaff").mockRejectedValueOnce(
+      new ApiError(403, "forbidden"),
+    );
+    renderAdmin(<StaffView />);
+    await screen.findByText("Try again");
+    expect(screen.queryByRole("searchbox")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Show" })).toBeNull();
+  });
+
+  it("keeps the rows when a refresh fails, with the banner above them", async () => {
+    const spy = vi.spyOn(holder.client, "listStaff");
+    renderAdmin(<StaffView />);
+    await table();
+    spy.mockRejectedValue(new ApiError(403, "forbidden"));
+    try {
+      act(() => onlineManager.setOnline(false));
+      act(() => onlineManager.setOnline(true));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Try again");
+      expect(names(await table())).toHaveLength(13);
+      expect(screen.getByRole("searchbox")).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("returns focus to the row after a keyboard open and close", async () => {
+    renderAdmin(<StaffView />);
+    const t = await table();
+    const manage = within(t).getByRole("button", {
+      name: "Manage Dr. Kofi Mensah",
+    });
+    const row = manage.closest("tr")!;
+    row.focus();
+    await userEvent.keyboard("{Enter}");
+    const panel = await screen.findByRole("dialog", { name: "Staff member" });
+    await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(manage).toHaveFocus();
   });
 });

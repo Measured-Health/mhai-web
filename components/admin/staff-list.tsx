@@ -139,24 +139,26 @@ export function StaffCards({ rows, now, onOpen }: ListProps) {
           last ? `Active ${last}` : null,
         ].filter(Boolean);
         return (
-          <li key={s.id}>
+          <li
+            key={s.id}
+            className="card-v3 flex flex-col gap-2 p-3.5 text-[13px]"
+          >
+            <Who s={s} />
+            <span className="flex flex-wrap items-center gap-1.5">
+              <StaffStatusChip staff={s} now={now} />
+              <RoleChips roles={s.roles} />
+            </span>
+            {meta.length > 0 && (
+              <span className="text-[12px] text-ink-3">{meta.join(" · ")}</span>
+            )}
             <button
               type="button"
               aria-label={`Manage ${s.full_name}`}
               data-staff-id={s.id}
               onClick={() => onOpen(s.id)}
-              className="card-v3 flex min-h-11 w-full flex-col gap-2 p-3.5 text-left text-[13px] focus-visible:outline-2 focus-visible:outline-mint-deep"
+              className="inline-flex min-h-11 items-center justify-center self-start rounded-full border border-line bg-white px-5 text-[13px] font-semibold text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint-deep"
             >
-              <Who s={s} />
-              <span className="flex flex-wrap items-center gap-1.5">
-                <StaffStatusChip staff={s} now={now} />
-                <RoleChips roles={s.roles} />
-              </span>
-              {meta.length > 0 && (
-                <span className="text-[12px] text-ink-3">
-                  {meta.join(" · ")}
-                </span>
-              )}
+              Manage
             </button>
           </li>
         );

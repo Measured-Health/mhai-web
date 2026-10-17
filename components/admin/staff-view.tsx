@@ -8,6 +8,7 @@ import {
   staffCounts,
   type StaffFilter,
 } from "@/lib/admin/staff";
+import { adminError } from "@/lib/admin/errors";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useIsDesktop } from "@/lib/hooks/use-media";
 import { useNow } from "@/lib/hooks/use-now";
@@ -51,6 +52,9 @@ export function StaffView() {
   const counts = staffCounts(list, now);
   const rows = filterStaff(list, filter, search, now);
   const hospital = user?.hospital ?? "your hospital";
+  const failed = q.isError ? adminError(q.error) : null;
+  const waiting = q.isPending && !q.isError && q.fetchStatus === "paused";
+  const showControls = !(q.isError && !q.data);
   const List = desktop ? StaffTable : StaffCards;
 
   return (
@@ -58,57 +62,81 @@ export function StaffView() {
       title="Staff"
       actions={
         <div className="flex flex-col items-end gap-1">
-          <Button disabled={!online} onClick={() => setInviting(true)}>
+          <Button
+            disabled={!online}
+            aria-describedby={online ? undefined : "invite-offline"}
+            onClick={() => setInviting(true)}
+          >
             <UserPlus aria-hidden className="size-4" />
             Invite staff
           </Button>
           {!online && (
-            <p className="text-[12px] text-ink-3">
+            <p id="invite-offline" className="text-[12px] text-ink-3">
               You&apos;re offline. Reconnect to invite people.
             </p>
           )}
         </div>
       }
     >
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <label className="relative flex min-w-[220px] flex-1 items-center">
-          <Search aria-hidden className="absolute left-3 size-4 text-ink-3" />
-          <span className="sr-only">Search staff</span>
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, email or specialty"
-            className="min-h-11 w-full rounded-xl border border-lilac-2 bg-white pl-9 pr-3 text-[14px] focus-visible:outline-2 focus-visible:outline-mint-deep"
-          />
-        </label>
-        <div role="group" aria-label="Show" className="flex flex-wrap gap-1.5">
-          {STAFF_FILTERS.filter(
-            (f) => f.id === "all" || f.id === filter || counts[f.id] > 0,
-          ).map((f) => (
-            <FilterChip
-              key={f.id}
-              pressed={filter === f.id}
-              onClick={() => setFilter(f.id)}
-            >
-              {f.label} · {counts[f.id]}
-            </FilterChip>
-          ))}
+      {showControls && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <label className="relative flex min-w-[220px] flex-1 items-center">
+            <Search aria-hidden className="absolute left-3 size-4 text-ink-3" />
+            <span className="sr-only">Search staff</span>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, email or specialty"
+              className="min-h-11 w-full rounded-xl border border-lilac-2 bg-white pl-9 pr-3 text-[14px] focus-visible:outline-2 focus-visible:outline-mint-deep"
+            />
+          </label>
+          <div
+            role="group"
+            aria-label="Show"
+            className="flex flex-wrap gap-1.5"
+          >
+            {STAFF_FILTERS.filter(
+              (f) => f.id === "all" || f.id === filter || counts[f.id] > 0,
+            ).map((f) => (
+              <FilterChip
+                key={f.id}
+                pressed={filter === f.id}
+                onClick={() => setFilter(f.id)}
+              >
+                {f.label} · {counts[f.id]}
+              </FilterChip>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      {q.isPending ? (
+      {failed && (
+        <div className="mb-4">
+          <Banner tone="bad" title={failed.title}>
+            {failed.body}
+            <span className="mt-2 block">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void q.refetch()}
+              >
+                Try again
+              </Button>
+            </span>
+          </Banner>
+        </div>
+      )}
+      {waiting ? (
+        <div
+          role="status"
+          className="card-v3 p-6 text-center text-[14px] text-ink-2"
+        >
+          You&apos;re offline. Staff will load when you reconnect.
+        </div>
+      ) : q.isPending ? (
         <Skeleton className="h-72 rounded-2xl" />
-      ) : q.isError ? (
-        <Banner tone="bad" title="Couldn't load the staff list">
-          Check your connection and try again.
-          <span className="mt-2 block">
-            <Button size="sm" variant="ghost" onClick={() => void q.refetch()}>
-              Try again
-            </Button>
-          </span>
-        </Banner>
-      ) : rows.length === 0 ? (
+      ) : !q.data ? null : rows.length === 0 ? (
         <div className="card-v3 p-6 text-center text-[14px] text-ink-2">
           {search ? (
             <>
@@ -128,7 +156,7 @@ export function StaffView() {
       ) : (
         <List rows={rows} now={now} onOpen={setOpenId} />
       )}
-      {q.isSuccess && (
+      {q.data && (
         <p role="status" className="sr-only">
           {rows.length === 1 ? "1 person shown" : `${rows.length} people shown`}
         </p>
