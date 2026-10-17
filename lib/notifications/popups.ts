@@ -36,7 +36,7 @@ export function baselineFrom(first: AlertOut[]): number | null {
 
 /**
  * New alerts since the last check: status "new", id not in `seen`, and
- * created after the baseline watermark. Both times are the server's; the
+ * created after the baseline watermark (Critical is exempt from the watermark). Both times are the server's; the
  * device clock is never used (A7). The first check (`seen` null) is a
  * baseline and pops nothing (spec §4). With no readable `created_at` or no
  * watermark, the alert counts as new (fail safe). A repeated id (including a
@@ -52,7 +52,10 @@ export function newAlerts(
   for (const a of next) {
     if (a.status !== "new" || seen.has(a.id) || out.has(a.id)) continue;
     const t = createdAt(a);
-    if (watermark !== null && t !== null && t < watermark) continue;
+    // The watermark never hides a Critical: one that becomes visible late
+    // (commit order, late ingestion timestamps) must still pop up.
+    if (!isCritical(a) && watermark !== null && t !== null && t < watermark)
+      continue;
     out.set(a.id, a);
   }
   return [...out.values()];

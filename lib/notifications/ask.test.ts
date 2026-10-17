@@ -65,7 +65,7 @@ describe("askFromAlert", () => {
       makeAlert({ finding: { ...base, name: "x".repeat(3000) } }),
       ALERT_NOW,
     );
-    expect(Array.from(v.symptoms[0]!).length).toBeLessThanOrEqual(200);
+    expect(v.symptoms[0]!.length).toBeLessThanOrEqual(200);
     expect(v.symptoms[0]).toMatch(
       /^Result: x+… 2\.9 mmol\/L \(low; normal 3\.5–5\.1\)$/,
     );
@@ -83,7 +83,9 @@ describe("askFromAlert", () => {
       expect(t).not.toMatch(
         /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/,
       );
-    expect(Array.from(v.symptoms[0]!).length).toBeLessThanOrEqual(200);
+    expect(v.symptoms[0]!.length).toBeLessThanOrEqual(200);
+    expect(v.question.length).toBeLessThanOrEqual(2000);
+    expect(validate(v).ok).toBe(true);
   });
 });
 

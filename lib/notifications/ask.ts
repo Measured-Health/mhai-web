@@ -1,7 +1,10 @@
-import type { AlertOut, AlertSeverity } from "../api/alerts-contract";
+import type {
+  AlertOut,
+  AlertSeverity,
+  FindingOut,
+} from "../api/alerts-contract";
 import type { Urgency } from "../api/contract";
 import { emptyForm, type FormValues } from "../form-schema";
-import type { FindingOut } from "../api/alerts-contract";
 import { findingLine, recordedLabel, severityOf } from "./alert-view";
 
 const PRIORITY: Record<AlertSeverity, Urgency> = {
@@ -13,10 +16,19 @@ const SYMPTOM_MAX = 200;
 const QUESTION_MAX = 2000;
 const SYMPTOM_PREFIX = "Result: ";
 
-/** Code-point-safe cut, so a surrogate pair is never split. */
-const cut = (text: string, max: number) =>
-  Array.from(text).slice(0, max).join("");
-const len = (text: string) => Array.from(text).length;
+/**
+ * Cut to at most `max` UTF-16 units (how the form counts length), only at
+ * code-point boundaries so a surrogate pair is never split.
+ */
+function cut(text: string, max: number): string {
+  let out = "";
+  for (const ch of text) {
+    if (out.length + ch.length > max) break;
+    out += ch;
+  }
+  return out;
+}
+const len = (text: string) => text.length;
 
 /**
  * The finding line within `max` characters. A long name is shortened first

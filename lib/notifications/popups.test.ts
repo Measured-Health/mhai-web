@@ -43,12 +43,23 @@ describe("newAlerts", () => {
   });
 
   it("never pops an alert older than the baseline watermark, even if its id is unseen", () => {
-    const outside = fresh("outside", "critical", -30);
+    const outside = fresh("outside", "urgent", -30);
     const newer = fresh("newer", "urgent", 2);
     const watermark = baselineFrom([fresh("w", "info", 0)]);
     expect(newAlerts(new Set(["w"]), [outside, newer], watermark)).toEqual([
       newer,
     ]);
+  });
+
+  it("pops an unseen Critical older than the watermark, even while muted", () => {
+    const late = fresh("late", "critical", -30);
+    const quiet = fresh("quiet", "urgent", -30);
+    const plan = planPopups(
+      newAlerts(new Set(["w"]), [late, quiet], since),
+      OFF,
+    );
+    expect(plan.show).toEqual([late]);
+    expect(newAlerts(new Set(["w"]), [late, quiet], since)).toEqual([late]);
   });
 
   it("takes the watermark from the newest baseline created_at", () => {
