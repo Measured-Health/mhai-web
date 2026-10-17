@@ -23,6 +23,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { RESULT_LABEL } from "@/lib/labels";
 import { Banner } from "../ui/banner";
 import { Button } from "../ui/button";
+import { BarList } from "../ui/charts/bar-list";
 import { cn } from "../ui/cn";
 import { Skeleton } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
@@ -75,9 +76,6 @@ export function UsageView() {
   // Export waits for the numbers; say so instead of a silent disabled button.
   const loading = !u && !q.isError;
   const mix = u ? shares(u.confidence) : null;
-  const top = u
-    ? Math.max(1, ...u.by_specialty.map((s) => s.consultations))
-    : 1;
 
   return (
     <AdminFrame
@@ -178,29 +176,21 @@ export function UsageView() {
           <div className="grid gap-4 md:grid-cols-2">
             <Card title="Result confidence">
               {mix ? (
-                <ul className="flex flex-col gap-2.5">
-                  {CONFIDENCE_ORDER.map((k) => {
+                <BarList
+                  animate={false}
+                  max={100}
+                  items={CONFIDENCE_ORDER.map((k) => {
                     const { Icon, bar, text } = LEVEL[k];
-                    return (
-                      <li key={k} className="text-[13px]">
-                        <span className="flex items-center gap-2">
-                          <Icon aria-hidden className={cn("size-4", text)} />
-                          <span className="flex-1">{RESULT_LABEL[k]}</span>
-                          <b className="font-mono">{mix[k]}%</b>
-                        </span>
-                        <span
-                          aria-hidden
-                          className="mt-1 block h-1.5 rounded-full bg-lilac"
-                        >
-                          <span
-                            className={cn("block h-full rounded-full", bar)}
-                            style={{ width: `${mix[k]}%` }}
-                          />
-                        </span>
-                      </li>
-                    );
+                    return {
+                      key: k,
+                      label: RESULT_LABEL[k],
+                      value: mix[k],
+                      text: `${mix[k]}%`,
+                      icon: <Icon aria-hidden className={cn("size-4", text)} />,
+                      barClass: bar,
+                    };
                   })}
-                </ul>
+                />
               ) : (
                 <p className="text-[13px] text-ink-3">
                   No consultations in this period.
@@ -208,35 +198,15 @@ export function UsageView() {
               )}
             </Card>
             <Card title="By specialty">
-              {u.by_specialty.length ? (
-                <ul className="flex flex-col gap-2.5">
-                  {u.by_specialty.map((s) => (
-                    <li key={s.specialty} className="text-[13px]">
-                      <span className="flex items-center gap-2">
-                        <span className="flex-1 [overflow-wrap:anywhere]">
-                          {s.specialty}
-                        </span>
-                        <b className="font-mono">
-                          {countLabel(s.consultations)}
-                        </b>
-                      </span>
-                      <span
-                        aria-hidden
-                        className="mt-1 block h-1.5 rounded-full bg-lilac"
-                      >
-                        <span
-                          className="block h-full rounded-full bg-mint"
-                          style={{
-                            width: `${Math.round((s.consultations * 100) / top)}%`,
-                          }}
-                        />
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-[13px] text-ink-3">Nothing to show yet.</p>
-              )}
+              <BarList
+                animate={false}
+                items={u.by_specialty.map((s) => ({
+                  key: s.specialty,
+                  label: s.specialty,
+                  value: s.consultations,
+                  text: countLabel(s.consultations),
+                }))}
+              />
             </Card>
           </div>
         </div>
