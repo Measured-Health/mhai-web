@@ -17,6 +17,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Usage for hospital admins, in counts only: consultations, active
+  clinicians, agreement rate, median review time, the confidence mix and
+  the specialty breakdown, with a CSV export made on the device.
 - Hospital settings: review turnaround, whether reviewers must share the
   specialty, two-step for clinicians, the idle timeout and "trust this
   device"; hospital sign-on and allowed email domains are shown read-only.
