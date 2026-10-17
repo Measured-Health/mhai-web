@@ -122,21 +122,3 @@ export function rangeStart(r: ActivityRange, now: number): string {
   const days = r === "7d" ? 7 : r === "30d" ? 30 : 365;
   return new Date(now - days * DAY).toISOString();
 }
-
-const CLOCK = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-});
-const DATE = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-});
-
-/** "09:41" today; "12 Sep 09:41" before; "" when unreadable. */
-export function eventClock(iso: string, now: number): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "";
-  const d = new Date(t);
-  const sameDay = new Date(now).toDateString() === d.toDateString();
-  return sameDay ? CLOCK.format(d) : `${DATE.format(d)} ${CLOCK.format(d)}`;
-}

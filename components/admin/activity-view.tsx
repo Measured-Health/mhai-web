@@ -14,11 +14,11 @@ import {
   ACTIVITY_TYPE_LABEL,
   actorName,
   describeEvent,
-  eventClock,
   rangeStart,
   typeLabel,
   type ActivityRange,
 } from "@/lib/admin/activity";
+import { eventClock } from "@/lib/time";
 import {
   CSV_MAX_ROWS,
   activityCsv,

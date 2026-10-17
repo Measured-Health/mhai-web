@@ -6,7 +6,8 @@ import {
   useStaff,
   useStaffActivity,
 } from "@/lib/admin-queries";
-import { actorName, describeEvent, eventClock } from "@/lib/admin/activity";
+import { actorName, describeEvent } from "@/lib/admin/activity";
+import { eventClock } from "@/lib/time";
 import { adminError } from "@/lib/admin/errors";
 import { inviteNote, policyBroken, sortName } from "@/lib/admin/staff";
 import { useNow } from "@/lib/hooks/use-now";

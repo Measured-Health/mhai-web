@@ -14,3 +14,21 @@ export function ageLabel(fromMs: number, now: number): string {
   if (m < 1440) return ago(fromMs, now);
   return `${Math.round(m / 1440)} d`;
 }
+
+const CLOCK = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const DATE = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+});
+
+/** "09:41" today; "12 Sep 09:41" before; "" when unreadable. */
+export function eventClock(iso: string, now: number): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const d = new Date(t);
+  const sameDay = new Date(now).toDateString() === d.toDateString();
+  return sameDay ? CLOCK.format(d) : `${DATE.format(d)} ${CLOCK.format(d)}`;
+}
