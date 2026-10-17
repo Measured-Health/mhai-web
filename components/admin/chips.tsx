@@ -2,9 +2,11 @@ import {
   CheckCircle2,
   Clock,
   Flag,
+  Hourglass,
   ShieldAlert,
   TriangleAlert,
   UserX,
+  UsersRound,
 } from "lucide-react";
 import type { StaffOut, StaffRole } from "@/lib/api/admin-contract";
 import { FLAG_LABEL } from "@/lib/admin/activity";
@@ -59,6 +61,26 @@ export function FlagChip({ flag }: { flag: "policy" | "alert" }) {
     <Chip tone={flag === "alert" ? "bad" : "warn"}>
       <Icon aria-hidden className="size-3.5" />
       {FLAG_LABEL[flag]}
+    </Chip>
+  );
+}
+
+/** Fewer than 2 people can review it (R12). */
+export function ShortChip() {
+  return (
+    <Chip tone="warn">
+      <UsersRound aria-hidden className="size-3.5" />
+      Short
+    </Chip>
+  );
+}
+
+/** Waiting longer than the hospital's turnaround (R12). */
+export function OverdueChip({ hours }: { hours: number }) {
+  return (
+    <Chip tone="bad">
+      <Hourglass aria-hidden className="size-3.5" />
+      Over {hours} h
     </Chip>
   );
 }

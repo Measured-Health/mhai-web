@@ -17,6 +17,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Review oversight for hospital admins: corrections waiting with their
+  specialty, how long they've waited and how many people can review them;
+  specialties short of reviewers are flagged; remind the reviewers or
+  assign one. No clinical content is shown, and only clinicians can
+  approve or reject.
+
 - The hospital's activity log: sign-ins, consultations (specialty and
   confidence only), feedback, review decisions, account changes and flagged
   security events, with filters and a CSV export made on the device.
