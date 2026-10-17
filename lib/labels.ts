@@ -69,8 +69,6 @@ export const FORBIDDEN_TERMS = [
   "roles_changed",
   "specialty_changed",
   "reviewer_changed",
-  "deactivated",
-  "reactivated",
   "password_reset_sent",
   "mfa_reset",
   "mfa_reminder_sent",

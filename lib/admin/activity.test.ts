@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { ADMIN_NOW as NOW, makeEvent } from "@/tests/admin";
+import { FORBIDDEN_TERMS, RESULT_LABEL, STAGES } from "../labels";
+import { ROLE_LABEL, SIGN_IN_LABEL, STAFF_FILTERS, STAFF_STATE } from "./staff";
 import {
+  ACTIVITY_TYPE_LABEL,
+  FLAG_LABEL,
   actorName,
   describeEvent,
   eventClock,
@@ -152,5 +156,82 @@ describe("time", () => {
       eventClock(new Date(NOW - 3 * 86_400_000).toISOString(), NOW),
     ).toMatch(/^\d{1,2} [A-Z][a-z]{2} \d{2}:\d{2}$/);
     expect(eventClock("not a date", NOW)).toBe("");
+  });
+});
+
+const KINDS = [
+  "signed_in",
+  "signed_in_without_mfa",
+  "sign_in_locked",
+  "consultation_run",
+  "result_agreed",
+  "correction_suggested",
+  "correction_approved",
+  "correction_rejected",
+  "correction_withdrawn",
+  "invite_sent",
+  "invite_cancelled",
+  "invite_accepted",
+  "roles_changed",
+  "specialty_changed",
+  "reviewer_changed",
+  "deactivated",
+  "reactivated",
+  "removed",
+  "password_reset_sent",
+  "mfa_reset",
+  "mfa_reminder_sent",
+  "settings_changed",
+  "reviewers_reminded",
+  "reviewer_assigned",
+  "policy_breach",
+];
+
+// Same matching rule as the e2e scan: upper-case terms are case-sensitive.
+const hits = (text: string) =>
+  FORBIDDEN_TERMS.filter((t) =>
+    new RegExp(`\\b${t}\\b`, t === t.toUpperCase() ? "" : "i").test(text),
+  );
+
+describe("every kind reads as plain words", () => {
+  it("gives a sentence with no backend code, for each kind", () => {
+    for (const kind of KINDS) {
+      const text = describeEvent(
+        makeEvent({
+          kind,
+          target: who("Dr. Eze"),
+          specialty: "Cardiology",
+          confidence: "high",
+          device: "Chrome on Windows",
+          count: 3,
+        }),
+      );
+      expect(text.length, kind).toBeGreaterThan(3);
+      expect(text, kind).not.toContain(kind);
+      expect(text, kind).not.toMatch(/_/);
+      expect(hits(text), kind).toEqual([]);
+    }
+  });
+
+  it("says 'Several' when the failed sign-in count is unknown", () => {
+    expect(
+      describeEvent(
+        makeEvent({ kind: "sign_in_locked", target: who("Dr. Bello") }),
+      ),
+    ).toBe("Several failed sign-ins for Dr. Bello · account locked");
+  });
+
+  it("keeps every visible label free of forbidden terms", () => {
+    const shown = [
+      ...Object.values(RESULT_LABEL),
+      ...STAGES.map((s) => s.label),
+      ...Object.values(STAFF_STATE).map((s) => s.label),
+      ...STAFF_FILTERS.map((f) => f.label),
+      ...Object.values(ROLE_LABEL),
+      ...Object.values(SIGN_IN_LABEL),
+      ...Object.values(ACTIVITY_TYPE_LABEL),
+      ...Object.values(FLAG_LABEL),
+    ];
+    for (const text of shown) expect(hits(text), text).toEqual([]);
   });
 });
