@@ -38,7 +38,9 @@ export function BarList({
   const drawn = (i: BarItem) =>
     !i.hidden && i.value !== null && Number.isFinite(i.value);
   const top =
-    max ?? Math.max(1, ...items.map((i) => (drawn(i) ? i.value! : 0)));
+    max !== undefined && Number.isFinite(max) && max > 0
+      ? max
+      : Math.max(1, ...items.map((i) => (drawn(i) ? i.value! : 0)));
   return (
     <ul aria-label={label} className="flex flex-col gap-2.5">
       {items.map((i) => (

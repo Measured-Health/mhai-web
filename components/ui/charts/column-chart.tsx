@@ -45,7 +45,7 @@ export function ColumnChart({
 }) {
   const [asTable, setAsTable] = useState(false);
   const [active, setActive] = useState(0);
-  const [focused, setFocused] = useState<number | null>(null);
+  const [focused, setFocused] = useState<string | null>(null);
   const refs = useRef<(HTMLLIElement | null)[]>([]);
   const titleId = useId();
   const summaryId = useId();
@@ -57,7 +57,8 @@ export function ColumnChart({
   const last = columns.length - 1;
   // The data can shrink under a live chart (period change, kept-alive route).
   const current = Math.min(active, Math.max(0, last));
-  const shown = focused !== null && focused <= last ? focused : null;
+  // Keyed, so a data swap that drops the focused column drops its caption.
+  const shown = columns.find((c) => c.key === focused) ?? null;
   // A hidden route fires no blur; don't come back to a stale caption.
   useLayoutEffect(() => () => setFocused(null), []);
 
@@ -157,7 +158,7 @@ export function ColumnChart({
                 onKeyDown={(e) => move(e, i)}
                 onFocus={() => {
                   setActive(i);
-                  setFocused(i);
+                  setFocused(c.key);
                 }}
                 onBlur={() => setFocused(null)}
                 className="flex h-full min-w-0 flex-1 flex-col items-center justify-end rounded-t-sm focus-visible:outline-2 focus-visible:outline-mint-deep"
@@ -189,16 +190,22 @@ export function ColumnChart({
             aria-hidden
             className="mt-1 flex justify-between gap-2 text-[11px] text-ink-3"
           >
-            <span>{columns[0]!.label}</span>
+            <span className="min-w-0 [overflow-wrap:anywhere]">
+              {columns[0]!.label}
+            </span>
             {columns.length > 2 && (
-              <span className="hidden sm:inline">
+              <span className="hidden sm:inline min-w-0 [overflow-wrap:anywhere]">
                 {columns[Math.floor(last / 2)]!.label}
               </span>
             )}
-            {last > 0 && <span>{columns[last]!.label}</span>}
+            {last > 0 && (
+              <span className="min-w-0 [overflow-wrap:anywhere]">
+                {columns[last]!.label}
+              </span>
+            )}
           </div>
           <p aria-hidden className="mt-1 min-h-5 text-[12.5px] text-ink-2">
-            {shown !== null ? describe(columns[shown]!) : ""}
+            {shown ? describe(shown) : ""}
           </p>
           {marked && (
             <p className="mt-1 flex items-center gap-1.5 text-[12px] text-ink-2">

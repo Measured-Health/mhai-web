@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Activity } from "react";
 import { describe, expect, it } from "vitest";
 import { BarList } from "./bar-list";
 import { ColumnChart, type Column } from "./column-chart";
@@ -111,6 +112,37 @@ const chart = (columns = COLUMNS) =>
     />,
   );
 
+describe("BarList edge cases", () => {
+  it("ignores an unusable max", () => {
+    for (const max of [NaN, 0, -5, Infinity]) {
+      const { unmount } = render(
+        <BarList
+          label="L"
+          max={max}
+          items={[{ key: "a", label: "A", value: 5, text: "5" }]}
+        />,
+      );
+      expect(
+        bars(screen.getByRole("list", { name: "L" }))[0]?.style.width,
+      ).toBe("100%");
+      unmount();
+    }
+  });
+
+  it("copes with only hidden items", () => {
+    render(
+      <BarList
+        label="L"
+        items={[{ key: "a", label: "A", value: 2, text: "2", hidden: true }]}
+      />,
+    );
+    const list = screen.getByRole("list", { name: "L" });
+    expect(list).toHaveTextContent("AFewer than 5");
+    expect(list.innerHTML).not.toContain("NaN");
+    expect(list.querySelector("[aria-hidden]")).toBeNull();
+  });
+});
+
 describe("ColumnChart", () => {
   it("has a title, a text summary and a name for every column", () => {
     chart();
@@ -196,7 +228,7 @@ describe("ColumnChart", () => {
     expect(items.filter((li) => li.tabIndex === 0)).toHaveLength(1);
   });
 
-  it("clears the caption when focus leaves (F2)", async () => {
+  it("clears the caption when focus leaves", async () => {
     chart();
     await userEvent.tab();
     await userEvent.tab();
@@ -207,6 +239,60 @@ describe("ColumnChart", () => {
     expect(
       screen.queryByText("12 Oct: 7 alerts", { selector: "p" }),
     ).toBeNull();
+  });
+
+  it("has no stale caption after a hidden route comes back (F2)", async () => {
+    const ui = (mode: "visible" | "hidden") => (
+      <Activity mode={mode}>
+        <ColumnChart
+          title="Alerts over time"
+          columns={COLUMNS}
+          summary="s"
+          valueText={(n) => `${n} alerts`}
+          headers={["Day", "Alerts"]}
+        />
+      </Activity>
+    );
+    const { rerender } = render(ui("visible"));
+    await userEvent.tab();
+    await userEvent.tab();
+    expect(
+      screen.getByText("12 Oct: 7 alerts", { selector: "p" }),
+    ).toBeVisible();
+    rerender(ui("hidden"));
+    rerender(ui("visible"));
+    expect(
+      screen.queryByText("12 Oct: 7 alerts", { selector: "p" }),
+    ).toBeNull();
+  });
+
+  it("drops the caption when a data swap removes the focused column", async () => {
+    const { rerender } = chart();
+    await userEvent.tab();
+    await userEvent.tab();
+    rerender(
+      <ColumnChart
+        title="Alerts over time"
+        columns={[{ key: "x", label: "1 Nov", value: 2 }]}
+        summary="s"
+        valueText={(n) => `${n} alerts`}
+        headers={["Day", "Alerts"]}
+      />,
+    );
+    expect(
+      screen.queryByText("12 Oct: 7 alerts", { selector: "p" }),
+    ).toBeNull();
+  });
+
+  it("draws all-zero columns without NaN heights", () => {
+    chart(COLUMNS.map((c) => ({ ...c, value: 0, mark: null })));
+    for (const li of screen.getAllByRole("listitem"))
+      expect(li.innerHTML).not.toContain("NaN");
+  });
+
+  it("writes one axis label for a single column", () => {
+    chart([{ key: "1", label: "12 Oct", value: 4 }]);
+    expect(screen.getAllByText("12 Oct", { selector: "span" })).toHaveLength(1);
   });
 
   it("has a phone layout: a shorter plot, end dates only and a 44px toggle", () => {
