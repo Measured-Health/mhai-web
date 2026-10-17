@@ -53,6 +53,23 @@ or rejected with a reason if its "Why?" contains the word "unsure". The
 bell in the top bar keeps this session's decisions. Like the rest of the
 demo, all of it is in memory only.
 
+**Hospital admin.** Sign in with the hospital admin sample (Grace Nwosu) to
+land on **Staff** for Havana Hospital: 13 synthetic people, including one
+who hasn't set up two-step, a waiting invite, an expired one and a
+deactivated account. Invite people (one or a pasted list), and open anyone
+to change their roles, specialty or review rights, send a password reset,
+reset two-step, deactivate, reactivate or remove them. Removing someone (or
+cancelling an invite) needs your own two-step code (in the demo, `123456`).
+You can't do that to yourself or to the last hospital admin. **Hospital
+settings**, **Usage** and **Activity** (with **Review oversight**) are in
+the same sidebar group, and CSV exports are made on your device. The
+medical director sample (Dr. Obi) is a clinician and a hospital admin, so
+they see both sides. Every hospital admin must use two-step: the new
+hospital admin sample (Chike Okoro) accepts the terms, sets a password and
+sets up two-step (code `123456`) before reaching Staff. None of the admin
+screens shows question text, results or patient details, and like the rest
+of the demo it is all in memory only.
+
 ### Share the demo
 
 The demo runs on sample data (`NEXT_PUBLIC_USE_MOCK=true`). A ribbon on
@@ -66,10 +83,13 @@ The demo starts at a sign-in page (sample accounts, memory only, so a
 reload signs you out). Any email and password works. The page lists sample
 accounts you can fill in with one tap: a clinician who signs straight in, a
 clinician with two-step (code `123456`, or a real authenticator app using
-the secret shown in the demo), a new account (first sign-in), a hospital
-admin (the 403 page) and a locked account. The password `wrong` counts
-down to a lock, and "Continue with hospital account" signs in through the
-demo's hospital sign-on.
+the secret shown in the demo), a new account (first sign-in), a new
+hospital admin (first sign-in, with two-step required), a hospital admin
+(Staff, settings, usage and activity; no clinical screens), a medical
+director (clinician and hospital admin: both sides), a platform admin (the
+403 page) and a locked account. The password `wrong` counts down to a lock,
+and "Continue with hospital account" signs in through the demo's hospital
+sign-on.
 
 - **On your machine:** `NEXT_PUBLIC_USE_MOCK=true npm run build && npx next start`
   (the flag is read at build time, so it must be set for the build).

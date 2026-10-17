@@ -11,9 +11,11 @@ All notable changes to this project are documented here. The format follows
 - The 403 page is now only for Measured Health platform admin and auditor
   accounts, and points them to the platform admin app. Hospital admins use
   the hospital admin side instead.
-- The demo's sign-in page lists a hospital admin, a medical director
-  (clinician and hospital admin) and a platform admin (the 403 page), and a
-  new hospital admin who sees the first sign-in steps.
+- The demo's sign-in page lists a hospital admin (Grace Nwosu), a medical
+  director (Dr. Obi, clinician and hospital admin), a platform admin (the
+  403 page), and a new hospital admin (Chike Okoro) who accepts the terms,
+  sets a password and sets up two-step before reaching Staff. In the demo,
+  removing staff takes the code `123456`.
 
 ### Added
 
@@ -123,6 +125,17 @@ All notable changes to this project are documented here. The format follows
   - Prettier, Node version pin, Dependabot, CODEOWNERS;
   - PR and issue templates, `SECURITY.md`, `CONTRIBUTING.md`, ADRs and an
     agent guide.
+
+### Security
+
+- Removing a staff member (or cancelling an invite) needs the hospital
+  admin's own two-step code or a backup code; a wrong code removes no one.
+- Every hospital admin must use two-step verification. An admin without it
+  is sent to the setup step before any page, and the app's server refuses
+  hospital admin requests from a session without two-step.
+- The app's server forwards hospital admin requests only for hospital
+  admins, and clinical requests only for clinicians, each only after first
+  sign-in.
 
 ### Fixed
 

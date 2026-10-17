@@ -113,5 +113,31 @@ export async function openReview(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
+/** From a signed-in screen: opens a Hospital admin page (from the menu on phones). */
+export async function openAdmin(
+  page: Page,
+  name: "Staff" | "Hospital settings" | "Activity" | "Usage",
+) {
+  if (isMobile(page))
+    await page.getByRole("button", { name: "Open menu" }).click();
+  await page
+    .getByRole("link", { name, exact: true })
+    .filter({ visible: true })
+    .click();
+}
+
+/**
+ * Types a 6-digit two-step code into the code boxes (inside `scope`, if
+ * given). The sixth digit submits on its own.
+ */
+export async function typeCode(
+  page: Page,
+  code: string,
+  scope: Pick<Page, "getByLabel"> = page,
+) {
+  await scope.getByLabel("Digit 1 of 6").click();
+  await page.keyboard.type(code);
+}
+
 /** The demo's sample logins (lib/auth/mock.ts). */
 export { DEMO_EMAILS } from "../../lib/auth/mock";

@@ -20,4 +20,20 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(/\*\*Review corrections\*\* in the sidebar/);
     expect(readme).toMatch(/contains the word "unsure"/);
   });
+
+  it("documents the hospital admin demo and the 403 sample", () => {
+    expect(readme).toMatch(
+      /\*\*Hospital admin\.\*\* Sign in with the hospital admin sample/,
+    );
+    expect(readme).toMatch(/a platform admin \(the\s+403 page\)/);
+    expect(readme).not.toMatch(/a hospital\s+admin \(the\s+403 page\)/);
+  });
+
+  it("says removing staff needs the admin's two-step code, and every admin needs two-step", () => {
+    expect(readme).toMatch(
+      /needs\s+your\s+own\s+two-step\s+code\s+\(in\s+the\s+demo,\s+`123456`\)/,
+    );
+    expect(readme).toMatch(/Every\s+hospital\s+admin\s+must\s+use\s+two-step/);
+    expect(readme).toMatch(/a\s+new\s+hospital\s+admin\s+\(first\s+sign-in/);
+  });
 });
