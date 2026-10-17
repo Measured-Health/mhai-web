@@ -5,6 +5,12 @@ import {
   MOCK_CODE,
   MOCK_TOTP_SECRET,
 } from "@/lib/auth/mock";
+import {
+  createMockAuthClient,
+  createStepUp,
+  MOCK_NEW_BACKUP_CODES,
+} from "@/lib/auth/mock";
+import { createMockAdmin } from "./mock-admin";
 import { totp } from "@/lib/auth/totp";
 import { ADMIN_NOW, mockAdminAs } from "@/tests/admin";
 import { ApiError } from "./errors";
@@ -338,5 +344,93 @@ describe("removing staff needs a two-step code", () => {
   it("works for the hospital admin too", async () => {
     const a = mockAdminAs(DEMO_EMAILS.hospitalAdmin);
     expect(await rm(a, GOOD)).toBe("ok");
+  });
+
+  it("a refused request does not spend a backup code (self_change, last_admin)", async () => {
+    const backup = { backupCode: MOCK_BACKUP_CODES[2]! };
+    const a = director();
+    expect(await code(a.removeStaff("s-obi", backup, KEY))).toBe(
+      "403 self_change",
+    );
+    const b = mockAdminAs(null);
+    await b.staffAction("s-nwosu", "deactivate");
+    expect(await code(b.removeStaff("s-obi", backup, KEY))).toBe(
+      "409 last_admin",
+    );
+    expect(await code(b.removeStaff("s-eze", backup, KEY))).toBe("ok");
+  });
+
+  it("shares backup codes with sign-in", async () => {
+    const stepUp = createStepUp(() => ADMIN_NOW);
+    const mk = () =>
+      createMockAdmin({
+        now: () => ADMIN_NOW,
+        me: async () => DEMO_EMAILS.director,
+        delayMs: 0,
+        stepUp,
+      });
+    stepUp.takeBackup(MOCK_BACKUP_CODES[0]!); // spent at sign-in
+    expect(
+      await code(
+        mk().removeStaff("s-eze", { backupCode: MOCK_BACKUP_CODES[0]! }, KEY),
+      ),
+    ).toBe("403 mfa_invalid");
+    stepUp.setBackupCodes(MOCK_NEW_BACKUP_CODES); // regenerated
+    expect(
+      await code(
+        mk().removeStaff("s-eze", { backupCode: MOCK_BACKUP_CODES[1]! }, KEY),
+      ),
+    ).toBe("403 mfa_invalid");
+    expect(
+      await code(
+        mk().removeStaff(
+          "s-eze",
+          { backupCode: MOCK_NEW_BACKUP_CODES[0]! },
+          KEY,
+        ),
+      ),
+    ).toBe("ok");
+  });
+
+  it("a code spent on removal lowers the signed-in backup count", async () => {
+    const stepUp = createStepUp(() => ADMIN_NOW);
+    const auth = createMockAuthClient({ now: () => ADMIN_NOW, stepUp });
+    await auth.signIn(DEMO_EMAILS.director, "anything");
+    const left = (await auth.getSession())!.user.backupCodesLeft!;
+    const a = createMockAdmin({
+      now: () => ADMIN_NOW,
+      me: async () => DEMO_EMAILS.director,
+      delayMs: 0,
+      stepUp,
+    });
+    await a.removeStaff("s-eze", { backupCode: MOCK_BACKUP_CODES[0]! }, KEY);
+    expect((await auth.getSession())!.user.backupCodesLeft).toBe(left - 1);
+  });
+
+  it("accepts a lowercase, dash-less backup code and a code with spaces", async () => {
+    const lower = MOCK_BACKUP_CODES[3]!.replace("-", "").toLowerCase();
+    expect(await rm(director(), { backupCode: lower })).toBe("ok");
+    expect(await rm(director(), { mfaCode: " 123 456 " })).toBe("ok");
+    expect(await rm(director(), { mfaCode: "abc123456" })).toBe(
+      "403 mfa_invalid",
+    );
+  });
+
+  it("the lockout is per admin and ends after a while", async () => {
+    let t = ADMIN_NOW;
+    const stepUp = createStepUp(() => t);
+    const as = (email: string) =>
+      createMockAdmin({
+        now: () => t,
+        me: async () => email,
+        delayMs: 0,
+        stepUp,
+      });
+    const d = as(DEMO_EMAILS.director);
+    for (let i = 0; i < 5; i++) await rm(d, { mfaCode: "000000" });
+    expect(await rm(d, GOOD)).toBe("429 mfa_locked");
+    expect(await rm(as(DEMO_EMAILS.hospitalAdmin), GOOD)).toBe("ok");
+    t += 16 * 60_000;
+    expect(await rm(d, GOOD)).toBe("ok");
   });
 });

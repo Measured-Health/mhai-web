@@ -34,6 +34,75 @@ export const MOCK_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
 const LOCK_MS = 15 * 60_000;
 const MAX_TRIES = 5;
 
+export type StepUpResult = "ok" | "invalid" | "locked";
+
+/**
+ * The demo's two-step codes, shared by sign-in and by removing staff, so a
+ * backup code spent in one place is spent everywhere, and regenerated codes
+ * replace the old ones. Wrong tries are counted per person and lock for a while.
+ */
+export interface StepUp {
+  /** A current authenticator code (or the demo code). */
+  digitsOk(code: string): Promise<boolean>;
+  /** Uses up a backup code if it is current; false if not. */
+  takeBackup(code: string): boolean;
+  setBackupCodes(codes: string[]): void;
+  /** Called after a backup code is used. */
+  onBackupSpent?: () => void;
+  /** Checks a code for `email`, counting wrong tries; locks after five. */
+  check(
+    email: string | null,
+    auth: { mfaCode: string } | { backupCode: string },
+  ): Promise<StepUpResult>;
+}
+
+export function createStepUp(now: () => number = () => Date.now()): StepUp {
+  let backupLeft = new Set(MOCK_BACKUP_CODES);
+  const failures = new Map<string, number>();
+  const lockedUntil = new Map<string, number>();
+  const self: StepUp = {
+    async digitsOk(code) {
+      const digits = code.replace(/\s/g, "");
+      return (
+        digits === MOCK_CODE ||
+        (await verifyTotp(MOCK_TOTP_SECRET, digits, now()))
+      );
+    },
+    takeBackup(code) {
+      const c = normalizeBackupCode(code);
+      if (!backupLeft.delete(c)) return false;
+      self.onBackupSpent?.();
+      return true;
+    },
+    setBackupCodes(codes) {
+      backupLeft = new Set(codes);
+    },
+    async check(email, auth) {
+      const key = email?.toLowerCase() ?? "";
+      if ((lockedUntil.get(key) ?? 0) > now()) return "locked";
+      const ok =
+        "backupCode" in auth
+          ? self.takeBackup(auth.backupCode)
+          : await self.digitsOk(auth.mfaCode);
+      if (ok) {
+        failures.delete(key);
+        return "ok";
+      }
+      const n = (failures.get(key) ?? 0) + 1;
+      if (n >= MAX_TRIES) {
+        failures.delete(key);
+        lockedUntil.set(key, now() + LOCK_MS);
+      } else failures.set(key, n);
+      return "invalid";
+    },
+  };
+  return self;
+}
+
+let demoStepUp = createStepUp();
+/** The codes the running demo's sign-in uses; the sample hospital checks the same. */
+export const getDemoStepUp = (): StepUp => demoStepUp;
+
 const trigger = (login: string) =>
   login
     .toLowerCase()
@@ -174,11 +243,12 @@ function userFor(login: string, roles: Role[], mfaEnabled: boolean): User {
 /** The demo's sign-in: memory only (a reload signs you out), never stored. */
 export function createMockAuthClient({
   now = () => Date.now(),
-}: { now?: () => number } = {}): AuthClient {
+  stepUp,
+}: { now?: () => number; stepUp?: StepUp } = {}): AuthClient {
+  const codes = (stepUp ??= demoStepUp = createStepUp(now));
   let session: User | null = null;
   let steps: FirstStep[] = [];
   let pending: User | null = null;
-  let backupLeft = new Set(MOCK_BACKUP_CODES);
   const failures = new Map<string, number>();
   const lockedUntil = new Map<string, number>();
   let devices: Device[] = [];
@@ -210,12 +280,13 @@ export function createMockAuthClient({
   const strong = (pw: string) => {
     if (pw.length < 12) throw new AuthError("weak_password");
   };
-  const codeOk = async (code: string) => {
-    const digits = code.replace(/\D/g, "");
-    return (
-      digits === MOCK_CODE ||
-      (await verifyTotp(MOCK_TOTP_SECRET, digits, now()))
-    );
+  const codeOk = (code: string) => codes.digitsOk(code);
+  codes.onBackupSpent = () => {
+    if (session)
+      session = {
+        ...session,
+        backupCodesLeft: Math.max(0, (session.backupCodesLeft ?? 0) - 1),
+      };
   };
   const done = (step: FirstStep) => {
     steps = steps.filter((s) => s !== step);
@@ -274,9 +345,7 @@ export function createMockAuthClient({
     async verifyCode(code, { backup }) {
       if (!pending) throw new AuthError("mfa_expired");
       if (backup) {
-        const c = normalizeBackupCode(code);
-        if (!backupLeft.has(c)) throw new AuthError("mfa_invalid");
-        backupLeft.delete(c);
+        if (!codes.takeBackup(code)) throw new AuthError("mfa_invalid");
       } else if (!(await codeOk(code))) {
         throw new AuthError("mfa_invalid");
       }
@@ -318,7 +387,7 @@ export function createMockAuthClient({
 
     async startMfaSetup() {
       const u = requireSession();
-      backupLeft = new Set(MOCK_BACKUP_CODES);
+      codes.setBackupCodes(MOCK_BACKUP_CODES);
       return {
         // Authenticator apps list it as "MHAI Demo" over the email, so the
         // shared demo key is never mistaken for a real MHAI account.
@@ -337,7 +406,7 @@ export function createMockAuthClient({
 
     async regenerateBackupCodes() {
       const u = requireSession();
-      backupLeft = new Set(MOCK_NEW_BACKUP_CODES);
+      codes.setBackupCodes(MOCK_NEW_BACKUP_CODES);
       session = { ...u, backupCodesLeft: 10 };
       return [...MOCK_NEW_BACKUP_CODES];
     },

@@ -1,12 +1,10 @@
 import { getAuthClient } from "../auth/client";
-import { normalizeBackupCode } from "../auth/codes";
 import {
+  createStepUp,
   DEMO_EMAILS,
-  MOCK_BACKUP_CODES,
-  MOCK_CODE,
-  MOCK_TOTP_SECRET,
+  getDemoStepUp,
+  type StepUp,
 } from "../auth/mock";
-import { verifyTotp } from "../auth/totp";
 import { EMAIL_RE } from "../email";
 import type { AdminClient, StaffAction } from "./admin";
 import type {
@@ -32,7 +30,6 @@ const MIN = 60_000;
 const H = 60 * MIN;
 const D = 24 * H;
 const INVITE_MS = 7 * D;
-const MAX_CODE_TRIES = 5;
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const copy = <T>(v: T): T => structuredClone(v);
@@ -503,6 +500,7 @@ export function createMockAdmin({
   me: meOpt,
   delayMs = 150,
   twoStep,
+  stepUp,
 }: {
   now?: () => number;
   me?: () => Promise<string | null>;
@@ -513,6 +511,11 @@ export function createMockAdmin({
    * `me` is not given).
    */
   twoStep?: (email: string | null) => Promise<boolean>;
+  /**
+   * The two-step codes. By default the running demo's own (so a backup code
+   * spent at sign-in is spent here too); a fresh set when `me` is given.
+   */
+  stepUp?: StepUp;
 } = {}): AdminClient {
   let staff = seedStaff(now());
   let settings = seedSettings();
@@ -522,8 +525,8 @@ export function createMockAdmin({
     meOpt ??
     (async () => (await getAuthClient().getSession())?.user.email ?? null);
   let nextId = 1;
-  let wrongCodes = 0;
-  const usedBackup = new Set<string>();
+  const codes = (): StepUp =>
+    (stepUp ??= meOpt === undefined ? getDemoStepUp() : createStepUp(now));
   const hasTwoStep =
     twoStep ??
     (async (email: string | null) => {
@@ -593,23 +596,9 @@ export function createMockAdmin({
   /** The two-step gate for removing staff (403 mfa_required / mfa_invalid, 429 mfa_locked). */
   const checkCode = async (auth: StaffRemoveAuth) => {
     if (!(await hasTwoStep(await youEmail()))) fail(403, "mfa_required");
-    if (wrongCodes >= MAX_CODE_TRIES) fail(429, "mfa_locked");
-    let ok = false;
-    if ("backupCode" in auth) {
-      const c = normalizeBackupCode(auth.backupCode);
-      ok = MOCK_BACKUP_CODES.includes(c) && !usedBackup.has(c);
-      if (ok) usedBackup.add(c);
-    } else {
-      const digits = auth.mfaCode.replace(/\D/g, "");
-      ok =
-        digits === MOCK_CODE ||
-        (await verifyTotp(MOCK_TOTP_SECRET, digits, now()));
-    }
-    if (!ok) {
-      wrongCodes += 1;
-      fail(403, "mfa_invalid");
-    }
-    wrongCodes = 0;
+    const r = await codes().check(await youEmail(), auth);
+    if (r === "locked") fail(429, "mfa_locked");
+    if (r === "invalid") fail(403, "mfa_invalid");
   };
   const reply = async (s: StaffOut) => (await mark([s]))[0]!;
 
@@ -771,9 +760,9 @@ export function createMockAdmin({
     async removeStaff(id, auth) {
       await wait();
       const s = find(id);
-      await checkCode(auth);
       if (await isYou(s)) fail(403, "self_change");
       if (isLastAdmin(s)) fail(409, "last_admin");
+      await checkCode(auth);
       staff = staff.filter((x) => x.id !== id);
       await log(
         "admin",
