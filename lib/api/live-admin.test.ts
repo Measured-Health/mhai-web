@@ -168,4 +168,10 @@ describe("live admin client", () => {
     );
     expect(unauthorized).toHaveBeenCalledTimes(1);
   });
+
+  it("hands back the usage alerts block as the API sent it", async () => {
+    const body = { period: "this_month", alerts: { unavailable: true } };
+    reply(() => Response.json(body));
+    expect(await client().getUsage("this_month")).toEqual(body);
+  });
 });

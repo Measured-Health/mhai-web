@@ -10,8 +10,11 @@ import type { AdminClient, StaffAction } from "./admin";
 import type {
   ActivityEventOut,
   ActivityType,
+  ChangeOut,
+  GuardedOut,
   HospitalSettingsOut,
   InviteOut,
+  MeasureOut,
   OversightItemOut,
   SignInMethod,
   StaffIssue,
@@ -19,9 +22,11 @@ import type {
   StaffRemoveAuth,
   StaffRole,
   StaffStatus,
+  UsageAlertsOut,
   UsageOut,
   UsagePeriod,
 } from "./admin-contract";
+import type { AlertLocationOut } from "./alerts-contract";
 import { ApiError } from "./errors";
 
 export const MOCK_HOSPITAL = "Havana Hospital";
@@ -305,6 +310,233 @@ function periodRange(
   return { from: iso(now - 90 * D), to: iso(now) };
 }
 
+/** The usage alerts sample: switched on, switched off (null) or failing. */
+export type MockAlertsMode = "on" | "off" | "unavailable";
+
+const count = (value: number): GuardedOut => ({ value, suppressed: false });
+const hiddenCount = (): GuardedOut => ({ value: null, suppressed: true });
+const measure = (
+  value: number,
+  change: ChangeOut | null = null,
+): MeasureOut => ({
+  value,
+  suppressed: false,
+  change,
+});
+const up = (amount: number, previous: number): ChangeOut => ({
+  direction: "up",
+  amount,
+  previous,
+});
+const down = (amount: number, previous: number): ChangeOut => ({
+  direction: "down",
+  amount,
+  previous,
+});
+const ward = (name: string): AlertLocationOut => ({
+  kind: "admitted",
+  ward: name,
+  bed: null,
+});
+const CARDIOLOGY: AlertLocationOut = {
+  kind: "outpatient",
+  clinic: "Cardiology clinic",
+};
+const EMERGENCY: AlertLocationOut = { kind: "emergency" };
+
+type SeriesSeed = {
+  bucket: "day" | "week";
+  /** One per bucket from the period's first day. */
+  values: readonly number[];
+  /** Bucket index → about how many times the usual. */
+  unusual?: Readonly<Record<number, number>>;
+};
+type AlertsSeed = Omit<UsageAlertsOut, "series"> & { series: SeriesSeed };
+
+/**
+ * Written for 16 Oct 2026 (R12). The server's small-group rule is already
+ * applied: hidden groups are null, and where one group in a set is hidden,
+ * another is too, so neither can be worked out from the rest.
+ */
+const USAGE_ALERTS: Record<UsagePeriod, AlertsSeed> = {
+  this_month: {
+    critical_target_minutes: 15,
+    has_previous: true,
+    total: measure(128, up(35, 95)),
+    by_severity: {
+      critical: measure(17, up(42, 12)),
+      urgent: measure(46, up(21, 38)),
+      info: measure(65, up(44, 45)),
+    },
+    // None was unhandled on the same days last month: no percentage from 0.
+    unhandled: measure(9),
+    median_ack_minutes: measure(22, up(6, 16)),
+    median_ack_minutes_critical: measure(11, up(3, 8)),
+    critical_within_target: measure(0.71, down(17, 0.88)),
+    acknowledged_share: measure(0.82, down(3, 0.85)),
+    dismissed_share: measure(0.18, up(3, 0.15)),
+    dismiss_reasons: [
+      { reason: "not_relevant", count: count(9) },
+      { reason: "already_known", count: count(7) },
+      { reason: "wrong_patient", count: hiddenCount() },
+      { reason: "other", count: hiddenCount() },
+    ],
+    top_findings: [
+      { name: "Potassium", flag: "low", count: count(31) },
+      { name: "Sodium", flag: "low", count: count(24) },
+      { name: "Platelets", flag: "low", count: count(18) },
+      { name: null, flag: null, count: count(11) },
+      { name: "Haemoglobin", flag: "low", count: hiddenCount() },
+    ],
+    top_locations: [
+      { location: ward("Ward 3"), count: count(34) },
+      { location: EMERGENCY, count: count(29) },
+      { location: ward("Ward 5"), count: count(21) },
+      { location: null, count: count(8) },
+      { location: CARDIOLOGY, count: hiddenCount() },
+    ],
+    series: {
+      bucket: "day",
+      values: [6, 7, 5, 8, 6, 7, 9, 6, 7, 8, 6, 7, 8, 23, 7, 8],
+      unusual: { 13: 3.1 },
+    },
+    rising: [
+      {
+        kind: "finding",
+        name: "Potassium",
+        flag: "low",
+        count: 31,
+        previous: 9,
+      },
+      { kind: "location", location: ward("Ward 3"), count: 34, previous: 12 },
+    ],
+    worsening: { value: 0.71, previous: 0.88 },
+  },
+  last_month: {
+    critical_target_minutes: 15,
+    has_previous: true,
+    total: measure(182, up(7, 170)),
+    by_severity: {
+      critical: measure(22, down(12, 25)),
+      urgent: measure(70, up(6, 66)),
+      info: measure(90, up(14, 79)),
+    },
+    unhandled: measure(0),
+    median_ack_minutes: measure(16, down(2, 18)),
+    median_ack_minutes_critical: measure(8, down(1, 9)),
+    critical_within_target: measure(0.88, up(2, 0.86)),
+    acknowledged_share: measure(0.82, up(2, 0.8)),
+    dismissed_share: measure(0.18, down(2, 0.2)),
+    dismiss_reasons: [
+      { reason: "not_relevant", count: count(14) },
+      { reason: "already_known", count: count(11) },
+      // 2 is hidden, so 5 is hidden too: otherwise 2 could be worked out.
+      { reason: "wrong_patient", count: hiddenCount() },
+      { reason: "other", count: hiddenCount() },
+    ],
+    top_findings: [
+      { name: "Sodium", flag: "low", count: count(41) },
+      { name: "Platelets", flag: "low", count: count(33) },
+      { name: "Potassium", flag: "low", count: count(14) },
+      { name: null, flag: null, count: count(12) },
+      { name: "Glucose", flag: "high", count: count(9) },
+    ],
+    top_locations: [
+      { location: EMERGENCY, count: count(52) },
+      { location: ward("Ward 5"), count: count(40) },
+      { location: ward("Ward 3"), count: count(22) },
+      { location: null, count: count(10) },
+      { location: CARDIOLOGY, count: hiddenCount() },
+    ],
+    series: {
+      bucket: "day",
+      values: [
+        6, 7, 5, 6, 7, 6, 5, 6, 7, 6, 6, 7, 5, 6, 7, 6, 5, 6, 7, 6, 6, 7, 5, 6,
+        7, 6, 5, 6, 7, 5,
+      ],
+    },
+    rising: [],
+    worsening: null,
+  },
+  last_90_days: {
+    critical_target_minutes: 15,
+    has_previous: false,
+    total: measure(525),
+    by_severity: {
+      critical: measure(63),
+      urgent: measure(189),
+      info: measure(273),
+    },
+    unhandled: measure(9),
+    median_ack_minutes: measure(19),
+    median_ack_minutes_critical: measure(10),
+    critical_within_target: measure(0.8),
+    acknowledged_share: measure(0.82),
+    dismissed_share: measure(0.18),
+    dismiss_reasons: [
+      { reason: "not_relevant", count: count(40) },
+      { reason: "already_known", count: count(33) },
+      { reason: "wrong_patient", count: count(6) },
+      { reason: "other", count: count(12) },
+    ],
+    top_findings: [
+      { name: "Sodium", flag: "low", count: count(110) },
+      { name: "Platelets", flag: "low", count: count(86) },
+      { name: "Potassium", flag: "low", count: count(64) },
+      { name: null, flag: null, count: count(41) },
+      { name: "Glucose", flag: "high", count: count(30) },
+    ],
+    top_locations: [
+      { location: EMERGENCY, count: count(150) },
+      { location: ward("Ward 5"), count: count(118) },
+      { location: ward("Ward 3"), count: count(80) },
+      { location: null, count: count(34) },
+      { location: CARDIOLOGY, count: count(21) },
+    ],
+    series: {
+      bucket: "week",
+      values: [38, 41, 36, 40, 39, 42, 37, 44, 40, 43, 41, 45, 39],
+    },
+    rising: [],
+    worsening: null,
+  },
+};
+
+/** Buckets from the period's first day, never past its end (R12). */
+function seriesFor(
+  seed: SeriesSeed,
+  from: string,
+  to: string,
+): UsageAlertsOut["series"] {
+  const step = seed.bucket === "day" ? D : 7 * D;
+  const first = Date.parse(`${from.slice(0, 10)}T00:00:00.000Z`);
+  const end = Date.parse(to);
+  const points = seed.values.flatMap((total, i) => {
+    const t = first + i * step;
+    return t > end
+      ? []
+      : [
+          {
+            start: iso(t).slice(0, 10),
+            total,
+            usual_multiple: seed.unusual?.[i] ?? null,
+          },
+        ];
+  });
+  return { bucket: seed.bucket, points };
+}
+
+function alertsFor(
+  p: UsagePeriod,
+  range: { from: string; to: string },
+  mode: MockAlertsMode,
+): UsageOut["alerts"] {
+  if (mode === "off") return null;
+  if (mode === "unavailable") return { unavailable: true };
+  const { series, ...rest } = copy(USAGE_ALERTS[p]);
+  return { ...rest, series: seriesFor(series, range.from, range.to) };
+}
+
 type EventSeed = Partial<ActivityEventOut> &
   Pick<ActivityEventOut, "type" | "kind"> & { ago: number };
 
@@ -501,6 +733,7 @@ export function createMockAdmin({
   delayMs = 150,
   twoStep,
   stepUp,
+  alerts: alertsMode = "on",
 }: {
   now?: () => number;
   me?: () => Promise<string | null>;
@@ -516,6 +749,8 @@ export function createMockAdmin({
    * spent at sign-in is spent here too); a fresh set when `me` is given.
    */
   stepUp?: StepUp;
+  /** The usage alerts sample: on (default), switched off, or failing. */
+  alerts?: MockAlertsMode;
 } = {}): AdminClient {
   let staff = seedStaff(now());
   let settings = seedSettings();
@@ -804,7 +1039,13 @@ export function createMockAdmin({
 
     async getUsage(period) {
       await wait();
-      return { period, ...periodRange(period, now()), ...copy(USAGE[period]) };
+      const range = periodRange(period, now());
+      return {
+        period,
+        ...range,
+        ...copy(USAGE[period]),
+        alerts: alertsFor(period, range, alertsMode),
+      };
     },
 
     async listActivity(q) {

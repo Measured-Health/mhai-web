@@ -1,6 +1,12 @@
 import type { AdminClient } from "@/lib/api/admin";
-import type { ActivityEventOut, StaffOut } from "@/lib/api/admin-contract";
-import { createMockAdmin } from "@/lib/api/mock-admin";
+import type {
+  ActivityEventOut,
+  StaffOut,
+  UsageAlertsOut,
+  UsagePeriod,
+} from "@/lib/api/admin-contract";
+import { createMockAdmin, type MockAlertsMode } from "@/lib/api/mock-admin";
+import { DEMO_EMAILS } from "@/lib/auth/mock";
 
 /** The sample hospital's clock in tests: 16 Oct 2026, 10:00 UTC. */
 export const ADMIN_NOW = Date.UTC(2026, 9, 16, 10, 0, 0);
@@ -58,3 +64,22 @@ export const mockAdminAs = (email: string | null): AdminClient =>
 /** The same on the real clock, for screens (they read `Date.now()`). */
 export const screenAdminAs = (email: string | null): AdminClient =>
   createMockAdmin({ me: async () => email, delayMs: 0 });
+
+/** The sample hospital at ADMIN_NOW with its alerts on, off or failing. */
+export const mockAdminWith = (
+  alerts: MockAlertsMode,
+  email: string = DEMO_EMAILS.director,
+): AdminClient =>
+  createMockAdmin({
+    now: () => ADMIN_NOW,
+    me: async () => email,
+    delayMs: 0,
+    alerts,
+  });
+
+/** A period's sample alert numbers at ADMIN_NOW. */
+export async function sampleAlerts(
+  period: UsagePeriod = "this_month",
+): Promise<UsageAlertsOut> {
+  return (await mockAdminWith("on").getUsage(period)).alerts as UsageAlertsOut;
+}

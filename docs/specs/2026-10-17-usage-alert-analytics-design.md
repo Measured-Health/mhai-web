@@ -256,7 +256,10 @@ export interface LocationGroupOut {
 }
 
 export interface SeriesBucketOut {
-  /** The hospital's calendar day (or the week's first day), "YYYY-MM-DD". */
+  /**
+   * The hospital's calendar day, or the week's first day, "YYYY-MM-DD". Weeks start on
+   * the period's first day (not a fixed weekday); the last week may be partial.
+   */
   start: string;
   /** Hospital-wide; not suppressed. */
   total: number;
