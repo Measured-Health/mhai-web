@@ -82,7 +82,9 @@ describe("Toast pop-ups", () => {
     expect(screen.getByText("Critical patient alert")).toBeVisible();
     act(() =>
       screen
-        .getByRole("button", { name: "Hide pop-up: Critical patient alert" })
+        .getByRole("button", {
+          name: "Hide pop-up: Critical patient alert, Emeka Nnamdi · Platelets 62",
+        })
         .click(),
     );
     expect(screen.queryByText("Critical patient alert")).toBeNull();
@@ -230,5 +232,48 @@ describe("Toast pop-ups", () => {
     expect(screen.getByText("Plain")).toBeVisible();
     expect(screen.getByText("Crit 1")).toBeVisible();
     expect(document.querySelectorAll("[data-toast]")).toHaveLength(5);
+  });
+
+  it("clears every timer on unmount", () => {
+    vi.useFakeTimers();
+    const { unmount } = ui();
+    act(() => {
+      box.api.show(popup({ ms: 5000 }));
+      box.api.show(popup({ ms: 9000 }));
+    });
+    expect(vi.getTimerCount()).toBe(2);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cancels a toast's timer when it is dismissed", () => {
+    vi.useFakeTimers();
+    ui();
+    let id = 0;
+    act(() => {
+      id = box.api.show(popup({ ms: 5000 }));
+      box.api.show(popup({ ms: 9000 }));
+    });
+    expect(vi.getTimerCount()).toBe(2);
+    act(() => box.api.dismiss(id));
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it("tells same-title pop-ups apart by their body", () => {
+    ui();
+    act(() => {
+      box.api.show(popup({ body: "Halima Garba" }));
+      box.api.show(popup({ body: "Emeka Nnamdi" }));
+    });
+    expect(
+      screen.getByRole("button", {
+        name: "Hide pop-up: Urgent patient alert, Halima Garba",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "Hide pop-up: Urgent patient alert, Emeka Nnamdi",
+      }),
+    ).toBeVisible();
   });
 });

@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -68,6 +69,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const itemsRef = useRef<Item[]>([]);
   const seq = useRef(0);
 
+  // Nothing may fire, or keep patient text, after the provider is gone.
+  useEffect(() => {
+    const live = timers.current;
+    return () => {
+      for (const h of live.values()) clearTimeout(h);
+      live.clear();
+    };
+  }, []);
+
   // The live text belongs to one toast: it goes when that toast goes (A10).
   const remove = useCallback((gone: (i: Item) => boolean) => {
     const ids = new Set(itemsRef.current.filter(gone).map((i) => i.id));
@@ -94,15 +104,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       let next = [...itemsRef.current, { ...t, id }];
       // Over the cap: the oldest that can expire goes, then the oldest
       // persistent non-Critical. Never the new one, never a Critical (A11).
-      if (next.length > TOAST_MAX) {
+      while (next.length > TOAST_MAX) {
         const others = next.filter(
           (i) => i.id !== id && i.severity !== "critical",
         );
         const out = others.find((i) => i.ms !== null) ?? others[0];
-        if (out) {
-          remove((i) => i.id === out.id);
-          next = next.filter((i) => i.id !== out.id);
-        }
+        if (!out) break;
+        remove((i) => i.id === out.id);
+        next = next.filter((i) => i.id !== out.id);
       }
       itemsRef.current = next;
       setItems(next);
@@ -188,7 +197,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 {(action || t.ms === null) && (
                   <button
                     type="button"
-                    aria-label={`Hide pop-up: ${t.title}`}
+                    aria-label={`Hide pop-up: ${t.title}${t.body ? `, ${t.body}` : ""}`}
                     onClick={() => dismiss(t.id)}
                     className="-mr-2 -mt-2 grid size-11 shrink-0 place-items-center rounded-xl text-ink-3 hover:bg-bg focus-visible:outline-2 focus-visible:outline-mint-deep sm:size-8"
                   >
