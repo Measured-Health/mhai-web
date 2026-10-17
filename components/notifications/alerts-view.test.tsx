@@ -1,7 +1,11 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/errors";
+import { useQueryClient } from "@tanstack/react-query";
+import { CORRECTION_KEYS } from "@/lib/correction-queries";
+import { makeCorrection } from "@/tests/corrections";
+import type { CorrectionOut } from "@/lib/api/contract";
 import type { MockAlerts } from "@/lib/api/mock-alerts";
 import { MOCK_ALERT_EVERY_MS, createMockAlerts } from "@/lib/api/mock-alerts";
 import { ALERT_NOW, mockAlerts } from "@/tests/alerts";
@@ -16,8 +20,15 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace }),
   usePathname: () => "/notifications",
 }));
+const listMine = vi.hoisted(() =>
+  vi.fn(async (): Promise<CorrectionOut[]> => []),
+);
+vi.mock("@/lib/api/client", () => ({
+  getClient: () => ({ listMyCorrections: listMine }),
+}));
 import ClinicianLayout from "@/app/(clinical)/(clinician)/layout";
 import NotificationsPage from "@/app/(clinical)/(clinician)/notifications/page";
+import { DecisionsProvider } from "../corrections/decisions-provider";
 import { AlertsProvider, useAlerts } from "./alerts-provider";
 
 const list = () => screen.findByRole("list", { name: "Patient alerts" });
@@ -30,7 +41,33 @@ beforeEach(() => {
   push.mockClear();
   replace.mockClear();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+/** Shows what the page still has to focus, so a test can see it cleared. */
+function Probe() {
+  const a = useAlerts();
+  return <p data-testid="focus">{a?.focusId ?? "none"}</p>;
+}
+function Opener({ id }: { id: string }) {
+  const a = useAlerts();
+  return (
+    <button type="button" onClick={() => a?.openAlert(id)}>
+      open {id}
+    </button>
+  );
+}
+const withAlerts = (id: string) => (
+  <ToastProvider>
+    <AlertsProvider>
+      <Opener id={id} />
+      <Probe />
+      <NotificationsPage />
+    </AlertsProvider>
+  </ToastProvider>
+);
 
 describe("Notifications: Patient alerts", () => {
   it("lists new alerts newest first, with the source when there are two systems", async () => {
@@ -132,17 +169,20 @@ describe("Notifications: Patient alerts", () => {
     );
   });
 
-  it("says when alerts aren't switched on (R12)", async () => {
-    vi.spyOn(holder.client, "listAlerts").mockRejectedValue(
-      new ApiError(404, "not_found"),
-    );
-    renderWithAuth(<NotificationsPage />);
-    expect(
-      await screen.findByText(
-        "Patient alerts aren't switched on for your hospital yet",
-      ),
-    ).toBeVisible();
-  });
+  it.each([404, 403])(
+    "says when alerts aren't switched on (R12, %i)",
+    async (status) => {
+      vi.spyOn(holder.client, "listAlerts").mockRejectedValue(
+        new ApiError(status, "off"),
+      );
+      renderWithAuth(<NotificationsPage />);
+      expect(
+        await screen.findByText(
+          "Patient alerts aren't switched on for your hospital yet",
+        ),
+      ).toBeVisible();
+    },
+  );
 
   it("offers a retry when the alerts can't load", async () => {
     vi.spyOn(holder.client, "listAlerts")
@@ -158,10 +198,13 @@ describe("Notifications: Patient alerts", () => {
   });
 
   it("never reads a failing list as no alerts", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.spyOn(holder.client, "listAlerts").mockRejectedValue(
       new ApiError(500, "error"),
     );
     renderWithAuth(<NotificationsPage />);
+    // Let the 5xx retries run out.
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
     expect(
       await screen.findByText("Couldn't load patient alerts"),
     ).toBeVisible();
@@ -203,6 +246,124 @@ describe("Notifications: Patient alerts", () => {
     await user.click(screen.getByRole("button", { name: "Handled" }));
     await shows(1);
     expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it("dims and locks the old list while a filter change loads", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(<NotificationsPage />);
+    await shows(6);
+    vi.spyOn(holder.client, "listAlerts").mockReturnValue(
+      new Promise(() => {}),
+    );
+    await user.click(screen.getByRole("button", { name: "Handled" }));
+    const l = await list();
+    await waitFor(() => expect(l).toHaveAttribute("inert"));
+    expect(l).toHaveClass("opacity-60");
+    expect(screen.getByText("Updating alerts")).toBeInTheDocument();
+    expect(screen.queryByText("6 alerts shown")).toBeNull();
+  });
+
+  it("shows the tab counts for alerts and decisions", async () => {
+    const decided = {
+      ...makeCorrection({ id: "c1" }),
+      status: "approved" as const,
+      decided_by: {
+        display_name: "Dr. Bello",
+        full_name: null,
+        specialty: null,
+        hospital: null,
+      },
+      decided_at: new Date().toISOString(),
+    };
+    let decide = false;
+    listMine.mockImplementation(async () => [
+      decide ? decided : makeCorrection({ id: "c1" }),
+    ]);
+    function Refresh() {
+      const qc = useQueryClient();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            decide = true;
+            void qc.invalidateQueries({ queryKey: CORRECTION_KEYS.mine });
+          }}
+        >
+          refresh decisions
+        </button>
+      );
+    }
+    const user = userEvent.setup();
+    renderWithAuth(
+      <ToastProvider>
+        <DecisionsProvider>
+          <AlertsProvider>
+            <Refresh />
+            <NotificationsPage />
+          </AlertsProvider>
+        </DecisionsProvider>
+      </ToastProvider>,
+    );
+    expect(
+      await screen.findByRole("link", { name: "Patient alerts · 6 new" }),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Corrections" })).toBeVisible();
+    await waitFor(() => expect(listMine).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "refresh decisions" }));
+    expect(
+      await screen.findByRole("link", { name: "Corrections · 1 new" }),
+    ).toBeVisible();
+  });
+
+  it("clears the request for an alert that isn't in the list", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(withAlerts("al-missing"));
+    await shows(6);
+    await user.click(screen.getByRole("button", { name: "open al-missing" }));
+    expect(push).toHaveBeenCalledWith("/notifications");
+    await waitFor(() =>
+      expect(screen.getByTestId("focus")).toHaveTextContent("none"),
+    );
+  });
+
+  it("clears the request when the list can't load", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(holder.client, "listAlerts").mockRejectedValue(
+      new ApiError(403, "off"),
+    );
+    renderWithAuth(withAlerts("al-105"));
+    expect(
+      await screen.findByText(
+        "Patient alerts aren't switched on for your hospital yet",
+      ),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "open al-105" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("focus")).toHaveTextContent("none"),
+    );
+  });
+
+  it("scrolls to the alert without animating", async () => {
+    const user = userEvent.setup();
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      renderWithAuth(withAlerts("al-105"));
+      await shows(6);
+      await user.click(screen.getByRole("button", { name: "Dismissed" }));
+      await shows(1);
+      await user.click(screen.getByRole("button", { name: "open al-105" }));
+      await waitFor(() =>
+        expect(scroll).toHaveBeenCalledWith({
+          block: "center",
+          behavior: "auto",
+        }),
+      );
+    } finally {
+      // jsdom has no scrollIntoView of its own.
+      // @ts-expect-error restoring the missing method
+      delete Element.prototype.scrollIntoView;
+    }
   });
 
   it("sends an admin-only person home without loading alerts", async () => {

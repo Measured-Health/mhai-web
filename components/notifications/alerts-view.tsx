@@ -69,14 +69,21 @@ export function AlertsView() {
   // Bring the alert a pop-up or the bell asked for into view, once the
   // latest list is in.
   useEffect(() => {
-    if (!focusId || !q.isSuccess || q.isFetching) return;
+    if (!focusId) return;
+    // A failed list has nothing to show; don't leave the request hanging.
+    if (q.isError) {
+      focusDone?.();
+      return;
+    }
+    if (!q.isSuccess || q.isFetching) return;
     const el = document.getElementById(alertDomId(focusId));
     if (el) {
-      el.scrollIntoView?.({ block: "center" });
+      // "auto" never animates, so reduced motion is respected.
+      el.scrollIntoView?.({ block: "center", behavior: "auto" });
       el.focus();
     }
     focusDone?.();
-  }, [focusId, q.isSuccess, q.isFetching, alerts, focusDone]);
+  }, [focusId, q.isSuccess, q.isError, q.isFetching, alerts, focusDone]);
 
   return (
     <>
@@ -149,9 +156,11 @@ export function AlertsView() {
           </div>
         )}
         <div aria-live="polite" className="sr-only">
-          {q.isSuccess
-            ? `${alerts.length} ${alerts.length === 1 ? "alert" : "alerts"} shown`
-            : ""}
+          {q.isPlaceholderData
+            ? "Updating alerts"
+            : q.isSuccess
+              ? `${alerts.length} ${alerts.length === 1 ? "alert" : "alerts"} shown`
+              : ""}
         </div>
         {q.isPending ? (
           <div aria-busy="true" className="mt-4 flex flex-col gap-3">
@@ -191,7 +200,8 @@ export function AlertsView() {
           <ul
             aria-label="Patient alerts"
             aria-busy={q.isFetching || undefined}
-            className="mt-4 flex flex-col gap-3"
+            inert={q.isPlaceholderData || undefined}
+            className={`mt-4 flex flex-col gap-3 ${q.isPlaceholderData ? "opacity-60" : ""}`}
           >
             {alerts.map((a) => (
               <li key={a.id}>

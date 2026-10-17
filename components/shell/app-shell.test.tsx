@@ -165,9 +165,7 @@ describe("AppShell by role", () => {
     expect(screen.getByText("decisions off")).toBeInTheDocument();
     await keys();
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: /^Notifications/ }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Notifications/ })).toBeNull();
     expect(push).not.toHaveBeenCalled();
   });
 });
