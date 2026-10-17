@@ -32,7 +32,12 @@ alerts and MHAI's suggestions relate.
   confidence, specialty, age band, sex, urgency, review outcome. Available now.
 - **EMR/EHR records** (after the integration): recorded diagnoses, labs, vitals, medications.
 - **Patient alerts** (Plan 5a): findings, severity, how they were handled and how fast.
-- All analysis runs on the backend; the browser receives results only.
+- All analysis runs on the backend, on MHAI's canonical, normalised model (ADR 0003), so the
+  same views work for every hospital and every connected EMR. The browser receives results
+  only.
+- **Source** is a filter when a hospital has more than one connected system; records with
+  codes that couldn't be standardised are counted under "Not standardised" rather than
+  dropped or guessed.
 
 ## 4. The Analysis page
 
