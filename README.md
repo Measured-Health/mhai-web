@@ -86,8 +86,9 @@ sealed in an `httpOnly` cookie and never reaches browser JavaScript. Set:
 
 - `MHAI_API_URL`: the API base, without `/api/v1`;
 - `SESSION_SECRET`: at least 32 characters (`openssl rand -base64 48`);
-- `NEXT_PUBLIC_ADMIN_APP_URL` (optional): where the 403 page's "Go to
-  admin app" points.
+- `NEXT_PUBLIC_ADMIN_APP_URL` (optional): where the 403 page's "Go to the
+  platform admin app" points. Only platform admin and auditor accounts get
+  that page; hospital admins use the hospital admin side of this app.
 
 Live mode switches every feature on, including hospital sign-on, password
 reset, devices, "trust this device", terms and backup codes. It uses an

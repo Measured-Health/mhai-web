@@ -29,6 +29,10 @@ describe("labels", () => {
     ])
       expect(FORBIDDEN_TERMS).toContain(code);
   });
+  it("forbids the two-step codes a staff removal can return", () => {
+    for (const code of ["mfa_required", "mfa_invalid", "mfa_locked"])
+      expect(FORBIDDEN_TERMS).toContain(code);
+  });
   it("lists the six analysing steps in order", () => {
     expect(STAGES.map((s) => s.label)).toEqual([
       "Protecting patient privacy",

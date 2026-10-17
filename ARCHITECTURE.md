@@ -128,12 +128,20 @@ flowchart TB
 - **Roles combine in the clinical app:** a clinician who is also a
   hospital admin sees both sides in one sidebar. The "Hospital admin"
   group only appears with that role.
+- **A hospital admin who isn't a clinician** signs in straight to the
+  hospital admin side (Staff). Clinical screens redirect them there, and
+  the server refuses them every clinical call.
+- **Every hospital admin has two-step on:** one who signs in without it
+  must set it up before reaching any page, and the server refuses the
+  hospital admin calls until it is on.
 - **Hospital admins are scoped to their hospital:** every staff and
   usage call is filtered by the hospital in the session. The hospital
   admin side never shows question text, results or patient details.
-- **Wrong-app 403s:** a platform admin signing in to the clinical app, or
-  a clinician or hospital admin signing in to the platform admin app, gets
-  a 403 page that links to the right app.
+- **Wrong-app 403s:** only a platform account (platform admin or
+  auditor) signing in to this app gets the 403 page, which links to the
+  platform admin app. Hospital admins use the hospital admin side here; a
+  clinician or hospital admin signing in to the platform admin app gets
+  its 403 page, which links back here.
 - **Researcher** has no endpoints yet, so it has no app.
 
 ## 3. Repository layout
@@ -371,6 +379,15 @@ leave the page, whichever comes first.
 ### 4.7 Hospital admin side
 
 Designs: `design/v3/hospital-admin.html`.
+
+Routes: `/admin/staff`, `/admin/settings`, `/admin/usage`,
+`/admin/activity` and `/admin/activity/oversight`. The calls go through the
+same-origin proxy to `/api/v1/hospital/*`, which forwards only the exact
+shapes the admin client uses, and only for a session with the hospital
+admin role and two-step on (otherwise 403 `mfa_required`). Removing a
+person sends the admin's own two-step code in the `DELETE` body. Until the
+backend defines them, the calls follow the assumed contract in the design
+spec §10 item 3.
 
 | Screen             | What it does                                                                                                                                                                                                                        |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

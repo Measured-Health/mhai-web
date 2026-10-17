@@ -41,6 +41,9 @@ export const FORBIDDEN_TERMS = [
   "not_supported",
   "needs_rewording",
   "out_of_scope",
+  "mfa_required",
+  "mfa_invalid",
+  "mfa_locked",
 ] as const;
 
 export function citationTag(action: Citation["action"]): {
