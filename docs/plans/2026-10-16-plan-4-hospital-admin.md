@@ -11901,3 +11901,23 @@ today). The sample hospital admin and medical director accounts in the demo keep
 state (terms already accepted) so they sign straight in; the "New account" sample shows the steps.
 Test: an admin-only account with `terms` pending goes to /welcome and, after accepting, lands on
 /admin/staff.
+
+## Amendment (product owner, 2026-10-17): two-step is required for every admin
+
+Overrides Tasks 1, 2, 4, 8 and 17 where they differ.
+
+- **Hospital admins** (including a clinician who is also a hospital admin) must have two-step
+  verification turned on. If a hospital admin signs in without it, the first-sign-in "Set up
+  two-step verification" step is added and cannot be skipped; they reach no page (clinical or
+  admin) until it is done. The mock enforces this: any account with `hospital_admin` and two-step
+  off gets the `mfa` step.
+- **Server side (Task 4):** the BFF forwards `/hospital/*` admin routes only for a session whose
+  user holds `hospital_admin` **and** has two-step on; otherwise 403 `mfa_required`, which the app
+  turns into the setup step. Test both.
+- **Platform admins and auditors** (separate platform admin app): two-step required, as the
+  backend spec already says. Spec §10 records both as backend asks: the API refuses admin
+  endpoints for a session without two-step.
+- **Tests:** an admin-only account and a medical director with two-step off are sent to the
+  setup step and can't reach /admin/staff or the clinical home until it's done; the BFF refuses
+  admin routes without two-step. E2E (Task 17): "New hospital admin" sets up two-step and lands
+  on Staff.
