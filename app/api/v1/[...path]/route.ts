@@ -1,3 +1,4 @@
+import { handledFields } from "@/lib/api/alert-handled";
 import { canUse } from "@/lib/auth/types";
 import { apiBase } from "@/lib/server/api";
 import { forbidden, json, sameOrigin } from "@/lib/server/http";
@@ -15,6 +16,8 @@ const ALLOWED = new Set([
   "corrections",
   "readyz",
   "hospital",
+  "alerts",
+  "me",
 ]);
 // Anything else (HEAD, PUT, OPTIONS...) never reaches a read or write branch.
 const METHODS = new Set(["GET", "POST", "PATCH", "DELETE"]);
@@ -64,10 +67,38 @@ function hospitalShape(method: string, path: string[]): boolean {
   return false;
 }
 
-/** Only the shapes the clients use (Plans 3 and 4). */
+const ALERT_ACTIONS = new Set(["acknowledge", "dismiss"]);
+
+/**
+ * Patient alerts and your notification settings: exactly the shapes the
+ * alerts client uses (Plan 5a). Under `me`, only GET and PATCH
+ * `me/notification-settings`; every other `me/*` path is refused.
+ */
+function alertShape(method: string, path: string[]): boolean {
+  const [first, second, third] = path;
+  if (first === "me")
+    return (
+      path.length === 2 &&
+      second === "notification-settings" &&
+      (method === "GET" || method === "PATCH")
+    );
+  if (method === "GET")
+    return (
+      path.length === 1 || (path.length === 2 && second === "unread-count")
+    );
+  return (
+    method === "POST" &&
+    path.length === 3 &&
+    second !== "unread-count" &&
+    ALERT_ACTIONS.has(third ?? "")
+  );
+}
+
+/** Only the shapes the clients use (Plans 3, 4 and 5a). */
 function shapeAllowed(method: string, path: string[]): boolean {
   if (!METHODS.has(method)) return false;
   if (path[0] === "hospital") return hospitalShape(method, path);
+  if (path[0] === "alerts" || path[0] === "me") return alertShape(method, path);
   // Clinical calls only read and post (Plans 1–3).
   if (method !== "GET" && method !== "POST") return false;
   const [first, second, third] = path;
@@ -94,7 +125,7 @@ async function refresh(s: ServerSession): Promise<ServerSession> {
   return next;
 }
 
-/** Same-origin proxy for clinical and hospital admin calls: adds the token the browser never sees. */
+/** Same-origin proxy for clinical, alert and hospital admin calls: adds the token the browser never sees. */
 async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   const { path } = await ctx.params;
   if (
@@ -111,6 +142,9 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     return json(401, { code: "session_expired" });
   }
   // Each side is for its own role, after first sign-in (R2, Plan 4).
+  // Everything outside `hospital` is clinical, including `alerts` and `me`
+  // (Plan 5a). NOTE: that makes every future `me/*` route clinician-only too;
+  // a `me` route meant for hospital admins needs its own area rule here.
   const area = path[0] === "hospital" ? "admin" : "clinical";
   if (!canUse(s.user, area) || s.steps.length > 0) return forbidden();
   // Every hospital admin must have two-step on (amendment 3).
@@ -148,11 +182,20 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     return json(401, { code: "session_expired" });
   }
   if (!res.ok) {
-    // Never echo upstream error text: keep only the problem code.
-    const p = (await res.json().catch(() => null)) as { code?: unknown } | null;
-    return json(res.status, {
-      code: typeof p?.code === "string" ? p.code : "error",
-    });
+    // Never echo upstream error text: keep only the problem code (and, for a
+    // 409 already_handled on an alert, who and when, through the same helper
+    // the live client uses).
+    const p = (await res.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+    const code = typeof p?.code === "string" ? p.code : "error";
+    return json(
+      res.status,
+      res.status === 409 && code === "already_handled" && path[0] === "alerts"
+        ? { code, ...handledFields(p) }
+        : { code },
+    );
   }
   return new Response(res.body, {
     status: res.status,
