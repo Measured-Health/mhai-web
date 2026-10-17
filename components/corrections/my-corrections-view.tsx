@@ -19,6 +19,7 @@ import { Skeleton } from "../ui/skeleton";
 import { FilterChip } from "./filter-chip";
 import { OverdueChip, StatusChip } from "./chips";
 import { ResubmitDialog } from "./resubmit-dialog";
+import { ReviewerReason } from "./reviewer-reason";
 import { useWithdrawFlow } from "./withdraw-dialog";
 
 type Filter = "all" | CorrectionStatus;
@@ -150,14 +151,7 @@ export function MyCorrectionsView() {
                                 <OverdueChip />
                               </span>
                             )}
-                            {reason && (
-                              <p className="mt-1.5 rounded-xl bg-bad-wash px-3 py-2 text-[13px] text-bad-deep [overflow-wrap:anywhere]">
-                                <span className="font-semibold">
-                                  Reviewer&apos;s reason:{" "}
-                                </span>
-                                “{reason}”
-                              </p>
-                            )}
+                            {reason && <ReviewerReason reason={reason} />}
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             <Button
