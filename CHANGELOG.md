@@ -17,6 +17,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Hospital settings: review turnaround, whether reviewers must share the
+  specialty, 2-step for clinicians, the idle timeout and "trust this
+  device"; hospital sign-on and allowed email domains are shown read-only.
 - Hospital admins can manage each person from the staff member panel:
   change roles, specialty and who can review corrections; send a password
   reset; reset two-step verification; remind them to set it up; send a new

@@ -12,10 +12,14 @@ import { Dialog } from "../ui/dialog";
 export function UnsavedGuard({
   dirty,
   onDiscard,
+  title = "Discard this draft?",
+  body = "If you leave now, what you typed will be lost.",
 }: {
   dirty: boolean;
   /** Runs when the clinician confirms Discard, before navigating. */
   onDiscard?(): void;
+  title?: string;
+  body?: string;
 }) {
   const { navigate, setNavigationGuard } = useShell();
   const [pending, setPending] = useState<string | null>(null);
@@ -66,9 +70,9 @@ export function UnsavedGuard({
   };
 
   return (
-    <Dialog open={pending !== null} onClose={keep} title="Discard this draft?">
+    <Dialog open={pending !== null} onClose={keep} title={title}>
       <p className="mb-[18px] text-[14.5px] leading-normal text-ink-2">
-        If you leave now, what you typed will be lost.
+        {body}
       </p>
       <div className="flex justify-end gap-2">
         <Button onClick={keep}>Keep editing</Button>
