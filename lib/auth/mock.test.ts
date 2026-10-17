@@ -8,6 +8,7 @@ import {
   MOCK_RESET_TOKEN,
   MOCK_SSO_CODE,
   MOCK_TOTP_SECRET,
+  DEMO_EMAILS,
   SAMPLE_ACCOUNTS,
   createMockAuthClient,
 } from "./mock";
@@ -29,7 +30,7 @@ describe("mock auth client", () => {
     if (r.status !== "signed_in") throw new Error();
     expect(r.user).toMatchObject({
       email: "a.reyes@havanahospital.org",
-      role: "clinician",
+      roles: ["clinician"],
       displayName: "Dr. Reyes",
       mfaEnabled: true,
     });
@@ -122,12 +123,59 @@ describe("mock auth client", () => {
     });
   });
 
-  it("signs admin and auditor accounts in with their role", async () => {
+  it("signs each kind of account in with its roles", async () => {
     const c = createMockAuthClient();
-    const r = await c.signIn("admin@h.org", "pw");
+    const rolesFor = async (email: string) => {
+      const r = await c.signIn(email, "pw");
+      if (r.status !== "signed_in") throw new Error();
+      return r.user;
+    };
+    expect((await rolesFor(DEMO_EMAILS.hospitalAdmin)).roles).toEqual([
+      "hospital_admin",
+    ]);
+    const director = await rolesFor(DEMO_EMAILS.director);
+    expect(director).toMatchObject({
+      roles: ["clinician", "hospital_admin"],
+      displayName: "Dr. Obi",
+      roleTitle: "Medical director",
+    });
+    const platform = await rolesFor(DEMO_EMAILS.platformAdmin);
+    expect(platform.roles).toEqual(["admin"]);
+    expect(isClinical(platform)).toBe(false);
+    const auditor = await rolesFor("auditor.x@h.org");
+    expect(auditor.roles).toEqual(["auditor"]);
+    expect(auditor.fullName).not.toBe(platform.fullName);
+    expect((await rolesFor(DEMO_EMAILS.clinician)).roles).toEqual([
+      "clinician",
+    ]);
+  });
+
+  it("gives a new hospital admin the first sign-in steps", async () => {
+    const c = createMockAuthClient();
+    const r = await c.signIn("newadmin.eze@havanahospital.org", "temp");
     if (r.status !== "signed_in") throw new Error();
-    expect(r.user.role).toBe("admin");
+    expect(r.user.roles).toEqual(["hospital_admin"]);
     expect(isClinical(r.user)).toBe(false);
+    expect(r.steps).toEqual(["terms", "password", "mfa"]);
+    expect(r.user.mfaEnabled).toBe(false);
+  });
+
+  it("lists the sample accounts with plain labels", () => {
+    expect(SAMPLE_ACCOUNTS.map((a) => a.label)).toEqual([
+      "Clinician",
+      "Clinician with two-step",
+      "New account",
+      "New hospital admin",
+      "Hospital admin",
+      "Medical director",
+      "Platform admin",
+      "Locked account",
+    ]);
+    expect(
+      SAMPLE_ACCOUNTS.find((a) => a.label === "Platform admin")?.note,
+    ).toBe("Shows the 403 page");
+    for (const a of SAMPLE_ACCOUNTS)
+      expect(Object.values(DEMO_EMAILS)).toContain(a.email);
   });
 
   it("checks passwords and reset links", async () => {
@@ -173,17 +221,17 @@ describe("mock auth client", () => {
 
   it("gives each sample account its own person", async () => {
     const c = createMockAuthClient();
-    const r = await c.signIn(SAMPLE_ACCOUNTS[2].email, "temp");
+    const r = await c.signIn(DEMO_EMAILS.newAccount, "temp");
     if (r.status !== "signed_in") throw new Error();
     expect(r.user).toMatchObject({
       displayName: "Nurse Bello",
       mfaEnabled: false,
       backupCodesLeft: null,
     });
-    expect((await c.signIn(SAMPLE_ACCOUNTS[3].email, "pw")).status).toBe(
+    expect((await c.signIn(DEMO_EMAILS.platformAdmin, "pw")).status).toBe(
       "signed_in",
     );
-    expect(await fail(c.signIn(SAMPLE_ACCOUNTS[4].email, "pw"))).toMatchObject({
+    expect(await fail(c.signIn(DEMO_EMAILS.locked, "pw"))).toMatchObject({
       code: "locked",
     });
   });

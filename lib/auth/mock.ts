@@ -34,36 +34,132 @@ export const MOCK_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
 const LOCK_MS = 15 * 60_000;
 const MAX_TRIES = 5;
 
+export type StepUpResult = "ok" | "invalid" | "locked";
+
+/**
+ * The demo's two-step codes, shared by sign-in and by removing staff, so a
+ * backup code spent in one place is spent everywhere, and regenerated codes
+ * replace the old ones. Wrong tries are counted per person and lock for a while.
+ */
+export interface StepUp {
+  /** A current authenticator code (or the demo code). */
+  digitsOk(code: string): Promise<boolean>;
+  /** Uses up a backup code if it is current; false if not. */
+  takeBackup(code: string): boolean;
+  setBackupCodes(codes: string[]): void;
+  /** Called after a backup code is used. */
+  onBackupSpent?: () => void;
+  /** Checks a code for `email`, counting wrong tries; locks after five. */
+  check(
+    email: string | null,
+    auth: { mfaCode: string } | { backupCode: string },
+  ): Promise<StepUpResult>;
+}
+
+export function createStepUp(now: () => number = () => Date.now()): StepUp {
+  let backupLeft = new Set(MOCK_BACKUP_CODES);
+  const failures = new Map<string, number>();
+  const lockedUntil = new Map<string, number>();
+  const self: StepUp = {
+    async digitsOk(code) {
+      const digits = code.replace(/\s/g, "");
+      return (
+        digits === MOCK_CODE ||
+        (await verifyTotp(MOCK_TOTP_SECRET, digits, now()))
+      );
+    },
+    takeBackup(code) {
+      const c = normalizeBackupCode(code);
+      if (!backupLeft.delete(c)) return false;
+      self.onBackupSpent?.();
+      return true;
+    },
+    setBackupCodes(codes) {
+      backupLeft = new Set(codes);
+    },
+    async check(email, auth) {
+      const key = email?.toLowerCase() ?? "";
+      if ((lockedUntil.get(key) ?? 0) > now()) return "locked";
+      const ok =
+        "backupCode" in auth
+          ? self.takeBackup(auth.backupCode)
+          : await self.digitsOk(auth.mfaCode);
+      if (ok) {
+        failures.delete(key);
+        return "ok";
+      }
+      const n = (failures.get(key) ?? 0) + 1;
+      if (n >= MAX_TRIES) {
+        failures.delete(key);
+        lockedUntil.set(key, now() + LOCK_MS);
+      } else failures.set(key, n);
+      return "invalid";
+    },
+  };
+  return self;
+}
+
+let demoStepUp = createStepUp();
+/** The codes the running demo's sign-in uses; the sample hospital checks the same. */
+export const getDemoStepUp = (): StepUp => demoStepUp;
+
 const trigger = (login: string) =>
   login
     .toLowerCase()
     .split("@")[0]!
     .split(/[._+-]/)[0] ?? "";
 
+/** The demo's sample logins. Task 3's sample hospital lists the two admins. */
+export const DEMO_EMAILS = {
+  clinician: "a.reyes@havanahospital.org",
+  twoStep: "mfa.okafor@havanahospital.org",
+  newAccount: "new.bello@havanahospital.org",
+  newAdmin: "newadmin.okoro@havanahospital.org",
+  hospitalAdmin: "admin.nwosu@havanahospital.org",
+  director: "director.obi@havanahospital.org",
+  platformAdmin: "platform.bakare@measured-health.example",
+  locked: "locked.eze@havanahospital.org",
+} as const;
+
 /** Sample accounts for the demo's sign-in page. Any other email works too. */
 export const SAMPLE_ACCOUNTS = [
   {
-    email: "a.reyes@havanahospital.org",
+    email: DEMO_EMAILS.clinician,
     label: "Clinician",
     note: "Signs straight in",
   },
   {
-    email: "mfa.okafor@havanahospital.org",
+    email: DEMO_EMAILS.twoStep,
     label: "Clinician with two-step",
     note: "Code 123456",
   },
   {
-    email: "new.bello@havanahospital.org",
+    email: DEMO_EMAILS.newAccount,
     label: "New account",
     note: "First sign-in steps",
   },
   {
-    email: "admin.adeyemi@havanahospital.org",
+    email: DEMO_EMAILS.newAdmin,
+    label: "New hospital admin",
+    note: "First sign-in steps",
+  },
+  {
+    email: DEMO_EMAILS.hospitalAdmin,
     label: "Hospital admin",
+    note: "Staff, settings and usage; no clinical screens",
+  },
+  {
+    email: DEMO_EMAILS.director,
+    label: "Medical director",
+    note: "Clinician and hospital admin",
+  },
+  {
+    email: DEMO_EMAILS.platformAdmin,
+    label: "Platform admin",
     note: "Shows the 403 page",
   },
   {
-    email: "locked.eze@havanahospital.org",
+    email: DEMO_EMAILS.locked,
     label: "Locked account",
     note: "Shows the lock",
   },
@@ -86,14 +182,32 @@ const PEOPLE: Record<
     specialty: "General ward",
   },
   admin: {
-    displayName: "Kemi Adeyemi",
-    fullName: "Kemi Adeyemi",
-    roleTitle: "Hospital admin",
+    displayName: "Grace Nwosu",
+    fullName: "Grace Nwosu",
+    roleTitle: "Hospital IT lead",
+    specialty: null,
+  },
+  newadmin: {
+    displayName: "Chike Okoro",
+    fullName: "Chike Okoro",
+    roleTitle: "Hospital IT lead",
+    specialty: null,
+  },
+  director: {
+    displayName: "Dr. Obi",
+    fullName: "Dr. Ngozi Obi",
+    roleTitle: "Medical director",
+    specialty: "Emergency medicine",
+  },
+  platform: {
+    displayName: "Tunde Bakare",
+    fullName: "Tunde Bakare",
+    roleTitle: "Platform admin",
     specialty: null,
   },
   auditor: {
-    displayName: "Tunde Bakare",
-    fullName: "Tunde Bakare",
+    displayName: "Femi Adebayo",
+    fullName: "Femi Adebayo",
     roleTitle: "Auditor",
     specialty: null,
   },
@@ -105,12 +219,21 @@ const REYES = {
   specialty: "Internal Medicine",
 };
 
-function userFor(login: string, role: Role, mfaEnabled: boolean): User {
+/** The first word of the login picks the roles (memory-only demo). */
+const ROLES_FOR: Record<string, Role[]> = {
+  admin: ["hospital_admin"],
+  newadmin: ["hospital_admin"],
+  director: ["clinician", "hospital_admin"],
+  platform: ["admin"],
+  auditor: ["auditor"],
+};
+
+function userFor(login: string, roles: Role[], mfaEnabled: boolean): User {
   return {
     username: login.split("@")[0]!,
     email: login.includes("@") ? login : null,
     ...(PEOPLE[trigger(login)] ?? REYES),
-    role,
+    roles: [...roles],
     hospital: "Havana Hospital",
     mfaEnabled,
     backupCodesLeft: mfaEnabled ? 8 : null,
@@ -120,11 +243,12 @@ function userFor(login: string, role: Role, mfaEnabled: boolean): User {
 /** The demo's sign-in: memory only (a reload signs you out), never stored. */
 export function createMockAuthClient({
   now = () => Date.now(),
-}: { now?: () => number } = {}): AuthClient {
+  stepUp,
+}: { now?: () => number; stepUp?: StepUp } = {}): AuthClient {
+  const codes = (stepUp ??= demoStepUp = createStepUp(now));
   let session: User | null = null;
   let steps: FirstStep[] = [];
   let pending: User | null = null;
-  let backupLeft = new Set(MOCK_BACKUP_CODES);
   const failures = new Map<string, number>();
   const lockedUntil = new Map<string, number>();
   let devices: Device[] = [];
@@ -156,12 +280,13 @@ export function createMockAuthClient({
   const strong = (pw: string) => {
     if (pw.length < 12) throw new AuthError("weak_password");
   };
-  const codeOk = async (code: string) => {
-    const digits = code.replace(/\D/g, "");
-    return (
-      digits === MOCK_CODE ||
-      (await verifyTotp(MOCK_TOTP_SECRET, digits, now()))
-    );
+  const codeOk = (code: string) => codes.digitsOk(code);
+  codes.onBackupSpent = () => {
+    if (session)
+      session = {
+        ...session,
+        backupCodesLeft: Math.max(0, (session.backupCodesLeft ?? 0) - 1),
+      };
   };
   const done = (step: FirstStep) => {
     steps = steps.filter((s) => s !== step);
@@ -197,28 +322,22 @@ export function createMockAuthClient({
       }
       failures.delete(key);
       if (word === "mfa") {
-        pending = userFor(key, "clinician", true);
+        pending = userFor(key, ["clinician"], true);
         return { status: "mfa_required" };
       }
-      if (word === "new") {
-        const u = userFor(key, "clinician", false);
+      if (word === "new" || word === "newadmin") {
+        const u = userFor(key, ROLES_FOR[word] ?? ["clinician"], false);
         const owed: FirstStep[] = ["terms", "password", "mfa"];
         startSession(u, owed);
         return { status: "signed_in", user: u, steps: [...owed] };
       }
-      const role: Role =
-        word === "admin"
-          ? "admin"
-          : word === "auditor"
-            ? "auditor"
-            : "clinician";
-      const u = userFor(key, role, true);
+      const u = userFor(key, ROLES_FOR[word] ?? ["clinician"], true);
       startSession(u);
       return { status: "signed_in", user: u, steps: [] };
     },
 
     async signInWithHospital() {
-      const u = userFor("a.reyes@havanahospital.org", "clinician", true);
+      const u = userFor("a.reyes@havanahospital.org", ["clinician"], true);
       startSession(u);
       return { status: "signed_in", user: u, steps: [] };
     },
@@ -226,9 +345,7 @@ export function createMockAuthClient({
     async verifyCode(code, { backup }) {
       if (!pending) throw new AuthError("mfa_expired");
       if (backup) {
-        const c = normalizeBackupCode(code);
-        if (!backupLeft.has(c)) throw new AuthError("mfa_invalid");
-        backupLeft.delete(c);
+        if (!codes.takeBackup(code)) throw new AuthError("mfa_invalid");
       } else if (!(await codeOk(code))) {
         throw new AuthError("mfa_invalid");
       }
@@ -245,7 +362,7 @@ export function createMockAuthClient({
 
     async completeHospitalSignIn(code) {
       if (code !== MOCK_SSO_CODE) throw new AuthError("sso_failed");
-      const u = userFor("a.reyes@havanahospital.org", "clinician", true);
+      const u = userFor("a.reyes@havanahospital.org", ["clinician"], true);
       startSession(u);
       return { status: "signed_in", user: u, steps: [] };
     },
@@ -270,7 +387,7 @@ export function createMockAuthClient({
 
     async startMfaSetup() {
       const u = requireSession();
-      backupLeft = new Set(MOCK_BACKUP_CODES);
+      codes.setBackupCodes(MOCK_BACKUP_CODES);
       return {
         // Authenticator apps list it as "MHAI Demo" over the email, so the
         // shared demo key is never mistaken for a real MHAI account.
@@ -289,7 +406,7 @@ export function createMockAuthClient({
 
     async regenerateBackupCodes() {
       const u = requireSession();
-      backupLeft = new Set(MOCK_NEW_BACKUP_CODES);
+      codes.setBackupCodes(MOCK_NEW_BACKUP_CODES);
       session = { ...u, backupCodesLeft: 10 };
       return [...MOCK_NEW_BACKUP_CODES];
     },

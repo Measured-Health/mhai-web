@@ -1,3 +1,4 @@
+import { canUse } from "@/lib/auth/types";
 import { apiBase } from "@/lib/server/api";
 import { forbidden, json, sameOrigin } from "@/lib/server/http";
 import { refreshOnce } from "@/lib/server/refresh";
@@ -8,7 +9,15 @@ import {
   type ServerSession,
 } from "@/lib/server/session";
 
-const ALLOWED = new Set(["queries", "feedback", "corrections", "readyz"]);
+const ALLOWED = new Set([
+  "queries",
+  "feedback",
+  "corrections",
+  "readyz",
+  "hospital",
+]);
+// Anything else (HEAD, PUT, OPTIONS...) never reaches a read or write branch.
+const METHODS = new Set(["GET", "POST", "PATCH", "DELETE"]);
 const REFRESH_WITHIN_MS = 5 * 60_000;
 const MAX_BODY = 64 * 1024;
 const SEGMENT = /^[A-Za-z0-9_-]+$/; // ids are opaque; no dots, slashes or escapes
@@ -16,9 +25,51 @@ const IDEMPOTENCY_KEY = /^[A-Za-z0-9-]{1,64}$/;
 
 const DECISIONS = new Set(["approve", "reject", "withdraw"]);
 const MY_LISTS = new Set(["mine", "reviewed"]);
+const STAFF_ACTIONS = new Set([
+  "deactivate",
+  "reactivate",
+  "password-reset",
+  "reset-mfa",
+  "remind",
+  "resend-invite",
+]);
+const OVERSIGHT_ACTIONS = new Set(["remind", "assign"]);
+const READ_ONLY = new Set(["usage", "activity", "review-oversight"]);
 
-/** Corrections and feedback only take the shapes the client uses (Plan 3). */
+/** The hospital admin side: exactly the shapes the admin client uses (Plan 4). */
+function hospitalShape(method: string, path: string[]): boolean {
+  const [, area, id, action] = path;
+  const n = path.length;
+  if (area === "staff") {
+    if (n === 2) return method === "GET";
+    if (n === 3)
+      return id === "invites"
+        ? method === "POST"
+        : // DELETE carries the admin's two-step code (amendment 1).
+          method === "PATCH" || method === "DELETE";
+    return (
+      n === 4 &&
+      method === "POST" &&
+      id !== "invites" &&
+      STAFF_ACTIONS.has(action ?? "")
+    );
+  }
+  if (area === "settings")
+    return n === 2 && (method === "GET" || method === "PATCH");
+  if (READ_ONLY.has(area ?? "")) return n === 2 && method === "GET";
+  if (area === "corrections" && n === 4)
+    return action === "eligible-reviewers"
+      ? method === "GET"
+      : method === "POST" && OVERSIGHT_ACTIONS.has(action ?? "");
+  return false;
+}
+
+/** Only the shapes the clients use (Plans 3 and 4). */
 function shapeAllowed(method: string, path: string[]): boolean {
+  if (!METHODS.has(method)) return false;
+  if (path[0] === "hospital") return hospitalShape(method, path);
+  // Clinical calls only read and post (Plans 1–3).
+  if (method !== "GET" && method !== "POST") return false;
   const [first, second, third] = path;
   if (first === "corrections") {
     if (method === "GET")
@@ -43,7 +94,7 @@ async function refresh(s: ServerSession): Promise<ServerSession> {
   return next;
 }
 
-/** Same-origin proxy for clinical calls: adds the token the browser never sees. */
+/** Same-origin proxy for clinical and hospital admin calls: adds the token the browser never sees. */
 async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   const { path } = await ctx.params;
   if (
@@ -59,8 +110,12 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     await clearSession();
     return json(401, { code: "session_expired" });
   }
-  // Clinical calls are for clinicians who finished first sign-in only.
-  if (s.user.role !== "clinician" || s.steps.length > 0) return forbidden();
+  // Each side is for its own role, after first sign-in (R2, Plan 4).
+  const area = path[0] === "hospital" ? "admin" : "clinical";
+  if (!canUse(s.user, area) || s.steps.length > 0) return forbidden();
+  // Every hospital admin must have two-step on (amendment 3).
+  if (area === "admin" && s.user.mfaEnabled !== true)
+    return json(403, { code: "mfa_required" });
   if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
 
   const body = req.method === "GET" ? undefined : await req.text();
@@ -68,7 +123,9 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     return json(413, { code: "too_large" });
 
   const key = req.headers.get("idempotency-key");
-  const url = `${apiBase()}/${path.map(encodeURIComponent).join("/")}${new URL(req.url).search}`;
+  // Only reads carry filters; a write's query string is never forwarded.
+  const search = req.method === "GET" ? new URL(req.url).search : "";
+  const url = `${apiBase()}/${path.map(encodeURIComponent).join("/")}${search}`;
   let res: Response;
   try {
     res = await fetch(url, {
@@ -108,3 +165,5 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
 
 export const GET = handle;
 export const POST = handle;
+export const PATCH = handle;
+export const DELETE = handle;

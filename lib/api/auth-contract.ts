@@ -5,6 +5,8 @@
 export interface ApiUser {
   username: string;
   role: string;
+  /** Every role (assumed, spec §10 item 2); `role` stays the primary one. */
+  roles?: string[];
   email?: string | null;
   display_name?: string | null;
   full_name?: string | null;

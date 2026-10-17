@@ -3,7 +3,22 @@ import type { Device, FirstStep, Role, User } from "../auth/types";
 
 export type { ApiUser, ApiLoginOk, ApiMfaRequired } from "../api/auth-contract";
 
-const ROLES: readonly Role[] = ["clinician", "admin", "auditor", "researcher"];
+const ROLES: readonly Role[] = [
+  "clinician",
+  "hospital_admin",
+  "admin",
+  "auditor",
+  "researcher",
+];
+
+/** Known roles only, each once. None known reads as non-clinical, never as a clinician. */
+export function rolesOf(u: Pick<ApiUser, "role" | "roles">): Role[] {
+  const raw = Array.isArray(u.roles) ? u.roles : [u.role];
+  const known = [
+    ...new Set(raw.filter((r): r is Role => ROLES.includes(r as Role))),
+  ];
+  return known.length ? known : ["researcher"];
+}
 
 export function toUser(u: ApiUser): User {
   return {
@@ -11,8 +26,7 @@ export function toUser(u: ApiUser): User {
     email: u.email ?? null,
     displayName: u.display_name || u.full_name || u.username,
     fullName: u.full_name ?? null,
-    // Anything unexpected is treated as non-clinical, never as a clinician.
-    role: ROLES.includes(u.role as Role) ? (u.role as Role) : "researcher",
+    roles: rolesOf(u),
     roleTitle: u.role_title ?? null,
     specialty: u.specialty ?? null,
     hospital: u.hospital ?? null,

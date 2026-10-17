@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  DEMO_EMAILS,
   expectNoForbiddenWords,
   expectNoStorage,
   openAccountMenu,
@@ -73,10 +74,10 @@ test("first sign-in: terms, password, two-step, backup codes", async ({
   await expect(page).toHaveURL(/\/$/);
 });
 
-test("an admin account sees the 403 page, never the clinical app", async ({
+test("a platform admin account sees the 403 page, never the clinical app", async ({
   page,
 }) => {
-  await signIn(page, "admin.adeyemi@havanahospital.org");
+  await signIn(page, DEMO_EMAILS.platformAdmin);
   await expect(page).toHaveURL(/\/no-access$/);
   await expect(
     page.getByRole("heading", { name: "You don't have access" }),
@@ -85,6 +86,7 @@ test("an admin account sees the 403 page, never the clinical app", async ({
   await expect(
     page.getByRole("button", { name: /Start a consultation/ }),
   ).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Staff" })).toHaveCount(0);
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
 });

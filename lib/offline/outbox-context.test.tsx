@@ -54,7 +54,7 @@ const signedOut = ({ children }: { children: ReactNode }) => (
   </AuthTestProvider>
 );
 const admin = ({ children }: { children: ReactNode }) => (
-  <AuthTestProvider user={{ ...TEST_USER, role: "admin" }}>
+  <AuthTestProvider user={{ ...TEST_USER, roles: ["admin"] }}>
     <OutboxProvider>{children}</OutboxProvider>
   </AuthTestProvider>
 );

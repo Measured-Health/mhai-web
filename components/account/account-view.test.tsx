@@ -150,6 +150,19 @@ describe("AccountView", () => {
 });
 
 describe("AccountView feedback", () => {
+  it("has no feedback section for a hospital admin who isn't a clinician", async () => {
+    const getStats = vi.spyOn(holder.client, "getMyFeedbackStats");
+    await signedIn({ ...TEST_USER, roles: ["hospital_admin"] });
+    expect(screen.getByRole("region", { name: "Profile" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "My feedback" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "My feedback" })).toBeNull();
+    expect(getStats).not.toHaveBeenCalled();
+    // Close goes back to their own side, not the clinical home.
+    expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute(
+      "href",
+      "/admin/staff",
+    );
+  });
   it("shows your feedback counts and links to My feedback & corrections", async () => {
     await signedIn();
     const section = await screen.findByRole("region", { name: "My feedback" });

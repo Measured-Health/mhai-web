@@ -128,12 +128,20 @@ flowchart TB
 - **Roles combine in the clinical app:** a clinician who is also a
   hospital admin sees both sides in one sidebar. The "Hospital admin"
   group only appears with that role.
+- **A hospital admin who isn't a clinician** signs in straight to the
+  hospital admin side (Staff). Clinical screens redirect them there, and
+  the server refuses them every clinical call.
+- **Every hospital admin has two-step on:** one who signs in without it
+  must set it up before reaching any page, and the server refuses the
+  hospital admin calls until it is on.
 - **Hospital admins are scoped to their hospital:** every staff and
   usage call is filtered by the hospital in the session. The hospital
   admin side never shows question text, results or patient details.
-- **Wrong-app 403s:** a platform admin signing in to the clinical app, or
-  a clinician or hospital admin signing in to the platform admin app, gets
-  a 403 page that links to the right app.
+- **Wrong-app 403s:** only a platform account (platform admin or
+  auditor) signing in to this app gets the 403 page, which links to the
+  platform admin app. Hospital admins use the hospital admin side here; a
+  clinician or hospital admin signing in to the platform admin app gets
+  its 403 page, which links back here.
 - **Researcher** has no endpoints yet, so it has no app.
 
 ## 3. Repository layout
@@ -372,12 +380,21 @@ leave the page, whichever comes first.
 
 Designs: `design/v3/hospital-admin.html`.
 
+Routes: `/admin/staff`, `/admin/settings`, `/admin/usage`,
+`/admin/activity` and `/admin/activity/oversight`. The calls go through the
+same-origin proxy to `/api/v1/hospital/*`, which forwards only the exact
+shapes the admin client uses, and only for a session with the hospital
+admin role and two-step on (otherwise 403 `mfa_required`). Removing a
+person sends the admin's own two-step code in the `DELETE` body. Until the
+backend defines them, the calls follow the assumed contract in the design
+spec §10 item 3.
+
 | Screen             | What it does                                                                                                                                                                                                                        |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Staff              | Everyone at the hospital: roles, specialty, status, sign-in method, last active. Filters surface problems such as "2-step not set up"                                                                                               |
+| Staff              | Everyone at the hospital: roles, specialty, status, sign-in method, last active. Filters surface problems such as "Two-step not set up"                                                                                             |
 | Invite staff       | One person or a pasted list, with a role and a specialty. With hospital single sign-on they just sign in; otherwise they get an email invite (7 days) and go through first sign-in                                                  |
-| Staff member panel | Change roles and specialty, set who can review corrections, send a password reset, reset 2-step, deactivate. You can't remove your own admin role                                                                                   |
-| Hospital settings  | Review turnaround and reviewer rules, 2-step policy for clinicians, idle timeout, "trust this device", and SSO status (read-only; Measured Health configures it)                                                                    |
+| Staff member panel | Change roles and specialty, set who can review corrections, send a password reset, reset two-step, deactivate, remove (needs the admin's own two-step code). You can't remove your own admin role                                   |
+| Hospital settings  | Review turnaround and reviewer rules, two-step policy for clinicians, idle timeout, "trust this device", and SSO status (read-only; Measured Health configures it)                                                                  |
 | Usage              | Counts only: consultations, active clinicians, the confidence mix, agreement rate, review time and specialty breakdown. CSV export                                                                                                  |
 | Activity           | A log of sign-ins, consultations (specialty and confidence only), feedback, review decisions, account changes and flagged security events; plus review oversight: overdue corrections, reviewer coverage, remind, assign a reviewer |
 

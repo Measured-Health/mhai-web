@@ -19,7 +19,9 @@ import { useSession } from "../session-store";
 import { getAuthClient } from "./client";
 import { onUnauthorized } from "./events";
 import {
+  ADMIN_HOME,
   isClinical,
+  isHospitalAdmin,
   type AuthClient,
   type Capabilities,
   type FirstStep,
@@ -53,10 +55,28 @@ export interface AuthCtx extends State {
 const SIGNED_OUT: State = { status: "signed_out", user: null, steps: [] };
 const Ctx = createContext<AuthCtx | null>(null);
 
-/** Where a signed-in person belongs right now. */
+/**
+ * The first sign-in steps still owed. Every hospital admin, including a
+ * clinician who is one, must have two-step on: without it the setup step is
+ * owed even if the session didn't list it (amendment 3).
+ */
+export function stepsOwed(user: User | null, steps: FirstStep[]): FirstStep[] {
+  return isHospitalAdmin(user) && !user?.mfaEnabled && !steps.includes("mfa")
+    ? [...steps, "mfa"]
+    : steps;
+}
+
+function withOwed(s: State): State {
+  const steps = stepsOwed(s.user, s.steps);
+  return steps === s.steps ? s : { ...s, steps };
+}
+
+/** Where a signed-in person belongs right now (R2). */
 export function homeFor(s: { user: User | null; steps: FirstStep[] }) {
-  if (s.steps.length) return "/welcome";
-  return isClinical(s.user) ? "/" : "/no-access";
+  if (stepsOwed(s.user, s.steps).length) return "/welcome";
+  if (isClinical(s.user)) return "/";
+  if (isHospitalAdmin(s.user)) return ADMIN_HOME;
+  return "/no-access";
 }
 
 /**
@@ -76,12 +96,20 @@ export function AuthProvider({
   const [client] = useState(() => given ?? getAuthClient());
   const history = useSession();
   const router = useRouter();
-  const [state, setState] = useState<State>(() =>
+  const [state, setRaw] = useState<State>(() =>
     initialUser === undefined
       ? { status: "loading", user: null, steps: [] }
       : initialUser
-        ? { status: "signed_in", user: initialUser, steps: [] }
+        ? withOwed({ status: "signed_in", user: initialUser, steps: [] })
         : SIGNED_OUT,
+  );
+  // Every change keeps the owed steps complete: an admin who loses two-step
+  // (e.g. the API says so) owes the setup step again, and keeps owing it
+  // until the step itself is completed (after the backup codes).
+  const setState = useCallback(
+    (next: State | ((s: State) => State)) =>
+      setRaw((s) => withOwed(typeof next === "function" ? next(s) : next)),
+    [],
   );
   const [mfaPending, setMfaPending] = useState(false);
   const [reason, setReason] = useState<SignOutReason | null>(null);
@@ -104,24 +132,27 @@ export function AuthProvider({
               : SIGNED_OUT,
           );
       })
-      .catch(() => on && setState(SIGNED_OUT));
+      .catch(() => on && setRaw(SIGNED_OUT));
     return () => {
       on = false;
     };
-  }, [client, initialUser]);
+  }, [client, initialUser, setState]);
 
-  const apply = useCallback((r: SignInResult) => {
-    if (r.status === "mfa_required") {
-      setMfaPending(true);
+  const apply = useCallback(
+    (r: SignInResult) => {
+      if (r.status === "mfa_required") {
+        setMfaPending(true);
+        return r;
+      }
+      setMfaPending(false);
+      setReason(null);
+      // A new sign-in: nothing from before is ever sent under it.
+      endApprovalSession();
+      setState({ status: "signed_in", user: r.user, steps: r.steps });
       return r;
-    }
-    setMfaPending(false);
-    setReason(null);
-    // A new sign-in: nothing from before is ever sent under it.
-    endApprovalSession();
-    setState({ status: "signed_in", user: r.user, steps: r.steps });
-    return r;
-  }, []);
+    },
+    [setState],
+  );
 
   // A sign-out still finishing (sending a waiting approval, then ending the
   // session): a sign-in waits for it, so it can't end the next session or
@@ -144,7 +175,7 @@ export function AuthProvider({
       if (!sent) endApprovalSession();
       startTransition(() => {
         history.clear();
-        setState(SIGNED_OUT);
+        setRaw(SIGNED_OUT);
         setMfaPending(false);
         setReason(why);
         router.replace("/sign-in");
@@ -197,7 +228,7 @@ export function AuthProvider({
         setState((s) => (s.user ? { ...s, user: { ...s.user, ...patch } } : s)),
       signOut,
     }),
-    [state, mfaPending, client, reason, apply, afterSignOut, signOut],
+    [state, mfaPending, client, reason, apply, afterSignOut, signOut, setState],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

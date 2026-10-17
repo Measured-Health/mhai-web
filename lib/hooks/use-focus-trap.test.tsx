@@ -63,4 +63,51 @@ describe("useFocusTrap", () => {
     await userEvent.tab();
     expect(screen.getByTestId("panel")).toHaveFocus();
   });
+
+  describe("a dialog opened on top", () => {
+    function Panel() {
+      const ref = useRef<HTMLDivElement>(null);
+      useFocusTrap(true, ref);
+      return (
+        <div ref={ref}>
+          <button>inside</button>
+        </div>
+      );
+    }
+    const tabFromDialog = (modal: boolean) => {
+      render(
+        <>
+          <Panel />
+          <dialog open>
+            <button>in dialog</button>
+          </dialog>
+        </>,
+      );
+      const dialog = document.querySelector("dialog")!;
+      // jsdom has no top layer; say what a browser would for showModal().
+      const real = dialog.matches.bind(dialog);
+      dialog.matches = (q: string) => (q === ":modal" ? modal : real(q));
+      const button = screen.getByRole("button", { name: "in dialog" });
+      button.focus();
+      const tab = new KeyboardEvent("keydown", {
+        key: "Tab",
+        bubbles: true,
+        cancelable: true,
+      });
+      document.dispatchEvent(tab);
+      return { tab, button };
+    };
+
+    it("is left to a modal dialog", () => {
+      const { tab, button } = tabFromDialog(true);
+      expect(tab.defaultPrevented).toBe(false);
+      expect(button).toHaveFocus();
+    });
+
+    it("is not left to a non-modal one, which does not own the keyboard", () => {
+      const { tab } = tabFromDialog(false);
+      expect(tab.defaultPrevented).toBe(true);
+      expect(screen.getByRole("button", { name: "inside" })).toHaveFocus();
+    });
+  });
 });

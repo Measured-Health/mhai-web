@@ -29,6 +29,10 @@ describe("labels", () => {
     ])
       expect(FORBIDDEN_TERMS).toContain(code);
   });
+  it("forbids the two-step codes a staff removal can return", () => {
+    for (const code of ["mfa_required", "mfa_invalid", "mfa_locked"])
+      expect(FORBIDDEN_TERMS).toContain(code);
+  });
   it("lists the six analysing steps in order", () => {
     expect(STAGES.map((s) => s.label)).toEqual([
       "Protecting patient privacy",
@@ -54,5 +58,24 @@ describe("labels", () => {
     expect(stageIndex("decision")).toBe(5);
     expect(stageIndex(null)).toBe(0);
     expect(stageIndex(undefined)).toBe(0);
+  });
+  it("forbids the hospital admin codes on screen", () => {
+    for (const t of [
+      "self_change",
+      "last_admin",
+      "not_eligible",
+      "domain_not_allowed",
+      "already_staff",
+      "invalid_email",
+      "mfa_not_set_up",
+      "invite_expired",
+      "hospital_admin",
+      "password_mfa",
+      "mfa_required",
+      "mfa_invalid",
+      "mfa_locked",
+      "self_role_change",
+    ])
+      expect(FORBIDDEN_TERMS).toContain(t);
   });
 });

@@ -1,4 +1,5 @@
-export type Role = "clinician" | "admin" | "auditor" | "researcher";
+export type Role =
+  "clinician" | "hospital_admin" | "admin" | "auditor" | "researcher";
 
 /** The signed-in person, as the UI shows them. Fields the API doesn't have yet are null. */
 export interface User {
@@ -7,7 +8,8 @@ export interface User {
   /** Short name for the sidebar and greetings, e.g. "Dr. Reyes". */
   displayName: string;
   fullName: string | null;
-  role: Role;
+  /** Every role the person holds. Clinician and hospital admin combine (R1). */
+  roles: Role[];
   /** Job title from hospital records, e.g. "Attending physician". */
   roleTitle: string | null;
   specialty: string | null;
@@ -113,8 +115,35 @@ export interface AuthClient {
   signOutEverywhere(): Promise<void>;
 }
 
-/** Only clinicians use this app; every other role gets the 403 page. */
-export const isClinical = (u: User | null) => u?.role === "clinician";
+/** Measured Health's own staff: they use the platform admin app, never this one. */
+const PLATFORM_ROLES: readonly Role[] = ["admin", "auditor"];
+
+/** Roles from a value that may predate `roles` (be defensive: never crash). */
+const rolesOf = (u: User | null): Role[] =>
+  Array.isArray(u?.roles) ? u.roles : [];
+
+export const isPlatformAccount = (u: User | null) =>
+  rolesOf(u).some((r) => PLATFORM_ROLES.includes(r));
+
+/** The clinical side: a clinician who isn't a platform account (R1). */
+export const isClinical = (u: User | null) =>
+  !isPlatformAccount(u) && rolesOf(u).includes("clinician");
+
+/** The hospital admin side (spec §5.6). */
+export const isHospitalAdmin = (u: User | null) =>
+  !isPlatformAccount(u) && rolesOf(u).includes("hospital_admin");
+
+/** A hospital admin who isn't a clinician: no clinical screens at all (R3). */
+export const isAdminOnly = (u: User | null) =>
+  isHospitalAdmin(u) && !isClinical(u);
+
+export type Area = "clinical" | "admin";
+
+export const canUse = (u: User | null, area: Area) =>
+  area === "clinical" ? isClinical(u) : isHospitalAdmin(u);
+
+/** The hospital admin side's first screen (R2). */
+export const ADMIN_HOME = "/admin/staff";
 
 /** "Dr. Reyes" → "DR"; "Ana Maria Reyes" → "AM". */
 export function initials(name: string): string {

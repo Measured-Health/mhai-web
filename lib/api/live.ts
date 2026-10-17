@@ -1,4 +1,3 @@
-import { reportUnauthorized } from "../auth/events";
 import type { MhaiClient } from "./client";
 import type {
   ClinicalResultOut,
@@ -9,66 +8,27 @@ import type {
   WriteOpts,
 } from "./contract";
 import { ApiError } from "./errors";
+import { apiOk, apiRequest, keyHeader } from "./request";
 
 /** The real API, through this app's /api/v1 proxy (the token stays server-side). */
 export function createLiveClient({
   fetchImpl = (...a: Parameters<typeof fetch>) => fetch(...a),
 }: { fetchImpl?: typeof fetch } = {}): MhaiClient {
-  async function call(
+  const call = (
     path: string,
     method = "GET",
     body?: unknown,
-    extra?: Record<string, string>,
+    headers?: Record<string, string>,
     keepalive = false,
-  ) {
-    let res: Response;
-    try {
-      res = await fetchImpl(`/api/v1${path}`, {
-        method,
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-          ...extra,
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
-        // An approval sent while the page unloads must outlive the page.
-        ...(keepalive ? { keepalive: true } : {}),
-      });
-    } catch {
-      throw new ApiError(0, "network");
-    }
-    if (res.status === 401) {
-      reportUnauthorized();
-      throw new ApiError(401, "session_expired");
-    }
-    const data = (await res.json().catch(() => null)) as Record<
-      string,
-      unknown
-    > | null;
-    return { res, data };
-  }
-  async function ok<T>(
+  ) => apiRequest(fetchImpl, path, { method, body, headers, keepalive });
+  const ok = <T>(
     path: string,
     method = "GET",
     body?: unknown,
-    extra?: Record<string, string>,
+    headers?: Record<string, string>,
     keepalive = false,
-  ): Promise<T> {
-    const { res, data } = await call(path, method, body, extra, keepalive);
-    if (!res.ok)
-      throw new ApiError(
-        res.status,
-        typeof data?.code === "string" ? data.code : "error",
-      );
-    return data as T;
-  }
+  ) => apiOk<T>(fetchImpl, path, { method, body, headers, keepalive });
   const id = encodeURIComponent;
-  const keyHeader = (opts?: { idempotencyKey?: string }) =>
-    opts?.idempotencyKey
-      ? { "Idempotency-Key": opts.idempotencyKey }
-      : undefined;
   const decide = async (path: string, body: unknown, opts?: WriteOpts) => {
     await ok<unknown>(
       path,

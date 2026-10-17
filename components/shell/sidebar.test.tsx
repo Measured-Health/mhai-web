@@ -1,20 +1,33 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MhaiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import { createMockClient } from "@/lib/api/mock";
-import { renderWithAuth } from "@/tests/auth-wrapper";
+import type { AdminClient } from "@/lib/api/admin";
+import { DEMO_EMAILS } from "@/lib/auth/mock";
+import { screenAdminAs } from "@/tests/admin";
+import { renderWithAuth, TEST_USER } from "@/tests/auth-wrapper";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as MhaiClient }));
 vi.mock("@/lib/api/client", () => ({ getClient: () => holder.client }));
+const adminHolder = vi.hoisted(() => ({
+  client: null as unknown as AdminClient,
+}));
+vi.mock("@/lib/api/admin", () => ({
+  getAdminClient: () => adminHolder.client,
+}));
+const pathname = vi.hoisted(() => ({ value: "/c/q1" }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/c/q1",
+  usePathname: () => pathname.value,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 import { Sidebar } from "./sidebar";
 
 beforeEach(() => {
   holder.client = createMockClient();
+  // The real clock: AdminNav reads invite expiry against Date.now().
+  adminHolder.client = screenAdminAs(DEMO_EMAILS.director);
+  pathname.value = "/c/q1";
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -159,5 +172,109 @@ describe("Sidebar", () => {
         screen.queryByRole("link", { name: /Review corrections/ }),
       ).toBeNull(),
     );
+  });
+
+  it("shows no hospital admin group to a clinician", () => {
+    renderWithAuth(<Sidebar items={[]} />);
+    expect(screen.queryByRole("region", { name: "Hospital admin" })).toBeNull();
+  });
+
+  it("shows a medical director both sides", () => {
+    const list = vi.spyOn(adminHolder.client, "listStaff");
+    renderWithAuth(<Sidebar items={items} />, {
+      ...TEST_USER,
+      roles: ["clinician", "hospital_admin"],
+    });
+    const group = screen.getByRole("region", { name: "Hospital admin" });
+    expect(
+      within(group)
+        .getAllByRole("link")
+        .map((l) => l.getAttribute("aria-label")),
+    ).toEqual(["Staff", "Hospital settings", "Activity", "Usage"]);
+    expect(within(group).getByRole("link", { name: "Staff" })).toHaveAttribute(
+      "href",
+      "/admin/staff",
+    );
+    expect(
+      screen.getByRole("link", { name: "New consultation" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Chest pain, 54 M")).toBeInTheDocument();
+    // On a clinical page the staff list isn't loaded just for a count (A14).
+    expect(list).not.toHaveBeenCalled();
+    expect(within(group).queryByText(/members/)).toBeNull();
+  });
+
+  it("counts staff and pending invites on the admin side, for screen readers too", async () => {
+    pathname.value = "/admin/staff";
+    renderWithAuth(<Sidebar items={[]} />, {
+      ...TEST_USER,
+      roles: ["clinician", "hospital_admin"],
+    });
+    const staff = screen.getByRole("link", { name: "Staff" });
+    // One invite is pending; the expired one needs attention instead.
+    await waitFor(() =>
+      expect(staff).toHaveAccessibleDescription(
+        "12 members · 1 invite pending",
+      ),
+    );
+    expect(
+      screen.getByRole("link", { name: "Usage" }),
+    ).toHaveAccessibleDescription("Counts only");
+  });
+
+  it("shows an admin-only person the admin group and nothing clinical (R3)", () => {
+    const pending = vi.spyOn(holder.client, "listPendingCorrections");
+    renderWithAuth(<Sidebar items={items} />, {
+      ...TEST_USER,
+      roles: ["hospital_admin"],
+    });
+    expect(
+      screen.getByRole("region", { name: "Hospital admin" }),
+    ).toBeInTheDocument();
+    for (const name of [
+      /New consultation/,
+      /Search consultations/,
+      /Review corrections/,
+      /^Help$/,
+    ])
+      expect(
+        screen.queryByRole("link", { name }) ??
+          screen.queryByRole("button", { name }),
+      ).toBeNull();
+    expect(screen.queryByText("Chest pain, 54 M")).toBeNull();
+    expect(screen.queryByText(/kept for this session/)).toBeNull();
+    expect(
+      screen.getByText("Hospital admin", { selector: "p" }),
+    ).toBeInTheDocument();
+    // No clinical call: the review queue is never asked for.
+    expect(pending).not.toHaveBeenCalled();
+  });
+
+  it("marks the current admin page, also on its sub-pages", () => {
+    pathname.value = "/admin/activity/oversight";
+    renderWithAuth(<Sidebar items={[]} />, {
+      ...TEST_USER,
+      roles: ["hospital_admin"],
+    });
+    expect(screen.getByRole("link", { name: "Activity" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("link", { name: "Staff" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
+  it("keeps the admin group's labels for screen readers in the rail", () => {
+    renderWithAuth(<Sidebar items={[]} rail />, {
+      ...TEST_USER,
+      roles: ["hospital_admin"],
+    });
+    expect(
+      screen.getByRole("region", { name: "Hospital admin" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Hospital settings" }),
+    ).toBeVisible();
   });
 });
