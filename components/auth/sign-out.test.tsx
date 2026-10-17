@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useEffect, useRef } from "react";
+import { Activity, useEffect, useRef, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/lib/auth/auth-context";
 import { OutboxProvider, useOutbox } from "@/lib/offline/outbox-context";
@@ -57,7 +57,53 @@ const mountWithUnsent = () =>
     );
   });
 
+/**
+ * The app keeps visited routes alive (cacheComponents): /sign-out stays
+ * mounted, hidden, after a sign-out and is shown again on the next one.
+ */
+function KeptAlive() {
+  const [mode, setMode] = useState<"visible" | "hidden">("visible");
+  const { signIn } = useAuth();
+  return (
+    <>
+      <button type="button" onClick={() => setMode("hidden")}>
+        leave
+      </button>
+      <button type="button" onClick={() => void signIn("a@b.org", "x")}>
+        sign in
+      </button>
+      <button type="button" onClick={() => setMode("visible")}>
+        sign out again
+      </button>
+      <Status />
+      <Activity mode={mode}>
+        <SignOut />
+      </Activity>
+    </>
+  );
+}
+
 describe("SignOut", () => {
+  it("signs out again when the kept-alive page is shown a second time", async () => {
+    renderWithAuth(<KeptAlive />);
+    await waitFor(() =>
+      expect(screen.getByTestId("auth")).toHaveTextContent("signed_out"),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "leave" }));
+    await userEvent.click(screen.getByRole("button", { name: "sign in" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("auth")).toHaveTextContent("signed_in"),
+    );
+    replace.mockClear();
+    await userEvent.click(
+      screen.getByRole("button", { name: "sign out again" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("auth")).toHaveTextContent("signed_out"),
+    );
+    expect(replace).toHaveBeenCalledWith("/sign-in");
+  });
+
   it("signs out and lands on sign-in", async () => {
     renderWithAuth(<SignOut />);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));

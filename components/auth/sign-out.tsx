@@ -18,6 +18,14 @@ export function SignOut() {
   // Also set by "Sign out and delete", so emptying the outbox can't sign out twice.
   const started = useRef(false);
   const unsent = items.length;
+  // Visited routes stay mounted, hidden (cacheComponents): leaving this page
+  // runs the cleanup, so the next sign-out in this tab starts again.
+  useEffect(
+    () => () => {
+      started.current = false;
+    },
+    [],
+  );
   useEffect(() => {
     if (status === "signed_in") {
       // Wait for the outbox, and ask first when something is still unsent.
