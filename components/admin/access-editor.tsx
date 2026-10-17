@@ -226,7 +226,8 @@ export function AccessEditor({
       )}
       {selfRoles && (
         <p id={selfId} className="text-[13px] text-ink-2">
-          This change is recorded in the activity log.
+          This change is recorded in the activity log and flagged for your
+          hospital&apos;s admins. It takes effect next time you sign in.
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">

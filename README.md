@@ -60,9 +60,9 @@ deactivated account. Invite people (one or a pasted list), and open anyone
 to change their roles, specialty or review rights, send a password reset,
 reset two-step, deactivate, reactivate or remove them. Removing someone (or
 cancelling an invite) needs your own two-step code (in the demo, `123456`).
+You can't do that to yourself or to the last hospital admin.
 The demo accepts `123456` and a real authenticator code again and again;
-making each code single-use is asked of the backend.
-You can't do that to yourself or to the last hospital admin. **Hospital
+making each code single-use is asked of the backend. **Hospital
 settings**, **Usage** and **Activity** (with **Review oversight**) are in
 the same sidebar group, and CSV exports are made on your device. The
 medical director sample (Dr. Obi) is a clinician and a hospital admin, so

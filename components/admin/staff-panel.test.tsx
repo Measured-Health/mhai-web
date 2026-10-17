@@ -219,7 +219,8 @@ describe("StaffPanel", () => {
       HOSPITAL_ADMIN,
     );
     const panel = await screen.findByRole("dialog", { name: "Staff member" });
-    const notice = "This change is recorded in the activity log.";
+    const notice =
+      "This change is recorded in the activity log and flagged for your hospital's admins. It takes effect next time you sign in.";
     const clinician = await within(panel).findByRole("checkbox", {
       name: "Clinician",
     });
@@ -248,7 +249,7 @@ describe("StaffPanel", () => {
       await within(panel).findByRole("checkbox", { name: "Hospital admin" }),
     );
     expect(
-      within(panel).queryByText("This change is recorded in the activity log."),
+      within(panel).queryByText(/This change is recorded in the activity log/),
     ).toBeNull();
   });
 
