@@ -142,50 +142,54 @@ export function ColumnChart({
         </table>
       ) : (
         <>
-          <ol
-            aria-labelledby={titleId}
-            aria-describedby={summaryId}
-            className="flex h-28 items-end gap-[2px] border-b border-line sm:h-40"
-          >
-            {columns.map((c, i) => (
-              <li
-                key={c.key}
-                ref={(el) => {
-                  refs.current[i] = el;
-                }}
-                tabIndex={i === current ? 0 : -1}
-                aria-label={describe(c)}
-                onKeyDown={(e) => move(e, i)}
-                onFocus={() => {
-                  setActive(i);
-                  setFocused(c.key);
-                }}
-                onBlur={() => setFocused(null)}
-                className="flex h-full min-w-0 flex-1 flex-col items-center justify-end rounded-t-sm focus-visible:outline-2 focus-visible:outline-mint-deep"
-              >
-                {c.mark && (
+          {/* On phones each column is at least a 44 px target and the chart
+              scrolls sideways; focusing a column scrolls it into view. */}
+          <div className="max-sm:overflow-x-auto">
+            <ol
+              aria-labelledby={titleId}
+              aria-describedby={summaryId}
+              className="flex h-28 items-end gap-[2px] border-b border-line max-sm:w-max max-sm:min-w-full sm:h-40"
+            >
+              {columns.map((c, i) => (
+                <li
+                  key={c.key}
+                  ref={(el) => {
+                    refs.current[i] = el;
+                  }}
+                  tabIndex={i === current ? 0 : -1}
+                  aria-label={describe(c)}
+                  onKeyDown={(e) => move(e, i)}
+                  onFocus={() => {
+                    setActive(i);
+                    setFocused(c.key);
+                  }}
+                  onBlur={() => setFocused(null)}
+                  className="flex h-full min-w-0 flex-1 flex-col items-center justify-end rounded-t-sm focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-mint-deep max-sm:min-w-11"
+                >
+                  {c.mark && (
+                    <span
+                      aria-hidden
+                      className="mb-0.5 text-[10px] leading-none text-warn-deep"
+                    >
+                      ▲
+                    </span>
+                  )}
                   <span
                     aria-hidden
-                    className="mb-0.5 text-[10px] leading-none text-warn-deep"
-                  >
-                    ▲
-                  </span>
-                )}
-                <span
-                  aria-hidden
-                  className={cn(
-                    "block w-full origin-bottom rounded-t-sm motion-safe:animate-[rise_var(--t-story)_var(--e-out)_both]",
-                    c.mark ? "bg-warn" : "bg-mint",
-                  )}
-                  style={{
-                    height: c.value
-                      ? `${Math.max(2, Math.round((c.value * 100) / top))}%`
-                      : 0,
-                  }}
-                />
-              </li>
-            ))}
-          </ol>
+                    className={cn(
+                      "block w-full origin-bottom rounded-t-sm motion-safe:animate-[rise_var(--t-story)_var(--e-out)_both]",
+                      c.mark ? "bg-warn" : "bg-mint",
+                    )}
+                    style={{
+                      height: c.value
+                        ? `${Math.max(2, Math.round((c.value * 100) / top))}%`
+                        : 0,
+                    }}
+                  />
+                </li>
+              ))}
+            </ol>
+          </div>
           <div
             aria-hidden
             className="mt-1 flex justify-between gap-2 text-[11px] text-ink-3"

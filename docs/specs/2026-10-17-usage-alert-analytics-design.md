@@ -82,6 +82,12 @@ shows "Fewer than 5"**.
 - **The UI shows "Fewer than 5" and no bar.** It never shows a number for a suppressed value,
   even if one is sent by mistake, and it shows any count from 1 to 4 as "Fewer than 5" as
   well (a second guard).
+- **Fail closed on a set that adds up (R3).** Where hiding is by sum (the total with the
+  severities, the dismissal reasons, acknowledged and dismissed), a raw 1 to 4 among the
+  members, or exactly one hidden member, would let the hidden value be worked out. The
+  frontend then fails the whole group: it shows "Couldn't load patient alerts" with Try again,
+  never zeros and never "Nothing unusual". The same goes for anything malformed, and for a
+  dismissal reason the frontend doesn't know.
 - **Changes and flags respect it:** a change is shown only when both periods' values are
   shown; a hidden group is never flagged as rising.
 - **Exception: Alerts over time.** Its daily or weekly totals are hospital-wide, with no
@@ -335,6 +341,11 @@ Rules for the backend:
   no separate alerts route, so a 404 is never needed: an older backend that sends no `alerts`
   field reads as switched off.
 - `Cache-Control: no-store`, as for the rest of usage.
+- Never send a set that gives a hidden value away: no raw 1 to 4, and never exactly one
+  hidden member in a set that adds up (the frontend fails the whole group closed, §4).
+- **New dismissal reasons must ship in the frontend before the backend sends them.** The
+  frontend knows the four reasons above; one it doesn't know fails the whole group closed
+  (a new reason would otherwise be missing from a set that is meant to add up).
 
 ## 14. Demo (sample data)
 

@@ -314,7 +314,7 @@ function periodRange(
  * The usage alerts sample: switched on, switched off (null), failing, or "edge":
  * the sample with hidden measures (Critical and Urgent, the Critical median),
  * a measure with nothing to measure yet (the median) and, in a weekly period,
- * a flagged week. Never a raw 1 to 4.
+ * a flagged week (with a previous period, so it shows). Never a raw 1 to 4.
  */
 export type MockAlertsMode = "on" | "off" | "unavailable" | "edge";
 
@@ -545,7 +545,13 @@ function alertsFor(
     rest.by_severity.urgent = { ...hiddenCount(), change: null };
     rest.median_ack_minutes_critical = { ...hiddenCount(), change: null };
     rest.median_ack_minutes = { value: null, suppressed: false, change: null };
-    if (series.bucket === "week") series.unusual = { 11: 2.1 };
+    if (series.bucket === "week") {
+      // The weekly period gets a previous one, or its flagged week and What
+      // changed line would never show. The week has no share change to go
+      // with it, so no worsening flag either.
+      rest.has_previous = true;
+      series.unusual = { 11: 2.1 };
+    }
   }
   return { ...rest, series: seriesFor(series, range.from, range.to) };
 }

@@ -16,6 +16,7 @@ import { ADMIN_NOW, mockAdminAs, mockAdminWith } from "@/tests/admin";
 import { ApiError } from "./errors";
 import type { GuardedOut, UsageAlertsOut } from "./admin-contract";
 import { PERIODS } from "@/lib/admin/report";
+import { readAlerts, whatChanged } from "@/lib/admin/alert-usage";
 import { SMALL_GROUP_MIN } from "@/lib/small-groups";
 
 const code = async (p: Promise<unknown>) => {
@@ -616,6 +617,19 @@ describe("usage alerts (sample, at 16 Oct)", () => {
       change: null,
     });
     expect(a.series.bucket).toBe("week");
+    // A previous period, so the flagged week and its What changed line show.
+    expect(a.has_previous).toBe(true);
+    expect(readAlerts({ alerts: a }).state).toBe("ready");
+    expect(whatChanged(a)).toEqual({
+      kind: "items",
+      items: [
+        {
+          key: "busy-2026-10-03",
+          kind: "busy",
+          text: "Week of 3 Oct: 45 alerts, about 2× the usual",
+        },
+      ],
+    });
     expect(a.series.points.filter((p) => p.usual_multiple !== null)).toEqual([
       { start: "2026-10-03", total: 45, usual_multiple: 2.1 },
     ]);

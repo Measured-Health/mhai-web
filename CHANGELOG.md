@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Usage's Result confidence and By specialty bars use the new shared bar
+  list. They look the same, but the bars now grow in once when the page
+  opens (not with reduced motion).
 - The decisions bell is now the notification bell, shared with patient
   alerts.
 - The 403 page is now only for Measured Health platform admin and auditor
@@ -21,6 +24,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Patient alerts on Usage for hospital admins, when alerts are switched on:
+  volumes by severity, still unhandled, median time to acknowledge (overall
+  and for Critical), the share of Critical alerts handled within the
+  hospital's target, outcomes and dismissal reasons, the top findings and
+  locations, and a column chart over time with a table view. A **What
+  changed** summary lists slower Critical handling, unusually busy days or
+  weeks and rising findings or locations, or says "Nothing unusual this
+  period" or "Not enough data to compare". The volume tiles, the response
+  times, the Critical share and the two outcomes show their change against
+  the previous period; dismissal reasons, top findings and top locations
+  don't. A change that rounds to zero reads "no change". Groups of fewer
+  than 5 show "Fewer than 5", on screen and in the CSV export, which now
+  includes the alert numbers. If the alert numbers can't load, or don't
+  add up safely, Usage says so with Try again instead of showing zeros.
+  The column chart scrolls sideways on phones so every column is a 44 px
+  target.
 - One notification centre for clinicians: the bell in the top bar counts
   new patient alerts and decisions on your corrections together
   ("Notifications, 3 unread"), and its panel shows the latest of both with

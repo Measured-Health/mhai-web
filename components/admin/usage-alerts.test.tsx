@@ -200,14 +200,27 @@ describe("UsageAlerts", () => {
   });
 
   it("marks no week as busy without a previous period, even when one is flagged", async () => {
-    render(
-      <UsageAlerts usage={await edge("last_90_days")} onRetry={vi.fn()} />,
-    );
+    const u = await edge("last_90_days");
+    const flagged = {
+      ...u,
+      alerts: { ...(u.alerts as UsageAlertsOut), has_previous: false },
+    };
+    render(<UsageAlerts usage={flagged} onRetry={vi.fn()} />);
     expect(
       within(changed()).getByText("Not enough data to compare"),
     ).toBeInTheDocument();
     expect(screen.queryByText("Unusually busy")).toBeNull();
     expect(screen.queryByText(/the usual/)).toBeNull();
+  });
+
+  it("shows the edge week as busy, with its line, when there is a previous period", async () => {
+    render(
+      <UsageAlerts usage={await edge("last_90_days")} onRetry={vi.fn()} />,
+    );
+    expect(items("What changed")).toEqual([
+      "Week of 3 Oct: 45 alerts, about 2× the usual",
+    ]);
+    expect(screen.getByText("Unusually busy")).toBeInTheDocument();
   });
 
   it("never reads as zero or Nothing unusual when alerts couldn't load (Review Focus 1)", async () => {
