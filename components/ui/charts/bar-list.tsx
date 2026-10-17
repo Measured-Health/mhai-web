@@ -1,22 +1,6 @@
-import type { ReactNode } from "react";
+import type { BarItem } from "@/lib/charts";
 import { FEWER_THAN_5 } from "@/lib/small-groups";
 import { cn } from "../cn";
-
-export interface BarItem {
-  key: string;
-  label: ReactNode;
-  /** Bar length in the list's scale; null draws no bar. */
-  value: number | null;
-  /** Written beside the bar, e.g. "412" or "62%". */
-  text: string;
-  /** Under the small-group rule: writes "Fewer than 5" and draws no bar. */
-  hidden?: boolean;
-  icon?: ReactNode;
-  /** A line under the label, e.g. the change against the previous period. Never with a hidden value. */
-  note?: ReactNode;
-  /** Bar colour class; `bg-mint` by default. */
-  barClass?: string;
-}
 
 /**
  * Horizontal bars with the number always written beside them (the Usage

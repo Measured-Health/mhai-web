@@ -18,8 +18,8 @@ import {
   flagWord,
   locationLabel,
 } from "../notifications/alert-view";
+import type { Column } from "../charts";
 import { FEWER_THAN_5, SMALL_GROUP_MIN, isSmallCount } from "../small-groups";
-import type { Column } from "@/components/ui/charts/column-chart";
 import { countLabel, percentLabel } from "./report";
 
 // The usage alerts wording and guards (Plan 5b). The backend computes every

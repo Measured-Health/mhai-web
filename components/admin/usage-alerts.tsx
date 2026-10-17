@@ -46,7 +46,8 @@ import {
 } from "@/lib/admin/alert-usage";
 import { DISMISS_REASONS, SEVERITY } from "@/lib/notifications/alert-view";
 import { SEVERITY_ICON } from "../notifications/chips";
-import { BarList, type BarItem } from "../ui/charts/bar-list";
+import type { BarItem } from "@/lib/charts";
+import { BarList } from "../ui/charts/bar-list";
 import { ColumnChart } from "../ui/charts/column-chart";
 import { cn } from "../ui/cn";
 import { Card, RetryBanner, Tile } from "./usage-parts";

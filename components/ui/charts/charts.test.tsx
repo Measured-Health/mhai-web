@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { Activity } from "react";
 import { describe, expect, it } from "vitest";
 import { BarList } from "./bar-list";
-import { ColumnChart, type Column } from "./column-chart";
+import type { Column } from "@/lib/charts";
+import { ColumnChart } from "./column-chart";
 
 const bars = (list: HTMLElement) =>
   within(list)
@@ -140,6 +141,7 @@ const chart = (columns = COLUMNS) =>
       summary="Most alerts on 14 Oct: 23"
       valueText={(n) => (n === 1 ? "1 alert" : `${n} alerts`)}
       headers={["Day", "Alerts"]}
+      markLegend="Unusually busy"
     />,
   );
 
@@ -253,6 +255,7 @@ describe("ColumnChart", () => {
         summary="s"
         valueText={(n) => `${n} alerts`}
         headers={["Day", "Alerts"]}
+        markLegend="Unusually busy"
       />,
     );
     const items = screen.getAllByRole("listitem");
@@ -281,6 +284,7 @@ describe("ColumnChart", () => {
           summary="s"
           valueText={(n) => `${n} alerts`}
           headers={["Day", "Alerts"]}
+          markLegend="Unusually busy"
         />
       </Activity>
     );
@@ -308,6 +312,7 @@ describe("ColumnChart", () => {
         summary="s"
         valueText={(n) => `${n} alerts`}
         headers={["Day", "Alerts"]}
+        markLegend="Unusually busy"
       />,
     );
     expect(

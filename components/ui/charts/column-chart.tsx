@@ -7,17 +7,9 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import type { Column } from "@/lib/charts";
 import { Button } from "../button";
 import { cn } from "../cn";
-
-export interface Column {
-  key: string;
-  /** e.g. "14 Oct" or "Week of 6 Oct". */
-  label: string;
-  value: number;
-  /** Why this column is marked, e.g. "about 3× the usual"; null when not. */
-  mark?: string | null;
-}
 
 const HEADING = { 2: "h2", 3: "h3", 4: "h4" } as const;
 
@@ -32,7 +24,7 @@ export function ColumnChart({
   summary,
   valueText,
   headers,
-  markLegend = "Unusually busy",
+  markLegend,
   level = 3,
 }: {
   title: string;
@@ -40,7 +32,8 @@ export function ColumnChart({
   summary: string;
   valueText: (n: number) => string;
   headers: readonly [string, string];
-  markLegend?: string;
+  /** What a marked column means, written beside the marker in the legend. */
+  markLegend: string;
   level?: 2 | 3 | 4;
 }) {
   const [asTable, setAsTable] = useState(false);
