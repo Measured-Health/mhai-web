@@ -3,27 +3,30 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState, type FormEvent } from "react";
 import { homeFor, useAuth } from "@/lib/auth/auth-context";
-import { normalizeBackupCode } from "@/lib/auth/codes";
 import { useRedirect } from "@/lib/auth/use-redirect";
 import type { AuthError } from "@/lib/auth/types";
 import { Button } from "../ui/button";
 import { AuthHeading } from "./auth-layout";
-import { CodeInput, normalizeCode } from "./code-input";
-import { inputClass } from "./password-fields";
+import {
+  BACKUP_FAILED_BODY,
+  BackupCodeInput,
+  BackupCodeToggle,
+  useCodeOrBackup,
+} from "./backup-code-toggle";
+import { CodeInput } from "./code-input";
 import { AuthErrorBanner } from "./auth-error-banner";
 import { errorCode } from "./auth-error-copy";
 
 const BACKUP_FAILED = {
   title: "That backup code didn't work.",
-  body: "Check it, or it may have been used already. Each code works once.",
+  body: BACKUP_FAILED_BODY,
 };
 
 export function CodeForm() {
   const auth = useAuth();
   const router = useRouter();
   const id = useId();
-  const [code, setCode] = useState("");
-  const [backup, setBackup] = useState(false);
+  const { code, setCode, backup, setBackup, ready, value } = useCodeOrBackup();
   const [trust, setTrust] = useState(false);
   const [error, setError] = useState<AuthError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,14 +42,13 @@ export function CodeForm() {
   useRedirect(target);
   if (auth.status === "loading" || target) return null;
 
-  const ready = backup ? code.length === 9 : normalizeCode(code).length === 6;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!ready || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await auth.verifyCode(backup ? code : normalizeCode(code), {
+      await auth.verifyCode(value, {
         backup,
         trustDevice: trust,
       });
@@ -91,26 +93,12 @@ export function CodeForm() {
         </AuthErrorBanner>
       )}
       {backup ? (
-        <div>
-          <label
-            htmlFor={`${id}-backup`}
-            className="mb-1.5 block text-[12.5px] text-ink-2"
-          >
-            Backup code
-          </label>
-          <input
-            ref={backupRef}
-            id={`${id}-backup`}
-            autoComplete="off"
-            autoCapitalize="characters"
-            spellCheck={false}
-            placeholder="XXXX-XXXX"
-            maxLength={9}
-            value={code}
-            onChange={(e) => setCode(normalizeBackupCode(e.target.value))}
-            className={`${inputClass} font-mono`}
-          />
-        </div>
+        <BackupCodeInput
+          id={`${id}-backup`}
+          inputRef={backupRef}
+          value={code}
+          onChange={setCode}
+        />
       ) : (
         <CodeInput
           autoSubmit
@@ -137,34 +125,14 @@ export function CodeForm() {
         {busy ? "Checking…" : "Verify"}
       </Button>
       <p className="mt-4 flex flex-wrap items-center justify-center gap-x-2 text-[13px] text-ink-3">
-        {backup ? (
-          <button
-            type="button"
-            className="min-h-11 text-mint-deep"
-            onClick={() => {
-              setBackup(false);
-              setCode("");
-              setError(null);
-            }}
-          >
-            Use your app instead
-          </button>
-        ) : (
-          <>
-            Lost your phone?
-            <button
-              type="button"
-              className="min-h-11 text-mint-deep"
-              onClick={() => {
-                setBackup(true);
-                setCode("");
-                setError(null);
-              }}
-            >
-              Use a backup code
-            </button>
-          </>
-        )}
+        <BackupCodeToggle
+          backup={backup}
+          prompt="Lost your phone?"
+          onChange={(b) => {
+            setBackup(b);
+            setError(null);
+          }}
+        />
         <span aria-hidden>·</span>
         <button
           type="button"

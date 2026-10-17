@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { useRef } from "react";
 import { ConfidencePill } from "./confidence-pill";
 import { Button } from "./button";
 import { Banner } from "./banner";
@@ -44,6 +45,25 @@ describe("Dialog", () => {
     expect(screen.getByText("Keep editing")).toHaveFocus();
     await userEvent.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("can give the first focus to a chosen element over an earlier input", () => {
+    function Ask() {
+      const keep = useRef<HTMLButtonElement>(null);
+      return (
+        <Dialog
+          open
+          onClose={() => {}}
+          title="Remove this account?"
+          initialFocus={keep}
+        >
+          <input aria-label="Code" />
+          <button ref={keep}>Keep account</button>
+        </Dialog>
+      );
+    }
+    render(<Ask />);
+    expect(screen.getByText("Keep account")).toHaveFocus();
   });
 });
 

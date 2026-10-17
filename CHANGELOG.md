@@ -17,6 +17,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Hospital admins can manage each person from the staff member panel:
+  change roles, specialty and who can review corrections; send a password
+  reset; reset two-step verification; remind them to set it up; send a new
+  invite; deactivate and reactivate; or remove the account (or cancel an
+  invite). Removing someone needs your own two-step code (or a backup
+  code). Destructive actions ask first, with "Keep" as the default, and
+  nobody can lock themselves or the hospital out.
 - Hospital admins: a "Hospital admin" group in the sidebar (Staff,
   Hospital settings, Activity, Usage). A medical director who is also a
   clinician sees both sides; a hospital admin who isn't a clinician signs

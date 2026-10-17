@@ -15,6 +15,7 @@ import { Button } from "../ui/button";
 import { SidePanel } from "../ui/side-panel";
 import { Skeleton } from "../ui/skeleton";
 import { AccessEditor } from "./access-editor";
+import { AccountActions, RemindButton } from "./account-actions";
 import { StaffStatusChip } from "./chips";
 
 const JOINED = new Intl.DateTimeFormat("en-GB", {
@@ -44,7 +45,13 @@ export function StaffPanel({
   return (
     <SidePanel open={staffId !== null} onClose={onClose} title="Staff member">
       {row ? (
-        <Member row={row} list={list} settings={settings.data} now={now} />
+        <Member
+          row={row}
+          list={list}
+          settings={settings.data}
+          now={now}
+          onClose={onClose}
+        />
       ) : staff.isSuccess ? (
         <div role="status">
           <b className="block text-[15px]">
@@ -69,11 +76,13 @@ function Member({
   list,
   settings,
   now,
+  onClose,
 }: {
   row: StaffOut;
   list: StaffOut[];
   settings: HospitalSettingsOut | undefined;
   now: number;
+  onClose(): void;
 }) {
   const activity = useStaffActivity(row.id);
   const recentId = useId();
@@ -98,6 +107,7 @@ function Member({
         <Banner tone="warn" title="Two-step verification isn't set up">
           Hospital policy requires it. {row.display_name} will be asked at next
           sign-in.
+          <RemindButton row={row} />
         </Banner>
       )}
       {note && <p className="text-[13px] text-ink-2">{note}</p>}
@@ -112,6 +122,8 @@ function Member({
       ) : (
         <Skeleton className="h-48" />
       )}
+
+      <AccountActions row={row} list={list} onRemoved={onClose} />
 
       <section aria-labelledby={recentId}>
         <h3 id={recentId} className="mb-2 text-[13px] font-semibold">
