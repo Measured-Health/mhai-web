@@ -59,4 +59,22 @@ describe("labels", () => {
     expect(stageIndex(null)).toBe(0);
     expect(stageIndex(undefined)).toBe(0);
   });
+  it("forbids the hospital admin codes on screen", () => {
+    for (const t of [
+      "self_change",
+      "last_admin",
+      "not_eligible",
+      "domain_not_allowed",
+      "already_staff",
+      "invalid_email",
+      "mfa_not_set_up",
+      "invite_expired",
+      "hospital_admin",
+      "password_mfa",
+      "mfa_required",
+      "mfa_invalid",
+      "mfa_locked",
+    ])
+      expect(FORBIDDEN_TERMS).toContain(t);
+  });
 });
