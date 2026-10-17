@@ -59,19 +59,24 @@ when a new hospital or a new EMR vendor is added.
 1. The frontend talks **only to MHAI's API**, never to an EMR, and receives the canonical
    shape (alerts, findings, patient, location, analysis aggregates). No vendor names, codes
    or formats in components.
-2. **Source is data, not code:** an alert or finding carries `source` (a display name such as
-   "Havana EMR") and an `emr_link` the backend provides. The UI shows "Open in {source}" and
-   follows the link; it never builds EMR URLs.
+2. **Vendors are invisible to the frontend.** No vendor or product names appear in the UI,
+   the code or the API types. An alert or finding carries an `emr_link` the backend
+   provides; the UI shows a generic "Open patient record" and follows the link, never
+   building EMR URLs. Where a hospital has more than one connected system, each has a
+   hospital-chosen label (e.g. "Main record", "Lab system"), returned by the API as
+   `source_label`; the UI shows that label only, never the vendor.
 3. **Locations, codes and units come already normalised** (with a display label); the UI
    never maps codes. A finding shows the source's reference range as given.
 4. **Unknown or partial data degrades gracefully:** a missing location shows "Location not
    recorded"; an unmapped finding shows its source label with "Not standardised" — never
    hidden, never guessed.
 5. **Many systems per hospital** are possible (e.g. a lab system and a separate EMR); lists
-   and analysis filters include **Source** when more than one is connected.
-6. **Admin screens are driven by the API:** connection status (hospital admin, read-only) and
-   connection setup (platform admin app) render the fields each connector declares, so a new
-   connector needs no new screens.
+   and analysis filters include **Source** (by `source_label`) when more than one is
+   connected.
+6. **Admin screens are driven by the API:** connection status (hospital admin, read-only)
+   shows the hospital's labels and health, not vendors. Connection setup lives only in the
+   platform admin app, which renders the fields each connector declares, so a new connector
+   needs no new screens there either.
 
 ## Consequences
 

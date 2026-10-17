@@ -35,7 +35,8 @@ alerts and MHAI's suggestions relate.
 - All analysis runs on the backend, on MHAI's canonical, normalised model (ADR 0003), so the
   same views work for every hospital and every connected EMR. The browser receives results
   only.
-- **Source** is a filter when a hospital has more than one connected system; records with
+- **Source** (the hospital's own label for each system, never a vendor name) is a filter when
+  a hospital has more than one connected system; records with
   codes that couldn't be standardised are counted under "Not standardised" rather than
   dropped or guessed.
 
