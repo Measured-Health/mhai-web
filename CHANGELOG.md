@@ -17,6 +17,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The hospital's activity log: sign-ins, consultations (specialty and
+  confidence only), feedback, review decisions, account changes and flagged
+  security events, with filters and a CSV export made on the device.
 - Usage for hospital admins, in counts only: consultations, active
   clinicians, agreement rate, median review time, the confidence mix and
   the specialty breakdown, with a CSV export made on the device.
