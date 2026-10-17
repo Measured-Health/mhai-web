@@ -287,10 +287,10 @@ test("a reviewer's decision arrives as a toast and stays in the bell", async ({
     page.getByText("Your correction was approved", { exact: true }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Decisions on your corrections, 1 new" })
+    .getByRole("button", { name: /^Notifications, \d+ unread$/ })
     .filter({ visible: true })
     .click();
   await expect(
-    page.getByRole("region", { name: "Decisions this session" }),
+    page.getByRole("region", { name: "Notifications" }),
   ).toContainText("Dengue fever, likely");
 });

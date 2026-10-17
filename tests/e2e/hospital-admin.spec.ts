@@ -67,7 +67,7 @@ async function expectNoClinicalScreen(page: Page) {
     page.getByRole("heading", { name: "My feedback & corrections" }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: /^Decisions on your corrections/ }),
+    page.getByRole("button", { name: /^Notifications/ }),
   ).toHaveCount(0);
 }
 

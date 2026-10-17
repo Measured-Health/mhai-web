@@ -277,3 +277,14 @@ describe("Toast pop-ups", () => {
     ).toBeVisible();
   });
 });
+
+describe("Toast printing (B4)", () => {
+  it("keeps pop-ups off paper: the whole viewport is print:hidden", () => {
+    ui();
+    act(() => {
+      box.api.show(popup());
+    });
+    const viewport = document.querySelector("[data-toast]")!.parentElement!;
+    expect(viewport).toHaveClass("print:hidden");
+  });
+});

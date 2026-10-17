@@ -142,12 +142,12 @@ describe("AppShell by role", () => {
     await userEvent.keyboard("n");
   };
 
-  it("gives a clinician the shortcuts and the decision bell", async () => {
+  it("gives a clinician the shortcuts and the notification bell", async () => {
     shell(TEST_USER);
     expect(screen.getByText("decisions on")).toBeInTheDocument();
     expect(
       await screen.findByRole("button", {
-        name: /Decisions on your corrections/,
+        name: /^Notifications/,
       }),
     ).toBeInTheDocument();
     await userEvent.keyboard("?");
@@ -159,14 +159,14 @@ describe("AppShell by role", () => {
     expect(push).toHaveBeenCalledWith("/");
   });
 
-  it("gives a hospital admin who isn't a clinician no shortcuts, search or decision bell (R3)", async () => {
+  it("gives a hospital admin who isn't a clinician no shortcuts, search or notification bell (R3)", async () => {
     shell({ ...TEST_USER, roles: ["hospital_admin"] });
     expect(screen.getByRole("heading", { name: "Staff" })).toBeInTheDocument();
     expect(screen.getByText("decisions off")).toBeInTheDocument();
     await keys();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(
-      screen.queryByRole("button", { name: /Decisions on your corrections/ }),
+      screen.queryByRole("button", { name: /^Notifications/ }),
     ).toBeNull();
     expect(push).not.toHaveBeenCalled();
   });

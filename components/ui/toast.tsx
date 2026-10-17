@@ -155,7 +155,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {assertive.text && <span key={assertive.n}>{assertive.text}</span>}
       </div>
       {/* Below the top bar, so a pop-up never covers the bell (R4). */}
-      <div className="pointer-events-none fixed right-5 top-[calc(var(--demo-h,0px)+4.75rem)] z-50 flex w-[340px] max-w-[calc(100vw-2.5rem)] flex-col gap-2">
+      <div className="pointer-events-none fixed right-5 print:hidden top-[calc(var(--demo-h,0px)+4.75rem)] z-50 flex w-[340px] max-w-[calc(100vw-2.5rem)] flex-col gap-2">
         {items.map((t) => {
           const Icon = t.severity ? ICON[t.severity] : null;
           const action = t.action;

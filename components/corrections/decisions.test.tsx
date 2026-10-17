@@ -14,7 +14,7 @@ vi.mock("@/lib/api/client", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
-import { DecisionBell } from "./decision-bell";
+import { NotificationBell } from "../notifications/notification-bell";
 import { DecisionsProvider, newDecisions } from "./decisions-provider";
 
 const reviewer = {
@@ -44,7 +44,7 @@ function ui() {
     <QueryClientProvider client={qc}>
       <ToastProvider>
         <DecisionsProvider>
-          <DecisionBell />
+          <NotificationBell />
           <button>elsewhere</button>
         </DecisionsProvider>
       </ToastProvider>
@@ -102,21 +102,19 @@ describe("newDecisions", () => {
   });
 });
 
-describe("decision toasts and the bell", () => {
-  it("never toasts decisions that were already there at sign-in", async () => {
+describe("decision pop-ups and the bell", () => {
+  it("never pops up decisions that were already there at sign-in", async () => {
     listMine.mockResolvedValue([approved]);
     const qc = ui();
     await baseline(qc);
     expect(
-      await screen.findByRole("button", {
-        name: "Decisions on your corrections",
-      }),
+      await screen.findByRole("button", { name: "Notifications" }),
     ).toBeVisible();
     await act(() => Promise.resolve());
     expect(screen.queryByText("Your correction was approved")).toBeNull();
   });
 
-  it("toasts a new decision, counts it on the bell, and lists it there", async () => {
+  it("pops up a new decision, counts it on the bell, and lists it there", async () => {
     const user = userEvent.setup();
     listMine.mockResolvedValueOnce([waiting]);
     const qc = ui();
@@ -128,25 +126,21 @@ describe("decision toasts and the bell", () => {
     ).toBeVisible();
     expect(screen.getByText("Dengue fever, likely · Dr. Bello")).toBeVisible();
     const bell = screen.getByRole("button", {
-      name: "Decisions on your corrections, 1 new",
+      name: "Notifications, 1 unread",
     });
     await user.click(bell);
-    const panel = screen.getByRole("region", {
-      name: "Decisions this session",
-    });
+    const panel = screen.getByRole("region", { name: "Notifications" });
     expect(within(panel).getByText("Approved")).toBeVisible();
     expect(within(panel).getByText("Dengue fever, likely")).toBeVisible();
     expect(
-      within(panel).getByRole("link", { name: "My feedback & corrections" }),
-    ).toHaveAttribute("href", "/my-feedback");
+      within(panel).getByRole("link", { name: "See all" }),
+    ).toHaveAttribute("href", "/notifications");
     expect(
-      within(panel).getByText("Kept for this session only."),
+      within(panel).getByText("Decisions are kept for this session only."),
     ).toBeVisible();
-    expect(bell).toHaveAccessibleName("Decisions on your corrections");
+    expect(bell).toHaveAccessibleName("Notifications");
     await user.keyboard("{Escape}");
-    expect(
-      screen.queryByRole("region", { name: "Decisions this session" }),
-    ).toBeNull();
+    expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
     expect(bell).toHaveFocus();
   });
 
@@ -171,11 +165,11 @@ describe("decision toasts and the bell", () => {
     expect(
       screen.getByText("Dengue fever, likely · Reason: Unsafe: Dose too high."),
     ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: /1 new/ }));
+    await user.click(screen.getByRole("button", { name: /1 unread/ }));
     expect(
-      within(
-        screen.getByRole("region", { name: "Decisions this session" }),
-      ).getByText("Reason: Unsafe: Dose too high."),
+      within(screen.getByRole("region", { name: "Notifications" })).getByText(
+        "Reason: Unsafe: Dose too high.",
+      ),
     ).toBeVisible();
   });
 
@@ -184,15 +178,11 @@ describe("decision toasts and the bell", () => {
     listMine.mockResolvedValue([]);
     ui();
     await user.click(
-      await screen.findByRole("button", {
-        name: "Decisions on your corrections",
-      }),
+      await screen.findByRole("button", { name: "Notifications" }),
     );
     expect(screen.getByText(/No decisions yet/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "elsewhere" }));
-    expect(
-      screen.queryByRole("region", { name: "Decisions this session" }),
-    ).toBeNull();
+    expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
   });
 
   it("keeps the history in memory only", async () => {
@@ -205,10 +195,5 @@ describe("decision toasts and the bell", () => {
     await screen.findByText("Your correction was approved");
     expect(setItem).not.toHaveBeenCalled();
     setItem.mockRestore();
-  });
-
-  it("renders no bell outside the provider", () => {
-    const { container } = render(<DecisionBell />);
-    expect(container).toBeEmptyDOMElement();
   });
 });

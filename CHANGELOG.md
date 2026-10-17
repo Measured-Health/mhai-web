@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The decisions bell is now the notification bell, shared with patient
+  alerts.
 - The 403 page is now only for Measured Health platform admin and auditor
   accounts, and points them to the platform admin app. Hospital admins use
   the hospital admin side instead.
@@ -19,6 +21,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- One notification centre for clinicians: the bell in the top bar counts
+  new patient alerts and decisions on your corrections together
+  ("Notifications, 3 unread"), and its panel shows the latest of both with
+  "See all". New alerts and decisions pop up with a View button. Alerts
+  that were already there when you signed in don't pop up; Critical alerts
+  are read out at once and stay until you hide them; a burst shows at most
+  three pop-ups and a summary. Pop-ups never take the focus and go when you
+  sign out. The panel and pop-ups are left out when printing.
 - Review oversight for hospital admins: corrections waiting with their
   specialty, how long they've waited and how many people can review them;
   specialties short of reviewers are flagged; remind the reviewers or
