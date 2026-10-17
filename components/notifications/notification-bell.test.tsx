@@ -194,6 +194,26 @@ describe("NotificationBell", () => {
     expect(mark!.querySelector("svg")).toBeTruthy();
   });
 
+  it("keeps the unseen decisions in the name and badge when the alert count fails", async () => {
+    alerts.getUnreadCount.mockRejectedValue(new ApiError(400, "bad"));
+    const waiting2 = makeCorrection({ id: "c2" });
+    listMine.mockResolvedValueOnce([waiting, waiting2]);
+    const qc = ui();
+    await bell("Notifications, couldn't check for new alerts");
+    await vi.waitFor(() =>
+      expect(qc.getQueryState(CORRECTION_KEYS.mine)?.status).toBe("success"),
+    );
+    listMine.mockResolvedValueOnce([approved, { ...approved, id: "c2" }]);
+    await act(() => qc.invalidateQueries({ queryKey: CORRECTION_KEYS.mine }));
+    const b = await bell(
+      "Notifications, 2 unread, couldn't check for new alerts",
+    );
+    const mark = b.querySelector("[data-count-failed]");
+    expect(mark).toBeTruthy();
+    expect(mark!.querySelector("svg")).toBeTruthy();
+    expect(mark).toHaveTextContent("2");
+  });
+
   it("shows loading in the panel until the alerts arrive, never 'no alerts' (F3)", async () => {
     const user = userEvent.setup();
     // One check is two reads (the feed and the Criticals): hold both.

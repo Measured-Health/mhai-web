@@ -57,10 +57,14 @@ export function NotificationBell() {
 
   if (!d && !a) return null;
   const count = (a?.unread ?? 0) + (d?.unseen ?? 0);
-  // A failed count is never shown as a number, or as nothing new (F3).
+  // A failed alert count is never shown as a number, or as nothing new
+  // (F3); unseen decisions are still known, so they still count.
   const failed = !!a?.countFailed;
+  const unseen = d?.unseen ?? 0;
   const label = failed
-    ? "Notifications, couldn't check for new alerts"
+    ? unseen
+      ? `Notifications, ${unseen} unread, couldn't check for new alerts`
+      : "Notifications, couldn't check for new alerts"
     : count
       ? `Notifications, ${count} unread`
       : "Notifications";
@@ -96,9 +100,10 @@ export function NotificationBell() {
           <span
             aria-hidden
             data-count-failed
-            className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-warn-wash text-warn-deep ring-1 ring-warn-line"
+            className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center gap-0.5 rounded-full bg-warn-wash px-0.5 font-mono text-[10px] font-bold text-warn-deep ring-1 ring-warn-line"
           >
-            <AlertTriangle className="size-2.5" />
+            <AlertTriangle className="size-2.5 shrink-0" />
+            {unseen > 0 && (unseen > 99 ? "99+" : unseen)}
           </span>
         ) : (
           count > 0 && (
