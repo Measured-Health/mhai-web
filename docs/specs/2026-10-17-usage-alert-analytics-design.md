@@ -84,7 +84,8 @@ shows "Fewer than 5"**.
   well (a second guard).
 - **Fail closed on a set that adds up (R3).** Where hiding is by sum (the total with the
   severities, the dismissal reasons, acknowledged and dismissed), a raw 1 to 4 among the
-  members, or exactly one hidden member, would let the hidden value be worked out. The
+  members, exactly one hidden member, or hidden severities that the shown total puts under 5
+  together, would let the hidden value be worked out. The
   frontend then fails the whole group: it shows "Couldn't load patient alerts" with Try again,
   never zeros and never "Nothing unusual". The same goes for anything malformed, for a
   dismissal reason the frontend doesn't know, and for a share, median or worsening flag sent

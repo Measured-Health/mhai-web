@@ -176,10 +176,31 @@ function givesAway(set: GuardedOut[], kind: MeasureKind): boolean {
   return set.filter((g) => shown(g, kind).kind === "hidden").length === 1;
 }
 
+/**
+ * With the total shown, hidden severities together are the total minus the
+ * shown ones. Under 5 gives them away ("3" says both are 1 or 2); 0 or less
+ * doesn't add up at all (a hidden group is never 0).
+ */
+function severitiesGiveAway(a: UsageAlertsOut, sev: GuardedOut[]): boolean {
+  const t = shown(a.total, "count");
+  if (
+    t.kind !== "value" ||
+    !sev.some((g) => shown(g, "count").kind === "hidden")
+  )
+    return false;
+  let rest = t.value;
+  for (const g of sev) {
+    const s = shown(g, "count");
+    if (s.kind === "value") rest -= s.value;
+  }
+  return rest < SMALL_GROUP_MIN;
+}
+
 function safeSets(a: UsageAlertsOut): boolean {
   const sev = SEVERITY_ORDER.map((k) => a.by_severity[k]);
   return !(
     givesAway([a.total, ...sev], "count") ||
+    severitiesGiveAway(a, sev) ||
     givesAway(
       a.dismiss_reasons.map((r) => r.count),
       "count",

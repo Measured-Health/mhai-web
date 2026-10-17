@@ -294,6 +294,31 @@ describe("readAlerts", () => {
     expect(readAlerts({ alerts: edge }).state).toBe("ready");
   });
 
+  it("refuses two hidden severities the shown total gives away (G5)", async () => {
+    const a = await sampleAlerts();
+    // Two hidden severities beside a shown total and Info: 128 - 125 = 3
+    // says both are tiny (and 2 would say both are 1).
+    const twoHidden = (info: number) =>
+      broken(a, {
+        by_severity: {
+          critical: hidden(),
+          urgent: hidden(),
+          info: m(info),
+        },
+        median_ack_minutes_critical: hidden(),
+        critical_within_target: hidden(),
+        worsening: null,
+      });
+    for (const info of [124, 125, 126, 127])
+      expect(stateOf(twoHidden(info))).toBe("failed");
+    // A sum that doesn't add up can't be read either.
+    expect(stateOf(twoHidden(128))).toBe("failed");
+    expect(stateOf(twoHidden(130))).toBe("failed");
+    // Hidden together at 5 or more, as the server does it, is fine.
+    expect(stateOf(twoHidden(123))).toBe("ready");
+    expect(stateOf(twoHidden(65))).toBe("ready");
+  });
+
   it("refuses a share or median shown over a hidden group (G1)", async () => {
     const a = await sampleAlerts();
     // Critical hidden together with Urgent, as the server does it: the sets

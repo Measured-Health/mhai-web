@@ -144,6 +144,39 @@ describe("UsageAlerts", () => {
     expect(tile("Median time to acknowledge")).not.toHaveTextContent(/\d/);
   });
 
+  it("draws no bar and no change beside any Fewer than 5 (G7)", async () => {
+    const u = await edge();
+    const a = u.alerts as UsageAlertsOut;
+    const change = { direction: "up", amount: 10, previous: 36 } as const;
+    // The server wrongly sends changes with hidden values: none may show.
+    const hiddenWithChange = { value: 40, suppressed: true, change };
+    render(
+      <UsageAlerts
+        usage={{
+          ...u,
+          alerts: {
+            ...a,
+            by_severity: { ...a.by_severity, urgent: hiddenWithChange },
+            median_ack_minutes_critical: hiddenWithChange,
+            acknowledged_share: hiddenWithChange,
+            dismissed_share: hiddenWithChange,
+          },
+        }}
+        onRetry={vi.fn()}
+      />,
+    );
+    const hidden = screen.getAllByText("Fewer than 5");
+    // Critical, Urgent, the Critical median and share tiles; two outcomes,
+    // two reasons, a finding and a location row.
+    expect(hidden).toHaveLength(10);
+    for (const el of hidden) {
+      const box = (el.closest("li") ?? el.closest(".card-v3"))!;
+      expect(box).not.toHaveTextContent(/ vs |\bup\b|\bdown\b|point/);
+      expect(box.querySelector(".rounded-full")).toBeNull();
+      expect(box.querySelector("[class*='lucide-arrow']")).toBeNull();
+    }
+  });
+
   it("charts the days, marking the busy one", async () => {
     render(<UsageAlerts usage={await usage()} onRetry={vi.fn()} />);
     const chart = screen.getByRole("region", { name: "Alerts over time" });
