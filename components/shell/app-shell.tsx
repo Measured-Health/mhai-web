@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth/auth-context";
+import { isAdminOnly } from "@/lib/auth/types";
 import { useShortcuts } from "@/lib/hooks/use-shortcuts";
 import { useSession } from "@/lib/session-store";
 import { CommandPalette } from "../utility/command-palette";
@@ -54,6 +56,9 @@ export function useShell(): ShellCtx {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  // A hospital admin who isn't a clinician gets no clinical tools (R3).
+  const { user } = useAuth();
+  const clinical = !isAdminOnly(user);
   const { items } = useSession();
   const router = useRouter();
   const [drawer, setDrawer] = useState(false);
@@ -79,11 +84,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     setDrawer(false);
     setKeysOpen(true);
   }, []);
-  useShortcuts({
-    "mod+k": openSearch,
-    "?": openShortcuts,
-    n: () => navigate("/"),
-  });
+  useShortcuts(
+    clinical
+      ? { "mod+k": openSearch, "?": openShortcuts, n: () => navigate("/") }
+      : {},
+  );
   const ctx = useMemo<ShellCtx>(
     () => ({
       openDrawer: () => setDrawer(true),
@@ -97,40 +102,48 @@ export function AppShell({ children }: { children: ReactNode }) {
     }),
     [openSearch, openShortcuts, searchOpen, navigate, setNavigationGuard],
   );
+  const body = (
+    <>
+      <div className="grid h-[calc(100dvh-var(--demo-h,0px))] grid-cols-1 md:grid-cols-[76px_minmax(0,1fr)] xl:grid-cols-[256px_minmax(0,1fr)]">
+        {/* Sidebar reads usePathname(); with cacheComponents it must sit in Suspense. */}
+        <div className="hidden md:block xl:hidden">
+          <Suspense fallback={null}>
+            <Sidebar items={items} rail onOpenSearch={openSearch} />
+          </Suspense>
+        </div>
+        <div className="hidden xl:block">
+          <Suspense fallback={null}>
+            <Sidebar items={items} onOpenSearch={openSearch} />
+          </Suspense>
+        </div>
+        <main className="canvas-v3 relative flex min-w-0 flex-col overflow-hidden">
+          <OfflineStrip />
+          {/* The health check is a clinical call. */}
+          {clinical && <DegradedStrip />}
+          {children}
+        </main>
+      </div>
+      <MobileDrawer
+        open={drawer}
+        onClose={() => setDrawer(false)}
+        items={items}
+        onOpenSearch={openSearch}
+      />
+      {clinical && (
+        <>
+          <CommandPalette
+            open={searchOpen}
+            onClose={() => setSearchOpen(false)}
+          />
+          <ShortcutsDialog open={keysOpen} onClose={() => setKeysOpen(false)} />
+        </>
+      )}
+    </>
+  );
   return (
     <Ctx.Provider value={ctx}>
-      {/* Polls your corrections and toasts decisions while signed in (R9). */}
-      <DecisionsProvider>
-        <div className="grid h-[calc(100dvh-var(--demo-h,0px))] grid-cols-1 md:grid-cols-[76px_minmax(0,1fr)] xl:grid-cols-[256px_minmax(0,1fr)]">
-          {/* Sidebar reads usePathname(); with cacheComponents it must sit in Suspense. */}
-          <div className="hidden md:block xl:hidden">
-            <Suspense fallback={null}>
-              <Sidebar items={items} rail onOpenSearch={openSearch} />
-            </Suspense>
-          </div>
-          <div className="hidden xl:block">
-            <Suspense fallback={null}>
-              <Sidebar items={items} onOpenSearch={openSearch} />
-            </Suspense>
-          </div>
-          <main className="canvas-v3 relative flex min-w-0 flex-col overflow-hidden">
-            <OfflineStrip />
-            <DegradedStrip />
-            {children}
-          </main>
-        </div>
-        <MobileDrawer
-          open={drawer}
-          onClose={() => setDrawer(false)}
-          items={items}
-          onOpenSearch={openSearch}
-        />
-        <CommandPalette
-          open={searchOpen}
-          onClose={() => setSearchOpen(false)}
-        />
-        <ShortcutsDialog open={keysOpen} onClose={() => setKeysOpen(false)} />
-      </DecisionsProvider>
+      {/* Polls your corrections and toasts decisions, for clinicians (R9, Plan 3). */}
+      {clinical ? <DecisionsProvider>{body}</DecisionsProvider> : body}
     </Ctx.Provider>
   );
 }

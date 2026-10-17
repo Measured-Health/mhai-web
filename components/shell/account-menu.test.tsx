@@ -80,4 +80,36 @@ describe("AccountMenu", () => {
     const { container } = renderWithAuth(<AccountMenu rail={false} />, null);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("gives an admin-only person only their account and sign out", async () => {
+    renderWithAuth(<AccountMenu rail={false} />, {
+      ...TEST_USER,
+      displayName: "Grace Nwosu",
+      fullName: "Grace Nwosu",
+      roleTitle: "Hospital IT lead",
+      specialty: null,
+      roles: ["hospital_admin"],
+    });
+    expect(
+      screen.getByText("Hospital IT lead · Hospital admin"),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Account: Grace Nwosu" }),
+    );
+    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+      "Profile & security",
+      "Sign out",
+    ]);
+  });
+
+  it("shows a medical director's admin role in the footer", () => {
+    renderWithAuth(<AccountMenu rail={false} />, {
+      ...TEST_USER,
+      roleTitle: "Medical director",
+      roles: ["clinician", "hospital_admin"],
+    });
+    expect(
+      screen.getByText("Medical director · Hospital admin"),
+    ).toBeInTheDocument();
+  });
 });

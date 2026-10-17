@@ -134,6 +134,43 @@ describe("WelcomeFlow", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/admin/staff"));
   });
 
+  it.each([
+    ["an admin-only person", ["hospital_admin"], "/admin/staff"],
+    ["a medical director", ["clinician", "hospital_admin"], "/"],
+  ] as const)(
+    "makes %s without two-step set it up before any page (amendment 3)",
+    async (_who, roles, home) => {
+      const user = userEvent.setup();
+      const client = createMockAuthClient();
+      await client.signIn("admin.nwosu@havanahospital.org", "pw");
+      renderWithAuth(
+        <ToastProvider>
+          <Grab />
+          <WelcomeFlow />
+        </ToastProvider>,
+        { ...TEST_USER, roles: [...roles], mfaEnabled: false },
+        client,
+      );
+      expect(
+        await screen.findByRole("heading", {
+          name: "Set up two-step verification",
+        }),
+      ).toBeInTheDocument();
+      expect(replace).not.toHaveBeenCalled();
+      expect(
+        screen.getByText("Step 1 of 2 · Protect your account"),
+      ).toBeInTheDocument();
+      await user.click(await screen.findByLabelText("Digit 1 of 6"));
+      await user.keyboard("123456");
+      await user.click(
+        await screen.findByLabelText("I've saved these codes somewhere safe"),
+      );
+      await user.click(screen.getByRole("button", { name: "Finish setup" }));
+      await waitFor(() => expect(replace).toHaveBeenCalledWith(home));
+      expect(auth.user?.mfaEnabled).toBe(true);
+    },
+  );
+
   it("rejects a wrong setup code and lets you try again", async () => {
     const user = userEvent.setup();
     const client = createMockAuthClient();

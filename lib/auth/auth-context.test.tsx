@@ -12,7 +12,7 @@ import { ApiError } from "../api/errors";
 import { UNDO_WINDOW_MS } from "../corrections";
 import { useUndoableApproval } from "../review/use-undoable-approval";
 import { createMockAuthClient } from "./mock";
-import { AuthProvider, homeFor, useAuth } from "./auth-context";
+import { AuthProvider, homeFor, stepsOwed, useAuth } from "./auth-context";
 import type { AuthClient, User } from "./types";
 import { SessionProvider, useSession } from "../session-store";
 import { TEST_USER } from "@/tests/auth-wrapper";
@@ -251,5 +251,22 @@ describe("homeFor", () => {
     expect(homeFor({ user: as("hospital_admin"), steps: ["mfa"] })).toBe(
       "/welcome",
     );
+  });
+  it("owes every hospital admin without two-step the setup step (amendment 3)", () => {
+    const off = (...r: User["roles"]) => ({ ...as(...r), mfaEnabled: false });
+    expect(stepsOwed(off("hospital_admin"), [])).toEqual(["mfa"]);
+    expect(stepsOwed(off("clinician", "hospital_admin"), ["terms"])).toEqual([
+      "terms",
+      "mfa",
+    ]);
+    expect(stepsOwed(off("hospital_admin"), ["mfa"])).toEqual(["mfa"]);
+    expect(stepsOwed(off("clinician"), [])).toEqual([]);
+    expect(stepsOwed(as("hospital_admin"), [])).toEqual([]);
+    expect(homeFor({ user: off("hospital_admin"), steps: [] })).toBe(
+      "/welcome",
+    );
+    expect(
+      homeFor({ user: off("clinician", "hospital_admin"), steps: [] }),
+    ).toBe("/welcome");
   });
 });

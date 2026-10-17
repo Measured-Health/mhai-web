@@ -55,10 +55,12 @@ const statusOf = (e: unknown) => (e instanceof ApiError ? e.status : 0);
 export const isMfaRequired = (e: unknown) =>
   e instanceof ApiError && e.status === 403 && e.code === "mfa_required";
 
-export const useStaff = () =>
+/** `enabled: false` loads nothing (the sidebar on a clinical page). */
+export const useStaff = ({ enabled = true }: { enabled?: boolean } = {}) =>
   useQuery({
     queryKey: ADMIN_KEYS.staff,
     queryFn: () => getAdminClient().listStaff(),
+    enabled,
     ...READ,
   });
 

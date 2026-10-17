@@ -3,7 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { useEffect, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Providers } from "@/app/providers";
+import type { User } from "@/lib/auth/types";
+import { TEST_USER } from "@/tests/auth-wrapper";
+import { useDecisions } from "../corrections/decisions-provider";
 import { AppShell, useShell } from "./app-shell";
+import { TopBar } from "./top-bar";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -112,5 +116,58 @@ describe("useShell().openShortcuts", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "keys" }));
     expect(screen.getByRole("dialog", { name: /shortcuts/i })).toBeVisible();
+  });
+});
+
+describe("AppShell by role", () => {
+  beforeEach(() => push.mockClear());
+  /** Reports whether the decisions context (bell, toasts, polling) is mounted. */
+  function DecisionsProbe() {
+    return <p>{useDecisions() ? "decisions on" : "decisions off"}</p>;
+  }
+  const shell = (user: User) =>
+    render(
+      <Providers auth={{ initialUser: user }}>
+        <AppShell>
+          <TopBar title="Staff" />
+          <DecisionsProbe />
+        </AppShell>
+      </Providers>,
+    );
+  const keys = async () => {
+    await userEvent.keyboard("?");
+    await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Control>}k{/Control}");
+    await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("n");
+  };
+
+  it("gives a clinician the shortcuts and the decision bell", async () => {
+    shell(TEST_USER);
+    expect(screen.getByText("decisions on")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", {
+        name: /Decisions on your corrections/,
+      }),
+    ).toBeInTheDocument();
+    await userEvent.keyboard("?");
+    expect(
+      await screen.findByRole("dialog", { name: /shortcuts/i }),
+    ).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("n");
+    expect(push).toHaveBeenCalledWith("/");
+  });
+
+  it("gives a hospital admin who isn't a clinician no shortcuts, search or decision bell (R3)", async () => {
+    shell({ ...TEST_USER, roles: ["hospital_admin"] });
+    expect(screen.getByRole("heading", { name: "Staff" })).toBeInTheDocument();
+    expect(screen.getByText("decisions off")).toBeInTheDocument();
+    await keys();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Decisions on your corrections/ }),
+    ).toBeNull();
+    expect(push).not.toHaveBeenCalled();
   });
 });

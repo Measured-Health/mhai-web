@@ -17,6 +17,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Hospital admins: a "Hospital admin" group in the sidebar (Staff,
+  Hospital settings, Activity, Usage). A medical director who is also a
+  clinician sees both sides; a hospital admin who isn't a clinician signs
+  straight in to Staff and never sees clinical screens.
+- Every hospital admin, including a medical director, must turn on
+  two-step verification: without it, the first sign-in setup step comes
+  before any page.
 - Profile & security shows your feedback: results you agreed with, and
   your corrections waiting, approved and rejected, with a link to My
   feedback & corrections.

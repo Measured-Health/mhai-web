@@ -397,7 +397,8 @@ components/admin/             admin-frame, chips, confirm-dialog, staff-view, st
                               invite-dialog, staff-panel, access-editor, account-actions,
                               settings-view, usage-view, activity-tabs, activity-view,
                               oversight-view, assign-dialog (new)
-tests/admin.ts                makeStaff(), makeEvent(), adminHolder helpers (new)
+tests/admin.ts                makeStaff(), makeEvent(), mockAdminAs(), screenAdminAs() (new;
+                              each test file keeps its own vi.hoisted adminHolder)
 tests/e2e/hospital-admin.spec.ts  (new)
 tests/e2e/helpers.ts          + DEMO sample emails, openAdmin()
 ```

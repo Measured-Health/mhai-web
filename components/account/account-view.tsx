@@ -2,7 +2,8 @@
 import { Lock, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { useAuth } from "@/lib/auth/auth-context";
+import { homeFor, useAuth } from "@/lib/auth/auth-context";
+import { isAdminOnly } from "@/lib/auth/types";
 import { MfaSetup } from "../auth/mfa-setup";
 import { MenuButton } from "../shell/menu-button";
 import { Avatar } from "../shell/account-menu";
@@ -21,12 +22,14 @@ const field =
   "flex min-h-11 items-center rounded-xl border border-lilac-2 bg-white px-3.5 text-[14px]";
 
 export function AccountView() {
-  const { user, capabilities } = useAuth();
+  const { user, steps, capabilities } = useAuth();
   const toast = useToast();
   const [pwOpen, setPwOpen] = useState(false);
   const [mfaOpen, setMfaOpen] = useState(false);
   const [codesOpen, setCodesOpen] = useState(false);
   if (!user) return null;
+  // A hospital admin who isn't a clinician has no clinical feedback (R3).
+  const clinical = !isAdminOnly(user);
   const fields = [
     ["Role", user.roleTitle],
     ["Specialty", user.specialty],
@@ -36,7 +39,7 @@ export function AccountView() {
     ["profile", "Profile"],
     ["security", "Security"],
     ...(capabilities.devices ? [["devices", "Devices"]] : []),
-    ["feedback", "My feedback"],
+    ...(clinical ? [["feedback", "My feedback"]] : []),
   ];
 
   return (
@@ -47,7 +50,8 @@ export function AccountView() {
         leading={<MenuButton />}
         actions={
           <Link
-            href="/"
+            // Back to your own side: Staff for an admin who isn't a clinician.
+            href={homeFor({ user, steps })}
             className="flex h-[34px] items-center gap-1.5 rounded-[10px] border border-line bg-white px-3 text-[12.5px] text-ink-2"
           >
             <X aria-hidden className="size-3.5" />
@@ -181,7 +185,7 @@ export function AccountView() {
             </section>
 
             {capabilities.devices && <DevicesSection />}
-            <FeedbackSection />
+            {clinical && <FeedbackSection />}
           </div>
         </div>
       </div>

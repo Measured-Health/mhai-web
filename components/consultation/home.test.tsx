@@ -22,7 +22,7 @@ vi.mock("@/lib/api/client", () => ({
   }),
 }));
 
-import Page from "@/app/(clinical)/page";
+import Page from "@/app/(clinical)/(clinician)/page";
 import { AppShell } from "@/components/shell/app-shell";
 
 const QUERY: QueryCreateIn = {
