@@ -34,6 +34,23 @@ test("sign in, see your name, sign out from the account menu", async ({
   await expect(page.getByText("You've signed out")).toBeVisible();
 });
 
+test("a second sign-in in the same tab can sign out too", async ({ page }) => {
+  await signIn(page);
+  await expect(page).toHaveURL(/\/$/);
+  await openAccountMenu(page);
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  // Sign in again without reloading: the sign-out page stays kept alive.
+  await page.getByLabel("Work email").fill("admin.nwosu@havanahospital.org");
+  await page.getByLabel("Password").fill("demo-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/staff$/);
+  await openAccountMenu(page);
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByText("You've signed out")).toBeVisible();
+});
+
 test("two-step code, including a wrong one first", async ({ page }) => {
   await signIn(page, "mfa.okafor@havanahospital.org");
   await expect(page).toHaveURL(/\/sign-in\/code$/);
