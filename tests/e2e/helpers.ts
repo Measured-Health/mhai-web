@@ -141,3 +141,13 @@ export async function typeCode(
 
 /** The demo's sample logins (lib/auth/mock.ts). */
 export { DEMO_EMAILS } from "../../lib/auth/mock";
+
+/** From a signed-in clinical screen: the bell, then "See all". */
+export async function openNotifications(page: Page) {
+  await page
+    .getByRole("button", { name: /^Notifications/ })
+    .filter({ visible: true })
+    .click();
+  await page.getByRole("link", { name: "See all" }).click();
+  await expect(page).toHaveURL(/\/notifications$/);
+}

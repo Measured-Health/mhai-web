@@ -75,6 +75,22 @@ Every PR must pass:
   "nothing about the account in browser storage": it is never the plain
   username, and it only exists while an item waits.
 
+- **Patient alerts show names and MRNs** (Plan 5a). They are held in memory
+  only: the query cache, React state and the pop-ups, all cleared on
+  sign-out. Never write them to storage, the URL, the document title, logs
+  or analytics; don't add print, export or copy for them; and "Ask MHAI
+  about it" must never copy the patient's name, MRN or location into a
+  consultation. **Clinical and privacy sign-off is required before live
+  use** for: names and MRNs in alerts, the bell and pop-ups; alerts kept in
+  memory only; Critical alerts always popping up; and alerts present at
+  sign-in (or created while the first check fails) not popping up but being
+  counted on the bell. It hasn't been given yet, so alerts run on sample
+  data only. Any change to how alerts handle patient identifiers needs
+  `clinical-review` and that sign-off.
+- **Alerts are EMR-agnostic** ([ADR 0003](docs/adr/0003-many-emr-systems.md)):
+  no vendor or product names anywhere, the record link comes from the API
+  (`emr_link`), and only the hospital's own `source_label` is shown.
+
 - **Use mock or synthetic data only** in code, tests, Storybook and
   screenshots.
 

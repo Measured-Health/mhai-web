@@ -36,4 +36,15 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(/Every\s+hospital\s+admin\s+must\s+use\s+two-step/);
     expect(readme).toMatch(/a\s+new\s+hospital\s+admin\s+\(first\s+sign-in/);
   });
+
+  it("documents the notifications demo, the pop-up rule and the sign-off gate", () => {
+    expect(readme).toMatch(/\*\*Notifications and patient alerts\.\*\*/);
+    expect(readme).toMatch(/a\s+new\s+one\s+arrives\s+every\s+2\s+minutes/);
+    expect(readme).toMatch(/Critical\s+alerts\s+still\s+pop\s+up/);
+    expect(readme).toMatch(
+      /clinical\s+and\s+privacy\s+sign-off[\s\S]*?before\s+live\s+use/,
+    );
+    expect(readme).toMatch(/alerts\s+already\s+present\s+at\s+sign-in/);
+    expect(readme).not.toMatch(/\blab\b/i);
+  });
 });

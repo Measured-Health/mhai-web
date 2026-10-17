@@ -72,6 +72,21 @@ sets up two-step (code `123456`) before reaching Staff. None of the admin
 screens shows question text, results or patient details, and like the rest
 of the demo it is all in memory only.
 
+**Notifications and patient alerts.** Sign in as the clinician sample (any
+clinician sees the same sample alerts). The bell in the top bar counts new
+patient alerts and decisions on your corrections together; its panel shows
+the latest of both, and **See all** opens Notifications, with a **Patient
+alerts** tab (New, Handled, Dismissed, severity and source) and a
+**Corrections** tab. Eight sample alerts are there at sign-in (they don't pop
+up, but the bell counts them), and a new one arrives every 2 minutes: Urgent,
+then Critical, then Info, again and again. Acknowledge one, dismiss one with
+a reason, or choose **Ask MHAI about it** to start a consultation filled in
+from the alert without the patient's name or MRN. Turn pop-ups off in Profile
+& security → Notifications: Critical alerts still pop up. The sample hospital
+has two connected systems, "Main record" and "Results system", so each alert
+says which one it came from. Every name and MRN is synthetic, and like the
+rest of the demo it is all in memory only.
+
 ### Share the demo
 
 The demo runs on sample data (`NEXT_PUBLIC_USE_MOCK=true`). A ribbon on
@@ -134,6 +149,24 @@ sent when the connection returns. This is the one exception to the
 "nothing in browser storage" rule; see [CONTRIBUTING.md](CONTRIBUTING.md)
 for the exception and its limits. The product owner gave clinical and
 privacy sign-off on 16 October 2026; any change to it needs a new one.
+
+### Patient alerts
+
+Patient alerts are the first place MHAI shows patients' names and MRNs: in
+the alert list, the bell and the pop-ups. They are kept in memory only
+(never in browser storage, the URL, the page title or logs), clear on
+sign-out, and are never printed or exported; "Ask MHAI about it" copies no
+identifiers into the question. These points need clinical and privacy
+sign-off before live use, and it has not been given:
+
+- names and MRNs shown in alerts, the bell and pop-ups;
+- alerts kept in memory only, so they are gone after a reload or sign-out;
+- Critical alerts always pop up, even when pop-ups are off;
+- alerts already present at sign-in, or created while the first check fails,
+  don't pop up but are counted on the bell.
+
+Until it is given, alerts run on sample data only; see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Tests
 
