@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/errors";
@@ -23,12 +23,46 @@ function Listed({ id }: { id: string }) {
   return a ? <AlertCard alert={a} now={ALERT_NOW} showSource /> : null;
 }
 const card = () => screen.findByRole("article");
+const offline = () => {
+  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  act(() => void window.dispatchEvent(new Event("offline")));
+};
+/** Notes if "someone else handled" ever shows, even for a moment. */
+function watchForGone() {
+  let seen = false;
+  const look = (n: Node) => {
+    if (n.textContent?.includes("Someone else handled")) seen = true;
+  };
+  const watch = new MutationObserver((records) =>
+    records.forEach((r) => r.addedNodes.forEach(look)),
+  );
+  watch.observe(document.body, { childList: true, subtree: true });
+  return () => {
+    look(document.body);
+    watch.disconnect();
+    return seen;
+  };
+}
+const phone = () =>
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn(() => ({
+      matches: false,
+      addEventListener() {},
+      removeEventListener() {},
+    })),
+  );
 
 beforeEach(() => {
   holder.client = mockAlerts();
   push.mockClear();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  // TanStack's onlineManager heard any "offline": tell it we're back.
+  act(() => void window.dispatchEvent(new Event("online")));
+});
 
 describe("AlertCard", () => {
   it("shows the alert in the spec's order, in words and icons", () => {
@@ -236,6 +270,99 @@ describe("AlertCard", () => {
     expect(
       within(c).getByText(/^Dismissed by Nurse Bello · 09:00/),
     ).toBeVisible();
+  });
+
+  it("never says someone else handled it when your own dismiss lands (F15)", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(<Listed id="al-105" />);
+    const c = await card();
+    await user.click(within(c).getByRole("button", { name: "Dismiss" }));
+    const dialog = screen.getByRole("dialog", { name: "Dismiss this alert?" });
+    await user.click(
+      within(dialog).getByRole("radio", { name: "Already known" }),
+    );
+    const seenGone = watchForGone();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Dismiss alert" }),
+    );
+    expect(
+      await within(c).findByText(
+        "Dismissed by Dr. Reyes · 09:00 · Already known",
+      ),
+    ).toBeVisible();
+    expect(seenGone()).toBe(false);
+  });
+
+  it("closing the dialog after someone else handled it focuses who did (F15)", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(<Listed id="al-105" />);
+    const c = await card();
+    await user.click(within(c).getByRole("button", { name: "Dismiss" }));
+    holder.client.handleElsewhere("al-105", "Nurse Bello", "dismissed");
+    const dialog = screen.getByRole("dialog", { name: "Dismiss this alert?" });
+    await user.click(
+      within(dialog).getByRole("radio", { name: "Wrong patient" }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Dismiss alert" }),
+    );
+    await within(dialog).findByText("Someone else handled this alert");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() =>
+      expect(within(c).getByText(/^Dismissed by Nurse Bello/)).toHaveFocus(),
+    );
+  });
+
+  it("can't send a dismiss offline, and the dialog says why (F15)", async () => {
+    const user = userEvent.setup();
+    const dismiss = vi.spyOn(holder.client, "dismissAlert");
+    renderWithAuth(<Listed id="al-105" />);
+    const c = await card();
+    await user.click(within(c).getByRole("button", { name: "Dismiss" }));
+    const dialog = screen.getByRole("dialog", { name: "Dismiss this alert?" });
+    await user.click(
+      within(dialog).getByRole("radio", { name: "Already known" }),
+    );
+    offline();
+    const send = within(dialog).getByRole("button", { name: "Dismiss alert" });
+    expect(send).toBeDisabled();
+    expect(send).toHaveAccessibleDescription(
+      "You're offline. Dismiss needs a connection.",
+    );
+    expect(dismiss).not.toHaveBeenCalled();
+  });
+
+  it("dismisses from a bottom sheet on a phone (F15)", async () => {
+    phone();
+    const user = userEvent.setup();
+    renderWithAuth(<Listed id="al-105" />);
+    const c = await card();
+    await user.click(within(c).getByRole("button", { name: "Dismiss" }));
+    const sheet = screen.getByRole("dialog", { name: "Dismiss this alert?" });
+    expect(
+      within(sheet).getByRole("heading", { name: "Dismiss this alert?" }),
+    ).toBeVisible();
+    await user.click(within(sheet).getByRole("radio", { name: "Other" }));
+    await user.click(
+      within(sheet).getByRole("button", { name: "Dismiss alert" }),
+    );
+    expect(
+      await within(c).findByText("Dismissed by Dr. Reyes · 09:00 · Other"),
+    ).toBeVisible();
+  });
+
+  it("caps the note at 500 characters and counts them (F15)", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(<Listed id="al-105" />);
+    const c = await card();
+    await user.click(within(c).getByRole("button", { name: "Dismiss" }));
+    const dialog = screen.getByRole("dialog", { name: "Dismiss this alert?" });
+    const note = within(dialog).getByLabelText("Note (optional)");
+    await user.click(note);
+    await user.paste("x".repeat(600));
+    expect(note).toHaveValue("x".repeat(500));
+    expect(within(dialog).getByText("500 / 500")).toBeVisible();
   });
 
   it("asks MHAI with a prefill that carries no name or MRN (R11)", async () => {

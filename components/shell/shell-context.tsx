@@ -12,7 +12,8 @@ export type ShellCtx = {
   closeDrawer(): void;
   searchOpen: boolean;
   closeSearch(): void;
-  navigate(href: string): void;
+  /** False when a navigation guard (an unsaved draft) held it back. */
+  navigate(href: string): boolean;
   setNavigationGuard(guard: NavigationGuard | null): void;
 };
 
@@ -32,7 +33,10 @@ export function useShell(): ShellCtx {
       closeDrawer() {},
       searchOpen: false,
       closeSearch() {},
-      navigate: (href) => router.push(href),
+      navigate: (href) => {
+        router.push(href);
+        return true;
+      },
       setNavigationGuard() {},
     }
   );

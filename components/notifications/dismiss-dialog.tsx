@@ -14,11 +14,19 @@ type Props = {
   gone: boolean;
   busy: boolean;
   failed: boolean;
+  /** Offline: nothing can be sent, and the dialog says so. */
+  offline: boolean;
   onSubmit(d: DismissIn): void;
 };
 
 /** Dismiss needs a reason (spec §3). A dialog on desktop, a sheet on phones, like Reject. */
-export function DismissDialog({ patient, failed, onSubmit, ...rest }: Props) {
+export function DismissDialog({
+  patient,
+  failed,
+  offline,
+  onSubmit,
+  ...rest
+}: Props) {
   return (
     <ReasonDialog<DismissReason>
       {...rest}
@@ -44,6 +52,9 @@ export function DismissDialog({ patient, failed, onSubmit, ...rest }: Props) {
           : null
       }
       noteHint="Don't add names or record numbers."
+      blocked={
+        offline ? "You're offline. Dismiss needs a connection." : undefined
+      }
       onSubmit={(reason, note) =>
         onSubmit(note ? { reason, note } : { reason })
       }

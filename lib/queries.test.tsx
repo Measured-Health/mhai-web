@@ -180,6 +180,22 @@ describe("session clear", () => {
     act(() => result.current.clear());
     expect(client.getQueryData(["result", "q1"])).toBeUndefined();
   });
+
+  it("starts the demo's sample alerts afresh for the next person (F7)", async () => {
+    vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "true");
+    try {
+      const { getAlertsClient } = await import("./api/alerts");
+      const before = getAlertsClient();
+      expect(getAlertsClient()).toBe(before);
+      const { result } = renderHook(() => useSession(), {
+        wrapper: wrapWith(makeClient()),
+      });
+      act(() => result.current.clear());
+      expect(getAlertsClient()).not.toBe(before);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 describe("useSubmitQuery", () => {

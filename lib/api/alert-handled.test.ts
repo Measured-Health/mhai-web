@@ -38,6 +38,28 @@ describe("handledFields (the 409 who and when)", () => {
     });
   });
 
+  it.each([
+    ["October 17, 2026 09:00"],
+    ["17/10/2026"],
+    ["2026-10-17"],
+    ["2026-10-17T09:00:00"],
+    [`2026-10-17T09:00:00.${"1".repeat(40)}Z`],
+    ["2026-13-45T99:99:00Z"],
+  ])(
+    "drops a handled time that isn't a short ISO 8601 time: %s (F12)",
+    (at) => {
+      expect(handledFields({ handled_at: at }).handled_at).toBeNull();
+    },
+  );
+
+  it.each([
+    ["2026-10-17T09:00:00Z"],
+    ["2026-10-17T09:00:00.123Z"],
+    ["2026-10-17T10:00:00+01:00"],
+  ])("keeps an ISO 8601 handled time: %s (F12)", (at) => {
+    expect(handledFields({ handled_at: at }).handled_at).toBe(at);
+  });
+
   it("keeps an acknowledged status and caps a very long name", () => {
     const out = handledFields({
       status: "handled",

@@ -10,12 +10,17 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { AlertOut, AlertPageOut } from "@/lib/api/alerts-contract";
+import type {
+  AlertOut,
+  AlertPageOut,
+  NotificationSettingsOut,
+} from "@/lib/api/alerts-contract";
 import {
+  DEFAULT_SETTINGS,
   NOTIFY_KEYS,
   alertsOff,
   useAlertFeed,
-  usePopupSettings,
+  useNotificationSettings,
   useUnreadAlerts,
 } from "@/lib/notification-queries";
 import {
@@ -65,7 +70,8 @@ export const useAlerts = () => useContext(AlertsCtx);
 export function AlertsProvider({ children }: { children: ReactNode }) {
   const feed = useAlertFeed();
   const unread = useUnreadAlerts();
-  const { alert_popups } = usePopupSettings();
+  // Loaded here so the settings are in the cache when a pop-up is planned.
+  useNotificationSettings();
   const qc = useQueryClient();
   const { show } = useToast();
   const { navigate } = useShell();
@@ -77,16 +83,15 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
   // The newest server time in the first answer; fixed after that. No device clock (A7).
   const watermark = useRef<number | null>(null);
   // Read inside the cache subscription, which outlives renders.
-  const popups = useRef(alert_popups);
   const go = useRef(navigate);
   useEffect(() => {
-    popups.current = alert_popups;
     go.current = navigate;
-  }, [alert_popups, navigate]);
+  }, [navigate]);
 
+  // An unsaved draft can hold the page back: then there's nothing to focus (F6).
   const openAlert = useCallback((id: string | null) => {
-    setFocus((f) => ({ id, seq: f.seq + 1 }));
-    go.current(NOTIFICATIONS_HREF);
+    if (go.current(NOTIFICATIONS_HREF))
+      setFocus((f) => ({ id, seq: f.seq + 1 }));
   }, []);
   const focusDone = useCallback(
     () => setFocus((f) => (f.id ? { ...f, id: null } : f)),
@@ -131,12 +136,34 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
       if (!fresh.length) return;
       // The Notifications page lists them too.
       void qc.invalidateQueries({ queryKey: NOTIFY_KEYS.lists });
-      const plan = planPopups(fresh, { alert_popups: popups.current });
+      // The settings as they are now, read from the cache: a change made a
+      // moment ago counts (F14). Both on until they load (R5).
+      const settings =
+        qc.getQueryData<NotificationSettingsOut>(NOTIFY_KEYS.settings) ??
+        DEFAULT_SETTINGS;
+      const plan = planPopups(fresh, { alert_popups: settings.alert_popups });
       for (const al of plan.show) pop(alertPopup(al), al.id);
       const more = moreAlertsPopup(plan.rest);
       if (more) pop(more, null);
     });
   }, [qc, show, openAlert]);
+
+  // The Notifications page's lists follow the count (F5). More alerts:
+  // refresh what's on screen. Fewer (handled here or by a colleague): mark
+  // the lists out of date without pulling a card from under the clinician;
+  // they refresh on the next filter or visit.
+  const lastCount = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const n = unread.data;
+    if (n === undefined) return;
+    const before = lastCount.current;
+    lastCount.current = n;
+    if (before === undefined || before === n) return;
+    void qc.invalidateQueries({
+      queryKey: NOTIFY_KEYS.lists,
+      refetchType: n > before ? "active" : "none",
+    });
+  }, [unread.data, qc]);
 
   const value = useMemo<Ctx>(
     () => ({

@@ -31,6 +31,8 @@ export type ReasonProps<C extends string> = {
   footnote?: ReactNode;
   /** Small print under the note, beside the counter. */
   noteHint?: string;
+  /** Why the form can't be sent right now (e.g. offline); disables it and says so. */
+  blocked?: string;
   onSubmit(reason: C, note: string | undefined): void;
 };
 
@@ -81,6 +83,7 @@ function ReasonForm<C extends string>({
   failure,
   footnote,
   noteHint,
+  blocked,
   onSubmit,
 }: ReasonProps<C>) {
   const [code, setCode] = useState<C | null>(null);
@@ -94,7 +97,7 @@ function ReasonForm<C extends string>({
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        if (gone || busy) return;
+        if (gone || busy || blocked) return;
         if (!code) {
           setMissing(true);
           first.current?.focus();
@@ -178,8 +181,18 @@ function ReasonForm<C extends string>({
           </Banner>
         </div>
       )}
+      {blocked && !gone && (
+        <p id={`${id}-blocked`} className="mt-2 text-[13px] text-ink-3">
+          {blocked}
+        </p>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button type="submit" variant="danger" disabled={busy || gone}>
+        <Button
+          type="submit"
+          variant="danger"
+          disabled={busy || gone || !!blocked}
+          aria-describedby={blocked && !gone ? `${id}-blocked` : undefined}
+        >
           {submitLabel}
         </Button>
         <Button type="button" variant="ghost" onClick={onClose}>

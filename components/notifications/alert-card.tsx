@@ -35,6 +35,10 @@ export const alertDomId = (id: string) => `alert-${id}`;
 
 type Problem = "conflict" | "failed" | null;
 
+/** Someone else got there first, or the save just failed. */
+const classify = (e: Error): Exclude<Problem, null> =>
+  isAlertHandled(e) ? "conflict" : "failed";
+
 /**
  * One patient alert, in the spec's order (§3): severity, the finding, likely
  * causes suggested by MHAI, the patient and where they are, then the actions.
@@ -61,6 +65,9 @@ export function AlertCard({
   const focusHandled = useRef(false);
 
   const closed = alert.status !== "new";
+  // Closed by someone else, not by your own dismiss landing: while yours is
+  // in flight or done, the alert is closed because of you (F15).
+  const gone = closed && !dismiss.isPending && !dismiss.isSuccess;
   const handled = handledLine(alert, now);
   const recorded = recordedLabel(alert.finding, now);
   const causes = likelyCauses(alert);
@@ -81,12 +88,10 @@ export function AlertCard({
   }, [settled]);
 
   const failed = (e: Error) => {
-    if (isAlertHandled(e)) {
-      setProblem("conflict");
-      return;
-    }
-    focusHandled.current = false;
-    setProblem("failed");
+    const p = classify(e);
+    // Only a conflict leaves a handled line to move to.
+    if (p === "failed") focusHandled.current = false;
+    setProblem(p);
   };
   const acknowledge = () => {
     setProblem(null);
@@ -103,7 +108,7 @@ export function AlertCard({
         // The dialog stays open and says why, so the focus stays in it.
         onError: (e) => {
           focusHandled.current = false;
-          setProblem(isAlertHandled(e) ? "conflict" : "failed");
+          setProblem(classify(e));
         },
       },
     );
@@ -273,9 +278,10 @@ export function AlertCard({
         <DismissDialog
           open
           patient={alert.patient.full_name}
-          gone={closed}
+          gone={gone}
           busy={dismiss.isPending}
           failed={problem === "failed"}
+          offline={!online}
           onClose={() => {
             // Closed after someone else handled it: the line says who.
             if (closed) focusHandled.current = true;

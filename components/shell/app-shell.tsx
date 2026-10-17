@@ -41,8 +41,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
   const navigate = useCallback(
     (href: string) => {
-      if (guard.current && !guard.current(href)) return;
+      if (guard.current && !guard.current(href)) return false;
       router.push(href);
+      return true;
     },
     [router],
   );

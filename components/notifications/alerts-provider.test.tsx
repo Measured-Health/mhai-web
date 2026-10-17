@@ -30,6 +30,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace: vi.fn() }),
 }));
 import { useDecisions } from "../corrections/decisions-provider";
+import { ShellContext, type ShellCtx } from "../shell/shell-context";
 import { AlertsProvider, useAlerts } from "./alerts-provider";
 import { NotificationsProvider } from "./notifications-provider";
 
@@ -157,12 +158,15 @@ describe("alert pop-ups", () => {
       }),
     );
     expect(screen.queryByText("Urgent patient alert")).toBeNull();
+    const before = qc.getQueryState(NOTIFY_KEYS.feed)!.dataUpdateCount;
     alerts.listAlerts.mockResolvedValueOnce(page([n1]));
     await poll(qc);
+    // Wait for that answer to land, not for a number of calls.
     await vi.waitFor(() =>
-      expect(alerts.listAlerts.mock.calls.length).toBeGreaterThan(4),
+      expect(qc.getQueryState(NOTIFY_KEYS.feed)!.dataUpdateCount).toBe(
+        before + 1,
+      ),
     );
-    await act(() => Promise.resolve());
     expect(screen.queryByText("Urgent patient alert")).toBeNull();
   });
 
@@ -256,6 +260,108 @@ describe("alert pop-ups", () => {
     expect(screen.getByRole("button", { name: "elsewhere" })).toHaveFocus();
   });
 
+  it("takes the first answer after a failed one as the baseline, popping nothing (F14)", async () => {
+    alerts.listAlerts.mockRejectedValue(new ApiError(400, "bad"));
+    const qc = ui();
+    await vi.waitFor(() =>
+      expect(qc.getQueryState(NOTIFY_KEYS.feed)?.status).toBe("error"),
+    );
+    alerts.listAlerts.mockResolvedValue(
+      page([arriving("c1", "critical", "Halima Garba")]),
+    );
+    await poll(qc);
+    await vi.waitFor(() =>
+      expect(qc.getQueryState(NOTIFY_KEYS.feed)?.status).toBe("success"),
+    );
+    expect(document.querySelectorAll("[data-toast]")).toHaveLength(0);
+    expect(live("assertive")).toBeEmptyDOMElement();
+  });
+
+  it("follows a settings change mid-session: Urgent then stays quiet (F14)", async () => {
+    const qc = ui();
+    await ready(qc);
+    act(() =>
+      qc.setQueryData(NOTIFY_KEYS.settings, {
+        alert_popups: false,
+        correction_popups: true,
+      }),
+    );
+    alerts.listAlerts.mockResolvedValueOnce(
+      page([arriving("u1", "urgent", "Emeka Nnamdi")]),
+    );
+    const before = qc.getQueryState(NOTIFY_KEYS.feed)!.dataUpdateCount;
+    await poll(qc);
+    await vi.waitFor(() =>
+      expect(qc.getQueryState(NOTIFY_KEYS.feed)!.dataUpdateCount).toBe(
+        before + 1,
+      ),
+    );
+    expect(screen.queryByText("Urgent patient alert")).toBeNull();
+    expect(live("polite")).toBeEmptyDOMElement();
+  });
+
+  it("refreshes the alert lists when the unread count changes (F5)", async () => {
+    const qc = ui();
+    await ready(qc);
+    await vi.waitFor(() =>
+      expect(qc.getQueryState(NOTIFY_KEYS.unread)?.status).toBe("success"),
+    );
+    const key = NOTIFY_KEYS.list({ status: "new" });
+    const fresh = () => qc.setQueryData(key, { pages: [], pageParams: [] });
+    act(fresh);
+    // The same count leaves the lists alone.
+    await act(() => qc.invalidateQueries({ queryKey: NOTIFY_KEYS.unread }));
+    expect(qc.getQueryState(key)?.isInvalidated).toBe(false);
+    // More: the lists are refreshed.
+    alerts.getUnreadCount.mockResolvedValue({ count: 3 });
+    await act(() => qc.invalidateQueries({ queryKey: NOTIFY_KEYS.unread }));
+    await vi.waitFor(() =>
+      expect(qc.getQueryState(key)?.isInvalidated).toBe(true),
+    );
+    // Fewer (handled here or elsewhere): marked out of date too.
+    act(fresh);
+    alerts.getUnreadCount.mockResolvedValue({ count: 1 });
+    await act(() => qc.invalidateQueries({ queryKey: NOTIFY_KEYS.unread }));
+    await vi.waitFor(() =>
+      expect(qc.getQueryState(key)?.isInvalidated).toBe(true),
+    );
+  });
+
+  it("forgets the alert when the unsaved-draft guard refuses a View (F6)", async () => {
+    const shell: ShellCtx = {
+      openDrawer() {},
+      openSearch() {},
+      openShortcuts() {},
+      closeDrawer() {},
+      searchOpen: false,
+      closeSearch() {},
+      navigate: () => false,
+      setNavigationGuard() {},
+    };
+    function Opener() {
+      const a = useAlerts();
+      return (
+        <button type="button" onClick={() => a?.openAlert("al-1")}>
+          open
+        </button>
+      );
+    }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ToastProvider>
+          <ShellContext.Provider value={shell}>
+            <AlertsProvider>
+              <Opener />
+              <Probe />
+            </AlertsProvider>
+          </ShellContext.Provider>
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "open" }));
+    expect(screen.getByText(/focus none/)).toBeInTheDocument();
+  });
+
   it("says when alerts aren't switched on, and counts nothing (R12)", async () => {
     alerts.listAlerts.mockRejectedValue(new ApiError(404, "not_found"));
     alerts.getUnreadCount.mockRejectedValue(new ApiError(404, "not_found"));
@@ -304,6 +410,58 @@ describe("the notification centre at sign-out", () => {
     expect(live("assertive")).toBeEmptyDOMElement();
     expect(setItem).not.toHaveBeenCalled();
     setItem.mockRestore();
+  });
+});
+
+describe("signing out and back in (F14)", () => {
+  it("starts a fresh baseline: alerts that came meanwhile don't pop up", async () => {
+    const qc = new QueryClient();
+    function Shell() {
+      const [signedIn, setSignedIn] = useState(true);
+      return (
+        <>
+          {signedIn && (
+            <NotificationsProvider>
+              <Probe />
+            </NotificationsProvider>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setSignedIn(false);
+              // As SessionProvider.clear() does at sign-out.
+              qc.clear();
+            }}
+          >
+            sign out
+          </button>
+          <button type="button" onClick={() => setSignedIn(true)}>
+            sign in
+          </button>
+        </>
+      );
+    }
+    render(
+      <QueryClientProvider client={qc}>
+        <ToastProvider>
+          <Shell />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    await ready(qc);
+    await userEvent.click(screen.getByRole("button", { name: "sign out" }));
+    alerts.listAlerts.mockResolvedValue(
+      page([arriving("c1", "critical", "Halima Garba")]),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "sign in" }));
+    await ready(qc);
+    await vi.waitFor(() =>
+      expect(qc.getQueryState(NOTIFY_KEYS.feed)?.data).toMatchObject({
+        alerts: [expect.objectContaining({ id: "c1" })],
+      }),
+    );
+    expect(document.querySelectorAll("[data-toast]")).toHaveLength(0);
+    expect(live("assertive")).toBeEmptyDOMElement();
   });
 });
 

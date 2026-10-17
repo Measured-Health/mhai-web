@@ -35,3 +35,12 @@ export function getAlertsClient(): AlertsClient {
       ? createMockAlerts()
       : createLiveAlertsClient());
 }
+
+/**
+ * Forgets the client at sign-out, so the next person starts afresh: the
+ * demo's sample alerts and settings are back as they began. The live client
+ * holds nothing, so a new one changes nothing there.
+ */
+export function resetAlertsClient(): void {
+  alerts = undefined;
+}
