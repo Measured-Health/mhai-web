@@ -6,6 +6,7 @@ import {
   POPUP_MAX,
   SEEN_MAX,
   alertPopup,
+  baselineFrom,
   moreAlertsPopup,
   newAlerts,
   planPopups,
@@ -29,15 +30,35 @@ const ON = { alert_popups: true };
 const OFF = { alert_popups: false };
 
 describe("newAlerts", () => {
+  const W = since;
   it("treats the first check as a baseline", () => {
-    expect(newAlerts(null, [fresh("a", "critical")])).toEqual([]);
+    expect(newAlerts(null, [fresh("a", "critical")], W)).toEqual([]);
   });
 
   it("finds alerts whose id was not seen before", () => {
     const a = fresh("a", "urgent");
     const old = fresh("old", "urgent");
-    expect(newAlerts(new Set(["old"]), [a, old])).toEqual([a]);
-    expect(newAlerts(new Set(["a"]), [a])).toEqual([]);
+    expect(newAlerts(new Set(["old"]), [a, old], W)).toEqual([a]);
+    expect(newAlerts(new Set(["a"]), [a], W)).toEqual([]);
+  });
+
+  it("never pops an alert older than the baseline watermark, even if its id is unseen", () => {
+    const outside = fresh("outside", "critical", -30);
+    const newer = fresh("newer", "urgent", 2);
+    const watermark = baselineFrom([fresh("w", "info", 0)]);
+    expect(newAlerts(new Set(["w"]), [outside, newer], watermark)).toEqual([
+      newer,
+    ]);
+  });
+
+  it("takes the watermark from the newest baseline created_at", () => {
+    expect(baselineFrom([fresh("a", "info", 1), fresh("b", "info", 5)])).toBe(
+      since + 5 * 60_000,
+    );
+    expect(baselineFrom([])).toBeNull();
+    expect(
+      baselineFrom([{ ...fresh("x", "info"), created_at: "garbage" }]),
+    ).toBeNull();
   });
 
   it("never compares alert times with the device clock (A7)", () => {
@@ -45,12 +66,9 @@ describe("newAlerts", () => {
     try {
       for (const skew of [10 * 365 * 86_400_000, -10 * 365 * 86_400_000]) {
         Date.now = () => ALERT_NOW + skew;
-        const c = fresh("c", "critical");
-        const u = {
-          ...fresh("u", "urgent"),
-          created_at: new Date(since - 5 * 86_400_000).toISOString(),
-        };
-        expect(newAlerts(new Set(["x"]), [c, u])).toEqual([c, u]);
+        const c = fresh("c", "critical", 1);
+        const old = fresh("o", "urgent", -5);
+        expect(newAlerts(new Set(["x"]), [c, old], W)).toEqual([c]);
       }
     } finally {
       Date.now = realNow;
@@ -60,39 +78,61 @@ describe("newAlerts", () => {
   it("never pops what was present at the baseline, but pops a later arrival", () => {
     const first = [fresh("a", "critical"), fresh("b", "urgent")];
     const seen = rememberSeen(null, first);
-    expect(newAlerts(seen, first)).toEqual([]);
-    const late = fresh("late", "critical");
-    expect(newAlerts(seen, [late, ...first])).toEqual([late]);
+    const w = baselineFrom(first);
+    expect(newAlerts(seen, first, w)).toEqual([]);
+    const late = fresh("late", "critical", 9);
+    expect(newAlerts(seen, [late, ...first], w)).toEqual([late]);
     const seen2 = rememberSeen(seen, [late, ...first]);
-    expect(newAlerts(seen2, [late, ...first])).toEqual([]);
+    expect(newAlerts(seen2, [late, ...first], w)).toEqual([]);
   });
 
-  it("skips handled ones, and counts an unreadable time as new", () => {
+  it("pops a repeated or reopened id only once", () => {
+    const a = fresh("a", "urgent", 3);
+    const seen = rememberSeen(new Set(), [a]);
+    expect(newAlerts(seen, [{ ...a, status: "handled" }], W)).toEqual([]);
+    expect(newAlerts(seen, [a], W)).toEqual([]);
+  });
+
+  it("collapses duplicates in a merged list", () => {
+    const c = fresh("c", "critical", 3);
+    expect(newAlerts(new Set(["x"]), [c, c], W)).toEqual([c]);
+    expect(planPopups([c, c], OFF).show).toEqual([c]);
+  });
+
+  it("skips handled ones, and counts an alert with an unreadable time as new", () => {
     const handled = { ...fresh("h", "critical"), status: "handled" as const };
     const odd = { ...fresh("o", "urgent"), created_at: "garbage" };
-    expect(newAlerts(new Set(), [handled, odd])).toEqual([odd]);
+    expect(newAlerts(new Set(), [handled, odd], W)).toEqual([odd]);
+    expect(newAlerts(new Set(), [odd], null)).toEqual([odd]);
   });
 
-  it("keeps the seen set within SEEN_MAX, dropping the oldest ids", () => {
+  it("pops a Critical newer than the watermark even with alert pop-ups muted", () => {
+    const seen = rememberSeen(null, [fresh("a", "urgent")]);
+    const next = [
+      fresh("a", "urgent"),
+      fresh("c", "critical", 4),
+      fresh("u", "urgent", 4),
+    ];
+    const p = planPopups(newAlerts(seen, next, W), OFF);
+    expect(p.show.map((a) => a.id)).toEqual(["c"]);
+  });
+
+  it("keeps every current id, trimming only older ones beyond SEEN_MAX", () => {
     const many = Array.from({ length: SEEN_MAX + 5 }, (_, i) =>
       fresh(`id${i}`, "info"),
     );
-    const seen = rememberSeen(null, many);
-    expect(seen.size).toBe(SEEN_MAX);
-    expect(seen.has("id0")).toBe(false);
-    expect(seen.has(`id${SEEN_MAX + 4}`)).toBe(true);
+    const all = rememberSeen(new Set(["older"]), many);
+    expect(all.size).toBe(SEEN_MAX + 5);
+    expect(all.has("older")).toBe(false);
+    expect(all.has("id0")).toBe(true);
+    const some = rememberSeen(
+      new Set(["o1", "o2"]),
+      many.slice(0, SEEN_MAX - 1),
+    );
+    expect(some.size).toBe(SEEN_MAX);
+    expect(some.has("o2")).toBe(true);
+    expect(some.has("o1")).toBe(false);
   });
-});
-
-it("pops a Critical that arrives later even with alert pop-ups muted", () => {
-  const seen = rememberSeen(null, [fresh("a", "urgent")]);
-  const next = [
-    fresh("a", "urgent"),
-    fresh("c", "critical"),
-    fresh("u", "urgent"),
-  ];
-  const p = planPopups(newAlerts(seen, next), OFF);
-  expect(p.show.map((a) => a.id)).toEqual(["c"]);
 });
 
 describe("planPopups", () => {

@@ -10,7 +10,7 @@ describe("askFromAlert", () => {
       age: "67",
       sex: "female",
       urgency: "emergency",
-      symptoms: ["Abnormal result: Potassium 2.9 mmol/L (low; normal 3.5–5.1)"],
+      symptoms: ["Result: Potassium 2.9 mmol/L (low; normal 3.5–5.1)"],
       question:
         "Potassium 2.9 mmol/L (low; normal 3.5–5.1), recorded 08:42. What are the likely causes, and what should I check or do next?",
       specialty: "",
@@ -59,15 +59,31 @@ describe("askFromAlert", () => {
     expect(askFromAlert(makeAlert({ age: 130 }), ALERT_NOW).age).toBe("");
   });
 
-  it("keeps a long finding within the form's limits", () => {
+  it("shortens a long name first, keeping value, unit, flag and range", () => {
+    const base = makeAlert().finding;
     const v = askFromAlert(
-      makeAlert({
-        finding: { ...makeAlert().finding, name: "x".repeat(3000) },
-      }),
+      makeAlert({ finding: { ...base, name: "x".repeat(3000) } }),
       ALERT_NOW,
     );
-    expect(v.symptoms[0]!.length).toBeLessThanOrEqual(200);
+    expect(Array.from(v.symptoms[0]!).length).toBeLessThanOrEqual(200);
+    expect(v.symptoms[0]).toMatch(
+      /^Result: x+… 2\.9 mmol\/L \(low; normal 3\.5–5\.1\)$/,
+    );
     expect(v.question.length).toBeLessThanOrEqual(2000);
+    expect(v.question).toMatch(/^x+… 2\.9 mmol\/L .*check or do next\?$/);
+  });
+
+  it("never splits a surrogate pair", () => {
+    const base = makeAlert().finding;
+    const v = askFromAlert(
+      makeAlert({ finding: { ...base, name: "😀".repeat(500) } }),
+      ALERT_NOW,
+    );
+    for (const t of [v.symptoms[0]!, v.question])
+      expect(t).not.toMatch(
+        /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/,
+      );
+    expect(Array.from(v.symptoms[0]!).length).toBeLessThanOrEqual(200);
   });
 });
 

@@ -21,30 +21,55 @@ const isCritical = (a: AlertOut) => severityOf(a.severity) === "critical";
 const createdAt = (a: AlertOut) => parseTime(a.created_at);
 
 /**
- * New alerts since the last check, by id: an alert is new when its id is not
- * in `seen`. The first check (`seen` null) is a baseline: alerts that already
- * exist never pop up (spec §4). Alert times are never compared with the
- * device clock, which may be wrong (A7).
+ * The newest server `created_at` among the baseline alerts, in ms; null when
+ * none can be read. Alerts that existed at sign-in but fall outside the feed
+ * window are older than this, so they never pop up later.
+ */
+export function baselineFrom(first: AlertOut[]): number | null {
+  let newest: number | null = null;
+  for (const a of first) {
+    const t = createdAt(a);
+    if (t !== null && (newest === null || t > newest)) newest = t;
+  }
+  return newest;
+}
+
+/**
+ * New alerts since the last check: status "new", id not in `seen`, and
+ * created after the baseline watermark. Both times are the server's; the
+ * device clock is never used (A7). The first check (`seen` null) is a
+ * baseline and pops nothing (spec §4). With no readable `created_at` or no
+ * watermark, the alert counts as new (fail safe). A repeated id (including a
+ * reopened alert) never pops twice, and duplicates in `next` collapse.
  */
 export function newAlerts(
   seen: ReadonlySet<string> | null,
   next: AlertOut[],
+  watermark: number | null,
 ): AlertOut[] {
   if (!seen) return [];
-  return next.filter((a) => a.status === "new" && !seen.has(a.id));
+  const out = new Map<string, AlertOut>();
+  for (const a of next) {
+    if (a.status !== "new" || seen.has(a.id) || out.has(a.id)) continue;
+    const t = createdAt(a);
+    if (watermark !== null && t !== null && t < watermark) continue;
+    out.set(a.id, a);
+  }
+  return [...out.values()];
 }
 
-/** The ids seen so far plus these, keeping the most recent SEEN_MAX. */
+/**
+ * The ids seen so far plus these. Every id in `next` is kept; only older ids
+ * beyond SEEN_MAX are dropped.
+ */
 export function rememberSeen(
   seen: ReadonlySet<string> | null,
   next: AlertOut[],
 ): Set<string> {
-  const merged = new Set(seen ?? []);
-  for (const a of next) {
-    merged.delete(a.id);
-    merged.add(a.id);
-  }
-  return new Set([...merged].slice(-SEEN_MAX));
+  const current = new Set(next.map((a) => a.id));
+  const older = [...(seen ?? [])].filter((id) => !current.has(id));
+  const keep = Math.max(SEEN_MAX - current.size, 0);
+  return new Set([...(keep ? older.slice(-keep) : []), ...current]);
 }
 
 export interface PopupPlan {
@@ -61,7 +86,7 @@ export function planPopups(
   fresh: AlertOut[],
   s: Pick<NotificationSettingsOut, "alert_popups">,
 ): PopupPlan {
-  const eligible = fresh
+  const eligible = [...new Map(fresh.map((a) => [a.id, a])).values()]
     .filter((a) => s.alert_popups || isCritical(a))
     .sort(
       (x, y) =>
