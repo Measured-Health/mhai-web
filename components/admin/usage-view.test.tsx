@@ -123,9 +123,13 @@ describe("UsageView", () => {
     expect(csv).toContain("Result: High confidence");
     expect(csv).toContain("Specialty: Internal Medicine,412");
     expect(csv).not.toMatch(/question|@/i);
-    // "Wrong patient" is a dismissal reason and "Outpatient" a place;
-    // nothing else may say patient.
-    expect(csv.replaceAll("Wrong patient", "")).not.toMatch(/\bpatient/i);
+    // Two legitimate labels contain "patient"; nothing else may.
+    expect(
+      csv
+        .replaceAll("Wrong patient", "")
+        .replaceAll("Outpatient · Cardiology clinic", ""),
+    ).not.toMatch(/patient/i);
+    expect(csv).not.toMatch(/\bMRN\b|\bbed\b/i);
   });
 
   it("says two-step, never 2-step", async () => {

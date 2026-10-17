@@ -157,6 +157,49 @@ describe("CSV row cap", () => {
   });
 });
 
+const EXPECTED_LABELS = [
+  "Alerts: total",
+  "Alerts: Critical",
+  "Alerts: Urgent",
+  "Alerts: Info",
+  "Alerts: still unhandled",
+  "Alerts: median time to acknowledge (minutes)",
+  "Alerts: median for Critical alerts (minutes)",
+  "Alerts: Critical handled within 15 min (%)",
+  "Alerts: acknowledged (%)",
+  "Alerts: dismissed (%)",
+  "Alerts: dismissed as Not clinically relevant",
+  "Alerts: dismissed as Already known",
+  "Alerts: dismissed as Wrong patient",
+  "Alerts: dismissed as Other",
+  "Alerts: finding Potassium · low",
+  "Alerts: finding Sodium · low",
+  "Alerts: finding Platelets · low",
+  "Alerts: finding Not standardised",
+  "Alerts: finding Haemoglobin · low",
+  "Alerts: location Ward 3",
+  "Alerts: location Emergency department",
+  "Alerts: location Ward 5",
+  "Alerts: location Location not recorded",
+  "Alerts: location Outpatient · Cardiology clinic",
+  "Alerts on 2026-10-01",
+  "Alerts on 2026-10-02",
+  "Alerts on 2026-10-03",
+  "Alerts on 2026-10-04",
+  "Alerts on 2026-10-05",
+  "Alerts on 2026-10-06",
+  "Alerts on 2026-10-07",
+  "Alerts on 2026-10-08",
+  "Alerts on 2026-10-09",
+  "Alerts on 2026-10-10",
+  "Alerts on 2026-10-11",
+  "Alerts on 2026-10-12",
+  "Alerts on 2026-10-13",
+  "Alerts on 2026-10-14",
+  "Alerts on 2026-10-15",
+  "Alerts on 2026-10-16",
+];
+
 describe("usage CSV: patient alerts", () => {
   const usage = (
     p: "this_month" | "last_month" | "last_90_days" = "this_month",
@@ -188,7 +231,10 @@ describe("usage CSV: patient alerts", () => {
     expect(out.indexOf("Alerts: total,128")).toBeGreaterThan(
       out.findIndex((l) => l.startsWith("Specialty:")),
     );
-    expect(out.join("\n")).not.toMatch(/vs last month|up from|the usual/);
+    const labels = out
+      .filter((l) => l.startsWith("Alerts"))
+      .map((l) => l.slice(0, l.lastIndexOf(",")));
+    expect(labels).toEqual(EXPECTED_LABELS);
   });
 
   it("writes weeks for the last 90 days", async () => {
@@ -291,6 +337,11 @@ describe("usage CSV: patient alerts", () => {
     expect(alertsCsvRows(u)).toEqual([]);
     expect(alertsCsvRows({})).toEqual([]);
     expect(usageCsv(u, "Sample Hospital")).not.toMatch(/Alerts/);
+  });
+
+  it("escapes a cell that really starts with a formula character", () => {
+    expect(csvCell("=1+1")).toBe("'=1+1");
+    expect(csvCell("@SUM(A1)")).toBe("'@SUM(A1)");
   });
 
   it("keeps a finding label that starts with a formula character inert", async () => {
