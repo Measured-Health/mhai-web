@@ -268,6 +268,31 @@ describe("usage CSV: patient alerts", () => {
     ).toEqual([["Alerts", "Couldn't load"]]);
   });
 
+  it("never writes a share or median computed over a hidden group (G1)", async () => {
+    const a = (await usage()).alerts as UsageAlertsOut;
+    const hide = { value: null, suppressed: true, change: null };
+    const rows = alertsCsvRows({
+      alerts: {
+        ...a,
+        by_severity: { ...a.by_severity, critical: hide, urgent: hide },
+        median_ack_minutes_critical: hide,
+        worsening: null,
+      },
+    });
+    // "Critical handled within 15 min" would be a share of fewer than 5.
+    expect(rows).toEqual([["Alerts", "Couldn't load"]]);
+    const edge = await mockAdminWith("edge").getUsage("this_month");
+    const edgeRows = alertsCsvRows(edge);
+    expect(edgeRows).toContainEqual([
+      "Alerts: Critical handled within 15 min (%)",
+      "Fewer than 5",
+    ]);
+    expect(edgeRows).toContainEqual([
+      "Alerts: median for Critical alerts (minutes)",
+      "Fewer than 5",
+    ]);
+  });
+
   it("writes Fewer than 5 for hidden values outside a revealing set", async () => {
     const a = (await usage()).alerts as UsageAlertsOut;
     const rows = alertsCsvRows({

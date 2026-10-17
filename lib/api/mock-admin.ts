@@ -312,7 +312,8 @@ function periodRange(
 
 /**
  * The usage alerts sample: switched on, switched off (null), failing, or "edge":
- * the sample with hidden measures (Critical and Urgent, the Critical median),
+ * the sample with hidden measures (Critical and Urgent, and the Critical
+ * median and share computed over them),
  * a measure with nothing to measure yet (the median) and, in a weekly period,
  * a flagged week (with a previous period, so it shows). Never a raw 1 to 4.
  */
@@ -545,10 +546,13 @@ function alertsFor(
     rest.by_severity.urgent = { ...hiddenCount(), change: null };
     rest.median_ack_minutes_critical = { ...hiddenCount(), change: null };
     rest.median_ack_minutes = { value: null, suppressed: false, change: null };
+    // A share over the hidden Critical group is hidden too, and so is its
+    // worsening flag ("down from 88%" would be a share of fewer than 5).
+    rest.critical_within_target = { ...hiddenCount(), change: null };
+    rest.worsening = null;
     if (series.bucket === "week") {
       // The weekly period gets a previous one, or its flagged week and What
-      // changed line would never show. The week has no share change to go
-      // with it, so no worsening flag either.
+      // changed line would never show.
       rest.has_previous = true;
       series.unusual = { 11: 2.1 };
     }

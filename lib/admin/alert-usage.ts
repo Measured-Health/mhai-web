@@ -188,10 +188,37 @@ function safeSets(a: UsageAlertsOut): boolean {
   );
 }
 
+const isValue = (g: GuardedOut, kind: MeasureKind) =>
+  shown(g, kind).kind === "value";
+
+/**
+ * Shares and medians are hidden when the group they're computed over is
+ * (spec §4): a share of 3 Critical alerts says something about each of
+ * them. The server never sends one; if it does, nothing in the block is
+ * shown. Nothing to measure (null) gives nothing away.
+ */
+function overHidden(a: UsageAlertsOut): boolean {
+  const hidden = (g: GuardedOut) => shown(g, "count").kind === "hidden";
+  const overCritical =
+    isValue(a.median_ack_minutes_critical, "minutes") ||
+    isValue(a.critical_within_target, "share") ||
+    a.worsening !== null;
+  const overTotal =
+    overCritical ||
+    isValue(a.median_ack_minutes, "minutes") ||
+    isValue(a.acknowledged_share, "share") ||
+    isValue(a.dismissed_share, "share");
+  return (
+    (hidden(a.by_severity.critical) && overCritical) ||
+    (hidden(a.total) && overTotal)
+  );
+}
+
 /**
  * Off when null or absent (R1). Failed when unavailable, unreadable in any
- * part (a value, the series, a flag, the target), or when a hidden value
- * could be worked out: the group then says so and never shows zeros or
+ * part (a value, the series, a flag, the target), when a hidden value
+ * could be worked out, or when a share or median over a hidden group is
+ * shown: the group then says so and never shows zeros or
  * "Nothing unusual" (R2, Review Focus 1).
  */
 export function readAlerts(u: Pick<UsageOut, "alerts">): AlertsState {
@@ -219,7 +246,7 @@ export function readAlerts(u: Pick<UsageOut, "alerts">): AlertsState {
     worseningOk(a.worsening);
   if (!ok) return { state: "failed" };
   const alerts = a as unknown as UsageAlertsOut;
-  return safeSets(alerts) && flagsShowable(alerts)
+  return safeSets(alerts) && !overHidden(alerts) && flagsShowable(alerts)
     ? { state: "ready", alerts }
     : { state: "failed" };
 }

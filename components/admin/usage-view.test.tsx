@@ -292,4 +292,35 @@ describe("UsageView: patient alerts", () => {
     expect(screen.queryByRole("region", { name: "Patient alerts" })).toBeNull();
     expect(screen.getByText("1,284")).toBeInTheDocument();
   });
+
+  async function failRefresh() {
+    await screen.findByText("1,284");
+    vi.spyOn(holder.client, "getUsage").mockRejectedValue(
+      new ApiError(403, "forbidden"),
+    );
+    for (const p of ["last_month", "this_month"])
+      await userEvent.selectOptions(screen.getByLabelText("Period"), p);
+    await screen.findByText("You can't do this");
+  }
+
+  it("exports no stale alert numbers when a refresh fails (G2)", async () => {
+    renderAdmin(<UsageView />);
+    await screen.findByRole("region", { name: "Patient alerts" });
+    await failRefresh();
+    await userEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    const csv = download.mock.calls[0][1] as string;
+    // The screen hides the alerts; the file says they couldn't load.
+    expect(csv).toContain("Alerts,Couldn't load\r\n");
+    expect(csv).not.toContain("Alerts: ");
+    expect(csv).toContain("Consultations,1284");
+  });
+
+  it("still leaves switched-off alerts out of the file when a refresh fails (G2)", async () => {
+    holder.client = mockAdminWith("off");
+    renderAdmin(<UsageView />);
+    await failRefresh();
+    await userEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    const csv = download.mock.calls[0][1] as string;
+    expect(csv).not.toMatch(/^Alerts/m);
+  });
 });

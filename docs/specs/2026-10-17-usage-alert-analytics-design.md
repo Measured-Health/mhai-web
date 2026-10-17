@@ -86,8 +86,9 @@ shows "Fewer than 5"**.
   severities, the dismissal reasons, acknowledged and dismissed), a raw 1 to 4 among the
   members, or exactly one hidden member, would let the hidden value be worked out. The
   frontend then fails the whole group: it shows "Couldn't load patient alerts" with Try again,
-  never zeros and never "Nothing unusual". The same goes for anything malformed, and for a
-  dismissal reason the frontend doesn't know.
+  never zeros and never "Nothing unusual". The same goes for anything malformed, for a
+  dismissal reason the frontend doesn't know, and for a share, median or worsening flag sent
+  as a value over a hidden group (Critical, or the total).
 - **Changes and flags respect it:** a change is shown only when both periods' values are
   shown; a hidden group is never flagged as rising.
 - **Exception: Alerts over time.** Its daily or weekly totals are hospital-wide, with no

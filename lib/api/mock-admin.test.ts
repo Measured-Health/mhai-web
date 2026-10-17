@@ -633,6 +633,18 @@ describe("usage alerts (sample, at 16 Oct)", () => {
     expect(a.series.points.filter((p) => p.usual_multiple !== null)).toEqual([
       { start: "2026-10-03", total: 45, usual_multiple: 2.1 },
     ]);
+    // Nothing computed over the hidden Critical group is shown (G1).
+    for (const p of ["this_month", "last_month", "last_90_days"] as const) {
+      const e = (await mockAdminWith("edge").getUsage(p))
+        .alerts as UsageAlertsOut;
+      expect(e.critical_within_target).toEqual({
+        value: null,
+        suppressed: true,
+        change: null,
+      });
+      expect(e.worsening).toBeNull();
+      expect(readAlerts({ alerts: e }).state).toBe("ready");
+    }
     for (const m of [a.total, a.by_severity.info, a.unhandled]) {
       expect(m.value === 0 || m.value! >= SMALL_GROUP_MIN).toBe(true);
     }

@@ -81,9 +81,17 @@ export function UsageView() {
             aria-describedby={loading ? loadingId : undefined}
             onClick={() => {
               if (!u) return;
+              // While Usage is failing the screen hides the alerts; the file
+              // says they couldn't load rather than export stale numbers.
+              const shownUsage = q.isError
+                ? {
+                    ...u,
+                    alerts: u.alerts ? { unavailable: true as const } : null,
+                  }
+                : u;
               downloadCsv(
                 csvName("usage", hospital, Date.now()),
-                usageCsv(u, hospital),
+                usageCsv(shownUsage, hospital),
               );
               toast.show({
                 title: "Usage exported",

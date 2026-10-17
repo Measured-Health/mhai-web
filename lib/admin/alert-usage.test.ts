@@ -293,6 +293,59 @@ describe("readAlerts", () => {
     const edge = (await mockAdminWith("edge").getUsage("this_month")).alerts;
     expect(readAlerts({ alerts: edge }).state).toBe("ready");
   });
+
+  it("refuses a share or median shown over a hidden group (G1)", async () => {
+    const a = await sampleAlerts();
+    // Critical hidden together with Urgent, as the server does it: the sets
+    // are safe, but anything computed over Critical must be hidden too.
+    const critHidden = (over: Record<string, unknown>) =>
+      broken(a, {
+        by_severity: { ...a.by_severity, critical: hidden(), urgent: hidden() },
+        median_ack_minutes_critical: hidden(),
+        critical_within_target: hidden(),
+        worsening: null,
+        ...over,
+      });
+    expect(stateOf(critHidden({}))).toBe("ready");
+    expect(
+      stateOf(critHidden({ median_ack_minutes_critical: m(11, up(3, 8)) })),
+    ).toBe("failed");
+    expect(stateOf(critHidden({ critical_within_target: m(0.71) }))).toBe(
+      "failed",
+    );
+    expect(
+      stateOf(critHidden({ worsening: { value: 0.71, previous: 0.88 } })),
+    ).toBe("failed");
+    // Nothing to measure over a hidden group is still nothing shown.
+    expect(stateOf(critHidden({ median_ack_minutes_critical: m(null) }))).toBe(
+      "ready",
+    );
+    // The total hidden with a severity: no median or share over it either.
+    const totalHidden = (over: Record<string, unknown>) =>
+      broken(a, {
+        total: hidden(),
+        by_severity: { ...a.by_severity, info: hidden() },
+        median_ack_minutes: hidden(),
+        median_ack_minutes_critical: hidden(),
+        critical_within_target: hidden(),
+        acknowledged_share: hidden(),
+        dismissed_share: hidden(),
+        worsening: null,
+        ...over,
+      });
+    expect(stateOf(totalHidden({}))).toBe("ready");
+    for (const key of [
+      "median_ack_minutes",
+      "median_ack_minutes_critical",
+      "critical_within_target",
+    ])
+      expect(stateOf(totalHidden({ [key]: m(0.5) }))).toBe("failed");
+    expect(
+      stateOf(
+        totalHidden({ acknowledged_share: m(0.8), dismissed_share: m(0.2) }),
+      ),
+    ).toBe("failed");
+  });
 });
 
 describe("values under the small-group rule", () => {

@@ -18,6 +18,7 @@ const withAlerts = async (
   const a = u.alerts as UsageAlertsOut;
   return { ...u, alerts: { ...a, ...over(a) } as UsageAlertsOut };
 };
+const hiddenMeasure = { value: null, suppressed: true, change: null };
 const label = (text: string) => screen.getByText(text, { selector: "span" });
 const tile = (text: string) => label(text).closest("div")!;
 const group = () => screen.getByRole("region", { name: "Patient alerts" });
@@ -302,6 +303,10 @@ describe("UsageAlerts", () => {
             },
             info: a.by_severity.info,
           },
+          // Computed over the hidden Critical group, so hidden too (G1).
+          median_ack_minutes_critical: hiddenMeasure,
+          critical_within_target: hiddenMeasure,
+          worsening: null,
           // A raw 1 to 4 outside a set that adds up still reads Fewer than 5.
           unhandled: {
             value: 3,
