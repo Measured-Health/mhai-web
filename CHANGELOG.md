@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The 403 page is now only for Measured Health platform admin and auditor
+  accounts, and points them to the platform admin app. Hospital admins use
+  the hospital admin side instead.
+- The demo's sign-in page lists a hospital admin, a medical director
+  (clinician and hospital admin) and a platform admin (the 403 page), and a
+  new hospital admin who sees the first sign-in steps.
+
 ### Added
 
 - Profile & security shows your feedback: results you agreed with, and

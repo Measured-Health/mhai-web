@@ -112,3 +112,6 @@ export async function openReview(page: Page) {
     .click();
   await expect(page).toHaveURL(/\/review$/);
 }
+
+/** The demo's sample logins (lib/auth/mock.ts). */
+export { DEMO_EMAILS } from "../../lib/auth/mock";

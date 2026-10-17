@@ -30,8 +30,8 @@ export function NoAccess() {
           You don&apos;t have access
         </h1>
         <p className="mx-auto my-3 max-w-[420px] leading-relaxed text-ink-2">
-          This page is for clinicians. Admin accounts manage the system in the
-          admin app.
+          This app is for hospital staff. Measured Health platform admin and
+          auditor accounts use the platform admin app.
         </p>
         <div className="flex flex-wrap justify-center gap-2">
           {adminUrl && (
@@ -39,7 +39,7 @@ export function NoAccess() {
               href={adminUrl}
               className="inline-flex min-h-11 items-center rounded-full bg-mint px-5 font-semibold text-white"
             >
-              Go to admin app
+              Go to the platform admin app
             </a>
           )}
           <Button

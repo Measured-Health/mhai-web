@@ -40,30 +40,57 @@ const trigger = (login: string) =>
     .split("@")[0]!
     .split(/[._+-]/)[0] ?? "";
 
+/** The demo's sample logins. Task 3's sample hospital lists the two admins. */
+export const DEMO_EMAILS = {
+  clinician: "a.reyes@havanahospital.org",
+  twoStep: "mfa.okafor@havanahospital.org",
+  newAccount: "new.bello@havanahospital.org",
+  newAdmin: "newadmin.okoro@havanahospital.org",
+  hospitalAdmin: "admin.nwosu@havanahospital.org",
+  director: "director.obi@havanahospital.org",
+  platformAdmin: "platform.bakare@measured-health.example",
+  locked: "locked.eze@havanahospital.org",
+} as const;
+
 /** Sample accounts for the demo's sign-in page. Any other email works too. */
 export const SAMPLE_ACCOUNTS = [
   {
-    email: "a.reyes@havanahospital.org",
+    email: DEMO_EMAILS.clinician,
     label: "Clinician",
     note: "Signs straight in",
   },
   {
-    email: "mfa.okafor@havanahospital.org",
+    email: DEMO_EMAILS.twoStep,
     label: "Clinician with two-step",
     note: "Code 123456",
   },
   {
-    email: "new.bello@havanahospital.org",
+    email: DEMO_EMAILS.newAccount,
     label: "New account",
     note: "First sign-in steps",
   },
   {
-    email: "admin.adeyemi@havanahospital.org",
+    email: DEMO_EMAILS.newAdmin,
+    label: "New hospital admin",
+    note: "First sign-in steps",
+  },
+  {
+    email: DEMO_EMAILS.hospitalAdmin,
     label: "Hospital admin",
+    note: "Staff, settings and usage; no clinical screens",
+  },
+  {
+    email: DEMO_EMAILS.director,
+    label: "Medical director",
+    note: "Clinician and hospital admin",
+  },
+  {
+    email: DEMO_EMAILS.platformAdmin,
+    label: "Platform admin",
     note: "Shows the 403 page",
   },
   {
-    email: "locked.eze@havanahospital.org",
+    email: DEMO_EMAILS.locked,
     label: "Locked account",
     note: "Shows the lock",
   },
@@ -86,14 +113,32 @@ const PEOPLE: Record<
     specialty: "General ward",
   },
   admin: {
-    displayName: "Kemi Adeyemi",
-    fullName: "Kemi Adeyemi",
-    roleTitle: "Hospital admin",
+    displayName: "Grace Nwosu",
+    fullName: "Grace Nwosu",
+    roleTitle: "Hospital IT lead",
+    specialty: null,
+  },
+  newadmin: {
+    displayName: "Chike Okoro",
+    fullName: "Chike Okoro",
+    roleTitle: "Hospital IT lead",
+    specialty: null,
+  },
+  director: {
+    displayName: "Dr. Obi",
+    fullName: "Dr. Ngozi Obi",
+    roleTitle: "Medical director",
+    specialty: "Emergency medicine",
+  },
+  platform: {
+    displayName: "Tunde Bakare",
+    fullName: "Tunde Bakare",
+    roleTitle: "Platform admin",
     specialty: null,
   },
   auditor: {
-    displayName: "Tunde Bakare",
-    fullName: "Tunde Bakare",
+    displayName: "Femi Adebayo",
+    fullName: "Femi Adebayo",
     roleTitle: "Auditor",
     specialty: null,
   },
@@ -103,6 +148,15 @@ const REYES = {
   fullName: "Dr. Ana Reyes",
   roleTitle: "Attending physician",
   specialty: "Internal Medicine",
+};
+
+/** The first word of the login picks the roles (memory-only demo). */
+const ROLES_FOR: Record<string, Role[]> = {
+  admin: ["hospital_admin"],
+  newadmin: ["hospital_admin"],
+  director: ["clinician", "hospital_admin"],
+  platform: ["admin"],
+  auditor: ["auditor"],
 };
 
 function userFor(login: string, roles: Role[], mfaEnabled: boolean): User {
@@ -200,19 +254,13 @@ export function createMockAuthClient({
         pending = userFor(key, ["clinician"], true);
         return { status: "mfa_required" };
       }
-      if (word === "new") {
-        const u = userFor(key, ["clinician"], false);
+      if (word === "new" || word === "newadmin") {
+        const u = userFor(key, ROLES_FOR[word] ?? ["clinician"], false);
         const owed: FirstStep[] = ["terms", "password", "mfa"];
         startSession(u, owed);
         return { status: "signed_in", user: u, steps: [...owed] };
       }
-      const roles: Role[] =
-        word === "admin"
-          ? ["admin"]
-          : word === "auditor"
-            ? ["auditor"]
-            : ["clinician"];
-      const u = userFor(key, roles, true);
+      const u = userFor(key, ROLES_FOR[word] ?? ["clinician"], true);
       startSession(u);
       return { status: "signed_in", user: u, steps: [] };
     },

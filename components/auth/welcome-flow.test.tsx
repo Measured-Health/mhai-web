@@ -101,6 +101,39 @@ describe("WelcomeFlow", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
   });
 
+  it("sends a new hospital admin through the steps, then to the admin side", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(
+      <ToastProvider>
+        <Grab />
+        <WelcomeFlow />
+      </ToastProvider>,
+      null,
+    );
+    await act(() => auth.signIn("newadmin.eze@havanahospital.org", "temp"));
+    expect(screen.getByText("Step 1 of 4 · First sign-in")).toBeInTheDocument();
+    await user.click(
+      screen.getByLabelText("I understand and agree to use MHAI this way"),
+    );
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.type(
+      await screen.findByLabelText("New password"),
+      "tram-lantern-okra",
+    );
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "tram-lantern-okra",
+    );
+    await user.click(screen.getByRole("button", { name: "Save password" }));
+    await user.click(await screen.findByLabelText("Digit 1 of 6"));
+    await user.keyboard("123456");
+    await user.click(
+      await screen.findByLabelText("I've saved these codes somewhere safe"),
+    );
+    await user.click(screen.getByRole("button", { name: "Finish setup" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/admin/staff"));
+  });
+
   it("rejects a wrong setup code and lets you try again", async () => {
     const user = userEvent.setup();
     const client = createMockAuthClient();
