@@ -122,7 +122,10 @@ describe("UsageView", () => {
       expect(l).toMatch(/^[^,]+,("[^"]*"|[^,]*)$/);
     expect(csv).toContain("Result: High confidence");
     expect(csv).toContain("Specialty: Internal Medicine,412");
-    expect(csv).not.toMatch(/question|patient|@/i);
+    expect(csv).not.toMatch(/question|@/i);
+    // "Wrong patient" is a dismissal reason and "Outpatient" a place;
+    // nothing else may say patient.
+    expect(csv.replaceAll("Wrong patient", "")).not.toMatch(/\bpatient/i);
   });
 
   it("says two-step, never 2-step", async () => {
@@ -183,6 +186,16 @@ describe("UsageView", () => {
 describe("UsageView: patient alerts", () => {
   beforeEach(() => {
     holder.client = mockAdminAs(DEMO_EMAILS.director);
+  });
+
+  it("exports the alert numbers with the small-group rule", async () => {
+    renderAdmin(<UsageView />);
+    await screen.findByRole("region", { name: "Patient alerts" });
+    await userEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    const csv = download.mock.calls[0][1] as string;
+    expect(csv).toContain("Alerts: total,128\r\n");
+    expect(csv).toContain("Alerts: dismissed as Other,Fewer than 5\r\n");
+    expect(localStorage.length + sessionStorage.length).toBe(0);
   });
 
   it("shows the Patient alerts group below the numbers", async () => {
