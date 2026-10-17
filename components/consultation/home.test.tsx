@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -387,6 +387,31 @@ describe("Home from a patient alert", () => {
       expect(screen.getByLabelText(/^Age/)).toHaveValue("60");
       await userEvent.click(screen.getByRole("button", { name: "Replace" }));
       expect(screen.getByLabelText(/^Age/)).toHaveValue("72");
+    });
+
+    it("can't replace the draft while it is being sent, and says why (F16)", async () => {
+      createQuery.mockImplementationOnce(
+        () => new Promise<{ query_id: string }>(() => {}),
+      );
+      const { ask } = await open();
+      ask(60);
+      await userEvent.type(screen.getByLabelText(/^Clinical question/), " ok");
+      await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
+      await vi.waitFor(() => expect(createQuery).toHaveBeenCalledTimes(1));
+      ask(72);
+      const dialog = screen.getByRole("dialog", {
+        name: "Replace your draft?",
+      });
+      const replaceButton = within(dialog).getByRole("button", {
+        name: "Replace",
+      });
+      expect(replaceButton).toBeDisabled();
+      expect(replaceButton).toHaveAccessibleDescription(
+        "Your question is being sent. Wait for it to finish.",
+      );
+      expect(
+        within(dialog).getByRole("button", { name: "Keep my draft" }),
+      ).toBeEnabled();
     });
   });
 

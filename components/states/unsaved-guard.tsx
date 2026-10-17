@@ -1,8 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useShell } from "../shell/app-shell";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
+import { DiscardDialog } from "./discard-dialog";
 
 /**
  * While `dirty`, asks before leaving: in-app links (document-level click
@@ -70,16 +69,14 @@ export function UnsavedGuard({
   };
 
   return (
-    <Dialog open={pending !== null} onClose={keep} title={title}>
-      <p className="mb-[18px] text-[14.5px] leading-normal text-ink-2">
-        {body}
-      </p>
-      <div className="flex justify-end gap-2">
-        <Button onClick={keep}>Keep editing</Button>
-        <Button variant="danger" onClick={discard}>
-          Discard
-        </Button>
-      </div>
-    </Dialog>
+    <DiscardDialog
+      open={pending !== null}
+      title={title}
+      body={body}
+      keepLabel="Keep editing"
+      discardLabel="Discard"
+      onKeep={keep}
+      onDiscard={discard}
+    />
   );
 }

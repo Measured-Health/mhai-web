@@ -7,10 +7,9 @@ import { HowItWorksPanel } from "@/components/form/side-panels";
 import { MenuButton } from "@/components/shell/menu-button";
 import { TopBar } from "@/components/shell/top-bar";
 import { FirstVisit } from "@/components/states/first-visit";
+import { DiscardDialog } from "@/components/states/discard-dialog";
 import { UnsavedGuard } from "@/components/states/unsaved-guard";
 import { Banner } from "@/components/ui/banner";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { QueryCreateIn } from "@/lib/api/contract";
 import { emptyForm, fromQuery, type FormValues } from "@/lib/form-schema";
@@ -124,7 +123,8 @@ function Home({
     clearPrefill();
   };
   const replaceDraft = () => {
-    if (!asking) return;
+    // A question on its way out would land on top of the alert's form.
+    if (!asking || submit.isPending) return;
     restart(asking);
     setFromAlert(true);
     setAsking(null);
@@ -251,22 +251,20 @@ function Home({
         </div>
         {started && <HowItWorksPanel onExample={restart} />}
       </div>
-      <Dialog
+      <DiscardDialog
         open={asking !== null}
-        onClose={keepDraft}
         title="Replace your draft?"
-      >
-        <p className="mb-[18px] text-[14.5px] leading-normal text-ink-2">
-          Replace your draft with the details from the alert? What you typed
-          will be lost.
-        </p>
-        <div className="flex justify-end gap-2">
-          <Button onClick={keepDraft}>Keep my draft</Button>
-          <Button variant="danger" onClick={replaceDraft}>
-            Replace
-          </Button>
-        </div>
-      </Dialog>
+        body="Replace your draft with the details from the alert? What you typed will be lost."
+        keepLabel="Keep my draft"
+        discardLabel="Replace"
+        onKeep={keepDraft}
+        onDiscard={replaceDraft}
+        blocked={
+          submit.isPending
+            ? "Your question is being sent. Wait for it to finish."
+            : undefined
+        }
+      />
       <UnsavedGuard
         dirty={dirty && !submit.isPending}
         onDiscard={() => restart(emptyForm)}

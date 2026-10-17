@@ -1,5 +1,6 @@
 "use client";
-import { useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { NotificationSettingsPatchIn } from "@/lib/api/alerts-contract";
 import { useOnline } from "@/lib/hooks/use-online";
 import {
   useNotificationSettings,
@@ -12,6 +13,9 @@ import { Switch } from "../ui/switch";
 
 const row =
   "flex min-h-14 flex-wrap items-center gap-3 border-t border-line py-3 text-[14px]";
+
+/** How long "Saved" stays after a save lands (F17). */
+export const SAVED_MS = 4000;
 
 /**
  * Profile & security → Notifications (spec §4): what pops up. The bell and
@@ -27,6 +31,34 @@ export function NotificationsSection() {
   const online = useOnline();
   const id = useId();
   const value = q.data ?? null;
+  // Per save, so one that fails while a later one lands is still reported (F17).
+  const [failed, setFailed] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    if (!saved) return;
+    const t = setTimeout(() => setSaved(false), SAVED_MS);
+    return () => clearTimeout(t);
+  }, [saved]);
+  // Saves still on their way. mutate()'s own callbacks only hear the latest
+  // call, so each save's promise is followed instead.
+  const inflight = useRef(0);
+  const change = (p: NotificationSettingsPatchIn) => {
+    inflight.current += 1;
+    setFailed(false);
+    setSaved(false);
+    save.mutateAsync(p).then(
+      () => {
+        inflight.current -= 1;
+        // "Saved" once nothing else is still saving.
+        if (inflight.current === 0) setSaved(true);
+      },
+      () => {
+        inflight.current -= 1;
+        setFailed(true);
+        setSaved(false);
+      },
+    );
+  };
   const offline = online ? undefined : `${id}-offline`;
   const describedBy = (hint: string) =>
     [hint, offline].filter(Boolean).join(" ");
@@ -81,7 +113,7 @@ export function NotificationsSection() {
               checked={value.alert_popups}
               disabled={!online}
               describedBy={describedBy(`${id}-alerts`)}
-              onChange={(v) => save.mutate({ alert_popups: v })}
+              onChange={(v) => change({ alert_popups: v })}
             />
           </div>
           <div className={row}>
@@ -99,7 +131,7 @@ export function NotificationsSection() {
               checked={value.correction_popups}
               disabled={!online}
               describedBy={describedBy(`${id}-decisions`)}
-              onChange={(v) => save.mutate({ correction_popups: v })}
+              onChange={(v) => change({ correction_popups: v })}
             />
           </div>
           {!online && (
@@ -107,7 +139,7 @@ export function NotificationsSection() {
               You&apos;re offline. Changes need a connection.
             </p>
           )}
-          {save.isError && (
+          {failed && (
             <div className="mt-3">
               <Banner
                 tone="bad"
@@ -120,10 +152,10 @@ export function NotificationsSection() {
           )}
           {/* Polite: "Saved" is announced only once the save has landed. */}
           <p role="status" className="mt-3 text-[12px] text-ink-3">
-            {save.isSuccess ? "Saved" : null}
+            {saved && !failed ? "Saved" : null}
           </p>
           <p className="text-[12px] text-ink-3">
-            Saved with your account, so they follow you to any device.
+            Kept with your account, so they follow you to any device.
           </p>
         </>
       )}

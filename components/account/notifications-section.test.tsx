@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/errors";
@@ -12,7 +12,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => "/account",
 }));
-import { NotificationsSection } from "./notifications-section";
+import { NotificationsSection, SAVED_MS } from "./notifications-section";
 
 const ALERTS = "Pop-ups for patient alerts";
 const DECISIONS = "Pop-ups for decisions on my corrections";
@@ -107,6 +107,60 @@ describe("Notifications settings", () => {
     );
   });
 
+  it("lets Saved go after a few seconds (F17)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderWithAuth(<NotificationsSection />);
+      await user.click(await sw(DECISIONS));
+      await waitFor(() =>
+        expect(screen.getByRole("status")).toHaveTextContent("Saved"),
+      );
+      act(() => vi.advanceTimersByTime(SAVED_MS));
+      expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports an earlier save that failed while a later one landed (F17)", async () => {
+    const user = userEvent.setup();
+    const real = holder.client.updateNotificationSettings.bind(holder.client);
+    let failFirst: () => void = () => {};
+    let second: Promise<unknown> | undefined;
+    const update = vi
+      .spyOn(holder.client, "updateNotificationSettings")
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            failFirst = () => reject(new ApiError(400, "error"));
+          }),
+      )
+      .mockImplementation((p, o) => (second = real(p, o)));
+    renderWithAuth(<NotificationsSection />);
+    await user.click(await sw(ALERTS));
+    await user.click(await sw(DECISIONS));
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+    // The later save lands first; then the earlier one fails.
+    await act(() => second);
+    expect(screen.queryByRole("alert")).toBeNull();
+    act(() => failFirst());
+    const banner = await screen.findByRole("alert");
+    expect(banner).toHaveTextContent(
+      "Couldn't save your notification settings",
+    );
+  });
+
+  it("says the settings follow you to any device", async () => {
+    renderWithAuth(<NotificationsSection />);
+    await sw(ALERTS);
+    expect(
+      screen.getByText(
+        "Kept with your account, so they follow you to any device.",
+      ),
+    ).toBeVisible();
+  });
+
   it("sends one idempotency key per change", async () => {
     const user = userEvent.setup();
     const update = vi.spyOn(holder.client, "updateNotificationSettings");
@@ -130,9 +184,10 @@ describe("Notifications settings", () => {
     );
     renderWithAuth(<NotificationsSection />);
     await user.click(await sw(ALERTS));
-    expect(
-      await screen.findByText("Couldn't save your notification settings"),
-    ).toBeVisible();
+    // Announced: the banner is an alert (F17).
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't save your notification settings",
+    );
     await waitFor(async () => expect(await sw(ALERTS)).toBeChecked());
     expect(screen.getByRole("status")).not.toHaveTextContent("Saved");
   });
