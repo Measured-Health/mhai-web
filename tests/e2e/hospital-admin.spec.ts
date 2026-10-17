@@ -485,11 +485,22 @@ test("the alerts chart works from the keyboard, with a visible focus ring", asyn
   const lastColumn = columns.last();
   await expect(lastColumn).toBeFocused();
 
-  // The ring is drawn, and it isn't clipped by the chart's edges.
+  // The ring is drawn, the column is in view, and neither is clipped by
+  // the scroll wrapper (phones) or, where nothing scrolls, the list.
   const ring = await lastColumn.evaluate((el) => {
     const cs = getComputedStyle(el);
     const box = el.getBoundingClientRect();
-    const edge = el.parentElement!.getBoundingClientRect();
+    const section = el.closest("section")!;
+    let clip: HTMLElement | null = el.parentElement!.parentElement;
+    while (
+      clip &&
+      clip !== section &&
+      getComputedStyle(clip).overflowX === "visible"
+    )
+      clip = clip.parentElement;
+    const edge = (
+      clip && clip !== section ? clip : el.parentElement!
+    ).getBoundingClientRect();
     const inset = -parseFloat(cs.outlineOffset) || 0;
     const w = parseFloat(cs.outlineWidth);
     return {
@@ -498,12 +509,34 @@ test("the alerts chart works from the keyboard, with a visible focus ring", asyn
       width_px: box.width,
       left: box.left - edge.left + inset - w,
       right: edge.right - box.right + inset - w,
+      inView:
+        box.left >= edge.left &&
+        box.right <= edge.right &&
+        box.left >= 0 &&
+        box.right <= window.innerWidth,
     };
   });
   expect(ring.style).not.toBe("none");
   expect(ring.width).toBeGreaterThanOrEqual(2);
   expect(ring.left).toBeGreaterThanOrEqual(0);
   expect(ring.right).toBeGreaterThanOrEqual(0);
+  expect(ring.inView).toBe(true);
+  // The axis labels scroll with the columns: same width, same scroller.
+  const axis = await chart
+    .getByText("1 Sep", { exact: true })
+    .evaluate((label) => {
+      const list = label.closest("section")!.querySelector("ol")!;
+      const row = label.parentElement!;
+      return {
+        together: list.parentElement!.contains(row),
+        gap: Math.abs(
+          row.getBoundingClientRect().width -
+            list.getBoundingClientRect().width,
+        ),
+      };
+    });
+  expect(axis.together).toBe(true);
+  expect(axis.gap).toBeLessThanOrEqual(1);
   // On phones each column is a 44 px target, so the chart scrolls sideways.
   if (isMobile(page)) expect(ring.width_px).toBeGreaterThanOrEqual(44);
   await expect(chart.getByText("Most alerts", { exact: false })).toBeVisible();
@@ -534,7 +567,7 @@ test("the usage CSV carries the alert numbers, with small groups hidden", async 
   expect(csv).not.toMatch(/MRN|@|\bBed\b/);
   // "patient" appears only in the two labels that name a reason or a clinic.
   expect(
-    csv.replace("Wrong patient", "").replace("Outpatient", ""),
+    csv.replaceAll("Wrong patient", "").replaceAll("Outpatient", ""),
   ).not.toMatch(/patient/i);
   await expect(page.getByText("Usage exported")).toBeVisible();
 });
