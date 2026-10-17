@@ -11891,8 +11891,7 @@ This overrides Tasks 3, 4, 10 and 17 where they differ.
   `FORBIDDEN_TERMS`. The mock accepts `MOCK_CODE` (123456) or a real code for
   `MOCK_TOTP_SECRET`, and the mock backup codes.
 - **Tests:** unit — remove sends the code; wrong code keeps the row and shows the error; no
-  two-step → blocked with the link; backup code path. E2E (Task 17) — the remove flow enters
-  123456.
+  two-step → blocked with the link; backup code path. E2E (Task 17) — the remove flow enters 123456.
 
 ## Amendment (product owner, 2026-10-16): admin-only people see the terms on first sign-in
 
