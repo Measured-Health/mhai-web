@@ -252,4 +252,40 @@ describe("InviteDialog", () => {
     );
     expect(li.closest("li")).toHaveClass("[overflow-wrap:anywhere]");
   });
+
+  it("says why Send is off for an empty box or only invalid lines", async () => {
+    const dialog = await openDialog();
+    const send = within(dialog).getByRole("button", { name: "Send 0 invites" });
+    expect(send).toBeDisabled();
+    const reason = within(dialog).getByText(
+      "Add at least one hospital email address.",
+    );
+    expect(send).toHaveAccessibleDescription(
+      "Add at least one hospital email address.",
+    );
+    await paste(dialog, "oops, someone@gmail.com");
+    expect(
+      within(dialog).getByRole("button", { name: "Send 0 invites" }),
+    ).toBeDisabled();
+    expect(reason).toBeInTheDocument();
+  });
+
+  it("keeps Cancel and Esc off while an invite is sending", async () => {
+    let finish!: (v: { invited: []; skipped: [] }) => void;
+    vi.spyOn(holder.client, "inviteStaff").mockReturnValue(
+      new Promise((res) => (finish = res)),
+    );
+    const dialog = await openDialog();
+    await paste(dialog, "a.new@havanahospital.org");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Send 1 invite" }),
+    );
+    expect(
+      await within(dialog).findByRole("button", { name: "Cancel" }),
+    ).toBeDisabled();
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
+    finish({ invited: [], skipped: [] });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
 });

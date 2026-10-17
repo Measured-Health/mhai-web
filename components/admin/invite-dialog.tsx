@@ -38,6 +38,10 @@ export function InviteDialog({ onClose }: { onClose(): void }) {
   const emailsId = useId();
   const hintId = useId();
   const problemsId = useId();
+  const needId = useId();
+  const roleNeedId = useId();
+  const offlineId = useId();
+  const capId = useId();
   const [text, setText] = useState("");
   const [roles, setRoles] = useState<StaffRole[]>(["clinician"]);
   const [specialty, setSpecialty] = useState<string | null>(null);
@@ -108,10 +112,14 @@ export function InviteDialog({ onClose }: { onClose(): void }) {
               : `${n} invites were sent.`}{" "}
           These weren&apos;t sent:
         </p>
-        <ul className="mt-2 flex max-h-48 flex-col gap-1 overflow-auto text-[13px]">
-          {result.skipped.map((x) => (
+        <ul
+          tabIndex={0}
+          aria-label="Not sent"
+          className="mt-2 flex max-h-48 flex-col gap-1 overflow-auto text-[13px]"
+        >
+          {result.skipped.map((x, i) => (
             <li
-              key={`${x.email}-${x.reason}`}
+              key={`${i}-${x.email}-${x.reason}`}
               className="[overflow-wrap:anywhere]"
             >
               {x.email} — {SKIP_REASON[x.reason] ?? "Not sent"}
@@ -126,7 +134,12 @@ export function InviteDialog({ onClose }: { onClose(): void }) {
   }
 
   return (
-    <Dialog key="invite" open onClose={onClose} title="Invite staff">
+    <Dialog
+      key="invite"
+      open
+      onClose={invite.isPending ? () => {} : onClose}
+      title="Invite staff"
+    >
       <p className="text-sm text-ink-2">
         {s === undefined
           ? "Loading your hospital's settings…"
@@ -161,6 +174,7 @@ export function InviteDialog({ onClose }: { onClose(): void }) {
       {problems.length > 0 && (
         <ul
           id={problemsId}
+          tabIndex={0}
           aria-label="Not invited"
           className="mt-2 flex max-h-32 flex-col gap-1 overflow-auto text-[12.5px] text-warn-deep"
         >
@@ -179,6 +193,7 @@ export function InviteDialog({ onClose }: { onClose(): void }) {
       )}
       {tooMany && (
         <p
+          id={capId}
           role="alert"
           className="mt-2 text-[13px] font-semibold text-bad-deep"
         >
@@ -210,7 +225,11 @@ export function InviteDialog({ onClose }: { onClose(): void }) {
         </div>
       </fieldset>
       {noRole && (
-        <p role="alert" className="text-[13px] font-semibold text-bad-deep">
+        <p
+          id={roleNeedId}
+          role="alert"
+          className="text-[13px] font-semibold text-bad-deep"
+        >
           Choose at least one role.
         </p>
       )}
@@ -232,7 +251,7 @@ export function InviteDialog({ onClose }: { onClose(): void }) {
       </label>
 
       {!online && (
-        <p className="mt-3 text-[13px] text-ink-3">
+        <p id={offlineId} className="mt-3 text-[13px] text-ink-3">
           You&apos;re offline. Invites need a connection.
         </p>
       )}
@@ -243,11 +262,29 @@ export function InviteDialog({ onClose }: { onClose(): void }) {
           </Banner>
         </div>
       )}
+      {emails.length === 0 && (
+        <p id={needId} className="mt-3 text-[13px] text-ink-3">
+          Add at least one hospital email address.
+        </p>
+      )}
       <div className="mt-5 flex flex-wrap justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>
+        <Button variant="ghost" disabled={invite.isPending} onClick={onClose}>
           Cancel
         </Button>
-        <Button disabled={!canSend} onClick={send}>
+        <Button
+          disabled={!canSend}
+          onClick={send}
+          aria-describedby={
+            [
+              emails.length === 0 && needId,
+              noRole && roleNeedId,
+              tooMany && capId,
+              !online && offlineId,
+            ]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        >
           {invite.isPending ? "Sending…" : sendLabel}
         </Button>
       </div>
