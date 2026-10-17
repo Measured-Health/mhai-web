@@ -72,6 +72,18 @@ sets up two-step (code `123456`) before reaching Staff. None of the admin
 screens shows question text, results or patient details, and like the rest
 of the demo it is all in memory only.
 
+**Patient alerts on Usage.** Usage also gives a short summary of the
+hospital's patient alerts, in counts only: how many and how serious, how
+quickly they were acknowledged (with "Critical handled within 15 min"), how
+they ended and why, the top findings and locations, a column chart over time
+(with a table view), and a **What changed** list against the period before.
+Any group of fewer than 5 shows "Fewer than 5", in the CSV export too. In
+the sample, This month has a busy day, a rising finding and ward, and slower
+Critical handling; Last month has nothing unusual; Last 90 days has no
+earlier period to compare with. The sample numbers are written for 16
+October; on other dates the columns are a cut of the same sample. Deeper
+trends and drill-down come with Plan 6 Analysis.
+
 **Notifications and patient alerts.** Sign in as the clinician sample (any
 clinician sees the same sample alerts). The bell in the top bar counts new
 patient alerts and decisions on your corrections together; its panel shows

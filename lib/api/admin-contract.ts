@@ -1,7 +1,15 @@
 // The hospital admin API, hand-written from Plan 4's assumed contract
 // (spec §10 items 2 and 3). To be replaced by types generated from the
 // backend OpenAPI schema. Nothing here can carry question text, results or
-// patient details: keep it that way.
+// patient details: keep it that way. The usage contract carries alert counts
+// only, never patients, MRNs, beds or alert ids.
+
+import type {
+  AlertLocationOut,
+  AlertSeverity,
+  DismissReason,
+  FindingFlag,
+} from "./alerts-contract";
 
 export type StaffRole = "clinician" | "hospital_admin";
 export type StaffStatus = "active" | "invited" | "deactivated";
@@ -94,6 +102,127 @@ export interface UsageOut {
   /** Counts per confidence level. */
   confidence: Record<ConfidenceLevel, number>;
   by_specialty: { specialty: string; consultations: number }[];
+  /**
+   * Patient alerts (Plan 5b, spec §10 item 21). Null or absent: alerts aren't
+   * switched on (an older backend sends no field). `{ unavailable: true }`:
+   * the rest of usage is fine but the alert numbers couldn't be computed.
+   */
+  alerts?: UsageAlertsOut | UsageAlertsUnavailableOut | null;
+}
+
+/**
+ * A number under the small-group rule. A hidden value is
+ * `{ value: null, suppressed: true }`; `value: null` with `suppressed: false`
+ * means there was nothing to measure.
+ */
+export interface GuardedOut {
+  value: number | null;
+  suppressed: boolean;
+}
+
+export type ChangeDirection = "up" | "down" | "same";
+
+/** The backend's comparison with the previous period of the same length. */
+export interface ChangeOut {
+  direction: ChangeDirection;
+  /** Whole percent for counts, minutes for times, percentage points for shares. */
+  amount: number;
+  /** The previous period's value, in the measure's unit (0–1 for shares). Never hidden. */
+  previous: number;
+}
+
+/** A number with its change. `change` is null when either period is hidden or missing. */
+export interface MeasureOut extends GuardedOut {
+  change: ChangeOut | null;
+}
+
+export interface FindingGroupOut {
+  /** Display label, e.g. "Potassium"; null for the unmapped findings ("Not standardised"). */
+  name: string | null;
+  flag: FindingFlag | null;
+  count: GuardedOut;
+}
+
+export interface LocationGroupOut {
+  /** Ward level at most (`bed` is null). Null reads "Location not recorded". */
+  location: AlertLocationOut | null;
+  count: GuardedOut;
+}
+
+export interface DismissReasonCountOut {
+  reason: DismissReason;
+  count: GuardedOut;
+}
+
+export interface SeriesBucketOut {
+  /**
+   * The hospital's calendar day, or the week's first day: "YYYY-MM-DD". Weeks
+   * start on the period's first day (not a fixed weekday); the last may be partial.
+   */
+  start: string;
+  /** Hospital-wide; not suppressed. */
+  total: number;
+  /** About how many times the usual level, when flagged as unusual; else null. */
+  usual_multiple: number | null;
+}
+
+export interface AlertSeriesOut {
+  /** Days for this_month and last_month, weeks for last_90_days. */
+  bucket: "day" | "week";
+  /** Oldest first. */
+  points: SeriesBucketOut[];
+}
+
+/** A finding or location well up on the previous period: at least 5 in both. */
+export type RisingOut =
+  | {
+      kind: "finding";
+      name: string | null;
+      flag: FindingFlag | null;
+      count: number;
+      previous: number;
+    }
+  | {
+      kind: "location";
+      location: AlertLocationOut | null;
+      count: number;
+      previous: number;
+    };
+
+/** Critical handled within the target dropped noticeably (shares 0–1). */
+export interface WorseningOut {
+  value: number;
+  previous: number;
+}
+
+export interface UsageAlertsOut {
+  /** The hospital's target for handling a Critical alert, in minutes (15 by default). */
+  critical_target_minutes: number;
+  /** False when there's no earlier period of the same length: no changes, no flags. */
+  has_previous: boolean;
+  total: MeasureOut;
+  by_severity: Record<AlertSeverity, MeasureOut>;
+  unhandled: MeasureOut;
+  /** Minutes from raised to acknowledged; value null when none was acknowledged. */
+  median_ack_minutes: MeasureOut;
+  median_ack_minutes_critical: MeasureOut;
+  /** 0–1: Critical alerts acknowledged or dismissed within the target. */
+  critical_within_target: MeasureOut;
+  /** 0–1 of handled alerts. */
+  acknowledged_share: MeasureOut;
+  dismissed_share: MeasureOut;
+  /** All four reasons: not_relevant, already_known, wrong_patient, other. */
+  dismiss_reasons: DismissReasonCountOut[];
+  /** At most 5 each, largest first. */
+  top_findings: FindingGroupOut[];
+  top_locations: LocationGroupOut[];
+  series: AlertSeriesOut;
+  rising: RisingOut[];
+  worsening: WorseningOut | null;
+}
+
+export interface UsageAlertsUnavailableOut {
+  unavailable: true;
 }
 
 export type ActivityType =

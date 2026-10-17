@@ -12,8 +12,12 @@ import {
 } from "@/lib/auth/mock";
 import { createMockAdmin } from "./mock-admin";
 import { totp } from "@/lib/auth/totp";
-import { ADMIN_NOW, mockAdminAs } from "@/tests/admin";
+import { ADMIN_NOW, mockAdminAs, mockAdminWith } from "@/tests/admin";
 import { ApiError } from "./errors";
+import type { GuardedOut, UsageAlertsOut } from "./admin-contract";
+import { PERIODS } from "@/lib/admin/report";
+import { readAlerts, whatChanged } from "@/lib/admin/alert-usage";
+import { SMALL_GROUP_MIN } from "@/lib/small-groups";
 
 const code = async (p: Promise<unknown>) => {
   try {
@@ -464,5 +468,185 @@ describe("removing staff needs a two-step code", () => {
     expect(await rm(as(DEMO_EMAILS.hospitalAdmin), GOOD)).toBe("ok");
     t += 16 * 60_000;
     expect(await rm(d, GOOD)).toBe("ok");
+  });
+});
+
+describe("usage alerts (sample, at 16 Oct)", () => {
+  const alertsOf = async (p: (typeof PERIODS)[number]["id"]) =>
+    (await director().getUsage(p)).alerts as UsageAlertsOut;
+  const counts = (a: UsageAlertsOut): GuardedOut[] => [
+    a.total,
+    a.by_severity.critical,
+    a.by_severity.urgent,
+    a.by_severity.info,
+    a.unhandled,
+    ...a.dismiss_reasons.map((r) => r.count),
+    ...a.top_findings.map((f) => f.count),
+    ...a.top_locations.map((l) => l.count),
+  ];
+
+  it("adds up, with a busy day, rising groups and slower Critical handling", async () => {
+    const a = await alertsOf("this_month");
+    const s = a.by_severity;
+    expect(s.critical.value! + s.urgent.value! + s.info.value!).toBe(
+      a.total.value,
+    );
+    expect(a.total).toEqual({
+      value: 128,
+      suppressed: false,
+      change: { direction: "up", amount: 35, previous: 95 },
+    });
+    expect(a.critical_target_minutes).toBe(15);
+    expect(a.series.bucket).toBe("day");
+    expect(a.series.points).toHaveLength(16);
+    expect(a.series.points[0]!.start).toBe("2026-10-01");
+    expect(a.series.points.at(-1)!.start).toBe("2026-10-16");
+    expect(a.series.points.reduce((n, p) => n + p.total, 0)).toBe(128);
+    expect(a.series.points.filter((p) => p.usual_multiple !== null)).toEqual([
+      { start: "2026-10-14", total: 23, usual_multiple: 3.1 },
+    ]);
+    expect(a.rising).toEqual([
+      {
+        kind: "finding",
+        name: "Potassium",
+        flag: "low",
+        count: 31,
+        previous: 9,
+      },
+      {
+        kind: "location",
+        location: { kind: "admitted", ward: "Ward 3", bed: null },
+        count: 34,
+        previous: 12,
+      },
+    ]);
+    expect(a.worsening).toEqual({ value: 0.71, previous: 0.88 });
+  });
+
+  it("never sends a small number: hidden groups come as null (Review Focus 2)", async () => {
+    for (const p of PERIODS) {
+      const a = await alertsOf(p.id);
+      for (const c of counts(a)) {
+        if (c.suppressed) expect(c.value).toBeNull();
+        else
+          expect(
+            c.value === 0 || (c.value !== null && c.value >= SMALL_GROUP_MIN),
+          ).toBe(true);
+      }
+      for (const r of a.rising) {
+        expect(r.count).toBeGreaterThanOrEqual(SMALL_GROUP_MIN);
+        expect(r.previous).toBeGreaterThanOrEqual(SMALL_GROUP_MIN);
+      }
+      for (const l of a.top_locations)
+        if (l.location?.kind === "admitted") expect(l.location.bed).toBeNull();
+      expect(a.top_findings.length).toBeLessThanOrEqual(5);
+      expect(a.top_locations.length).toBeLessThanOrEqual(5);
+    }
+    // Two reasons hidden together, so neither can be worked out from the rest.
+    const a = await alertsOf("this_month");
+    expect(
+      a.dismiss_reasons.filter((r) => r.count.suppressed).map((r) => r.reason),
+    ).toEqual(["wrong_patient", "other"]);
+  });
+
+  it("flags nothing last month, and has no earlier period for the last 90 days", async () => {
+    const last = await alertsOf("last_month");
+    expect(last.has_previous).toBe(true);
+    expect(last.rising).toEqual([]);
+    expect(last.worsening).toBeNull();
+    expect(last.series.points).toHaveLength(30);
+    expect(last.series.points.every((p) => p.usual_multiple === null)).toBe(
+      true,
+    );
+    expect(last.unhandled).toEqual({
+      value: 0,
+      suppressed: false,
+      change: null,
+    });
+
+    const ninety = await alertsOf("last_90_days");
+    expect(ninety.has_previous).toBe(false);
+    expect(ninety.series.bucket).toBe("week");
+    expect(ninety.series.points).toHaveLength(13);
+    expect(ninety.series.points[0]!.start).toBe("2026-07-18");
+    expect(ninety.series.points.reduce((n, p) => n + p.total, 0)).toBe(
+      ninety.total.value,
+    );
+    expect(ninety.rising).toEqual([]);
+    expect(ninety.worsening).toBeNull();
+    expect(
+      [
+        ninety.total,
+        ninety.median_ack_minutes,
+        ninety.critical_within_target,
+      ].map((m) => m.change),
+    ).toEqual([null, null, null]);
+  });
+
+  it("is the same every time (deterministic)", async () => {
+    const a = director();
+    expect(await a.getUsage("this_month")).toEqual(
+      await a.getUsage("this_month"),
+    );
+    expect(await a.getUsage("this_month")).toEqual(
+      await director().getUsage("this_month"),
+    );
+  });
+
+  it("can be switched off, or fail, for tests", async () => {
+    expect(
+      (await mockAdminWith("off").getUsage("this_month")).alerts,
+    ).toBeNull();
+    expect(
+      (await mockAdminWith("unavailable").getUsage("this_month")).alerts,
+    ).toEqual({ unavailable: true });
+  });
+
+  it("has an edge sample: hidden measures, no data yet, a flagged week", async () => {
+    const a = (await mockAdminWith("edge").getUsage("last_90_days"))
+      .alerts as UsageAlertsOut;
+    expect(a.by_severity.critical).toEqual({
+      value: null,
+      suppressed: true,
+      change: null,
+    });
+    expect(a.median_ack_minutes_critical.suppressed).toBe(true);
+    expect(a.median_ack_minutes).toEqual({
+      value: null,
+      suppressed: false,
+      change: null,
+    });
+    expect(a.series.bucket).toBe("week");
+    // A previous period, so the flagged week and its What changed line show.
+    expect(a.has_previous).toBe(true);
+    expect(readAlerts({ alerts: a }).state).toBe("ready");
+    expect(whatChanged(a)).toEqual({
+      kind: "items",
+      items: [
+        {
+          key: "busy-2026-10-03",
+          kind: "busy",
+          text: "Week of 3 Oct: 45 alerts, about 2× the usual",
+        },
+      ],
+    });
+    expect(a.series.points.filter((p) => p.usual_multiple !== null)).toEqual([
+      { start: "2026-10-03", total: 45, usual_multiple: 2.1 },
+    ]);
+    // Nothing computed over the hidden Critical group is shown (G1).
+    for (const p of ["this_month", "last_month", "last_90_days"] as const) {
+      const e = (await mockAdminWith("edge").getUsage(p))
+        .alerts as UsageAlertsOut;
+      expect(e.critical_within_target).toEqual({
+        value: null,
+        suppressed: true,
+        change: null,
+      });
+      expect(e.worsening).toBeNull();
+      expect(readAlerts({ alerts: e }).state).toBe("ready");
+    }
+    for (const m of [a.total, a.by_severity.info, a.unhandled]) {
+      expect(m.value === 0 || m.value! >= SMALL_GROUP_MIN).toBe(true);
+    }
   });
 });

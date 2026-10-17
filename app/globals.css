@@ -212,6 +212,12 @@ body {
   }
 }
 
+@keyframes rise {
+  from {
+    transform: scaleY(0);
+  }
+}
+
 @keyframes shake {
   20% {
     transform: translateX(-5px);

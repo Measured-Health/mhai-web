@@ -90,6 +90,18 @@ export const FORBIDDEN_TERMS = [
   "invalid_reason",
   "note_too_long",
   "invalid_cursor",
+  "critical_target_minutes",
+  "critical_within_target",
+  "median_ack_minutes",
+  "median_ack_minutes_critical",
+  "usual_multiple",
+  "has_previous",
+  "suppressed",
+  "acknowledged_share",
+  "dismissed_share",
+  "dismiss_reasons",
+  "top_findings",
+  "top_locations",
 ] as const;
 
 export function citationTag(action: Citation["action"]): {

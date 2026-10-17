@@ -51,6 +51,24 @@ describe("labels", () => {
     ])
       expect(FORBIDDEN_TERMS).toContain(code);
   });
+  it("forbids the usage alert codes (F9)", () => {
+    for (const code of [
+      "critical_target_minutes",
+      "critical_within_target",
+      "median_ack_minutes",
+      // Whole-word checks don't match the longer code inside this one.
+      "median_ack_minutes_critical",
+      "usual_multiple",
+      "has_previous",
+      "suppressed",
+      "acknowledged_share",
+      "dismissed_share",
+      "dismiss_reasons",
+      "top_findings",
+      "top_locations",
+    ])
+      expect(FORBIDDEN_TERMS).toContain(code);
+  });
   it("lists the six analysing steps in order", () => {
     expect(STAGES.map((s) => s.label)).toEqual([
       "Protecting patient privacy",

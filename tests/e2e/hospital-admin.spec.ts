@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import {
   DEMO_EMAILS,
@@ -404,4 +405,169 @@ test("review oversight: remind and assign, without clinical content", async ({
   await expect(
     page.getByRole("button", { name: /Approve|Reject/ }),
   ).toHaveCount(0);
+});
+
+/**
+ * The sample's alert numbers are written for this moment (R12). It repeats
+ * ADMIN_NOW in tests/admin.ts, which Playwright can't import without pulling
+ * in the mock client: change them together.
+ */
+const SAMPLE_DAY = new Date("2026-10-16T10:00:00Z");
+
+async function openUsageOnSampleDay(page: Page) {
+  await page.clock.install({ time: SAMPLE_DAY });
+  await asHospitalAdmin(page);
+  await openAdmin(page, "Usage");
+  await expect(page).toHaveURL(/\/admin\/usage$/);
+  const group = page.getByRole("region", { name: "Patient alerts" });
+  await expect(group).toBeVisible();
+  return group;
+}
+
+test("usage shows patient alerts, what changed and hidden small groups", async ({
+  page,
+}) => {
+  const group = await openUsageOnSampleDay(page);
+  await expect(
+    group.getByRole("region", { name: "What changed" }).getByRole("listitem"),
+  ).toHaveText([
+    "Critical within 15 min: 71%, down from 88%",
+    "14 Oct: 23 alerts, about 3× the usual",
+    "Potassium · low: 31, up from 9",
+    "Ward 3: 34, up from 12",
+  ]);
+  await expect(group.getByText("up 35% vs last month")).toBeVisible();
+  await expect(
+    group.getByText("up 6 min vs last month · worse", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    group
+      .getByRole("region", { name: "Dismissal reasons" })
+      .getByRole("listitem")
+      .filter({ hasText: "Wrong patient" }),
+  ).toHaveText("Wrong patientFewer than 5");
+
+  const chart = group.getByRole("region", { name: "Alerts over time" });
+  await expect(chart.getByText("Most alerts on 14 Oct: 23")).toBeVisible();
+  await chart.getByRole("button", { name: "Show as table" }).click();
+  await expect(
+    chart.getByRole("row", { name: "14 Oct 23 about 3× the usual" }),
+  ).toBeVisible();
+  await chart.getByRole("button", { name: "Show as chart" }).click();
+  await expect(
+    chart.getByRole("listitem", {
+      name: "14 Oct: 23 alerts, about 3× the usual",
+    }),
+  ).toBeVisible();
+
+  await page.getByLabel("Period").selectOption("last_month");
+  await expect(group.getByText("Nothing unusual this period")).toBeVisible();
+  await page.getByLabel("Period").selectOption("last_90_days");
+  await expect(group.getByText("Not enough data to compare")).toBeVisible();
+  await expect(group.getByText(/vs the 90 days before/)).toHaveCount(0);
+});
+
+test("the alerts chart works from the keyboard, with a visible focus ring", async ({
+  page,
+}) => {
+  const group = await openUsageOnSampleDay(page);
+  // The longest series: 30 daily columns.
+  await page.getByLabel("Period").selectOption("last_month");
+  await expect(group.getByText("Nothing unusual this period")).toBeVisible();
+  const chart = group.getByRole("region", { name: "Alerts over time" });
+  const columns = chart.getByRole("listitem");
+  await expect(columns).toHaveCount(30);
+
+  await chart.getByRole("button", { name: "Show as table" }).focus();
+  await page.keyboard.press("Tab");
+  await expect(columns.first()).toBeFocused();
+  await page.keyboard.press("End");
+  const lastColumn = columns.last();
+  await expect(lastColumn).toBeFocused();
+
+  // The ring is drawn, the column is in view, and neither is clipped by
+  // the scroll wrapper (phones) or, where nothing scrolls, the list.
+  const ring = await lastColumn.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    const box = el.getBoundingClientRect();
+    const section = el.closest("section")!;
+    let clip: HTMLElement | null = el.parentElement!.parentElement;
+    while (
+      clip &&
+      clip !== section &&
+      getComputedStyle(clip).overflowX === "visible"
+    )
+      clip = clip.parentElement;
+    const edge = (
+      clip && clip !== section ? clip : el.parentElement!
+    ).getBoundingClientRect();
+    const inset = -parseFloat(cs.outlineOffset) || 0;
+    const w = parseFloat(cs.outlineWidth);
+    return {
+      style: cs.outlineStyle,
+      width: w,
+      width_px: box.width,
+      left: box.left - edge.left + inset - w,
+      right: edge.right - box.right + inset - w,
+      inView:
+        box.left >= edge.left &&
+        box.right <= edge.right &&
+        box.left >= 0 &&
+        box.right <= window.innerWidth,
+    };
+  });
+  expect(ring.style).not.toBe("none");
+  expect(ring.width).toBeGreaterThanOrEqual(2);
+  expect(ring.left).toBeGreaterThanOrEqual(0);
+  expect(ring.right).toBeGreaterThanOrEqual(0);
+  expect(ring.inView).toBe(true);
+  // The axis labels scroll with the columns: same width, same scroller.
+  const axis = await chart
+    .getByText("1 Sep", { exact: true })
+    .evaluate((label) => {
+      const list = label.closest("section")!.querySelector("ol")!;
+      const row = label.parentElement!;
+      return {
+        together: list.parentElement!.contains(row),
+        gap: Math.abs(
+          row.getBoundingClientRect().width -
+            list.getBoundingClientRect().width,
+        ),
+      };
+    });
+  expect(axis.together).toBe(true);
+  expect(axis.gap).toBeLessThanOrEqual(1);
+  // On phones each column is a 44 px target, so the chart scrolls sideways.
+  if (isMobile(page)) expect(ring.width_px).toBeGreaterThanOrEqual(44);
+  await expect(chart.getByText("Most alerts", { exact: false })).toBeVisible();
+  await expect(chart.locator("p[aria-hidden]").first()).toContainText(
+    /^\d+ \w+: \d+ alerts?$/,
+  );
+
+  await page.keyboard.press("Home");
+  await expect(columns.first()).toBeFocused();
+  const firstInView = await columns.first().evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    return b.left >= 0 && b.right <= window.innerWidth;
+  });
+  expect(firstInView).toBe(true);
+});
+
+test("the usage CSV carries the alert numbers, with small groups hidden", async ({
+  page,
+}) => {
+  await openUsageOnSampleDay(page);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export CSV" }).click();
+  const csv = readFileSync((await (await download).path())!, "utf8");
+  expect(csv).toContain("Alerts: total,128\r\n");
+  expect(csv).toContain("Alerts: Critical handled within 15 min (%),71\r\n");
+  expect(csv).toContain("Alerts: dismissed as Wrong patient,Fewer than 5\r\n");
+  expect(csv).toContain("Alerts on 2026-10-14,23\r\n");
+  expect(csv).not.toMatch(/MRN|@|\bBed\b/);
+  // "patient" appears only in the two labels that name a reason or a clinic.
+  expect(
+    csv.replaceAll("Wrong patient", "").replaceAll("Outpatient", ""),
+  ).not.toMatch(/patient/i);
+  await expect(page.getByText("Usage exported")).toBeVisible();
 });

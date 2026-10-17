@@ -72,4 +72,12 @@ describe("README demo instructions", () => {
     expect(readme).not.toMatch(/\blab\b/i);
     expect(contributing).not.toMatch(/\blab\b/i);
   });
+
+  it("documents the patient alerts on Usage and the small-group rule", () => {
+    expect(readme).toMatch(/\*\*Patient alerts on Usage\.\*\*/);
+    expect(readme).toMatch(/What\s+changed/);
+    expect(readme).toMatch(/"Fewer\s+than\s+5"/);
+    expect(readme).toMatch(/Plan\s+6\s+Analysis/);
+    expect(readme).not.toMatch(/\blab\b/i);
+  });
 });
