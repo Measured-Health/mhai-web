@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { QueryCreateIn, Urgency } from "./api/contract";
+import { clearPrefill } from "./notifications/ask";
 import { RESULT_LABEL, type ResultKind } from "./labels";
 
 export interface SessionItem {
@@ -97,10 +98,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }),
     [],
   );
-  // Sign-out: drop history AND cached clinical results held in memory.
+  // Sign-out: drop history, cached clinical results held in memory and any
+  // consultation waiting to be filled from a patient alert.
   const clear = useCallback(() => {
     setItems([]);
     queryClient.clear();
+    clearPrefill();
   }, [queryClient]);
   const value = useMemo(
     () => ({

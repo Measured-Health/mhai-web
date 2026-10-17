@@ -12,6 +12,7 @@ import { Banner } from "@/components/ui/banner";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { QueryCreateIn } from "@/lib/api/contract";
 import { emptyForm, fromQuery, type FormValues } from "@/lib/form-schema";
+import { clearPrefill, readPrefill } from "@/lib/notifications/ask";
 import { useOutbox } from "@/lib/offline/outbox-context";
 import { useSubmitQuery } from "@/lib/queries";
 import { titleFor, useSession } from "@/lib/session-store";
@@ -26,9 +27,11 @@ import { titleFor, useSession } from "@/lib/session-store";
 function Home({
   editId,
   waitingId,
+  prefillToken,
 }: {
   editId: string | null;
   waitingId: string | null;
+  prefillToken: string | null;
 }) {
   const router = useRouter();
   const session = useSession();
@@ -38,6 +41,8 @@ function Home({
   const editing = editId ? session.get(editId) : undefined;
   const waiting = waitingId ? session.get(waitingId) : undefined;
   const real = waitingId ? outbox.resolved[waitingId] : undefined;
+  // "Ask MHAI about it": a form waiting in memory, found by its token (R3).
+  const prefill = readPrefill(prefillToken);
   const [saveError, setSaveError] = useState(false);
   // Written only in the submit handler.
   const saving = useRef(false);
@@ -45,11 +50,12 @@ function Home({
     if (real) router.replace(`/c/${real}`);
   }, [real, router]);
   const [started, setStarted] = useState(
-    session.items.length > 0 || Boolean(editing),
+    session.items.length > 0 || Boolean(editing) || Boolean(prefill),
   );
   const [initial, setInitial] = useState<FormValues>(() =>
-    editing ? fromQuery(editing.query) : emptyForm,
+    editing ? fromQuery(editing.query) : (prefill ?? emptyForm),
   );
+  const [fromAlert, setFromAlert] = useState(Boolean(prefill) && !editing);
   // Remounts the form for a new starting point (an example, or after Discard).
   const [formKey, setFormKey] = useState(0);
   const [dirty, setDirty] = useState(false);
@@ -59,6 +65,9 @@ function Home({
     setFormKey((k) => k + 1);
     setDirty(false);
     setStarted(true);
+    // Sent, discarded or replaced: the alert's prefill is done with.
+    setFromAlert(false);
+    clearPrefill();
   };
 
   const save = async (q: QueryCreateIn) => {
@@ -130,6 +139,13 @@ function Home({
                 Three quick sections. The more detail you give, the better the
                 answer.
               </p>
+              {fromAlert && (
+                <p className="mb-4 rounded-xl bg-mint-wash px-3.5 py-2.5 text-[13px] text-mint-deep">
+                  Filled in from a patient alert. The patient&apos;s name and
+                  record number weren&apos;t copied. Check the details before
+                  you analyse.
+                </p>
+              )}
               {saveError && (
                 <div className="mb-4">
                   <Banner tone="bad" title="Couldn't save your question">
@@ -201,14 +217,17 @@ function Home({
 function HomeRoute() {
   // `?edit=<id>` comes from "Edit question" on a result that couldn't complete.
   // `?waiting=<localId>`: a question just saved offline (see Home).
+  // `?prefill=<token>`: "Ask MHAI about it" on a patient alert (Plan 5a).
   const params = useSearchParams();
   const editId = params.get("edit");
   const waitingId = params.get("waiting");
+  const prefillToken = params.get("prefill");
   return (
     <Home
-      key={`${editId ?? ""}|${waitingId ?? ""}`}
+      key={`${editId ?? ""}|${waitingId ?? ""}|${prefillToken ?? ""}`}
       editId={editId}
       waitingId={waitingId}
+      prefillToken={prefillToken}
     />
   );
 }

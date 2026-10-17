@@ -38,6 +38,10 @@ All notable changes to this project are documented here. The format follows
   the hospital's system. An alert someone else handled first says who and
   when. Filters for New, Handled, Dismissed, severity and source; cards on
   phones; nothing is printed or exported.
+- "Ask MHAI about it" on a patient alert starts a consultation filled in
+  with the patient's age and sex, a priority from the alert's severity and
+  the abnormal result as the question. The patient's name, record number
+  and location are never copied.
 - Review oversight for hospital admins: corrections waiting with their
   specialty, how long they've waited and how many people can review them;
   specialties short of reviewers are flagged; remind the reviewers or
