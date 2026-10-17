@@ -36,7 +36,7 @@ flowchart LR
             cside["Clinical side"]
             hside["Hospital admin side"]
         end
-        aapp["Platform admin app<br/>admin.&lt;domain&gt;<br/>(planned)"]
+        aapp["Platform admin app<br/>platforms.&lt;domain&gt;<br/>(planned)"]
     end
 
     idp["Hospital identity provider<br/>(OIDC single sign-on)"]
@@ -70,7 +70,7 @@ The same picture as a sketch:
 ┌─────────────────────────────────┐                     ▼
 │          CLINICAL APP           │          ┌──────────────────────┐
 │          app.<domain>           │          │  PLATFORM ADMIN APP  │
-│ ┌──────────────┬──────────────┐ │          │   admin.<domain>     │
+│ ┌──────────────┬──────────────┐ │          │  platforms.<domain>  │
 │ │ CLINICAL     │ HOSPITAL     │ │          │  (VPN / allowlist)   │
 │ │ ask · result │ ADMIN        │ │          │ hospitals · health · │
 │ │ feedback ·   │ staff ·      │ │          │ DLQ · holds ·        │
@@ -450,7 +450,7 @@ Every admin action is audited.
 
 - MFA is required for admin and auditor. A single sign-on login must
   carry the IdP's MFA assertion.
-- Served from its own origin (`admin.<domain>`), ideally reachable only
+- Served from its own origin (`platforms.<domain>`), ideally reachable only
   over VPN or an IP allowlist. Its cookie is scoped to that origin, and
   it has its own CSP.
 - **It never shows patient data.** Admin endpoints return ids and counts
@@ -463,7 +463,7 @@ Every admin action is audited.
 ```mermaid
 flowchart LR
     u1([Clinicians, hospital admins]) --> cdn1["app.&lt;domain&gt;<br/>Clinical app"]
-    u2([Platform admins, auditors]) -->|VPN / allowlist| cdn2["admin.&lt;domain&gt;<br/>Platform admin app"]
+    u2([Platform admins, auditors]) -->|VPN / allowlist| cdn2["platforms.&lt;domain&gt;<br/>Platform admin app"]
     cdn1 --> api["api.&lt;domain&gt;/api/v1"]
     cdn2 --> api
 ```

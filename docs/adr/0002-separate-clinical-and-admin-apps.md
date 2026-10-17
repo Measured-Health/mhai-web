@@ -30,13 +30,16 @@ There are two kinds of admin:
   shown only for the `hospital_admin` role. They're scoped to the user's
   hospital and never show clinical content.
 - Build the **platform admin** UI as a **separate Next.js app** in this
-  repository. It's deployed on its own origin (`admin.<domain>`), ideally behind a
+  repository. It's deployed on its own origin (`platforms.<domain>`), ideally behind a
   VPN or IP allowlist.
 - When admin work starts, convert the repository to npm workspaces:
   `apps/clinical` (today's `app/`), `apps/admin`, and shared
   `packages/ui`, `packages/tokens` and `packages/api-client`. Neither app
   imports from the other.
 - Phase 1 changes nothing. The current app is the clinical app.
+- Revisited in [ADR 0004](0004-keep-the-hospital-admin-in-the-clinical-app.md) (17 Oct 2026):
+  the hospital admin side stays in the clinical app, and the platform admin app's address is
+  `platforms.<domain>`.
 
 ## Consequences
 
