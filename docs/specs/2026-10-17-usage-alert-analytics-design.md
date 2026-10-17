@@ -117,7 +117,7 @@ At the top of the group, a short list, most important first:
 1. **Worsening response:** when the share of Critical alerts handled within the target drops
    noticeably: "Critical within 15 min: 71%, down from 88%".
 2. **Unusual days or weeks:** buckets the backend flags as well above the usual level:
-   "14 Oct: 23 alerts, about 3× the usual" (weekly: "Week of 6 Oct: 41 alerts, about 2× the
+   "14 Oct: 23 alerts, about 3× the usual" (weekly: "Week of 3 Oct: 41 alerts, about 2× the
    usual"). They are also marked on the column chart.
 3. **Rising findings:** "Potassium · low: 31, up from 9".
 4. **Rising locations:** "Ward 3: 34, up from 12".
@@ -136,7 +136,7 @@ Analysis can reuse them: they know nothing about alerts or admins.
 
 - **`ColumnChart`:** columns over time.
   - A visible title and a one-line text summary ("Most alerts on 14 Oct: 23"; weekly "Most
-    alerts in the week of 6 Oct: 41"; "No alerts in this period" when every column is 0).
+    alerts in the week of 3 Oct: 41"; "No alerts in this period" when every column is 0).
   - **Show as table** / **Show as chart** toggle; the table has the same rows (Day or Week,
     Alerts, and a Note for marked columns).
   - Keyboard: Tab reaches the columns as one stop; the arrow keys, Home and End move between
@@ -159,7 +159,7 @@ Analysis can reuse them: they know nothing about alerts or admins.
 - Rows start with "Alerts", for example "Alerts: total", "Alerts: Critical", "Alerts: Critical
   handled within 15 min (%)", "Alerts: dismissed as Wrong patient", "Alerts: finding
   Potassium · low", "Alerts: location Ward 3", and one row per column of the chart ("Alerts on
-  2026-10-14", or "Alerts in the week of 2026-10-06").
+  2026-10-14", or "Alerts in the week of 2026-10-03").
 - A hidden value is written "Fewer than 5". A missing median is an empty cell, never 0.
 - Changes and flags stay on screen; the file holds the period's numbers.
 - Alerts switched off: no alert rows. Alerts couldn't load: one row, "Alerts, Couldn't load",

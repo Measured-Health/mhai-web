@@ -174,4 +174,11 @@ describe("live admin client", () => {
     reply(() => Response.json(body));
     expect(await client().getUsage("this_month")).toEqual(body);
   });
+
+  it("treats usage with no alerts key as switched off", async () => {
+    reply(() => Response.json({ period: "this_month", consultations: 1 }));
+    const usage = await client().getUsage("this_month");
+    expect("alerts" in usage).toBe(false);
+    expect(usage.alerts ?? null).toBeNull();
+  });
 });

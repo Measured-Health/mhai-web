@@ -310,8 +310,13 @@ function periodRange(
   return { from: iso(now - 90 * D), to: iso(now) };
 }
 
-/** The usage alerts sample: switched on, switched off (null) or failing. */
-export type MockAlertsMode = "on" | "off" | "unavailable";
+/**
+ * The usage alerts sample: switched on, switched off (null), failing, or "edge":
+ * the sample with hidden measures (Critical and Urgent, the Critical median),
+ * a measure with nothing to measure yet (the median) and, in a weekly period,
+ * a flagged week. Never a raw 1 to 4.
+ */
+export type MockAlertsMode = "on" | "off" | "unavailable" | "edge";
 
 const count = (value: number): GuardedOut => ({ value, suppressed: false });
 const hiddenCount = (): GuardedOut => ({ value: null, suppressed: true });
@@ -430,7 +435,7 @@ const USAGE_ALERTS: Record<UsagePeriod, AlertsSeed> = {
     dismiss_reasons: [
       { reason: "not_relevant", count: count(14) },
       { reason: "already_known", count: count(11) },
-      // 2 is hidden, so 5 is hidden too: otherwise 2 could be worked out.
+      // Both are hidden so neither can be worked out.
       { reason: "wrong_patient", count: hiddenCount() },
       { reason: "other", count: hiddenCount() },
     ],
@@ -534,6 +539,14 @@ function alertsFor(
   if (mode === "off") return null;
   if (mode === "unavailable") return { unavailable: true };
   const { series, ...rest } = copy(USAGE_ALERTS[p]);
+  if (mode === "edge") {
+    // Two severities hidden together, so neither can be worked out.
+    rest.by_severity.critical = { ...hiddenCount(), change: null };
+    rest.by_severity.urgent = { ...hiddenCount(), change: null };
+    rest.median_ack_minutes_critical = { ...hiddenCount(), change: null };
+    rest.median_ack_minutes = { value: null, suppressed: false, change: null };
+    if (series.bucket === "week") series.unusual = { 11: 2.1 };
+  }
   return { ...rest, series: seriesFor(series, range.from, range.to) };
 }
 

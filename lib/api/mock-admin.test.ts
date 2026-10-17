@@ -600,4 +600,27 @@ describe("usage alerts (sample, at 16 Oct)", () => {
       (await mockAdminWith("unavailable").getUsage("this_month")).alerts,
     ).toEqual({ unavailable: true });
   });
+
+  it("has an edge sample: hidden measures, no data yet, a flagged week", async () => {
+    const a = (await mockAdminWith("edge").getUsage("last_90_days"))
+      .alerts as UsageAlertsOut;
+    expect(a.by_severity.critical).toEqual({
+      value: null,
+      suppressed: true,
+      change: null,
+    });
+    expect(a.median_ack_minutes_critical.suppressed).toBe(true);
+    expect(a.median_ack_minutes).toEqual({
+      value: null,
+      suppressed: false,
+      change: null,
+    });
+    expect(a.series.bucket).toBe("week");
+    expect(a.series.points.filter((p) => p.usual_multiple !== null)).toEqual([
+      { start: "2026-10-03", total: 45, usual_multiple: 2.1 },
+    ]);
+    for (const m of [a.total, a.by_severity.info, a.unhandled]) {
+      expect(m.value === 0 || m.value! >= SMALL_GROUP_MIN).toBe(true);
+    }
+  });
 });
