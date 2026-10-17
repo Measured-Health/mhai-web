@@ -98,7 +98,16 @@ Sample alerts across Critical, Urgent and Info, for admitted, outpatient and ED 
 the sample hospital. A new sample alert arrives every couple of minutes so pop-ups can be
 seen. All names and MRNs are synthetic.
 
-## 8. Backend this design needs (assumed contract)
+## 8. Many EMR systems
+
+The frontend never depends on a particular EMR (ADR 0003): alerts arrive in MHAI's canonical
+shape; each carries its `source` (display name) and an `emr_link`, so "Open in EMR" reads
+"Open in {source}". Locations, codes and units come normalised with display labels; a
+missing location shows "Location not recorded", an unmapped finding shows its source label
+with "Not standardised". When a hospital has more than one connected system, the alerts page
+can filter by source.
+
+## 9. Backend this design needs (assumed contract)
 
 Add to spec §10 of the UI design:
 
@@ -110,7 +119,8 @@ Add to spec §10 of the UI design:
   Idempotency-Key; 409 when already handled by someone else (returns who and when).
 - `GET` / `PATCH /me/notification-settings {alert_popups, correction_popups}`.
 - Alert fields: id, severity, finding (name, value, unit, flag, reference range, recorded
-  at), likely causes (label, confidence), patient (name, MRN, location: admitted ward/bed,
-  outpatient clinic, or emergency), age, sex, EMR link, status, handled by/at, created at.
+  at, code system, standardised or not), likely causes (label, confidence), patient (name,
+  MRN, location: admitted ward/bed, outpatient clinic, emergency, or not recorded), age, sex,
+  source (display name), EMR link, status, handled by/at, created at.
 - Alerts are produced from the EMR feed with a clinician always in the loop; nothing is sent
   to patients.
