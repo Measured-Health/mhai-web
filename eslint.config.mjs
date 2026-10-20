@@ -8,13 +8,15 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Formatting is Prettier's job; turn off conflicting lint rules.
   prettier,
+  // The Next plugin looks for the apps under apps/.
+  { settings: { next: { rootDir: "apps/*/" } } },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
+    "**/.next/**",
+    "**/out/**",
+    "**/build/**",
+    "**/next-env.d.ts",
   ]),
 ]);
 

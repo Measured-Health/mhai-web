@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const readme = readFileSync("README.md", "utf8");
+// README and CONTRIBUTING live at the repository root.
+const repositoryRoot = path.join(import.meta.dirname, "../../..");
+const readme = readFileSync(path.join(repositoryRoot, "README.md"), "utf8");
 
 describe("README demo instructions", () => {
   it("sets NEXT_PUBLIC_USE_MOCK for the build (inlined at build time), not just start", () => {
@@ -62,7 +65,10 @@ describe("README demo instructions", () => {
   });
 
   it("repeats the sign-off in CONTRIBUTING, with no lab wording", () => {
-    const contributing = readFileSync("CONTRIBUTING.md", "utf8");
+    const contributing = readFileSync(
+      path.join(repositoryRoot, "CONTRIBUTING.md"),
+      "utf8",
+    );
     expect(contributing).toMatch(
       /Clinical\s+and\s+privacy\s+sign-off\s+is\s+required\s+before\s+live\s+use/,
     );
