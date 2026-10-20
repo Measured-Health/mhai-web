@@ -7,9 +7,18 @@ const repositoryRoot = path.join(import.meta.dirname, "../../..");
 const readme = readFileSync(path.join(repositoryRoot, "README.md"), "utf8");
 
 describe("README demo instructions", () => {
+  it("documents the workspaces and where the app lives", () => {
+    expect(readme).toMatch(/apps\/clinical/);
+    expect(readme).toMatch(/packages\/tokens/);
+  });
+
+  it("says to move .env.local into apps/clinical", () => {
+    expect(readme).toMatch(/`\.env\.local`[^.]*apps\/clinical\//);
+  });
+
   it("sets NEXT_PUBLIC_USE_MOCK for the build (inlined at build time), not just start", () => {
     expect(readme).toContain(
-      "NEXT_PUBLIC_USE_MOCK=true npm run build && npx next start",
+      "NEXT_PUBLIC_USE_MOCK=true npm run build && npm start",
     );
     expect(readme).not.toMatch(/npm run build && NEXT_PUBLIC_USE_MOCK=true/);
   });

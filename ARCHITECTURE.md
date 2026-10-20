@@ -146,44 +146,42 @@ flowchart TB
 
 ## 3. Repository layout
 
-**Today (Phase 1):** this repo is one Next.js app, and it is the
-clinical app.
-
-```text
-mhai-web/
-├── app/                 Next.js App Router (clinical app)
-├── design/              approved designs (v2 mockup, v3 boards, brand assets)
-├── docs/adr/            decisions
-├── docs/specs/          design specs
-└── ARCHITECTURE.md
-```
-
-**When admin work starts** (ADR 0002), the repo becomes npm workspaces. The
-apps are deployed separately but share packages.
+The repo is npm workspaces. The apps are deployed separately but share
+packages.
 
 ```text
 mhai-web/
 ├── apps/
-│   ├── clinical/        today's app/ moves here
-│   └── admin/
+│   ├── clinical/        the clinical app (@mhai/clinical)
+│   └── platform/        the platform admin app (planned, Plan 7b)
 ├── packages/
-│   ├── ui/              shared components (buttons, cards, dialogs, tables)
 │   ├── tokens/          colours, type, radius, shadows (design v3)
+│   ├── ui/              shared components (added with the platform admin app)
 │   └── api-client/      types generated from the backend's openapi.json
-└── design/ · docs/
+│                        (added with the platform admin app)
+├── scripts/             bundle check and repo tests
+├── design/              approved designs (v2 mockup, v3 boards, brand assets)
+├── docs/                adr/ decisions, specs/ design specs, plans/
+└── ARCHITECTURE.md
 ```
 
 ```mermaid
 flowchart LR
-    tokens[packages/tokens] --> ui[packages/ui]
-    ui --> clinical[apps/clinical]
-    ui --> admin[apps/admin]
-    apic[packages/api-client] --> clinical
-    apic --> admin
-    clinical -. never imports .- admin
+    tokens[packages/tokens] --> clinical[apps/clinical]
+    tokens --> platform["apps/platform (planned)"]
+    ui["packages/ui (added with the platform admin app)"] -.-> clinical
+    ui -.-> platform
+    apic["packages/api-client (added with the platform admin app)"] -.-> clinical
+    apic -.-> platform
+    clinical -. never imports .- platform
 ```
 
 Neither app imports from the other. Shared code lives only in `packages/`.
+Two checks keep it that way:
+
+- an ESLint rule blocks imports between `apps/clinical` and `apps/platform`;
+- `npm run check:bundle` scans the clinical build for the platform marker,
+  so platform code cannot ship to clinicians.
 
 ## 4. Clinical app
 

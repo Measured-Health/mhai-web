@@ -57,7 +57,7 @@ Every PR must pass:
 - **Never log patient data** to the console, analytics or error tracking.
 - **Never store PHI** in `localStorage`, `sessionStorage`, IndexedDB or
   service-worker caches, **with one exception: the offline outbox**
-  (`lib/offline/`). It holds only questions and feedback that couldn't be
+  (`apps/clinical/lib/offline/`). It holds only questions and feedback that couldn't be
   sent yet:
   - encrypted with AES-GCM under a non-extractable device key;
   - bound to the signed-in user (hashed);

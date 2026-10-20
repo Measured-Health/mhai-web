@@ -8,7 +8,8 @@ browser ──https──> nginx (host) ──> 127.0.0.1:8090 ──> mhai-web 
 ```
 
 Every merge to `main` that passes CI runs `.github/workflows/deploy.yml`:
-build the arm64 image in GitHub, push it to
+build the arm64 image in GitHub (from `apps/clinical/Dockerfile`, with the
+repository root as the build context), push it to
 `ghcr.io/measured-health/mhai-web`, then SSH to the instance, pull, restart
 and health-check. It never touches the EMR containers or nginx.
 

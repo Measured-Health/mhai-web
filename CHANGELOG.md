@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The repository is now npm workspaces: the app is in `apps/clinical` and
+  the design tokens are in `packages/tokens`. There is no change to the
+  app. If you keep a local `.env.local`, move it into `apps/clinical/`.
 - Usage's Result confidence and By specialty bars use the new shared bar
   list. They look the same, but the bars now grow in once when the page
   opens (not with reduced motion).

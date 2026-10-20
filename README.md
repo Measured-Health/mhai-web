@@ -9,7 +9,23 @@ Tailwind CSS. The backend lives in
 > evidence panel, feedback) runs on mock data. It is not connected to the
 > backend yet.
 
+## Layout
+
+The repository is npm workspaces. The apps are deployed separately; shared
+code lives in packages.
+
+```text
+apps/clinical/     the Next.js app (@mhai/clinical)
+packages/tokens/   design tokens (@mhai/tokens)
+```
+
+The platform admin app (`apps/platform`) and the shared `packages/ui` and
+`packages/api-client` are added with the platform admin app. Apps never
+import from each other; see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Development
+
+Run everything from the repository root.
 
 ```bash
 nvm use        # Node version from .nvmrc
@@ -17,21 +33,32 @@ npm ci
 npm run dev    # http://localhost:3000
 ```
 
-| Script                            | Purpose                       |
-| --------------------------------- | ----------------------------- |
-| `npm run lint`                    | ESLint                        |
-| `npm run typecheck`               | TypeScript check              |
-| `npm run format` / `format:check` | Prettier                      |
-| `npm run build` / `start`         | Production build and server   |
-| `npm test`                        | Unit tests (Vitest)           |
-| `npm run e2e`                     | End-to-end tests (Playwright) |
+To use another port, set it in the environment: `PORT=3200 npm run dev`.
+Root scripts do not pass extra arguments through.
+
+| Script                            | Purpose                             |
+| --------------------------------- | ----------------------------------- |
+| `npm run lint`                    | ESLint                              |
+| `npm run typecheck`               | TypeScript check                    |
+| `npm run format` / `format:check` | Prettier                            |
+| `npm run build` / `start`         | Production build and server         |
+| `npm run check:bundle`            | Clinical build has no platform code |
+| `npm test`                        | Unit tests (Vitest)                 |
+| `npm run e2e`                     | End-to-end tests (Playwright)       |
+
+Commands for one app, such as `npx playwright install chromium`, run from
+its folder: `cd apps/clinical`.
 
 ### Run on mock data
 
 ```bash
-cp .env.example .env.local   # sets NEXT_PUBLIC_USE_MOCK=true
+cp apps/clinical/.env.example apps/clinical/.env.local   # sets NEXT_PUBLIC_USE_MOCK=true
 npm run dev
 ```
+
+The app reads its environment files from `apps/clinical/`. If you have a
+`.env.local` in the repository root from before the move, move it into
+`apps/clinical/`.
 
 The question text picks the mock result. Words match whole, in any case:
 "fever" or "dengue" gives Use with caution, "potassium" gives Needs
@@ -122,9 +149,9 @@ director (clinician and hospital admin: both sides), a platform admin (the
 and "Continue with hospital account" signs in through the demo's hospital
 sign-on.
 
-- **On your machine:** `NEXT_PUBLIC_USE_MOCK=true npm run build && npx next start`
+- **On your machine:** `NEXT_PUBLIC_USE_MOCK=true npm run build && npm start`
   (the flag is read at build time, so it must be set for the build).
-  Feedback is saved to `.feedback/feedback.jsonl` in development.
+  Feedback is saved to `apps/clinical/.feedback/feedback.jsonl` in development.
 - **For the team:** https://demo.measured-health.org (open, not listed
   by search engines). Every merge to `main` that passes CI deploys there; see
   [deploy/README.md](deploy/README.md).
@@ -185,12 +212,12 @@ Until it is given, alerts run on sample data only; see
 ### Tests
 
 ```bash
-npm test        # unit tests
+npm test        # unit tests, every workspace
 npm run e2e     # end-to-end, desktop and mobile
 ```
 
 The e2e suite builds the app in mock mode and serves it on port 3100. The
-first time, install the browser with `npx playwright install chromium`.
+first time, install the browser with `cd apps/clinical && npx playwright install chromium`.
 It checks the four result states, form errors, and that no patient data is
 left in browser storage or cookies.
 
