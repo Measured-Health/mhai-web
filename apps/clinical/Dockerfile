@@ -6,6 +6,7 @@
 FROM node:24-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY apps/clinical/package.json apps/clinical/
 RUN npm ci
 
 FROM node:24-bookworm-slim AS build
@@ -16,7 +17,7 @@ COPY . .
 # when the container starts. The demo always runs on sample data.
 ENV NEXT_PUBLIC_USE_MOCK=true \
     NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN npm run build -w @mhai/clinical
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
@@ -26,11 +27,11 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0
 # Fixed ids, so the host's feedback folder can be owned by this user.
 RUN groupadd --system --gid 1001 nodejs && useradd --system --uid 1001 --gid nodejs nextjs
-COPY --from=build /app/public ./public
-COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=build --chown=nextjs:nodejs /app/apps/clinical/.next/standalone ./
+COPY --from=build --chown=nextjs:nodejs /app/apps/clinical/.next/static ./apps/clinical/.next/static
+COPY --from=build /app/apps/clinical/public ./apps/clinical/public
 USER nextjs
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:8080/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node", "server.js"]
+CMD ["node", "apps/clinical/server.js"]

@@ -1,5 +1,5 @@
-node_modules
-.next
+**/node_modules
+**/.next
 .git
 .github
 .open-next
@@ -11,8 +11,9 @@ node_modules
 .env.local
 .env.*.local
 tsconfig.tsbuildinfo
-test-results
-playwright-report
+**/test-results
+**/playwright-report
 deploy
 docs
 design
+**/.feedback
