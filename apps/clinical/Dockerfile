@@ -7,6 +7,7 @@ FROM node:24-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/clinical/package.json apps/clinical/
+COPY packages/tokens/package.json packages/tokens/
 RUN npm ci
 
 FROM node:24-bookworm-slim AS build

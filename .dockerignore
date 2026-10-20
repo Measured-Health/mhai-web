@@ -7,9 +7,8 @@
 .vscode
 .superpowers
 *.log
-.env
-.env.local
-.env.*.local
+**/.env*
+!**/.env.example
 tsconfig.tsbuildinfo
 **/test-results
 **/playwright-report

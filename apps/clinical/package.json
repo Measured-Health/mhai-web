@@ -12,6 +12,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@mhai/tokens": "*",
     "@tanstack/react-query": "5.104.2",
     "clsx": "2.1.1",
     "lucide-react": "1.57.0",

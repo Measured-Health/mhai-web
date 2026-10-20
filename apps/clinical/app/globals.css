@@ -1,37 +1,5 @@
 @import "tailwindcss";
-
-@theme {
-  --color-bloom: #460351;
-  --color-bloom-2: #2c0136;
-  --color-orchid: #a8499e;
-  --color-lilac: #f1ecf4;
-  --color-lilac-2: #e8dfee;
-  --color-mint: #15999e;
-  --color-mint-2: #43c1c5;
-  --color-mint-deep: #15777c;
-  --color-mint-wash: #e3f4f4;
-  --color-ink: #1c0d22;
-  --color-ink-2: #4a3d50;
-  --color-ink-3: #8a7f90;
-  --color-line: #ece4ef;
-  --color-bg: #f6f2f8;
-  --color-ok: #1b7a4a;
-  --color-ok-wash: #e4f5ec;
-  --color-ok-deep: #135a36;
-  --color-warn: #b5742a;
-  --color-warn-wash: #fbf0e2;
-  --color-warn-deep: #8c5a1f;
-  --color-warn-line: #ecca8e;
-  --color-bad: #a04438;
-  --color-bad-wash: #f8e8e5;
-  --color-bad-deep: #7d3029;
-  --color-bad-line: #e0b5ae;
-  --font-display: var(--font-darker), sans-serif;
-  --font-sans: var(--font-outfit), system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
-  --radius-card: 22px;
-  --shadow-card: 0 24px 50px -28px rgb(70 3 81 / 0.4);
-}
+@import "@mhai/tokens/theme.css";
 
 :root {
   --t-instant: 100ms;
