@@ -4,12 +4,12 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { passwordError } from "@mhai/api-client/password-rules";
 import type { AuthError } from "@/lib/auth/types";
 import { WEAK_COPY } from "../auth/new-password-step";
-import { inputClass, PasswordFields } from "../auth/password-fields";
+import { inputClass, PasswordFields } from "@mhai/ui/auth/password-fields";
 import { AuthErrorBanner } from "../auth/auth-error-banner";
 import { errorCode } from "../auth/auth-error-copy";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
-import { useToast } from "../ui/toast";
+import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
+import { useToast } from "@mhai/ui/toast";
 
 export function ChangePasswordDialog({
   open,

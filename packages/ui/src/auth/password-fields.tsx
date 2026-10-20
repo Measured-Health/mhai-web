@@ -2,7 +2,7 @@
 import { Check, Circle } from "lucide-react";
 import { useId } from "react";
 import { passwordError, passwordRules } from "@mhai/api-client/password-rules";
-import { cn } from "../ui/cn";
+import { cn } from "../cn";
 
 export const inputClass =
   "min-h-11 w-full rounded-xl border border-lilac-2 bg-white px-3.5 text-[14px] focus-visible:border-mint focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-mint/25 aria-invalid:border-bad";

@@ -14,7 +14,7 @@ import {
   type SessionItem,
 } from "@/lib/session-store";
 import { AppShell, useShell } from "../shell/app-shell";
-import { ToastProvider } from "../ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 
 const push = vi.fn();
 const replace = vi.fn();

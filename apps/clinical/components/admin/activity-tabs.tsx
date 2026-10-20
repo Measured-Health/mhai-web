@@ -1,7 +1,7 @@
 "use client";
 import { useOversight } from "@/lib/admin-queries";
 import { isOverdueItem } from "@/lib/admin/report";
-import { useNow } from "@/lib/hooks/use-now";
+import { useNow } from "@mhai/ui/hooks/use-now";
 import { LinkTabs } from "../ui/link-tabs";
 
 /** Log and Review oversight (hospital-admin.html tabs 6 and 7). */

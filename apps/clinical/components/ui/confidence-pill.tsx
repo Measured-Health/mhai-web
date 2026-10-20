@@ -1,4 +1,4 @@
-import { cn } from "./cn";
+import { cn } from "@mhai/ui/cn";
 
 const HEIGHTS = [6, 8, 10, 12, 14];
 

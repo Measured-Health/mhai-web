@@ -6,8 +6,8 @@ import { useId } from "react";
 import { staffState } from "@/lib/admin/staff";
 import type { StaffOut } from "@/lib/api/admin-contract";
 import { useStaff } from "@/lib/admin-queries";
-import { useNow } from "@/lib/hooks/use-now";
-import { cn } from "../ui/cn";
+import { useNow } from "@mhai/ui/hooks/use-now";
+import { cn } from "@mhai/ui/cn";
 
 export const ADMIN_LINKS = [
   { href: "/admin/staff", label: "Staff", sub: null, Icon: Users },

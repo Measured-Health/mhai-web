@@ -9,9 +9,9 @@ import { useUpdateStaff } from "@/lib/admin-queries";
 import { adminError, type AdminError } from "@/lib/admin/errors";
 import { ROLE_LABEL, guardFor } from "@/lib/admin/staff";
 import { useNetwork } from "@mhai/api-client/network";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { useToast } from "../ui/toast";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { useToast } from "@mhai/ui/toast";
 
 const ROLES: readonly StaffRole[] = ["clinician", "hospital_admin"];
 

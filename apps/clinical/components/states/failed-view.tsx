@@ -1,6 +1,6 @@
 import { RotateCw } from "lucide-react";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
 
 /** Couldn't complete: the inputs are kept; Try again is the main action. */
 export function FailedView({

@@ -11,8 +11,8 @@ import { useFeedback } from "@/lib/queries";
 import type { ResultView } from "@/lib/result-view";
 import { useSession } from "@/lib/session-store";
 import { UnsavedGuard } from "../states/unsaved-guard";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
 import { CorrectionForm } from "./correction-form";
 
 export type FeedbackBarHandle = {

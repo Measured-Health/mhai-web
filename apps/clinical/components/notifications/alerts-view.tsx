@@ -2,7 +2,7 @@
 import { AlertTriangle, Info, OctagonAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { AlertSeverity, AlertStatus } from "@/lib/api/alerts-contract";
-import { useNow } from "@/lib/hooks/use-now";
+import { useNow } from "@mhai/ui/hooks/use-now";
 import {
   alertsOff,
   useAlertList,
@@ -14,9 +14,9 @@ import {
   showSources,
 } from "@/lib/notifications/alert-view";
 import { FilterChip } from "../corrections/filter-chip";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { Skeleton } from "../ui/skeleton";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { Skeleton } from "@mhai/ui/skeleton";
 import { AlertCard, alertDomId } from "./alert-card";
 import { useAlerts } from "./alerts-provider";
 import { NotificationsFrame } from "./notifications-frame";

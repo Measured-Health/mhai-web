@@ -16,7 +16,7 @@ import {
   staffState,
   statusText,
 } from "@/lib/admin/staff";
-import { Chip } from "../ui/chip";
+import { Chip } from "@mhai/ui/chip";
 
 const STATE_ICON = {
   active: CheckCircle2,

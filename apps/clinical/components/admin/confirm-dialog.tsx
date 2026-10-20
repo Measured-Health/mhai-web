@@ -1,9 +1,9 @@
 "use client";
 import { useRef, type ReactNode } from "react";
 import type { AdminError } from "@/lib/admin/errors";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
 
 /**
  * A destructive confirmation (spec §7): the safe button comes first and has

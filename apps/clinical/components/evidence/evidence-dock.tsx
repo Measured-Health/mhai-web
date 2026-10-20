@@ -2,8 +2,8 @@
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { AlertTriangle, Check } from "lucide-react";
 import type { ResultView } from "@/lib/result-view";
-import { Sheet } from "../ui/sheet";
-import { cn } from "../ui/cn";
+import { Sheet } from "@mhai/ui/sheet";
+import { cn } from "@mhai/ui/cn";
 import {
   ConfidenceBars,
   EvidencePanel,

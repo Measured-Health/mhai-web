@@ -35,7 +35,7 @@ import {
   type AlertPopup,
 } from "@/lib/notifications/popups";
 import { useShell } from "../shell/shell-context";
-import { useToast } from "../ui/toast";
+import { useToast } from "@mhai/ui/toast";
 
 type Ctx = {
   /** New alerts no one has handled, from the API; 0 until known (R1). */

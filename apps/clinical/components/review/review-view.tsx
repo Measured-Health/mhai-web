@@ -18,8 +18,8 @@ import {
   type DecisionError,
   type QueueItem,
 } from "@/lib/corrections";
-import { useIsDesktop } from "@/lib/hooks/use-media";
-import { useNow } from "@/lib/hooks/use-now";
+import { useIsDesktop } from "@mhai/ui/hooks/use-media";
+import { useNow } from "@mhai/ui/hooks/use-now";
 import { useShortcuts } from "@/lib/hooks/use-shortcuts";
 import { useNetwork } from "@mhai/api-client/network";
 import { useUndoableApproval } from "@/lib/review/use-undoable-approval";
@@ -27,11 +27,11 @@ import { FilterChip } from "../corrections/filter-chip";
 import { useWithdrawFlow } from "../corrections/withdraw-dialog";
 import { MenuButton } from "../shell/menu-button";
 import { TopBar } from "../shell/top-bar";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
-import { Skeleton } from "../ui/skeleton";
-import { useToast } from "../ui/toast";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { cn } from "@mhai/ui/cn";
+import { Skeleton } from "@mhai/ui/skeleton";
+import { useToast } from "@mhai/ui/toast";
 import { AllCaughtUp, RecentDecisions } from "./all-caught-up";
 import { QueueList } from "./queue-list";
 import { RejectDialog } from "./reject-dialog";

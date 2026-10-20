@@ -9,10 +9,10 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
-import { useIdle } from "@/lib/hooks/use-idle";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
-import { useToast } from "../ui/toast";
+import { useIdle } from "@mhai/ui/hooks/use-idle";
+import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
+import { useToast } from "@mhai/ui/toast";
 
 type Timing = { warnAfterMs?: number; signOutAfterMs?: number };
 

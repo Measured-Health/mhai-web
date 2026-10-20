@@ -17,8 +17,8 @@ import {
 } from "@/lib/corrections";
 import { OriginalChip } from "../corrections/chips";
 import { Avatar } from "../shell/account-menu";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
 import { ConsultationDialog } from "./consultation-dialog";
 import { CorrectionCompare } from "./correction-compare";
 

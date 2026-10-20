@@ -12,7 +12,7 @@ import {
 } from "react";
 import { getClient } from "../api/client";
 import type { FeedbackIn, QueryCreateIn } from "../api/contract";
-import { useToast } from "@/components/ui/toast";
+import { useToast } from "@mhai/ui/toast";
 import { ApiError } from "../api/errors";
 import { useAuth } from "../auth/auth-context";
 import { isClinical } from "../auth/types";

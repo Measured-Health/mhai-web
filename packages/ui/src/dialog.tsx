@@ -6,7 +6,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { useEscape } from "@/lib/hooks/use-escape";
+import { useEscape } from "./hooks/use-escape";
 
 export function Dialog({
   open,

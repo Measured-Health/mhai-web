@@ -5,7 +5,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import { cn } from "../ui/cn";
+import { cn } from "../cn";
 
 export const normalizeCode = (s: string) => s.replace(/\D/g, "").slice(0, 6);
 

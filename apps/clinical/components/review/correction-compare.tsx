@@ -3,7 +3,7 @@ import { useId } from "react";
 import type { CorrectionOut } from "@/lib/api/contract";
 import { citationTag } from "@/lib/labels";
 import { wordDiff, type DiffPart } from "@/lib/word-diff";
-import { Chip } from "../ui/chip";
+import { Chip } from "@mhai/ui/chip";
 
 const WRAP = "[overflow-wrap:anywhere] whitespace-pre-line";
 const H = "mb-2 flex items-center gap-2 text-[11px] uppercase tracking-[.1em]";

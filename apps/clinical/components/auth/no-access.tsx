@@ -3,7 +3,7 @@ import { Lock } from "lucide-react";
 import { homeFor, useAuth } from "@/lib/auth/auth-context";
 import { useRedirect } from "@/lib/auth/use-redirect";
 import { useOutbox } from "@/lib/offline/outbox-context";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 
 export function NoAccess() {
   const auth = useAuth();

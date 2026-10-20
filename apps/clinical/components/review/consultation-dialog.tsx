@@ -1,8 +1,8 @@
 "use client";
 import type { CorrectionOut } from "@/lib/api/contract";
 import { OriginalChip } from "../corrections/chips";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
+import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
 
 const SEX = {
   female: "female",

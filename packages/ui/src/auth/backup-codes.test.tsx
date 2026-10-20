@@ -1,9 +1,22 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MOCK_BACKUP_CODES } from "@/lib/auth/mock";
-import { ToastProvider } from "../ui/toast";
+import { ToastProvider } from "../toast";
 import { BackupCodes } from "./backup-codes";
+
+// The clinical mock's demo backup codes (packages never import from an app).
+const MOCK_BACKUP_CODES = [
+  "4F7K-92QX",
+  "M8TD-31LP",
+  "Z2HV-7R6C",
+  "Q9WE-5N4B",
+  "K3YU-8J2D",
+  "P6RA-1T9M",
+  "B5NC-4X7H",
+  "W1GZ-6E3V",
+  "D8LS-2K5Q",
+  "H7MF-9P1Y",
+];
 
 afterEach(() => vi.restoreAllMocks());
 const mount = (onFinish = vi.fn()) =>

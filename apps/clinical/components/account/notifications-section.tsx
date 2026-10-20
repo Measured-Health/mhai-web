@@ -1,15 +1,15 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
 import type { NotificationSettingsPatchIn } from "@/lib/api/alerts-contract";
-import { useOnline } from "@/lib/hooks/use-online";
+import { useOnline } from "@mhai/ui/hooks/use-online";
 import {
   useNotificationSettings,
   useUpdateNotificationSettings,
 } from "@/lib/notification-queries";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { Skeleton } from "../ui/skeleton";
-import { Switch } from "../ui/switch";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { Skeleton } from "@mhai/ui/skeleton";
+import { Switch } from "@mhai/ui/switch";
 
 const row =
   "flex min-h-14 flex-wrap items-center gap-3 border-t border-line py-3 text-[14px]";

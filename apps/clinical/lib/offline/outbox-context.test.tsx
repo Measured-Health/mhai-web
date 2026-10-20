@@ -7,7 +7,7 @@ import { AuthTestProvider, TEST_USER } from "@/tests/auth-wrapper";
 import { useSession } from "../session-store";
 import { ownerId } from "./crypto";
 import { OutboxProvider, useOutbox } from "./outbox-context";
-import { ToastProvider } from "@/components/ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 import { OutboxIndicator } from "@/components/states/outbox-indicator";
 
 const createQuery = vi.fn();

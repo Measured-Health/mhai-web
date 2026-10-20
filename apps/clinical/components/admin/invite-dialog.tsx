@@ -19,10 +19,10 @@ import {
 } from "@/lib/admin/invite";
 import { ROLE_LABEL } from "@/lib/admin/staff";
 import { useNetwork } from "@mhai/api-client/network";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
-import { useToast } from "../ui/toast";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
+import { useToast } from "@mhai/ui/toast";
 
 const ROLES: readonly StaffRole[] = ["clinician", "hospital_admin"];
 const field =

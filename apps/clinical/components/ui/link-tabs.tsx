@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { cn } from "./cn";
+import { cn } from "@mhai/ui/cn";
 
 export interface LinkTab {
   id: string;

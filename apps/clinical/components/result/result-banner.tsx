@@ -1,5 +1,5 @@
 import type { ResultView } from "@/lib/result-view";
-import { Banner } from "../ui/banner";
+import { Banner } from "@mhai/ui/banner";
 
 export function ResultBanner({ view }: { view: ResultView }) {
   if (!view.banner) return null;

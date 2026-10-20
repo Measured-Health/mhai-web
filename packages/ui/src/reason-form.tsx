@@ -1,7 +1,7 @@
 "use client";
 import { Check } from "lucide-react";
 import { useId, useRef, useState, type ReactNode } from "react";
-import { useIsDesktop } from "@/lib/hooks/use-media";
+import { useIsDesktop } from "./hooks/use-media";
 import { Banner } from "./banner";
 import { Button } from "./button";
 import { Dialog } from "./dialog";

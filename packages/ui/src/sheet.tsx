@@ -1,9 +1,9 @@
 "use client";
 import { X } from "lucide-react";
 import { useRef, type ReactNode } from "react";
-import { useEscape } from "@/lib/hooks/use-escape";
-import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
-import { modalDialogOpen } from "@/lib/hooks/modal-dialog";
+import { useEscape } from "./hooks/use-escape";
+import { useFocusTrap } from "./hooks/use-focus-trap";
+import { modalDialogOpen } from "./hooks/modal-dialog";
 import { cn } from "./cn";
 
 /**

@@ -9,20 +9,19 @@ const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: repositoryRoot,
   // Shared workspace packages ship TypeScript source.
-  transpilePackages: ["@mhai/api-client"],
+  transpilePackages: ["@mhai/api-client", "@mhai/ui"],
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
     root: repositoryRoot,
     rules: {
       "*.css": {
-        // Tailwind scans for class names from `base` (the working directory
-        // by default). Keep scanning from the repository root, as before the
-        // move to apps/clinical, so the built CSS stays the same.
+        // Tailwind scans for class names from `base`: this app's folder.
+        // The shared packages are added with `@source` in app/globals.css.
         loaders: [
           {
             loader: "@tailwindcss/turbopack",
-            options: { base: repositoryRoot },
+            options: { base: import.meta.dirname },
           },
         ],
         as: "*.css",

@@ -1,7 +1,7 @@
 "use client";
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
-import { cn } from "../ui/cn";
+import { cn } from "@mhai/ui/cn";
 
 /** A filter toggle. The selected one shows a check, never colour alone. */
 export function FilterChip({

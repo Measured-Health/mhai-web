@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useFeedbackStats } from "@/lib/correction-queries";
-import { Skeleton } from "../ui/skeleton";
+import { Skeleton } from "@mhai/ui/skeleton";
 
 /** Feedback stats on Profile & security (spec §5.5, account.html 5). */
 export function FeedbackSection() {

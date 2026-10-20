@@ -1,9 +1,9 @@
 "use client";
 import { Copy, Download, Printer } from "lucide-react";
 import { useId, useState } from "react";
-import { Button } from "../ui/button";
-import { useToast } from "../ui/toast";
-import { AuthHeading } from "./auth-layout";
+import { Button } from "../button";
+import { useToast } from "../toast";
+import { AuthHeading } from "./auth-heading";
 
 export function BackupCodes({
   codes,

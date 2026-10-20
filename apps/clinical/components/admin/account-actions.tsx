@@ -19,11 +19,11 @@ import {
   BackupCodeInput,
   BackupCodeToggle,
   useCodeOrBackup,
-} from "../auth/backup-code-toggle";
-import { CodeInput } from "../auth/code-input";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { useToast } from "../ui/toast";
+} from "@mhai/ui/auth/backup-code-toggle";
+import { CodeInput } from "@mhai/ui/auth/code-input";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { useToast } from "@mhai/ui/toast";
 import { ConfirmDialog } from "./confirm-dialog";
 
 export type Confirmable =

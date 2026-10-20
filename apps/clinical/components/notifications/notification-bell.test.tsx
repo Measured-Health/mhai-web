@@ -8,7 +8,7 @@ import { CORRECTION_KEYS } from "@/lib/correction-queries";
 import { NOTIFY_KEYS } from "@/lib/notification-queries";
 import { at, makeAlert } from "@/tests/alerts";
 import { T0, makeCorrection } from "@/tests/corrections";
-import { ToastProvider } from "../ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 
 const alerts = vi.hoisted(() => ({
   listAlerts: vi.fn(),

@@ -6,9 +6,9 @@ import {
   cleanViewport,
   maskPage,
 } from "@/lib/feedback-link";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
-import { useToast } from "../ui/toast";
+import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
+import { useToast } from "@mhai/ui/toast";
 
 type Problem = "invalid" | "rate_limited" | "unavailable" | null;
 

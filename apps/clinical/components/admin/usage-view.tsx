@@ -21,11 +21,11 @@ import {
 import { adminError } from "@/lib/admin/errors";
 import { useAuth } from "@/lib/auth/auth-context";
 import { RESULT_LABEL } from "@/lib/labels";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 import { BarList } from "../ui/charts/bar-list";
-import { cn } from "../ui/cn";
-import { Skeleton } from "../ui/skeleton";
-import { useToast } from "../ui/toast";
+import { cn } from "@mhai/ui/cn";
+import { Skeleton } from "@mhai/ui/skeleton";
+import { useToast } from "@mhai/ui/toast";
 import { AdminFrame } from "./admin-frame";
 import { UsageAlerts } from "./usage-alerts";
 import { Card, RetryBanner, Tile } from "./usage-parts";

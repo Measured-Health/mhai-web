@@ -21,7 +21,7 @@ import {
 } from "@/lib/notification-queries";
 import { CORRECTIONS_HREF, NOTIFICATION_TAG } from "@/lib/notifications/popups";
 import { useShell } from "../shell/shell-context";
-import { useToast } from "../ui/toast";
+import { useToast } from "@mhai/ui/toast";
 
 export interface DecisionNote {
   id: string;

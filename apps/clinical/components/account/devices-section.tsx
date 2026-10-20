@@ -4,12 +4,12 @@ import { Monitor } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { AuthError } from "@/lib/auth/types";
-import { useNow } from "@/lib/hooks/use-now";
+import { useNow } from "@mhai/ui/hooks/use-now";
 import { flushPendingApprovals } from "@/lib/review/pending-approvals";
 import { AuthErrorBanner } from "../auth/auth-error-banner";
 import { errorCode } from "../auth/auth-error-copy";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
+import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
 import { useOutbox } from "@/lib/offline/outbox-context";
 
 const ago = (t: number | null, now: number) => {

@@ -9,14 +9,14 @@ import {
   rejectionText,
   statusLine,
 } from "@/lib/corrections";
-import { useNow } from "@/lib/hooks/use-now";
+import { useNow } from "@mhai/ui/hooks/use-now";
 import { StatusChip } from "../corrections/chips";
 import { ReviewerReason } from "../corrections/reviewer-reason";
 import { useDecisions } from "../corrections/decisions-provider";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { Chip } from "../ui/chip";
-import { Skeleton } from "../ui/skeleton";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { Chip } from "@mhai/ui/chip";
+import { Skeleton } from "@mhai/ui/skeleton";
 import { NotificationsFrame } from "./notifications-frame";
 
 /** The Corrections tab: what reviewers decided (spec §2). Looking here counts decisions as seen (R1). */

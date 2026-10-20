@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "@mhai/tokens/theme.css";
+/* The shared components; Tailwind scans this app's folder by itself. */
+@source "../../../packages/ui/src";
 
 :root {
   --t-instant: 100ms;

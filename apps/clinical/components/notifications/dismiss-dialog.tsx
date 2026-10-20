@@ -4,7 +4,7 @@ import {
   DISMISS_NOTE_MAX,
   DISMISS_REASONS,
 } from "@/lib/notifications/alert-view";
-import { ReasonDialog } from "../ui/reason-form";
+import { ReasonDialog } from "@mhai/ui/reason-form";
 
 type Props = {
   open: boolean;

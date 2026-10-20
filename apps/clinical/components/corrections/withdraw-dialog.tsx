@@ -3,10 +3,10 @@ import { useState, type ReactNode } from "react";
 import { useWithdrawCorrection } from "@/lib/correction-queries";
 import { decisionError, type DecisionError } from "@/lib/corrections";
 import { useNetwork } from "@mhai/api-client/network";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
-import { useToast } from "../ui/toast";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
+import { useToast } from "@mhai/ui/toast";
 
 /** "Keep it" comes first, so it gets the focus: the safe default (spec §7). */
 export function WithdrawDialog({
