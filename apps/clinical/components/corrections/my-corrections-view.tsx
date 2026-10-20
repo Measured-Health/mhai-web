@@ -9,7 +9,7 @@ import {
   statusLine,
 } from "@/lib/corrections";
 import { useNow } from "@/lib/hooks/use-now";
-import { useNetwork } from "@/lib/network";
+import { useNetwork } from "@mhai/api-client/network";
 import { CorrectionCompare } from "../review/correction-compare";
 import { MenuButton } from "../shell/menu-button";
 import { TopBar } from "../shell/top-bar";

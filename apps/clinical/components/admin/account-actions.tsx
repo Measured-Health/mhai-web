@@ -13,7 +13,7 @@ import { adminError, type AdminError } from "@/lib/admin/errors";
 import { INVITE_DAYS } from "@/lib/admin/invite";
 import { guardFor } from "@/lib/admin/staff";
 import { useAuth } from "@/lib/auth/auth-context";
-import { useNetwork } from "@/lib/network";
+import { useNetwork } from "@mhai/api-client/network";
 import {
   BACKUP_FAILED_BODY,
   BackupCodeInput,

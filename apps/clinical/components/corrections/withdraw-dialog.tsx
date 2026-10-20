@@ -2,7 +2,7 @@
 import { useState, type ReactNode } from "react";
 import { useWithdrawCorrection } from "@/lib/correction-queries";
 import { decisionError, type DecisionError } from "@/lib/corrections";
-import { useNetwork } from "@/lib/network";
+import { useNetwork } from "@mhai/api-client/network";
 import { Banner } from "../ui/banner";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";

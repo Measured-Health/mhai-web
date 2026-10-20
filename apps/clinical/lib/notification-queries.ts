@@ -17,8 +17,8 @@ import type {
   NotificationSettingsPatchIn,
 } from "./api/alerts-contract";
 import { ApiError, isAlertHandled } from "./api/errors";
-import { useKeyedMutation } from "./keyed-mutation";
-import { READ_RETRY, usePollEvery } from "./network";
+import { useKeyedMutation } from "@mhai/api-client/keyed-mutation";
+import { READ_RETRY, usePollEvery } from "@mhai/api-client/network";
 
 /** How often new alerts and the count are checked, like decisions (Plan 3). */
 export const ALERT_POLL_MS = 30_000;

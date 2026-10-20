@@ -1,7 +1,7 @@
 "use client";
 import { Check, Circle } from "lucide-react";
 import { useId } from "react";
-import { passwordError, passwordRules } from "@/lib/auth/password-rules";
+import { passwordError, passwordRules } from "@mhai/api-client/password-rules";
 import { cn } from "../ui/cn";
 
 export const inputClass =

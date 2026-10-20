@@ -18,7 +18,7 @@ import {
   type InviteLineStatus,
 } from "@/lib/admin/invite";
 import { ROLE_LABEL } from "@/lib/admin/staff";
-import { useNetwork } from "@/lib/network";
+import { useNetwork } from "@mhai/api-client/network";
 import { Banner } from "../ui/banner";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";

@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
   // A self-contained server for the Docker image (deploy/).
   output: "standalone",
   outputFileTracingRoot: repositoryRoot,
+  // Shared workspace packages ship TypeScript source.
+  transpilePackages: ["@mhai/api-client"],
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

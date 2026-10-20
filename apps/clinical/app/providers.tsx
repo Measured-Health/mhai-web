@@ -6,7 +6,7 @@ import { SessionGuard } from "@/components/states/session-timeout";
 import { ToastProvider } from "@/components/ui/toast";
 import { AuthProvider } from "@/lib/auth/auth-context";
 import type { AuthClient, User } from "@/lib/auth/types";
-import { retryDelay, shouldRetry } from "@/lib/network";
+import { retryDelay, shouldRetry } from "@mhai/api-client/network";
 import { OutboxProvider } from "@/lib/offline/outbox-context";
 import { SessionProvider } from "@/lib/session-store";
 

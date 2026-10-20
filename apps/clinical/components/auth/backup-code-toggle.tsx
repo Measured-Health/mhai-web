@@ -1,6 +1,6 @@
 "use client";
 import { useState, type Ref } from "react";
-import { normalizeBackupCode } from "@/lib/auth/codes";
+import { normalizeBackupCode } from "@mhai/api-client/codes";
 import { normalizeCode } from "./code-input";
 import { inputClass } from "./password-fields";
 

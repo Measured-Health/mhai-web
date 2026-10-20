@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
-import { useNetwork } from "@/lib/network";
+import { useNetwork } from "@mhai/api-client/network";
 import { useToast } from "../ui/toast";
 
 /** Data-saver styling on <html>, and "back online" after an offline spell. */

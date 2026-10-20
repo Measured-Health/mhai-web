@@ -6,7 +6,7 @@ import type { CorrectionOut } from "@/lib/api/contract";
 import { ApiError } from "@/lib/api/errors";
 import { refreshCorrections } from "@/lib/correction-queries";
 import { UNDO_WINDOW_MS } from "@/lib/corrections";
-import { isTransient, retryDelay } from "@/lib/network";
+import { isTransient, retryDelay } from "@mhai/api-client/network";
 import { approvalSession, registerPendingFlush } from "./pending-approvals";
 
 /** Like reject and withdraw: a lost answer is tried again with the same key. */

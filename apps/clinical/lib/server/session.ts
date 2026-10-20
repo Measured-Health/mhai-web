@@ -1,9 +1,4 @@
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-} from "node:crypto";
+import { sealSync, unsealSync } from "@mhai/api-client/server/seal";
 import { cookies } from "next/headers";
 import type { FirstStep, Role, SignInResult, User } from "../auth/types";
 import { stepsFor, toUser, type ApiLoginOk } from "./map-user";
@@ -25,43 +20,17 @@ interface MfaPending {
   expiresAt: number;
 }
 
-function key(): Buffer {
+function secret(): string {
   const secret = process.env.SESSION_SECRET;
   if (!secret || secret.length < 32)
     throw new Error("SESSION_SECRET must be set to at least 32 characters");
-  return createHash("sha256").update(secret).digest();
+  return secret;
 }
 
-export function seal(value: unknown): string {
-  const iv = randomBytes(12);
-  const c = createCipheriv("aes-256-gcm", key(), iv);
-  const body = Buffer.concat([
-    c.update(JSON.stringify(value), "utf8"),
-    c.final(),
-  ]);
-  return Buffer.concat([iv, c.getAuthTag(), body]).toString("base64url");
-}
+export const seal = (value: unknown): string => sealSync(value, secret());
 
-export function unseal<T>(sealed: string | undefined): T | null {
-  const k = key(); // outside the try: a missing secret must throw
-  if (!sealed) return null;
-  try {
-    const raw = Buffer.from(sealed, "base64url");
-    // 12 IV + 16 tag + at least 1 byte of ciphertext.
-    if (raw.length < 29) return null;
-    const d = createDecipheriv("aes-256-gcm", k, raw.subarray(0, 12), {
-      authTagLength: 16,
-    });
-    d.setAuthTag(raw.subarray(12, 28));
-    const text = Buffer.concat([
-      d.update(raw.subarray(28)),
-      d.final(),
-    ]).toString("utf8");
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
-}
+export const unseal = <T>(sealed: string | undefined): T | null =>
+  unsealSync<T>(sealed, secret());
 
 export const cookieOptions = (maxAgeS: number) => ({
   httpOnly: true,

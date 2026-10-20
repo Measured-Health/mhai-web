@@ -1,6 +1,6 @@
 "use client";
 import { useSyncExternalStore } from "react";
-import { ApiError } from "./api/errors";
+import { ApiError } from "./errors";
 
 export interface Network {
   online: boolean;

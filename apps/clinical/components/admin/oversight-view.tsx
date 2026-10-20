@@ -14,7 +14,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { isClinical } from "@/lib/auth/types";
 import { useIsDesktop } from "@/lib/hooks/use-media";
 import { useNow } from "@/lib/hooks/use-now";
-import { useNetwork } from "@/lib/network";
+import { useNetwork } from "@mhai/api-client/network";
 import { ageLabel } from "@/lib/time";
 import { Banner } from "../ui/banner";
 import { Button } from "../ui/button";
