@@ -1,6 +1,6 @@
 # 0002. Separate the clinical app and the platform admin app
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-13
 - **Deciders:** product owner, frontend lead
 
@@ -32,9 +32,9 @@ There are two kinds of admin:
 - Build the **platform admin** UI as a **separate Next.js app** in this
   repository. It's deployed on its own origin (`platforms.<domain>`), ideally behind a
   VPN or IP allowlist.
-- When admin work starts, convert the repository to npm workspaces:
-  `apps/clinical` (today's `app/`), `apps/admin`, and shared
-  `packages/ui`, `packages/tokens` and `packages/api-client`. Neither app
+- Convert the repository to npm workspaces: `apps/clinical`,
+  `apps/platform`, and shared `packages/ui`, `packages/tokens` and
+  `packages/api-client`. Neither app
   imports from the other.
 - Phase 1 changes nothing. The current app is the clinical app.
 - Revisited in [ADR 0004](0004-keep-the-hospital-admin-in-the-clinical-app.md) (17 Oct 2026):
@@ -59,7 +59,7 @@ There are two kinds of admin:
 
 **Follow-up:**
 
-- the restructure PR;
+- the restructure PR (Plan 7a);
 - admin designs (tables, charts, audit viewer) built on design v3 tokens.
 
 ## Alternatives considered

@@ -1,12 +1,24 @@
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const readme = readFileSync("README.md", "utf8");
+// README and CONTRIBUTING live at the repository root.
+const repositoryRoot = path.join(import.meta.dirname, "../../..");
+const readme = readFileSync(path.join(repositoryRoot, "README.md"), "utf8");
 
 describe("README demo instructions", () => {
+  it("documents the workspaces and where the app lives", () => {
+    expect(readme).toMatch(/apps\/clinical/);
+    expect(readme).toMatch(/packages\/tokens/);
+  });
+
+  it("says to move .env.local into apps/clinical", () => {
+    expect(readme).toMatch(/`\.env\.local`[^.]*apps\/clinical\//);
+  });
+
   it("sets NEXT_PUBLIC_USE_MOCK for the build (inlined at build time), not just start", () => {
     expect(readme).toContain(
-      "NEXT_PUBLIC_USE_MOCK=true npm run build && npx next start",
+      "NEXT_PUBLIC_USE_MOCK=true npm run build && npm start",
     );
     expect(readme).not.toMatch(/npm run build && NEXT_PUBLIC_USE_MOCK=true/);
   });
@@ -62,7 +74,10 @@ describe("README demo instructions", () => {
   });
 
   it("repeats the sign-off in CONTRIBUTING, with no lab wording", () => {
-    const contributing = readFileSync("CONTRIBUTING.md", "utf8");
+    const contributing = readFileSync(
+      path.join(repositoryRoot, "CONTRIBUTING.md"),
+      "utf8",
+    );
     expect(contributing).toMatch(
       /Clinical\s+and\s+privacy\s+sign-off\s+is\s+required\s+before\s+live\s+use/,
     );

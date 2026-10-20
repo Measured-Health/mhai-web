@@ -16,8 +16,8 @@ model).
 
 ## Read first
 
-- [ARCHITECTURE.md](ARCHITECTURE.md): the clinical app, the planned admin
-  app, and how both talk to the API.
+- [ARCHITECTURE.md](ARCHITECTURE.md): the clinical app, the planned
+  platform admin app, and how both talk to the API.
 - [CONTRIBUTING.md](CONTRIBUTING.md): conventions, the clinical UI rules,
   the rules for patient data in the browser, and the agent contribution
   workflow.
@@ -32,6 +32,10 @@ model).
 - No AI attribution in commits or PRs.
 
 ## Commands
+
+The repository is npm workspaces: the app is in `apps/clinical` and the
+design tokens are in `packages/tokens`. Run these from the root. Paths
+below are from the root.
 
 ```bash
 nvm use && npm ci          # Node from .nvmrc, exact lockfile install
@@ -48,7 +52,7 @@ npm run build              # production build
   No technical terms in the UI.
 - An escalated or degraded result always shows the review banner.
 - Never log, store or cache patient data in the browser, except the
-  encrypted offline outbox of unsent questions and feedback (`lib/offline/`,
+  encrypted offline outbox of unsent questions and feedback (`apps/clinical/lib/offline/`,
   see CONTRIBUTING). Use mock or synthetic data only.
 - Generate API types from the backend OpenAPI schema; never send user ids
   from the client.

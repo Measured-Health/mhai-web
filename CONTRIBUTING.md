@@ -24,6 +24,8 @@ Every PR must pass:
 - `tsc --noEmit`;
 - tests (once added);
 - a production build;
+- the bundle check (`npm run check:bundle`);
+- the script tests (`node --test`);
 - a gitleaks scan of history.
 
 ## Conventions
@@ -31,7 +33,8 @@ Every PR must pass:
 - **Commits:** imperative subject of at most 72 characters ("Add the
   confidence badge"); the body explains _why_. One logical change per
   commit. No AI attribution.
-- **Dependencies:** `npm install -E` to pin exact versions; commit
+- **Dependencies:** `npm install -E <pkg> -w @mhai/clinical` to pin exact
+  versions in the app; the root holds shared tooling only. Commit
   `package-lock.json`. Dependabot proposes upgrades weekly.
 - **Node:** the version in `.nvmrc`; `engines` in `package.json` matches.
 
@@ -57,7 +60,7 @@ Every PR must pass:
 - **Never log patient data** to the console, analytics or error tracking.
 - **Never store PHI** in `localStorage`, `sessionStorage`, IndexedDB or
   service-worker caches, **with one exception: the offline outbox**
-  (`lib/offline/`). It holds only questions and feedback that couldn't be
+  (`apps/clinical/lib/offline/`). It holds only questions and feedback that couldn't be
   sent yet:
   - encrypted with AES-GCM under a non-extractable device key;
   - bound to the signed-in user (hashed);
