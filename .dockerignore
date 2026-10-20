@@ -6,10 +6,10 @@
 .wrangler
 .vscode
 .superpowers
-*.log
+**/*.log
 **/.env*
 !**/.env.example
-tsconfig.tsbuildinfo
+**/*.tsbuildinfo
 **/test-results
 **/playwright-report
 deploy

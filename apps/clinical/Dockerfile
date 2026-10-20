@@ -2,6 +2,11 @@
 #
 # The sample-data demo as a Next.js standalone server. Built by
 # .github/workflows/deploy.yml for arm64 (the preview instance is Graviton).
+#
+# Build from the repository root: docker build -f apps/clinical/Dockerfile .
+# The deps stage must copy every workspace's package.json, or npm ci can't
+# resolve the workspaces. Only the root node_modules is copied into the
+# build stage, because all dependencies are hoisted there.
 
 FROM node:24-bookworm-slim AS deps
 WORKDIR /app

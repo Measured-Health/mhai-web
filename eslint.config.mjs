@@ -25,7 +25,9 @@ const eslintConfig = defineConfig([
     ["apps/clinical/**"],
     [
       "**/apps/platform/**",
+      "**/platform",
       "**/platform/**",
+      "**/apps/platform",
       "@mhai/platform",
       "@mhai/platform/*",
     ],
@@ -34,7 +36,9 @@ const eslintConfig = defineConfig([
     ["apps/platform/**"],
     [
       "**/apps/clinical/**",
+      "**/clinical",
       "**/clinical/**",
+      "**/apps/clinical",
       "@mhai/clinical",
       "@mhai/clinical/*",
     ],

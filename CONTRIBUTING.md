@@ -24,6 +24,8 @@ Every PR must pass:
 - `tsc --noEmit`;
 - tests (once added);
 - a production build;
+- the bundle check (`npm run check:bundle`);
+- the script tests (`node --test`);
 - a gitleaks scan of history.
 
 ## Conventions
@@ -31,7 +33,8 @@ Every PR must pass:
 - **Commits:** imperative subject of at most 72 characters ("Add the
   confidence badge"); the body explains _why_. One logical change per
   commit. No AI attribution.
-- **Dependencies:** `npm install -E` to pin exact versions; commit
+- **Dependencies:** `npm install -E <pkg> -w @mhai/clinical` to pin exact
+  versions in the app; the root holds shared tooling only. Commit
   `package-lock.json`. Dependabot proposes upgrades weekly.
 - **Node:** the version in `.nvmrc`; `engines` in `package.json` matches.
 

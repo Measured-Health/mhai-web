@@ -59,3 +59,21 @@ test("an app can import a package and its own code", async () => {
   );
   assert.equal(messages.length, 0);
 });
+
+test("clinical can't import the platform app by its bare folder", async () => {
+  assertBlocked(
+    await restricted(
+      'import x from "../../platform";\nexport { x };\n',
+      "apps/clinical/lib/z.ts",
+    ),
+  );
+});
+
+test("platform can't import the clinical app by its bare folder", async () => {
+  assertBlocked(
+    await restricted(
+      'import x from "../../clinical/lib/a";\nexport { x };\n',
+      "apps/platform/app/page.tsx",
+    ),
+  );
+});
