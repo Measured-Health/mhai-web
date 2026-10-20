@@ -13,7 +13,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "npm test --workspaces --if-present",
+    "test": "npm test --workspaces --if-present && node --test \"scripts/**/*.test.mjs\"",
     "e2e": "npm run e2e -w @mhai/clinical"
   },
   "devDependencies": {
