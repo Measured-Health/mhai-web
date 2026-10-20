@@ -3,20 +3,27 @@ import { NextResponse, type NextRequest } from "next/server";
 /**
  * A strict Content Security Policy for every page. Each request gets a fresh
  * nonce; Next reads it from the request's CSP header and puts it on its own
- * scripts and styles, so nothing inline runs without it. The layout reads
- * `x-nonce` too, which makes every page render per request.
+ * scripts and styles, so nothing inline runs without it. `x-nonce` is passed
+ * on for any page that needs the nonce itself. The root layout calls
+ * `headers()`, which makes every page render per request, so each response
+ * carries its own nonce.
  */
 export function proxy(request: NextRequest) {
   const nonce = Buffer.from(
     crypto.getRandomValues(new Uint8Array(16)),
   ).toString("base64");
-  // In development React uses eval to rebuild server error stacks; never in a build.
-  const devEval =
-    process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
+  const dev = process.env.NODE_ENV === "development";
+  // In development React uses eval to rebuild server error stacks, and Next's
+  // dev overlay applies inline styles. Browsers ignore 'unsafe-inline' when a
+  // nonce is present, so dev styles go without the nonce. Never in a build.
+  const devEval = dev ? " 'unsafe-eval'" : "";
+  const styleSrc = dev
+    ? "style-src 'self' 'unsafe-inline'"
+    : `style-src 'self' 'nonce-${nonce}'`;
   const csp = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${devEval}`,
-    `style-src 'self' 'nonce-${nonce}'`,
+    styleSrc,
     "img-src 'self' data:",
     "font-src 'self'",
     "connect-src 'self'",

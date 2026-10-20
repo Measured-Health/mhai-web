@@ -42,12 +42,27 @@ describe("proxy", () => {
   it("never allows unsafe-inline scripts", () => {
     for (const env of ["production", "development", "test"]) {
       vi.stubEnv("NODE_ENV", env);
-      const csp = proxy(request()).headers.get("content-security-policy");
-      expect(csp).not.toContain("unsafe-inline");
-      const script = directive(csp ?? "", "script-src");
+      const csp = proxy(request()).headers.get("content-security-policy") ?? "";
+      const script = directive(csp, "script-src");
+      expect(script).not.toContain("unsafe-inline");
       if (env === "development") expect(script).toContain("'unsafe-eval'");
       else expect(script).not.toContain("unsafe-eval");
+      if (env !== "development")
+        expect(directive(csp, "style-src")).not.toContain("unsafe-inline");
     }
+  });
+
+  it("allows inline styles without a nonce in development only", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const csp = proxy(request()).headers.get("content-security-policy") ?? "";
+    const style = directive(csp, "style-src");
+    expect(style).toBe("style-src 'self' 'unsafe-inline'");
+    expect(style).not.toContain("nonce-");
+    // Scripts still need the nonce; dev adds only 'unsafe-eval'.
+    const n = nonceOf(csp);
+    expect(directive(csp, "script-src")).toBe(
+      `script-src 'self' 'nonce-${n}' 'strict-dynamic' 'unsafe-eval'`,
+    );
   });
 
   it("sets the exact production policy", () => {
