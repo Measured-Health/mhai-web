@@ -7,15 +7,17 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @mhai/clinical",
-    "build": "npm run build -w @mhai/clinical",
+    "dev:platform": "npm run dev -w @mhai/platform",
+    "build": "npm run build -w @mhai/clinical && npm run build -w @mhai/platform",
     "start": "npm run start -w @mhai/clinical",
     "lint": "eslint",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:bundle": "node scripts/check-no-platform-code.mjs apps/clinical/.next",
+    "check:platform-marker": "node scripts/check-no-platform-code.mjs apps/platform/.next --expect-found",
     "test": "npm test --workspaces --if-present && node --test \"scripts/**/*.test.mjs\"",
-    "e2e": "npm run e2e -w @mhai/clinical"
+    "e2e": "npm run e2e -w @mhai/clinical && npm run e2e -w @mhai/platform"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

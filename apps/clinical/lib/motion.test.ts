@@ -2,7 +2,11 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const css = readFileSync("app/globals.css", "utf8");
+// The app's globals.css plus @mhai/ui/base.css, which it imports (the motion
+// tokens, the shared components' keyframes and the blanket reduced-motion rule).
+const css = ["app/globals.css", "../../packages/ui/src/base.css"]
+  .map((f) => readFileSync(f, "utf8"))
+  .join("\n");
 
 const sources = (d: string): string[] =>
   readdirSync(d).flatMap((f) => {

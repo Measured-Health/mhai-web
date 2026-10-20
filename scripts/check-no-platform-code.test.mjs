@@ -74,3 +74,27 @@ test("the CLI fails when it finds platform code", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("--expect-found exits 0 when the marker is present and 1 when absent", async () => {
+  const withMarker = await fixture({ "server/app/page.js": PLATFORM_MARKER });
+  const without = await fixture({ "server/app/page.js": "clinical" });
+  try {
+    const hit = spawnSync(
+      process.execPath,
+      [cli, withMarker, "--expect-found"],
+      {
+        encoding: "utf8",
+      },
+    );
+    assert.equal(hit.status, 0);
+    assert.match(hit.stdout, /server\/app\/page\.js/);
+    const miss = spawnSync(process.execPath, [cli, without, "--expect-found"], {
+      encoding: "utf8",
+    });
+    assert.equal(miss.status, 1);
+    assert.match(miss.stderr, /No platform marker/);
+  } finally {
+    await rm(withMarker, { recursive: true, force: true });
+    await rm(without, { recursive: true, force: true });
+  }
+});

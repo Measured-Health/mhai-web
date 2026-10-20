@@ -1,0 +1,52 @@
+@import "tailwindcss";
+@import "@mhai/tokens/theme.css";
+/* Motion tokens, keyframes and reduced motion for the shared components. */
+@import "@mhai/ui/base.css";
+/* The shared components; Tailwind scans this app's folder by itself. */
+@source "../../../packages/ui/src";
+
+html,
+body {
+  height: 100%;
+}
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Frosted card with a gradient hairline border (design v3 §3). */
+.card-v3 {
+  position: relative;
+  border-radius: var(--radius-card);
+  background: rgb(255 255 255 / 0.84);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow-card);
+}
+.card-v3::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    var(--color-mint),
+    #46035133,
+    transparent 60%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Faint glows behind the main column. */
+.canvas-v3 {
+  background:
+    radial-gradient(700px 360px at 85% -10%, #15999e22, transparent 60%),
+    radial-gradient(600px 360px at -10% 110%, #4603511a, transparent 60%),
+    var(--color-bg);
+}

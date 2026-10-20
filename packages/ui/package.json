@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "exports": {
+    "./base.css": "./src/base.css",
     "./cn": "./src/cn.ts",
     "./hooks/*": "./src/hooks/*.ts",
     "./*": "./src/*.tsx"

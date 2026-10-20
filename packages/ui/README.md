@@ -14,10 +14,18 @@ platform admin apps. The package is TypeScript source; each app compiles it
 What each app provides:
 
 - **Styles.** The components use Tailwind classes, the `@mhai/tokens` theme,
-  and the motion tokens and keyframes in the app's `globals.css`
-  (`--t-*`, `--e-*`, `toastIn`, `.skeleton-shimmer`). Tailwind must scan this
-  package: add `@source "../../../packages/ui/src";` to the app's
-  `globals.css`.
+  and the motion tokens, keyframes and reduced-motion rule in
+  `@mhai/ui/base.css` (`--t-*`, `--e-*`, `toastIn`, `.skeleton-shimmer`). The
+  app's `globals.css` imports it straight after the tokens, and Tailwind must
+  scan this package:
+
+  ```css
+  @import "tailwindcss";
+  @import "@mhai/tokens/theme.css";
+  @import "@mhai/ui/base.css";
+  @source "../../../packages/ui/src";
+  ```
+
 - **Brand images.** `brand` loads `/brand/logo.png`, `/brand/mark.svg` and
   `/brand/bhai-logo.png` from the app's `public/` folder.
 - **Toasts.** `useToast` (and `backup-codes`) need a `ToastProvider` above
