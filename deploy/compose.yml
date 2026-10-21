@@ -24,3 +24,19 @@ services:
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
+
+  # The platform admin app (platforms.measured-health.org), behind an IP allow
+  # list in nginx. PLATFORM_SESSION_SECRET (openssl rand -base64 48) lives in
+  # /srv/mhai-web/.env, mode 600; compose reads it from there.
+  platform:
+    image: ${PLATFORM_IMAGE:-ghcr.io/measured-health/mhai-web-platform:latest}
+    pull_policy: missing
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8091:8080"
+    mem_limit: 256m
+    environment:
+      PLATFORM_SESSION_SECRET: ${PLATFORM_SESSION_SECRET:?set in /srv/mhai-web/.env}
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

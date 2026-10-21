@@ -18,7 +18,6 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build:
@@ -33,6 +32,16 @@ jobs:
        github.event.workflow_run.head_repository.full_name == github.repository)
     # The instance is Graviton (aarch64), so build natively on arm64.
     runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: web
+            file: apps/clinical/Dockerfile
+            image: ghcr.io/${{ github.repository }}
+          - name: platform
+            file: apps/platform/Dockerfile
+            image: ghcr.io/${{ github.repository }}-platform
     permissions:
       contents: read
       packages: write
@@ -52,7 +61,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ matrix.image }}
           tags: |
             type=raw,value=latest
             type=sha,format=long
@@ -60,13 +69,13 @@ jobs:
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
-          file: apps/clinical/Dockerfile
+          file: ${{ matrix.file }}
           platforms: linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   deploy:
     needs: build
@@ -94,23 +103,26 @@ jobs:
 
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
-            docker compose pull web
-            docker compose up -d web
+            docker compose pull web platform
+            docker compose up -d web platform
 
-            # Straight to the container, not through nginx: the home page
-            # must load, and a dead consultation link must be a real 404.
+            # Straight to the containers, not through nginx: the demo home
+            # page must load, a dead consultation link must be a real 404, and
+            # the platform sign-in page must load with its security header.
             ok=0
             for _ in $(seq 1 24); do
               home=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/ || echo 000)
               gone=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/c/x || echo 000)
-              if [ "$home" = 200 ] && [ "$gone" = 404 ]; then ok=1; break; fi
+              plat=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8091/sign-in || echo 000)
+              csp=$(curl -s -D - -o /dev/null http://127.0.0.1:8091/sign-in | grep -ci '^content-security-policy:' || true)
+              if [ "$home" = 200 ] && [ "$gone" = 404 ] && [ "$plat" = 200 ] && [ "$csp" -ge 1 ]; then ok=1; break; fi
               sleep 5
             done
             if [ "$ok" != 1 ]; then
-              echo "Demo unhealthy (home=$home, /c/x=$gone). Recent logs:"
-              docker compose logs --tail=120 web
+              echo "Unhealthy (demo home=$home, /c/x=$gone, platform /sign-in=$plat, csp=$csp). Recent logs:"
+              docker compose logs --tail=120 web platform
               exit 1
             fi
 
-            echo "Demo healthy."
+            echo "Demo and platform healthy."
             docker image prune -f
