@@ -69,7 +69,7 @@ export function useHospital(id: string) {
 }
 
 /** After a change: the page shows the reply; lists and the feed refetch. */
-function saved(qc: QueryClient, h: Hospital) {
+export function saved(qc: QueryClient, h: Hospital) {
   qc.setQueryData(hospitalKey(h.id), h);
   void qc.invalidateQueries({ queryKey: hospitalListKey });
   void qc.invalidateQueries({
