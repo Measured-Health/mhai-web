@@ -1,4 +1,8 @@
-import type { DeactivateReason, HospitalStatus } from "./api/contract";
+import type {
+  DeactivateReason,
+  HospitalStatus,
+  TeamRole,
+} from "./api/contract";
 
 const STATUS: Record<HospitalStatus, string> = {
   active: "Active",
@@ -22,3 +26,10 @@ export const reasonLabel = (r: DeactivateReason) => REASON[r];
 
 /** Why Add hospital can't be used while offline. */
 export const ADD_OFFLINE = "You're offline. Reconnect to add a hospital.";
+
+const ROLE: Record<TeamRole, string> = {
+  platform_admin: "Platform admin",
+  auditor: "Auditor",
+};
+export const ROLES = Object.keys(ROLE) as TeamRole[];
+export const roleLabel = (r: TeamRole) => ROLE[r];
