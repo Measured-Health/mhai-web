@@ -25,7 +25,7 @@ describe("NoAccess", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "This app is for hospital staff. Measured Health platform admin and auditor accounts use the platform admin app.",
+        "This app is for hospital staff, not for Measured Health platform admin and auditor accounts.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Error 403")).toBeInTheDocument();
@@ -50,6 +50,7 @@ describe("NoAccess", () => {
     expect(await outboxCount(ADMIN.username)).toBe(0);
   });
   it("says to use the platform admin app, with no link (spec §2)", () => {
+    // The old address, still set somewhere, must not bring the link back.
     vi.stubEnv("NEXT_PUBLIC_ADMIN_APP_URL", "https://admin.example.org");
     renderWithAuth(<NoAccess />, ADMIN);
     expect(screen.getByText("Use the platform admin app.")).toBeInTheDocument();

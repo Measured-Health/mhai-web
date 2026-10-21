@@ -269,10 +269,16 @@ Add to UI design §10 as item 22, and to the backend requirements (mhai-multiage
   repeat and the session's id isn't the team id.
 - §13: `PUT …/sso` resets `last_test` whenever the address, issuer, client id, domains or
   secret change.
+- §13: `PATCH /platform/team/{id}` carries `version` (**409** `conflict` when changed
+  meanwhile).
+- §13: every step-up action takes `mfa_code` or `backup_code`.
+- §13: at sign-in, an account with no platform role gets **403** `not_platform`.
 - §13: `PATCH` and `DELETE` on `/platform/team/invites` are reserved paths.
 - Backend follow-up: test a draft single sign-on set-up before saving it, so a live set-up
   can change without switching sign-on off for the hospital. Until then, saving edits to a
   live set-up asks first and switches it off.
+- Follow-up: a live-mode end-to-end run covering the auditor gate (the mock-mode suite
+  can't reach it; the proxy's unit tests cover it).
 - Frontend only: `POST /api/auth/session` is the app's own keep-alive, so the screen's
   idle clock and the server's agree (§4). It doesn't reach the backend.
 - Team: nobody removes themselves or changes their own role in the app; another platform

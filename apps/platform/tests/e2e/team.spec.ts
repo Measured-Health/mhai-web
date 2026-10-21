@@ -46,6 +46,7 @@ test("team invite, change role and remove with a code; your own row can't be cha
   const femi = member(page, "Femi Ojo");
   await expect(femi.getByText("Invite pending")).toBeVisible();
   await expect(femi.getByText("Auditor", { exact: true })).toBeVisible();
+  await expect(page.getByText("6 team members shown")).toBeAttached();
 
   // Change role.
   await page

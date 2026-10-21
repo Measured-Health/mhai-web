@@ -53,29 +53,27 @@ test("an auditor sees no actions anywhere", async ({ page }) => {
   await expect(main.getByRole("button", { name: ACTIONS })).toHaveCount(0);
 });
 
-test("an auditor's direct POST to the API is 403", async ({ page }) => {
+// What this proves: a write sent straight to the proxy from outside the
+// app's pages (devtools, a script, another site) is refused before anything
+// goes upstream (Review Focus 1). In mock mode the session lives in the tab,
+// not on the server, so the proxy's auditor gate can't be reached here: it is
+// covered by app/api/v1/proxy.test.ts (every non-GET shape as an auditor is
+// 403 and upstream is never called), and the sample API's own refusal by
+// lib/api/mock.test.ts ("an auditor's write is forbidden"). A live-mode
+// end-to-end run is a follow-up (spec §16).
+test("a write straight to the proxy from outside the app's pages is refused (403)", async ({
+  page,
+}) => {
   await signIn(page, AMARA);
-  await openHospital(page, "Northgate General Hospital");
-  const status = page.getByRole("region", { name: "Status" });
-  await expect(status.getByText("Active", { exact: true })).toBeVisible();
-
-  // Not through the hidden buttons: straight at the proxy, as from devtools
-  // or a script (Review Focus 1). Refused before anything goes upstream.
   const res = await page.request.post(
     "/api/v1/platform/hospitals/h_northgate/deactivate",
     {
       data: { reason: "other", note: "test", mfa_code: "123456" },
-      headers: { "Idempotency-Key": "e2e-auditor-write" },
+      headers: { "Idempotency-Key": "e2e-outside-write" },
     },
   );
   expect(res.status()).toBe(403);
   expect(await res.json()).toEqual({ code: "forbidden" });
-
-  // Nothing changed: the hospital is still active, read afresh.
-  await openNav(page, "Hospitals");
-  await openHospital(page, "Northgate General Hospital");
-  await expect(status.getByText("Active", { exact: true })).toBeVisible();
-  await expect(status.getByText(/^Deactivated/)).toHaveCount(0);
 });
 
 test("every page has a CSP header with a nonce", async ({ page }) => {
@@ -112,7 +110,8 @@ test("every page has a CSP header with a nonce", async ({ page }) => {
     expect(scripts.length, path).toBeGreaterThan(0);
     for (const tag of scripts) expect(tag, path).toContain(`nonce="${nonce}"`);
     nonces.add(nonce!);
-    await page.waitForLoadState("networkidle");
+    // Let the page settle (signed out, most go on to sign-in) before the next.
+    await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
   }
   // A fresh nonce for every response.
   expect(nonces.size).toBe(paths.length);

@@ -71,7 +71,7 @@ The same picture as a sketch:
 │          CLINICAL APP           │          ┌──────────────────────┐
 │          app.<domain>           │          │  PLATFORM ADMIN APP  │
 │ ┌──────────────┬──────────────┐ │          │  platforms.<domain>  │
-│ │ CLINICAL     │ HOSPITAL     │ │          │  (VPN / allowlist)   │
+│ │ CLINICAL     │ HOSPITAL     │ │          │  (IP allow list)     │
 │ │ ask · result │ ADMIN        │ │          │ hospitals · health · │
 │ │ feedback ·   │ staff ·      │ │          │ DLQ · holds ·        │
 │ │ review queue │ settings ·   │ │          │ settings · audit     │
@@ -491,7 +491,7 @@ browser ──> platforms.<domain> (IP allow list)
 ```mermaid
 flowchart LR
     u1([Clinicians, hospital admins]) --> cdn1["app.&lt;domain&gt;<br/>Clinical app"]
-    u2([Platform admins, auditors]) -->|VPN / allowlist| cdn2["platforms.&lt;domain&gt;<br/>Platform admin app"]
+    u2([Platform admins, auditors]) -->|IP allow list| cdn2["platforms.&lt;domain&gt;<br/>Platform admin app"]
     cdn1 --> api["api.&lt;domain&gt;/api/v1"]
     cdn2 --> api
 ```

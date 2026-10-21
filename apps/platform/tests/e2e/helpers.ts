@@ -63,7 +63,8 @@ export async function openNav(
 
 /** From Hospitals: opens one hospital's page. */
 export async function openHospital(page: Page, name: string) {
-  await page.getByRole("link", { name: new RegExp(`^${name}`) }).click();
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  await page.getByRole("link", { name: new RegExp(`^${escaped}`) }).click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
 }
 
