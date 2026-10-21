@@ -103,26 +103,47 @@ jobs:
 
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
-            docker compose pull web platform
-            docker compose up -d web platform
+            docker compose pull web
+            docker compose up -d web
 
-            # Straight to the containers, not through nginx: the demo home
-            # page must load, a dead consultation link must be a real 404, and
-            # the platform sign-in page must load with its security header.
+            # Straight to the container, not through nginx: the home page
+            # must load, and a dead consultation link must be a real 404.
             ok=0
             for _ in $(seq 1 24); do
               home=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/ || echo 000)
               gone=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/c/x || echo 000)
-              plat=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8091/sign-in || echo 000)
-              csp=$(curl -s -D - -o /dev/null http://127.0.0.1:8091/sign-in | grep -ci '^content-security-policy:' || true)
-              if [ "$home" = 200 ] && [ "$gone" = 404 ] && [ "$plat" = 200 ] && [ "$csp" -ge 1 ]; then ok=1; break; fi
+              if [ "$home" = 200 ] && [ "$gone" = 404 ]; then ok=1; break; fi
               sleep 5
             done
             if [ "$ok" != 1 ]; then
-              echo "Unhealthy (demo home=$home, /c/x=$gone, platform /sign-in=$plat, csp=$csp). Recent logs:"
-              docker compose logs --tail=120 web platform
+              echo "Demo unhealthy (home=$home, /c/x=$gone). Recent logs:"
+              docker compose logs --tail=120 web
               exit 1
             fi
+            echo "Demo healthy."
 
-            echo "Demo and platform healthy."
+            # The platform app has its own folder and secret. Until that is
+            # set up (deploy/README.md), skip it; the demo deploy still passes.
+            if [ -f /srv/mhai-web-platform/.env ] && grep -q '^PLATFORM_SESSION_SECRET=.' /srv/mhai-web-platform/.env; then
+              cd /srv/mhai-web-platform
+              docker compose -f compose.platform.yml pull platform
+              docker compose -f compose.platform.yml up -d platform
+
+              ok=0
+              for _ in $(seq 1 24); do
+                plat=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8091/sign-in || echo 000)
+                csp=$(curl -s -D - -o /dev/null http://127.0.0.1:8091/sign-in | grep -ci '^content-security-policy:' || true)
+                if [ "$plat" = 200 ] && [ "$csp" -ge 1 ]; then ok=1; break; fi
+                sleep 5
+              done
+              if [ "$ok" != 1 ]; then
+                echo "Platform unhealthy (/sign-in=$plat, csp=$csp). Recent logs:"
+                docker compose -f compose.platform.yml logs --tail=120 platform
+                exit 1
+              fi
+              echo "Platform healthy."
+            else
+              echo "Platform not set up yet; skipped"
+            fi
+
             docker image prune -f
