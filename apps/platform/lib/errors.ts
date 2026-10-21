@@ -49,5 +49,6 @@ export function platformError(e: unknown): PlatformErrorWords {
     case "forbidden":
       return W("Your account can only view this.");
   }
-  return W(UNREACHABLE);
+  if (e.status >= 500) return W(UNREACHABLE);
+  return W("Something went wrong. Try again.");
 }

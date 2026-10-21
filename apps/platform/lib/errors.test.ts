@@ -41,4 +41,11 @@ describe("platformError", () => {
     expect(e(500, "whatever").title).toBe(down);
     expect(platformError(new Error("boom")).title).toBe(down);
   });
+
+  it("an unlisted 4xx is not called unreachable", () => {
+    expect(e(418, "teapot").title).toBe("Something went wrong. Try again.");
+    expect(e(429, "rate_limited").title).toBe(
+      "Something went wrong. Try again.",
+    );
+  });
 });

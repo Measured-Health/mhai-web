@@ -1,5 +1,6 @@
 "use client";
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useQueryClient,
   type InfiniteData,
@@ -32,6 +33,7 @@ export function useHospitals(filter: HospitalFilter) {
         q,
         cursor: pageParam,
       }),
+    placeholderData: keepPreviousData,
     getNextPageParam: (last) => last.next_cursor ?? undefined,
     select: (d: InfiniteData<{ hospitals: HospitalSummary[] }>) =>
       d.pages.flatMap((p) => p.hospitals),

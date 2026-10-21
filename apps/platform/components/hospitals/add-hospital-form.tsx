@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import { ApiError } from "@mhai/api-client/errors";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
 import { platformError } from "@/lib/errors";
+import { ADD_OFFLINE } from "@/lib/labels";
 import {
   parseHospitalForm,
   type FieldName,
@@ -17,7 +18,6 @@ import { Button } from "@mhai/ui/button";
 import { useToast } from "@mhai/ui/toast";
 import { TopBar } from "../shell/top-bar";
 import { useNeedsConnection } from "../states/offline-strip";
-import { ADD_OFFLINE } from "./hospitals-view";
 
 const FALLBACK_ZONES = [
   "Africa/Lagos",
@@ -38,6 +38,16 @@ function timeZones(): string[] {
     return FALLBACK_ZONES;
   }
 }
+
+const FIELD_ORDER: FieldName[] = [
+  "name",
+  "shortCode",
+  "country",
+  "timeZone",
+  "domains",
+  "adminName",
+  "adminEmail",
+];
 
 const EMPTY: FormValues = {
   name: "",
@@ -81,6 +91,11 @@ function Fields() {
   const [v, setV] = useState<FormValues>(EMPTY);
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
   const [failure, setFailure] = useState<string | null>(null);
+  // Which field to move focus to after the errors have rendered.
+  const [focusReq, setFocusReq] = useState<{ k: FieldName } | null>(null);
+  useEffect(() => {
+    if (focusReq) document.getElementById(`${id}-${focusReq.k}`)?.focus();
+  }, [focusReq, id]);
   const set = (k: FieldName) => (value: string) => {
     setV((p) => ({ ...p, [k]: value }));
     setErrors((p) => ({ ...p, [k]: undefined }));
@@ -91,7 +106,12 @@ function Fields() {
     if (add.isPending || net.offline) return;
     setFailure(null);
     const r = parseHospitalForm(v);
-    if (!r.ok) return setErrors(r.errors);
+    if (!r.ok) {
+      setErrors(r.errors);
+      const first = FIELD_ORDER.find((k) => r.errors[k]);
+      if (first) setFocusReq({ k: first });
+      return;
+    }
     setErrors({});
     add.mutate(r.value, {
       onSuccess: (h) => {
@@ -103,9 +123,16 @@ function Fields() {
         router.push(`/hospitals/${h.id}`);
       },
       onError: (err) => {
-        if (err instanceof ApiError && err.code === "duplicate")
-          return setErrors({ shortCode: platformError(err).title });
-        setFailure(platformError(err).title);
+        if (err instanceof ApiError && err.code === "duplicate") {
+          setErrors({ shortCode: platformError(err).title });
+          return setFocusReq({ k: "shortCode" });
+        }
+        // Nothing to highlight: the service refused the whole form.
+        setFailure(
+          err instanceof ApiError && err.code === "invalid"
+            ? "Check the details and try again."
+            : platformError(err).title,
+        );
       },
     });
   };
@@ -239,7 +266,7 @@ function Fields() {
           disabled={net.offline || add.isPending}
           aria-describedby={net.offline ? `${id}-offline` : undefined}
         >
-          Add hospital
+          {add.isPending ? "Adding…" : "Add hospital"}
         </Button>
       </div>
       {net.offline && (

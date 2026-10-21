@@ -109,6 +109,22 @@ describe("the hospitals list", () => {
     ).toBeInTheDocument();
   });
 
+  it("filtering keeps the list on screen instead of the loading state", async () => {
+    renderWithAuth(<HospitalsView />);
+    await screen.findByRole("table");
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Status" }),
+      "Deactivated",
+    );
+    expect(
+      screen.queryByRole("status", { name: "Loading hospitals" }),
+    ).toBeNull();
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByRole("row").slice(1)).toHaveLength(1),
+    );
+  });
+
   it("shows No hospitals match with Clear", async () => {
     renderWithAuth(<HospitalsView />);
     await screen.findByRole("table");

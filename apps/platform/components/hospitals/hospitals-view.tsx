@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { HospitalStatus } from "@/lib/api/contract";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
 import { platformError } from "@/lib/errors";
-import { STATUSES, statusLabel } from "@/lib/labels";
+import { ADD_OFFLINE, STATUSES, statusLabel } from "@/lib/labels";
 import { useHospitals } from "@/lib/queries/hospitals";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
 import { Button } from "@mhai/ui/button";
@@ -17,8 +17,6 @@ import { Loading } from "../states/loading";
 import { OFFLINE_NOTE, useNeedsConnection } from "../states/offline-strip";
 import { HospitalCards } from "./hospital-cards";
 import { HospitalTable } from "./hospital-table";
-
-export const ADD_OFFLINE = "You're offline. Reconnect to add a hospital.";
 
 /** Add hospital: a link when online, a disabled button saying why when not. */
 export function AddHospitalAction() {

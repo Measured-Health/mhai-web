@@ -19,3 +19,6 @@ const REASON: Record<DeactivateReason, string> = {
 };
 export const REASONS = Object.keys(REASON) as DeactivateReason[];
 export const reasonLabel = (r: DeactivateReason) => REASON[r];
+
+/** Why Add hospital can't be used while offline. */
+export const ADD_OFFLINE = "You're offline. Reconnect to add a hospital.";

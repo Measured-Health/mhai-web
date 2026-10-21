@@ -1,4 +1,5 @@
 import { screen, waitFor } from "@testing-library/react";
+import { ApiError } from "@mhai/api-client/errors";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -76,6 +77,20 @@ describe("the add hospital form", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
+  it("focus moves to the first field with an error", async () => {
+    renderWithAuth(<AddHospitalForm />);
+    await fill({ "Short code": "x", "First admin email": "nope" });
+    await submit();
+    expect(screen.getByLabelText("Short code")).toHaveFocus();
+    await fill({
+      Name: "Ok",
+      "Short code": "OK1",
+      "First admin email": "nope",
+    });
+    await submit();
+    expect(screen.getByLabelText("First admin email")).toHaveFocus();
+  });
+
   it("a used short code shows 'That short code is already used.'", async () => {
     const used = (await api.listHospitals({})).hospitals[0]!.short_code;
     renderWithAuth(<AddHospitalForm />);
@@ -85,6 +100,7 @@ describe("the add hospital form", () => {
       await screen.findByText("That short code is already used."),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Short code")).toBeInvalid();
+    expect(screen.getByLabelText("Short code")).toHaveFocus();
     expect(push).not.toHaveBeenCalled();
   });
 
@@ -106,6 +122,33 @@ describe("the add hospital form", () => {
     renderWithAuth(<HospitalPlaceholder id="h_lakeside_hospital" />);
     expect(await screen.findByText("Lakeside Hospital")).toBeInTheDocument();
     expect(screen.getByText("Set-up incomplete")).toBeInTheDocument();
+  });
+
+  it("a refusal with no field is announced, in plain words", async () => {
+    vi.spyOn(api, "addHospital").mockRejectedValue(
+      new ApiError(422, "invalid"),
+    );
+    renderWithAuth(<AddHospitalForm />);
+    await fill();
+    await submit();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Check the details and try again.");
+  });
+
+  it("the button says Adding… while in flight", async () => {
+    let release!: () => void;
+    const real = api.addHospital.bind(api);
+    vi.spyOn(api, "addHospital").mockImplementation(
+      (b, o) => new Promise((r) => (release = () => r(real(b, o)))),
+    );
+    renderWithAuth(<AddHospitalForm />);
+    await fill();
+    await submit();
+    expect(
+      await screen.findByRole("button", { name: "Adding…" }),
+    ).toBeDisabled();
+    release();
+    await waitFor(() => expect(push).toHaveBeenCalled());
   });
 
   it("an auditor sees the view-only message and no form", () => {
