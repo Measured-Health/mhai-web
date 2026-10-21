@@ -10,7 +10,9 @@ test("the sign-in page loads with the CSP header and no console CSP errors", asy
   const response = await page.goto("/sign-in");
   expect(response?.status()).toBe(200);
   expect(response?.headers()["content-security-policy"]).toContain("'nonce-");
-  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Sign in to MHAI Platform" }),
+  ).toBeVisible();
   await expect(page.locator('meta[name="mhai-app"]')).toHaveAttribute(
     "content",
     "mhai-platform-app",

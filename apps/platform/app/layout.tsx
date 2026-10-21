@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Darker_Grotesque, JetBrains_Mono, Outfit } from "next/font/google";
 import { PLATFORM_MARKER } from "../../../scripts/platform-marker.mjs";
+import { Providers } from "./providers";
 import "./globals.css";
 
 const darker = Darker_Grotesque({
@@ -34,7 +35,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         {/* The bundle check finds this in the platform build, never in clinical. */}
         <meta name="mhai-app" content={PLATFORM_MARKER} />
       </head>
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
