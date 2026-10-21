@@ -5,7 +5,7 @@ import {
   REJECT_REASONS,
   type DecisionError,
 } from "@/lib/corrections";
-import { ReasonDialog } from "../ui/reason-form";
+import { ReasonDialog } from "@mhai/ui/reason-form";
 
 type Props = {
   open: boolean;

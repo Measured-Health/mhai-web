@@ -2,7 +2,7 @@
 import { useEffect, type ReactNode } from "react";
 import { NOTIFICATION_TAG } from "@/lib/notifications/popups";
 import { DecisionsProvider } from "../corrections/decisions-provider";
-import { useToast } from "../ui/toast";
+import { useToast } from "@mhai/ui/toast";
 import { AlertsProvider } from "./alerts-provider";
 
 /**

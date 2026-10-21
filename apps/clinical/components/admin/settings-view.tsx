@@ -9,14 +9,14 @@ import type {
 } from "@/lib/api/admin-contract";
 import { useHospitalSettings, useUpdateSettings } from "@/lib/admin-queries";
 import { adminError, type AdminError } from "@/lib/admin/errors";
-import { useOnline } from "@/lib/hooks/use-online";
+import { useOnline } from "@mhai/ui/hooks/use-online";
 import { UnsavedGuard } from "../states/unsaved-guard";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { Chip } from "../ui/chip";
-import { Skeleton } from "../ui/skeleton";
-import { Switch } from "../ui/switch";
-import { useToast } from "../ui/toast";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { Chip } from "@mhai/ui/chip";
+import { Skeleton } from "@mhai/ui/skeleton";
+import { Switch } from "@mhai/ui/switch";
+import { useToast } from "@mhai/ui/toast";
 import { AdminFrame } from "./admin-frame";
 
 type Changes = Partial<SettingsEditable>;

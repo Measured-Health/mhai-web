@@ -7,11 +7,11 @@ import { useAuth } from "@/lib/auth/auth-context";
 import type { AuthError } from "@/lib/auth/types";
 import { SignedOutNotice } from "../states/signed-out-notice";
 import { AuthErrorBanner } from "./auth-error-banner";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 import { AuthHeading } from "./auth-layout";
 import { errorCode } from "./auth-error-copy";
 import { DemoHint } from "./demo-hint";
-import { inputClass } from "./password-fields";
+import { inputClass } from "@mhai/ui/auth/password-fields";
 
 export { authErrorCopy, errorCode } from "./auth-error-copy";
 

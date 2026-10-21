@@ -9,7 +9,7 @@ import { AuthError } from "@/lib/auth/types";
 import { OutboxProvider } from "@/lib/offline/outbox-context";
 import { renderWithAuth, TEST_USER } from "@/tests/auth-wrapper";
 import { outboxCount, resetOutbox, seedOutbox } from "@/tests/outbox";
-import { ToastProvider } from "../ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 import { AccountView } from "./account-view";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as MhaiClient }));

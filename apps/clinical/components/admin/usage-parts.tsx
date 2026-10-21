@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from "react";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { cn } from "@mhai/ui/cn";
 
 /**
  * One number on Usage. `muted` is for words in place of a number ("Fewer

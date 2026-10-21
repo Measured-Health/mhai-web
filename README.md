@@ -15,13 +15,14 @@ The repository is npm workspaces. The apps are deployed separately; shared
 code lives in packages.
 
 ```text
-apps/clinical/     the Next.js app (@mhai/clinical)
-packages/tokens/   design tokens (@mhai/tokens)
+apps/clinical/          the clinical app (@mhai/clinical)
+apps/platform/          the platform admin app (@mhai/platform)
+packages/tokens/        design tokens (@mhai/tokens)
+packages/ui/            shared components (@mhai/ui)
+packages/api-client/    shared API and sign-in helpers (@mhai/api-client)
 ```
 
-The platform admin app (`apps/platform`) and the shared `packages/ui` and
-`packages/api-client` are added with the platform admin app. Apps never
-import from each other; see [ARCHITECTURE.md](ARCHITECTURE.md).
+Apps never import from each other; see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Development
 
@@ -43,6 +44,8 @@ Root scripts do not pass extra arguments through.
 | `npm run format` / `format:check` | Prettier                            |
 | `npm run build` / `start`         | Production build and server         |
 | `npm run check:bundle`            | Clinical build has no platform code |
+| `npm run check:platform-marker`   | Platform build is the platform app  |
+| `npm run dev:platform`            | Platform admin app, port 3001       |
 | `npm test`                        | Unit tests (Vitest)                 |
 | `npm run e2e`                     | End-to-end tests (Playwright)       |
 
@@ -128,6 +131,68 @@ says which one it came from. Every name and MRN is synthetic, and like the
 rest of the demo it is all in memory only: the sample alerts and pop-up
 settings start afresh at each sign-in.
 
+### Platform admin app
+
+**Platform admin app.** Measured Health's own staff use it to add and run
+hospitals and to manage the platform team. It never shows patient data. To
+run it on sample data:
+
+```bash
+cp apps/platform/.env.example apps/platform/.env.local   # sets NEXT_PUBLIC_USE_MOCK=true
+npm run dev:platform   # http://localhost:3001
+```
+
+The sign-in page lists the sample accounts. Any password works except
+`wrong`, and the two-step code is `123456` (the clinical demo's backup
+codes work too):
+
+- Ada Bakare, platform admin: `ada.bakare@measured-health.example`;
+- Tunde Okafor, platform admin: `tunde.okafor@measured-health.example`;
+- Amara Eze, auditor: `amara.eze@measured-health.example`;
+- Chidi Nwosu, a new platform admin: `new.admin@measured-health.example`.
+  He sets a password, accepts the terms and sets up two-step (code
+  `123456`) before reaching Hospitals. Two-step can't be skipped, and the
+  demo repeats these steps at each sign-in.
+
+Any other email is a hospital account and is turned away with "This account
+can't use the platform admin app." The six sample hospitals:
+
+- **Northgate General Hospital**: active, with single sign-on on and tested;
+- **Riverside Children's Hospital**: active; try editing, deactivating and
+  reactivating it;
+- **Eastbrook Medical Centre**: set-up incomplete, its first admin's invite
+  still pending (Resend);
+- **Westfield Clinic**: deactivated, with its records retention period over,
+  so it can be removed;
+- **Harbour View Hospital**: removal pending, blocked by a legal hold, so
+  nobody can approve it;
+- **Southpoint Hospital**: removal pending, asked for by Tunde, so Ada can
+  approve it.
+
+Deactivating, reactivating, removing a hospital and removing a team member
+each need your own two-step code. **Removing a hospital takes two platform
+admins.** Sign in as Ada, open Westfield Clinic and choose Request removal
+(with a reason and `123456`): the page says it is waiting for a different
+platform admin. Sign out, sign in as Tunde in the same tab, open Westfield
+Clinic and approve it: it shows Removal scheduled and, about a minute later,
+Removed. The sample data lives in the tab's memory, so a reload starts it
+afresh and signs you out.
+
+**The auditor** (Amara Eze) sees every hospital, the team and the activity,
+with no buttons to change anything; the server refuses an auditor's changes
+too. On Team, nobody can change their own role or remove themselves: another
+platform admin can. The app signs out after 15 minutes without activity,
+with a warning at 13, and keeps nothing in browser storage.
+
+In live mode, set `MHAI_API_URL` as for the clinical app.
+**`PLATFORM_SESSION_SECRET` is required in live mode**: at least 32
+characters (`openssl rand -base64 48`), different from the clinical app's
+`SESSION_SECRET`. The live app is served at `platforms.<domain>`, reachable
+only from the addresses on an IP allow list. It runs as its own compose
+project (`deploy/compose.platform.yml`), deployed only once its secret is
+set, so the clinical demo never depends on it; see
+[deploy/README.md](deploy/README.md).
+
 ### Share the demo
 
 The demo runs on sample data (`NEXT_PUBLIC_USE_MOCK=true`). A ribbon on
@@ -163,10 +228,11 @@ its own server routes (`/api/auth/*`, `/api/v1/*`). The API token is
 sealed in an `httpOnly` cookie and never reaches browser JavaScript. Set:
 
 - `MHAI_API_URL`: the API base, without `/api/v1`;
-- `SESSION_SECRET`: at least 32 characters (`openssl rand -base64 48`);
-- `NEXT_PUBLIC_ADMIN_APP_URL` (optional): where the 403 page's "Go to the
-  platform admin app" points. Only platform admin and auditor accounts get
-  that page; hospital admins use the hospital admin side of this app.
+- `SESSION_SECRET`: at least 32 characters (`openssl rand -base64 48`).
+
+Platform admin and auditor accounts get a 403 page that says to use the
+platform admin app, with no link to it. Hospital admins use the hospital
+admin side of this app.
 
 Live mode switches every feature on, including hospital sign-on, password
 reset, devices, "trust this device", terms and backup codes. It uses an
@@ -216,10 +282,15 @@ npm test        # unit tests, every workspace
 npm run e2e     # end-to-end, desktop and mobile
 ```
 
-The e2e suite builds the app in mock mode and serves it on port 3100. The
-first time, install the browser with `cd apps/clinical && npx playwright install chromium`.
-It checks the four result states, form errors, and that no patient data is
-left in browser storage or cookies.
+The e2e suites build each app in mock mode and serve it: the clinical app
+on port 3100, the platform admin app on 3101. The first time, install the
+browser with `cd apps/clinical && npx playwright install chromium`. The
+clinical suite checks the four result states, form errors, and that no
+patient data is left in browser storage or cookies. The platform suite
+checks sign-in with two-step, the hospital and team actions, two-admin
+removal, that auditors can't change anything, the security headers, the
+phone layout, the idle sign-out, and that nothing is left in browser
+storage.
 
 ## Contributing
 

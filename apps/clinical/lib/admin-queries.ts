@@ -17,8 +17,8 @@ import type {
   UsagePeriod,
 } from "./api/admin-contract";
 import { ApiError } from "./api/errors";
-import { useKeyedMutation } from "./keyed-mutation";
-import { READ_RETRY, usePollEvery } from "./network";
+import { useKeyedMutation } from "@mhai/api-client/keyed-mutation";
+import { READ_RETRY, usePollEvery } from "@mhai/api-client/network";
 
 /** Review oversight refresh, like the clinicians' queue. */
 export const OVERSIGHT_POLL_MS = 60_000;

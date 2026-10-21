@@ -1,7 +1,8 @@
 name: Deploy demo
 
-# After CI passes on main: build the arm64 image in GitHub, push it to GHCR,
-# then have the preview instance pull it and restart the demo container.
+# After CI passes on main: build the arm64 images in GitHub (web and platform,
+# in separate jobs), push them to GHCR, then have the preview instance pull
+# them and restart the containers.
 # Building on the instance is avoided on purpose: it is small and also runs
 # the EMR stack.
 
@@ -18,10 +19,9 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build:
+  build-web:
     # Only a green CI run for a push to this repository's main. The branch
     # filter above matches by name alone, so a fork's PR from a branch called
     # "main" would otherwise build (and deploy) untrusted code.
@@ -52,7 +52,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=latest
             type=sha,format=long
@@ -65,16 +65,68 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  build-platform:
+    # A separate job, so a platform build or push that fails (a new GHCR
+    # package, a platform-only break) never cancels the demo's build or
+    # deploy (ruling R13). Same trust check as build-web.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    # The instance is Graviton (aarch64), so build natively on arm64.
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ghcr.io/${{ github.repository }}-platform
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: apps/platform/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=platform
+          cache-to: type=gha,mode=max,scope=platform
 
   deploy:
-    needs: build
+    needs: [build-web, build-platform]
     runs-on: ubuntu-latest
     environment: preview
     # Set the repo variable DEPLOY_ENABLED=true once the instance is set up
     # (deploy/README.md). Until then this workflow only publishes the image.
-    if: vars.DEPLOY_ENABLED == 'true'
+    # always(): the demo deploys on a green web build whatever the platform
+    # build did; the platform part runs only when its own build passed.
+    if: >-
+      always() &&
+      needs.build-web.result == 'success' &&
+      vars.DEPLOY_ENABLED == 'true'
     steps:
       - name: Pull and restart on the instance
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
@@ -82,8 +134,10 @@ jobs:
           # Short-lived and scoped to this repo's package; expires with the job.
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
+          # "success" only when the platform image was built and pushed.
+          PLATFORM_BUILD: ${{ needs.build-platform.result }}
         with:
-          envs: GHCR_TOKEN,GHCR_USER
+          envs: GHCR_TOKEN,GHCR_USER,PLATFORM_BUILD
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -111,6 +165,33 @@ jobs:
               docker compose logs --tail=120 web
               exit 1
             fi
-
             echo "Demo healthy."
+
+            # The platform app has its own folder and secret. Until that is
+            # set up (deploy/README.md), or when its image didn't build, skip
+            # it; the demo deploy still passes.
+            if [ "$PLATFORM_BUILD" != success ]; then
+              echo "Platform image not built ($PLATFORM_BUILD); skipped"
+            elif [ -f /srv/mhai-web-platform/.env ] && grep -q '^PLATFORM_SESSION_SECRET=.' /srv/mhai-web-platform/.env; then
+              cd /srv/mhai-web-platform
+              docker compose -f compose.platform.yml pull platform
+              docker compose -f compose.platform.yml up -d platform
+
+              ok=0
+              for _ in $(seq 1 24); do
+                plat=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8091/sign-in || echo 000)
+                csp=$(curl -s -D - -o /dev/null http://127.0.0.1:8091/sign-in | grep -ci '^content-security-policy:' || true)
+                if [ "$plat" = 200 ] && [ "$csp" -ge 1 ]; then ok=1; break; fi
+                sleep 5
+              done
+              if [ "$ok" != 1 ]; then
+                echo "Platform unhealthy (/sign-in=$plat, csp=$csp). Recent logs:"
+                docker compose -f compose.platform.yml logs --tail=120 platform
+                exit 1
+              fi
+              echo "Platform healthy."
+            else
+              echo "Platform not set up yet; skipped"
+            fi
+
             docker image prune -f

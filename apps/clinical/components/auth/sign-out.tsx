@@ -3,8 +3,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useOutbox } from "@/lib/offline/outbox-context";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
+import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
 
 /**
  * /sign-out: reached through the shell guard, so drafts are asked about first.

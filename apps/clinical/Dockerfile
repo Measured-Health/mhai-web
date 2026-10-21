@@ -12,6 +12,9 @@ FROM node:24-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/clinical/package.json apps/clinical/
+COPY apps/platform/package.json apps/platform/
+COPY packages/api-client/package.json packages/api-client/
+COPY packages/ui/package.json packages/ui/
 COPY packages/tokens/package.json packages/tokens/
 RUN npm ci
 

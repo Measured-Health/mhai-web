@@ -1,7 +1,7 @@
 "use client";
 import { useAuth, type SignOutReason } from "@/lib/auth/auth-context";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
 
 const COPY: Record<SignOutReason, { title: string; body: string }> = {
   idle: {

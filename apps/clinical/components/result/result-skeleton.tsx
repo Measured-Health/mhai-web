@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Skeleton } from "../ui/skeleton";
+import { Skeleton } from "@mhai/ui/skeleton";
 
 /** Shown only if loading takes longer than 200 ms (spec §3 Motion). */
 export function ResultSkeleton() {

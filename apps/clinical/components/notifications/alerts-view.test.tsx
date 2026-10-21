@@ -10,7 +10,7 @@ import type { MockAlerts } from "@/lib/api/mock-alerts";
 import { MOCK_ALERT_EVERY_MS, createMockAlerts } from "@/lib/api/mock-alerts";
 import { ALERT_NOW, mockAlerts } from "@/tests/alerts";
 import { renderWithAuth, TEST_USER } from "@/tests/auth-wrapper";
-import { ToastProvider } from "../ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as MockAlerts }));
 vi.mock("@/lib/api/alerts", () => ({ getAlertsClient: () => holder.client }));

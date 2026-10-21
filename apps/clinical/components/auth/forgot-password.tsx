@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { AuthError } from "@/lib/auth/types";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 import { AuthHeading } from "./auth-layout";
-import { inputClass } from "./password-fields";
+import { inputClass } from "@mhai/ui/auth/password-fields";
 import { AuthErrorBanner } from "./auth-error-banner";
 import { errorCode } from "./auth-error-copy";
 

@@ -13,17 +13,17 @@ import { adminError, type AdminError } from "@/lib/admin/errors";
 import { INVITE_DAYS } from "@/lib/admin/invite";
 import { guardFor } from "@/lib/admin/staff";
 import { useAuth } from "@/lib/auth/auth-context";
-import { useNetwork } from "@/lib/network";
+import { useNetwork } from "@mhai/api-client/network";
 import {
   BACKUP_FAILED_BODY,
   BackupCodeInput,
   BackupCodeToggle,
   useCodeOrBackup,
-} from "../auth/backup-code-toggle";
-import { CodeInput } from "../auth/code-input";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { useToast } from "../ui/toast";
+} from "@mhai/ui/auth/backup-code-toggle";
+import { CodeInput } from "@mhai/ui/auth/code-input";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { useToast } from "@mhai/ui/toast";
 import { ConfirmDialog } from "./confirm-dialog";
 
 export type Confirmable =

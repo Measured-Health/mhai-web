@@ -4,14 +4,14 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
-import { passwordError } from "@/lib/auth/password-rules";
+import { passwordError } from "@mhai/api-client/password-rules";
 import type { AuthError } from "@/lib/auth/types";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 import { AuthErrorBanner } from "./auth-error-banner";
 import { AuthHeading } from "./auth-layout";
 import { BackToSignIn } from "./forgot-password";
 import { WEAK_COPY } from "./new-password-step";
-import { PasswordFields } from "./password-fields";
+import { PasswordFields } from "@mhai/ui/auth/password-fields";
 import { errorCode } from "./auth-error-copy";
 
 export function ResetPassword() {

@@ -2,9 +2,9 @@
 import { CheckCircle2 } from "lucide-react";
 import type { Ref } from "react";
 import { correctionTitle } from "@/lib/corrections";
-import { useNow } from "@/lib/hooks/use-now";
+import { useNow } from "@mhai/ui/hooks/use-now";
 import type { PendingApproval } from "@/lib/review/use-undoable-approval";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 
 /** After Approve (review-queue 4). The countdown is plain text, not motion. */
 export function UndoNotice({

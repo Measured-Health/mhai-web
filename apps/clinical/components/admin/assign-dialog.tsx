@@ -3,11 +3,11 @@ import { useId, useState } from "react";
 import type { OversightItemOut } from "@/lib/api/admin-contract";
 import { useAssignReviewer, useEligibleReviewers } from "@/lib/admin-queries";
 import { adminError, type AdminError } from "@/lib/admin/errors";
-import { useNetwork } from "@/lib/network";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
-import { useToast } from "../ui/toast";
+import { useNetwork } from "@mhai/api-client/network";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
+import { useToast } from "@mhai/ui/toast";
 
 /** Pick one eligible reviewer for a waiting correction. Mounted while open. */
 export function AssignDialog({

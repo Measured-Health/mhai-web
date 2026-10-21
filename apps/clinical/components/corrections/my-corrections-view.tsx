@@ -8,14 +8,14 @@ import {
   rejectionText,
   statusLine,
 } from "@/lib/corrections";
-import { useNow } from "@/lib/hooks/use-now";
-import { useNetwork } from "@/lib/network";
+import { useNow } from "@mhai/ui/hooks/use-now";
+import { useNetwork } from "@mhai/api-client/network";
 import { CorrectionCompare } from "../review/correction-compare";
 import { MenuButton } from "../shell/menu-button";
 import { TopBar } from "../shell/top-bar";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { Skeleton } from "../ui/skeleton";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { Skeleton } from "@mhai/ui/skeleton";
 import { FilterChip } from "./filter-chip";
 import { OverdueChip, StatusChip } from "./chips";
 import { ResubmitDialog } from "./resubmit-dialog";

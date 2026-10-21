@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ToastProvider } from "../ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 import { DemoRibbon } from "./demo-ribbon";
 
 afterEach(() => {

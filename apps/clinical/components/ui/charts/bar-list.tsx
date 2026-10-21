@@ -1,6 +1,6 @@
 import type { BarItem } from "@/lib/charts";
 import { FEWER_THAN_5 } from "@/lib/small-groups";
-import { cn } from "../cn";
+import { cn } from "@mhai/ui/cn";
 
 /**
  * Horizontal bars with the number always written beside them (the Usage

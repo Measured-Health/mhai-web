@@ -3,7 +3,7 @@ import { Lock } from "lucide-react";
 import { homeFor, useAuth } from "@/lib/auth/auth-context";
 import { useRedirect } from "@/lib/auth/use-redirect";
 import { useOutbox } from "@/lib/offline/outbox-context";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 
 export function NoAccess() {
   const auth = useAuth();
@@ -16,7 +16,6 @@ export function NoAccess() {
         : null;
   useRedirect(target);
   if (auth.status === "loading" || target) return null;
-  const adminUrl = process.env.NEXT_PUBLIC_ADMIN_APP_URL;
   return (
     <main className="canvas-v3 grid min-h-[calc(100dvh-var(--demo-h,0px))] place-items-center p-6 text-center">
       <div>
@@ -30,18 +29,13 @@ export function NoAccess() {
           You don&apos;t have access
         </h1>
         <p className="mx-auto my-3 max-w-[420px] leading-relaxed text-ink-2">
-          This app is for hospital staff. Measured Health platform admin and
-          auditor accounts use the platform admin app.
+          This app is for hospital staff, not for Measured Health platform admin
+          and auditor accounts.
+        </p>
+        <p className="mb-3 font-semibold text-ink">
+          Use the platform admin app.
         </p>
         <div className="flex flex-wrap justify-center gap-2">
-          {adminUrl && (
-            <a
-              href={adminUrl}
-              className="inline-flex min-h-11 items-center rounded-full bg-mint px-5 font-semibold text-white"
-            >
-              Go to the platform admin app
-            </a>
-          )}
           <Button
             variant="ghost"
             onClick={async () => {

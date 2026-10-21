@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { Urgency } from "@/lib/api/contract";
 import { NotificationBell } from "../notifications/notification-bell";
-import { cn } from "../ui/cn";
+import { cn } from "@mhai/ui/cn";
 
 const URG = {
   routine: "bg-mint-wash text-mint-deep",

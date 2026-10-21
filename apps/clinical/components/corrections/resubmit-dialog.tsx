@@ -2,9 +2,9 @@
 import type { CorrectionOut } from "@/lib/api/contract";
 import { useFeedback } from "@/lib/queries";
 import { CorrectionForm } from "../feedback/correction-form";
-import { Banner } from "../ui/banner";
-import { Dialog } from "../ui/dialog";
-import { useToast } from "../ui/toast";
+import { Banner } from "@mhai/ui/banner";
+import { Dialog } from "@mhai/ui/dialog";
+import { useToast } from "@mhai/ui/toast";
 
 /** A rejected correction, changed and sent again as a new correction. */
 export function ResubmitDialog({

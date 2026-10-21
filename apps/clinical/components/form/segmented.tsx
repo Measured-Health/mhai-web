@@ -1,4 +1,4 @@
-import { cn } from "../ui/cn";
+import { cn } from "@mhai/ui/cn";
 
 export function Segmented<T extends string>({
   name,

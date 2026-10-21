@@ -1,7 +1,7 @@
 "use client";
 import { useId } from "react";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
+import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
 
 /**
  * "Lose what you typed?": keeping it is the safe default and comes first.

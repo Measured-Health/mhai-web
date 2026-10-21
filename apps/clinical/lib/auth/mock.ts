@@ -1,5 +1,5 @@
-import { normalizeBackupCode } from "./codes";
-import { verifyTotp } from "./totp";
+import { normalizeBackupCode } from "@mhai/api-client/codes";
+import { verifyTotp } from "@mhai/api-client/totp";
 import {
   AuthError,
   type AuthClient,

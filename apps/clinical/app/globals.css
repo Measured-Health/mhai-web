@@ -1,16 +1,9 @@
 @import "tailwindcss";
 @import "@mhai/tokens/theme.css";
-
-:root {
-  --t-instant: 100ms;
-  --t-fast: 160ms;
-  --t-base: 240ms;
-  --t-slow: 400ms;
-  --t-story: 700ms;
-  --e-out: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --e-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --e-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-}
+/* Motion tokens, keyframes and reduced motion for the shared components. */
+@import "@mhai/ui/base.css";
+/* The shared components; Tailwind scans this app's folder by itself. */
+@source "../../../packages/ui/src";
 
 html,
 body {
@@ -62,13 +55,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
-  }
+  /* The blanket rule is in @mhai/ui/base.css. */
   /* No stagger and no draw: everything is simply there. */
   .reveal > * {
     animation: none;
@@ -104,24 +91,6 @@ body {
   animation: none !important;
 }
 
-@keyframes sk {
-  from {
-    background-position: 100% 0;
-  }
-  to {
-    background-position: -200% 0;
-  }
-}
-@keyframes toastIn {
-  from {
-    transform: translateX(120%);
-    opacity: 0;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
 @keyframes fadeUp {
   from {
     opacity: 0;
@@ -131,10 +100,6 @@ body {
     opacity: 1;
     transform: none;
   }
-}
-
-.skeleton-shimmer {
-  animation: sk calc(var(--t-story) * 2) linear infinite;
 }
 
 @keyframes ring {

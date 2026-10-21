@@ -38,8 +38,10 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 
+// Distinctive, so "the cookie doesn't contain it" can't pass or fail by chance.
+const TOKEN = "plain-token-marker-7f3c9a";
 const LOGIN = {
-  access_token: "tok",
+  access_token: TOKEN,
   expires_in: 900,
   user: { username: "a.reyes", role: "clinician", mfa_enabled: true },
 };
@@ -96,7 +98,7 @@ describe("session cookies", () => {
       steps: [],
     });
     const raw = jar.values.get(SESSION_COOKIE)!;
-    expect(raw).not.toContain("tok");
+    expect(raw).not.toContain(TOKEN);
     expect(jar.options.get(SESSION_COOKIE)).toMatchObject({
       httpOnly: true,
       sameSite: "strict",
@@ -104,7 +106,7 @@ describe("session cookies", () => {
       maxAge: 900,
     });
     expect(await readSession(1_000)).toMatchObject({
-      token: "tok",
+      token: TOKEN,
       expiresAt: 901_000,
     });
   });
@@ -112,7 +114,7 @@ describe("session cookies", () => {
     jar.values.set(
       SESSION_COOKIE,
       seal({
-        token: "tok",
+        token: TOKEN,
         expiresAt: Date.now() + 60_000,
         user: { username: "a.reyes", role: "clinician" },
         steps: [],

@@ -3,7 +3,7 @@ import { CloudUpload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useOutbox } from "@/lib/offline/outbox-context";
 import { useSession, type SessionItem } from "@/lib/session-store";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 
 /**
  * A question saved offline, before it reaches the server. Shown in place on

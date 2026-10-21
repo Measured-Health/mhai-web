@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, type ReactNode } from "react";
 import type { AuthError } from "@/lib/auth/types";
-import { Banner } from "../ui/banner";
+import { Banner } from "@mhai/ui/banner";
 import { authErrorCopy } from "./auth-error-copy";
 
 /** A red sign-in error that takes focus when it appears. */

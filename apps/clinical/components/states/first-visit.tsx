@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 import type { FormValues } from "@/lib/form-schema";
 import { emptyForm } from "@/lib/form-schema";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 
 // Synthetic examples only: no real patient data.
 export const EXAMPLES: { title: string; hint: string; v: FormValues }[] = [

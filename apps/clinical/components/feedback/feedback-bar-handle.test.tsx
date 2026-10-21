@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FIXTURES } from "@/lib/api/fixtures";
 import { toResultView } from "@/lib/result-view";
 import { SessionProvider, useSession } from "@/lib/session-store";
-import { ToastProvider } from "../ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 
 let release: () => void = () => {};
 const send = vi.fn(

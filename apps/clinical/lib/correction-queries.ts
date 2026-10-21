@@ -9,7 +9,12 @@ import {
 import { getClient } from "./api/client";
 import type { RejectIn } from "./api/contract";
 import { ApiError } from "./api/errors";
-import { READ_RETRY, retryDelay, shouldRetry, usePollEvery } from "./network";
+import {
+  READ_RETRY,
+  retryDelay,
+  shouldRetry,
+  usePollEvery,
+} from "@mhai/api-client/network";
 
 /** The queue and the sidebar badge. */
 export const REVIEW_POLL_MS = 60_000;

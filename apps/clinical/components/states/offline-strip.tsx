@@ -1,6 +1,6 @@
 "use client";
 import { WifiOff } from "lucide-react";
-import { useOnline } from "@/lib/hooks/use-online";
+import { useOnline } from "@mhai/ui/hooks/use-online";
 
 export function OfflineStrip() {
   return useOnline() ? null : (

@@ -4,9 +4,9 @@ import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/lib/auth/auth-context";
 import { MOCK_TOTP_SECRET, createMockAuthClient } from "@/lib/auth/mock";
-import { totp } from "@/lib/auth/totp";
+import { totp } from "@mhai/api-client/totp";
 import { FROM_CLIENT, renderWithAuth, TEST_USER } from "@/tests/auth-wrapper";
-import { ToastProvider } from "../ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 import { WelcomeFlow } from "./welcome-flow";
 
 const replace = vi.fn();

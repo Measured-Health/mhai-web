@@ -3,11 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { AuthError } from "@/lib/auth/types";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 import { AuthHeading } from "./auth-layout";
-import { BackupCodes } from "./backup-codes";
-import { CodeInput, normalizeCode } from "./code-input";
-import { QrCode } from "./qr-code";
+import { BackupCodes } from "@mhai/ui/auth/backup-codes";
+import { CodeInput, normalizeCode } from "@mhai/ui/auth/code-input";
+import { QrCode } from "@mhai/ui/auth/qr-code";
 import { AuthErrorBanner } from "./auth-error-banner";
 import { errorCode } from "./auth-error-copy";
 

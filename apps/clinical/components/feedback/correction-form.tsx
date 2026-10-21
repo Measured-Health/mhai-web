@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { correctionSchema } from "@/lib/form-schema";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 
 export function CorrectionForm({
   onSubmit,

@@ -4,7 +4,7 @@ import type { ClinicalResultOut } from "@/lib/api/contract";
 import { FIXTURES } from "@/lib/api/fixtures";
 import { toResultView } from "@/lib/result-view";
 import { HighlightProvider } from "@/lib/highlight";
-import { ToastProvider } from "../ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 import { parseBody } from "./parse-body";
 import { ResultCard } from "./result-card";
 

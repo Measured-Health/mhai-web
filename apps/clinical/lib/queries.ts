@@ -10,7 +10,7 @@ import {
   retryDelay,
   shouldRetry,
   useNetwork,
-} from "./network";
+} from "@mhai/api-client/network";
 import { useOutbox } from "./offline/outbox-context";
 import { isLocalId } from "./offline/outbox";
 import { titleFor, useSession } from "./session-store";

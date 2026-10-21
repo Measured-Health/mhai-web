@@ -8,8 +8,8 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { Column } from "@/lib/charts";
-import { Button } from "../button";
-import { cn } from "../cn";
+import { Button } from "@mhai/ui/button";
+import { cn } from "@mhai/ui/cn";
 
 const HEADING = { 2: "h2", 3: "h3", 4: "h4" } as const;
 

@@ -1,11 +1,11 @@
 "use client";
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
-import { passwordError } from "@/lib/auth/password-rules";
+import { passwordError } from "@mhai/api-client/password-rules";
 import type { AuthError } from "@/lib/auth/types";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 import { AuthHeading } from "./auth-layout";
-import { PasswordFields } from "./password-fields";
+import { PasswordFields } from "@mhai/ui/auth/password-fields";
 import { AuthErrorBanner } from "./auth-error-banner";
 import { errorCode } from "./auth-error-copy";
 

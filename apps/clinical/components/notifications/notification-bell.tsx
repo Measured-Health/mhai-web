@@ -3,7 +3,7 @@ import { AlertTriangle, Bell } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { ageLabel } from "@/lib/corrections";
-import { useNow } from "@/lib/hooks/use-now";
+import { useNow } from "@mhai/ui/hooks/use-now";
 import {
   findingLine,
   locationLabel,

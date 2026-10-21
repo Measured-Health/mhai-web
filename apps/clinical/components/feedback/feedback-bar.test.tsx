@@ -11,7 +11,7 @@ import { ApiError } from "@/lib/api/errors";
 import { FIXTURES } from "@/lib/api/fixtures";
 import { toResultView } from "@/lib/result-view";
 import { SessionProvider, useSession } from "@/lib/session-store";
-import { ToastProvider } from "../ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 import { OutboxProvider } from "@/lib/offline/outbox-context";
 import { AuthTestProvider } from "@/tests/auth-wrapper";
 

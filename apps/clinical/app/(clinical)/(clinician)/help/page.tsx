@@ -1,7 +1,7 @@
 import { BookOpen, PenLine, ShieldCheck } from "lucide-react";
 import { MenuButton } from "@/components/shell/menu-button";
 import { TopBar } from "@/components/shell/top-bar";
-import { Logo, PartnerLine } from "@/components/ui/brand";
+import { Logo, PartnerLine } from "@mhai/ui/brand";
 import { ConfidencePill } from "@/components/ui/confidence-pill";
 
 const CARDS = [

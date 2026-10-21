@@ -79,8 +79,8 @@ packages/api-client  shared contract types, errors, network and idempotency help
   the clinical app.
 - **First sign-in:** set a new password if required, accept the terms, then set up two-step
   with backup codes. There is no way to skip two-step.
-- An account without `platform_admin` or `auditor` sees a "This account can't use the
-  platform admin app" page and is signed out.
+- An account without a platform role (`admin` or `platform_admin`, or `auditor`) sees a
+  "This account can't use the platform admin app" page and is signed out.
 
 ## 6. Look and layout
 
@@ -200,8 +200,13 @@ every state: Active (with and without SSO), Set-up incomplete, Deactivated, Remo
 
 Add to UI design §10 as item 22, and to the backend requirements (mhai-multiagent PR #40).
 
-- **Auth:** the existing auth endpoints, with a separate audience for the platform app. The
-  login `user` carries `roles` including `platform_admin` or `auditor`, and `mfa_enabled`.
+- **Auth:** the existing auth endpoints, with a separate audience for the platform app:
+  every call the platform app makes (sign-in and API) sends the header
+  `X-MHAI-Audience: platform`. The login `user` carries `roles` and `mfa_enabled`; the role
+  `admin` (today's name) or `platform_admin` means platform admin, `auditor` means auditor,
+  and any other account can't use the platform app (**403** `not_platform`).
+- **Ids:** every id (hospitals, team members, invites, events) is opaque and matches
+  `[A-Za-z0-9_-]+`; a team member's id is never an email or username.
 - **Hospitals:**
   - `GET /platform/hospitals?status&q&cursor` → `{hospitals, next_cursor}`;
   - `POST /platform/hospitals {name, short_code, country, time_zone, email_domains}`;
@@ -211,21 +216,28 @@ Add to UI design §10 as item 22, and to the backend requirements (mhai-multiage
   - `POST /platform/hospitals/{id}/reactivate {reason, mfa_code}`.
 - **Removal:**
   - `POST /platform/hospitals/{id}/removal {reason, mfa_code}` → the request with its
-    checks (`legal_holds`, `retention_until`, `export_required`) and any blocking reasons;
+    checks (`legal_holds`, `retention_until`, `export_required`) and any blocking reasons,
+    plus `requested_by_you` (boolean, decided by the server for the signed-in person, like a
+    team member's `is_you`), which the app uses to show Approve or "Waiting for a different
+    platform admin";
   - `POST /platform/hospitals/{id}/removal/approve {mfa_code}` (**409** `same_person` for
     the requester, **409** `blocked` while a check blocks);
   - `POST /platform/hospitals/{id}/removal/cancel`.
 - **SSO:** `GET` / `PUT /platform/hospitals/{id}/sso` (secrets write-only; responses show
-  only the last characters), `POST /platform/hospitals/{id}/sso/test`.
+  only the last characters), `POST /platform/hospitals/{id}/sso/test`. A `PUT` resets
+  `last_test` whenever the sign-in address, issuer, client id, allowed domains or secret
+  change, so a changed set-up must be tested again before it can be switched on.
 - **First hospital admin:** `POST /platform/hospitals/{id}/invites {name, email}`,
   `POST /platform/hospitals/{id}/invites/{invite_id}/resend`.
 - **Team:** `GET /platform/team`, `POST /platform/team/invites {name, email, role}`,
-  `PATCH /platform/team/{id} {role}`, `DELETE /platform/team/{id}` (with `mfa_code`;
-  **409** `last_admin`, **409** `own_role`).
+  `PATCH /platform/team/{id} {role, version}`, `DELETE /platform/team/{id}` (with
+  `mfa_code`; **409** `last_admin`, **409** `own_role`). `PATCH` and `DELETE` on
+  `/platform/team/invites` are reserved: `invites` is never a member id.
 - **Activity:** `GET /platform/activity?hospital&cursor` → structured events, newest first.
 - **On every endpoint:** two-step required (**403** `mfa_required`); auditors are refused
-  writes (**403** `forbidden`); every write honours `Idempotency-Key` and is audited; a
-  wrong step-up code gives **422** `invalid_code`.
+  writes (**403** `forbidden`); every write honours `Idempotency-Key` and is audited. A
+  step-up action takes `mfa_code` or `backup_code`; a wrong code gives **403**
+  `mfa_invalid`, and too many wrong codes **429** `mfa_locked` (for 15 minutes).
 
 ## 14. Delivery
 
@@ -245,3 +257,32 @@ Add to UI design §10 as item 22, and to the backend requirements (mhai-multiage
   wider blast radius than a hospital admin).
 - Activity in this release covers only the platform app's own actions; the cross-hospital
   audit log is a later sub-project.
+
+## 16. Changes during Plan 7b
+
+- §13 follows the backend's existing codes: a wrong step-up code is **403** `mfa_invalid`
+  and too many wrong codes **429** `mfa_locked` (replacing **422** `invalid_code`).
+- §13: the login roles `admin` or `platform_admin` both mean platform admin.
+- §13: every call sends `X-MHAI-Audience: platform`.
+- §13: every id is opaque and matches `[A-Za-z0-9_-]+`; the app's proxy refuses any other.
+- §13: a removal request carries `requested_by_you`, decided by the server, since names can
+  repeat and the session's id isn't the team id.
+- §13: `PUT …/sso` resets `last_test` whenever the address, issuer, client id, domains or
+  secret change.
+- §13: `PATCH /platform/team/{id}` carries `version` (**409** `conflict` when changed
+  meanwhile).
+- §13: every step-up action takes `mfa_code` or `backup_code`.
+- §13: at sign-in, an account with no platform role gets **403** `not_platform`.
+- §13: `PATCH` and `DELETE` on `/platform/team/invites` are reserved paths.
+- Backend follow-up: test a draft single sign-on set-up before saving it, so a live set-up
+  can change without switching sign-on off for the hospital. Until then, saving edits to a
+  live set-up asks first and switches it off.
+- Follow-up: a live-mode end-to-end run covering the auditor gate (the mock-mode suite
+  can't reach it; the proxy's unit tests cover it).
+- Frontend only: `POST /api/auth/session` is the app's own keep-alive, so the screen's
+  idle clock and the server's agree (§4). It doesn't reach the backend.
+- Team: nobody removes themselves or changes their own role in the app; another platform
+  admin can (the backend's **409** `own_role` still applies).
+- The clinical app's 403 page says "Use the platform admin app." with no link, and
+  `NEXT_PUBLIC_ADMIN_APP_URL` is gone (§2).
+- Nothing else in this design changed.

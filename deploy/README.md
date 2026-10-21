@@ -53,6 +53,128 @@ record must point at the instance (3.239.87.6).
 
 Then run the workflow once by hand (Actions → Deploy demo → Run workflow).
 
+## Platform admin app (platforms.measured-health.org)
+
+The platform admin app runs as its own compose project, `mhai-web-platform`,
+in its own folder, `/srv/mhai-web-platform`, behind its own nginx site with an
+IP allow list:
+
+```
+browser ──https──> nginx (host, allow list) ──> 127.0.0.1:8091 ──> platform container
+```
+
+The same workflow builds both images (`mhai-web` and `mhai-web-platform`)
+in separate jobs, so a failed platform build never stops the demo deploy.
+It always deploys the demo first. It deploys the platform only if its image
+built and `/srv/mhai-web-platform/.env` holds `PLATFORM_SESSION_SECRET`;
+otherwise it prints why it skipped the platform and still passes, so the
+demo never depends on this setup. One-time setup on the instance, after the demo setup
+above:
+
+1. DNS: the `platforms.measured-health.org` A record points at the instance
+   (already done).
+
+2. Folder, compose file and session secret. Compose refuses to start the
+   platform without the secret (`${PLATFORM_SESSION_SECRET:?}` in
+   `compose.platform.yml`), and the image never contains it. Run the secret
+   line once: running it again would replace the secret and sign everyone out.
+
+   ```bash
+   sudo mkdir -p /srv/mhai-web-platform && sudo chown ubuntu:ubuntu /srv/mhai-web-platform
+   # copy deploy/compose.platform.yml to /srv/mhai-web-platform/compose.platform.yml
+   cd /srv/mhai-web-platform
+   (umask 077; echo "PLATFORM_SESSION_SECRET=$(openssl rand -base64 48)" > .env)
+   ls -l .env   # -rw------- ubuntu
+   ```
+
+3. Allow list: `/etc/nginx/mhai-platform-allow.conf`, one `allow <ip>;` line
+   per permitted address (an IPv6 address needs its own line). The product
+   owner maintains it; everyone else gets 403. Create it only if it does not
+   exist, so re-running never wipes the owner's list. Replace the example
+   address:
+
+   ```bash
+   sudo touch /etc/nginx/mhai-platform-allow.conf
+   echo 'allow 203.0.113.10;' | sudo tee -a /etc/nginx/mhai-platform-allow.conf >/dev/null
+   ```
+
+4. nginx site. Test before reloading:
+
+   ```bash
+   sudo cp deploy/nginx/mhai-platform.conf /etc/nginx/sites-available/mhai-platform
+   sudo ln -s /etc/nginx/sites-available/mhai-platform /etc/nginx/sites-enabled/
+   sudo mkdir -p /var/www/html
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+   On plain http the site serves only Let's Encrypt's challenge path
+   (`/.well-known/acme-challenge/`) and redirects everything else to https.
+   The app is never served over http: passwords and two-step codes would
+   travel in clear, and browsers drop the Secure session cookie anyway.
+
+5. TLS. certbot's check comes from addresses that are not on the list, so use
+   the webroot method, which the open challenge path serves:
+
+   ```bash
+   sudo certbot certonly --webroot -w /var/www/html -d platforms.measured-health.org -m <ops-email> --agree-tos
+   ```
+
+   Then add this `:443` block to `/etc/nginx/sites-available/mhai-platform`,
+   below the `:80` block (it holds the allow list; keep the `include` and
+   `deny all;` lines):
+
+   ```nginx
+   server {
+       listen 443 ssl;
+       server_name platforms.measured-health.org;
+       server_tokens off;
+
+       ssl_certificate     /etc/letsencrypt/live/platforms.measured-health.org/fullchain.pem;
+       ssl_certificate_key /etc/letsencrypt/live/platforms.measured-health.org/privkey.pem;
+
+       access_log /var/log/nginx/mhai-platform.access.log;
+       error_log  /var/log/nginx/mhai-platform.error.log;
+
+       include /etc/nginx/mhai-platform-allow.conf;
+       deny all;
+
+       location / {
+           proxy_pass http://127.0.0.1:8091;
+           proxy_http_version 1.1;
+           # The app compares a write request's Origin with Host: keep $host.
+           proxy_set_header Host              $host;
+           proxy_set_header X-Real-IP         $remote_addr;
+           proxy_set_header X-Forwarded-For   $remote_addr;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_set_header X-Forwarded-Host  $host;
+           proxy_read_timeout 60s;
+       }
+
+       # Browsers that have seen the site use https only, for a year.
+       add_header Strict-Transport-Security "max-age=31536000" always;
+       add_header X-Robots-Tag "noindex, nofollow" always;
+       add_header X-Content-Type-Options "nosniff" always;
+   }
+   ```
+
+   Then `sudo nginx -t && sudo systemctl reload nginx`.
+
+6. Checks:
+   - from an address that is not on the list,
+     `curl -I https://platforms.measured-health.org/sign-in` returns 403;
+   - from a listed address it returns 200, with a
+     `Strict-Transport-Security` header;
+   - `curl -I http://platforms.measured-health.org/sign-in` returns 301 to
+     the https address.
+
+Then run the deploy workflow by hand (Actions, Deploy demo, Run workflow), or
+start it once on the instance:
+`cd /srv/mhai-web-platform && docker compose -f compose.platform.yml up -d`.
+
+Logs: `cd /srv/mhai-web-platform && docker compose -f compose.platform.yml logs --tail=100 platform`.
+To change who can reach it, edit the allow file, then
+`sudo nginx -t && sudo systemctl reload nginx`.
+
 ## Day to day
 
 - Read demo feedback (one JSON line per message: time, page, screen size,

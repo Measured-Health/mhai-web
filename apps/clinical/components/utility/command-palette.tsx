@@ -1,15 +1,15 @@
 "use client";
 import { useMemo, useRef, useState } from "react";
 import { HelpCircle, Plus, Search, Stethoscope } from "lucide-react";
-import { useEscape } from "@/lib/hooks/use-escape";
-import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+import { useEscape } from "@mhai/ui/hooks/use-escape";
+import { useFocusTrap } from "@mhai/ui/hooks/use-focus-trap";
 import {
   historyStatus,
   useSession,
   type SessionItem,
 } from "@/lib/session-store";
 import { useShell } from "../shell/app-shell";
-import { cn } from "../ui/cn";
+import { cn } from "@mhai/ui/cn";
 
 /** Matches title, diagnosis, symptoms, specialty and the plain-language result label. */
 export function searchItems(items: SessionItem[], q: string) {

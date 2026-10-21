@@ -1,5 +1,5 @@
 import type { Urgency } from "@/lib/api/contract";
-import { cn } from "../ui/cn";
+import { cn } from "@mhai/ui/cn";
 
 const OPTS: { value: Urgency; label: string; hint: string; dot: string }[] = [
   { value: "routine", label: "Routine", hint: "Clinic visit", dot: "bg-mint" },

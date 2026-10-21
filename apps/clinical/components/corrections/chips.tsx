@@ -13,7 +13,7 @@ import type {
 } from "@/lib/api/contract";
 import { OVERDUE_LABEL, STATUS_VIEW, originalKind } from "@/lib/corrections";
 import { RESULT_LABEL } from "@/lib/labels";
-import { Chip } from "../ui/chip";
+import { Chip } from "@mhai/ui/chip";
 
 const STATUS_ICON = {
   pending_review: Clock,

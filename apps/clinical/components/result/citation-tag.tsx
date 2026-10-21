@@ -3,7 +3,7 @@ import { Check, Info, X } from "lucide-react";
 import type { Citation } from "@/lib/api/contract";
 import { citationTag, sourceStatus } from "@/lib/labels";
 import { useHighlight } from "@/lib/highlight";
-import { cn } from "../ui/cn";
+import { cn } from "@mhai/ui/cn";
 
 const TONE = {
   ok: "bg-ok-wash text-ok-deep",

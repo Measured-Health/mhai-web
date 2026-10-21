@@ -11,7 +11,7 @@ import {
   MOCK_NEW_BACKUP_CODES,
 } from "@/lib/auth/mock";
 import { createMockAdmin } from "./mock-admin";
-import { totp } from "@/lib/auth/totp";
+import { totp } from "@mhai/api-client/totp";
 import { ADMIN_NOW, mockAdminAs, mockAdminWith } from "@/tests/admin";
 import { ApiError } from "./errors";
 import type { GuardedOut, UsageAlertsOut } from "./admin-contract";

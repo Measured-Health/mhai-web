@@ -3,7 +3,7 @@ import { ExternalLink, MapPin, Sparkles } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { AlertOut, DismissIn } from "@/lib/api/alerts-contract";
 import { isAlertHandled } from "@/lib/api/errors";
-import { useOnline } from "@/lib/hooks/use-online";
+import { useOnline } from "@mhai/ui/hooks/use-online";
 import {
   useAcknowledgeAlert,
   useDismissAlert,
@@ -19,9 +19,9 @@ import {
 import { askFromAlert, stashPrefill } from "@/lib/notifications/ask";
 import { eventClock } from "@/lib/time";
 import { useShell } from "../shell/shell-context";
-import { Banner } from "../ui/banner";
-import { Button } from "../ui/button";
-import { Chip } from "../ui/chip";
+import { Banner } from "@mhai/ui/banner";
+import { Button } from "@mhai/ui/button";
+import { Chip } from "@mhai/ui/chip";
 import {
   AlertStatusChip,
   CauseChip,

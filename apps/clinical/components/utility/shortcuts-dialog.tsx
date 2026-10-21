@@ -1,6 +1,6 @@
 "use client";
 import { useModLabel } from "@/lib/hooks/use-shortcuts";
-import { Dialog } from "../ui/dialog";
+import { Dialog } from "@mhai/ui/dialog";
 
 export function ShortcutsDialog({
   open,

@@ -49,7 +49,7 @@ import { SEVERITY_ICON } from "../notifications/chips";
 import type { BarItem } from "@/lib/charts";
 import { BarList } from "../ui/charts/bar-list";
 import { ColumnChart } from "../ui/charts/column-chart";
-import { cn } from "../ui/cn";
+import { cn } from "@mhai/ui/cn";
 import { Card, RetryBanner, Tile } from "./usage-parts";
 
 type Icon = typeof ArrowUp;

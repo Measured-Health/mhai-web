@@ -2,7 +2,11 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const css = readFileSync("app/globals.css", "utf8");
+// The app's globals.css plus @mhai/ui/base.css, which it imports (the motion
+// tokens, the shared components' keyframes and the blanket reduced-motion rule).
+const css = ["app/globals.css", "../../packages/ui/src/base.css"]
+  .map((f) => readFileSync(f, "utf8"))
+  .join("\n");
 
 const sources = (d: string): string[] =>
   readdirSync(d).flatMap((f) => {
@@ -10,7 +14,9 @@ const sources = (d: string): string[] =>
     if (statSync(p).isDirectory()) return sources(p);
     return /\.(tsx?|css)$/.test(f) && !/\.test\.tsx?$/.test(f) ? [p] : [];
   });
-const SRC = [...sources("components"), ...sources("app")];
+// The shared components in @mhai/ui use this app's motion tokens too.
+const UI = "../../packages/ui/src";
+const SRC = [...sources("components"), ...sources("app"), ...sources(UI)];
 
 /**
  * Looping animations that are exempt from the "durations are tokens" rule.
@@ -119,7 +125,7 @@ describe("motion", () => {
   });
 
   it("never animates the safety banner", () => {
-    expect(readFileSync("components/ui/banner.tsx", "utf8")).not.toMatch(
+    expect(readFileSync(`${UI}/banner.tsx`, "utf8")).not.toMatch(
       /animate-|transition/,
     );
   });

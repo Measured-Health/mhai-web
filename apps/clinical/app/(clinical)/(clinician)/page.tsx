@@ -9,7 +9,7 @@ import { TopBar } from "@/components/shell/top-bar";
 import { FirstVisit } from "@/components/states/first-visit";
 import { DiscardDialog } from "@/components/states/discard-dialog";
 import { UnsavedGuard } from "@/components/states/unsaved-guard";
-import { Banner } from "@/components/ui/banner";
+import { Banner } from "@mhai/ui/banner";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { QueryCreateIn } from "@/lib/api/contract";
 import { emptyForm, fromQuery, type FormValues } from "@/lib/form-schema";

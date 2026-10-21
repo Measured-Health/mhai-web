@@ -6,7 +6,7 @@ import { ApiError } from "@/lib/api/errors";
 import { createMockClient } from "@/lib/api/mock";
 import { OutboxProvider } from "@/lib/offline/outbox-context";
 import { renderWithAuth } from "@/tests/auth-wrapper";
-import { ToastProvider } from "../ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as MhaiClient }));
 vi.mock("@/lib/api/client", () => ({ getClient: () => holder.client }));

@@ -11,7 +11,7 @@ import type { CorrectionOut } from "@/lib/api/contract";
 import { ApiError } from "@/lib/api/errors";
 import { CORRECTION_KEYS } from "@/lib/correction-queries";
 import { T0, makeCorrection } from "@/tests/corrections";
-import { ToastProvider } from "../ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 
 const listMine = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api/client", () => ({

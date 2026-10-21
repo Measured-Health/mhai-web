@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { ToastProvider } from "@/components/ui/toast";
+import { ToastProvider } from "@mhai/ui/toast";
 import { DEMO_EMAILS } from "@/lib/auth/mock";
 import type { User } from "@/lib/auth/types";
 import { renderWithAuth, TEST_USER } from "./auth-wrapper";

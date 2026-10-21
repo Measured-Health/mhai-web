@@ -2,11 +2,11 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { AuthError } from "@/lib/auth/types";
-import { BackupCodes } from "../auth/backup-codes";
+import { BackupCodes } from "@mhai/ui/auth/backup-codes";
 import { AuthErrorBanner } from "../auth/auth-error-banner";
 import { errorCode } from "../auth/auth-error-copy";
-import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
+import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
 
 /** Replaces every backup code; the new ones are shown once. */
 export function NewBackupCodesDialog({

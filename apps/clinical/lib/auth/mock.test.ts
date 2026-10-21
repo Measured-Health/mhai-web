@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { totp } from "./totp";
+import { totp } from "@mhai/api-client/totp";
 import { AuthError, initials, isClinical } from "./types";
 import {
   MOCK_BACKUP_CODES,

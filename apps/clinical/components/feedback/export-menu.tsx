@@ -9,11 +9,11 @@ import {
   type Ref,
 } from "react";
 import { ChevronDown, Copy, Hash, Printer } from "lucide-react";
-import { useEscape } from "@/lib/hooks/use-escape";
+import { useEscape } from "@mhai/ui/hooks/use-escape";
 import type { ResultView } from "@/lib/result-view";
 import type { parseBody } from "../result/parse-body";
-import { Button } from "../ui/button";
-import { useToast } from "../ui/toast";
+import { Button } from "@mhai/ui/button";
+import { useToast } from "@mhai/ui/toast";
 import { resultAsText } from "./result-text";
 
 export type ExportMenuHandle = { copy(): void };

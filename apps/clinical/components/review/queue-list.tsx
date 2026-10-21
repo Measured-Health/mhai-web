@@ -8,8 +8,8 @@ import {
   type QueueItem,
 } from "@/lib/corrections";
 import { OriginalChip, OverdueChip } from "../corrections/chips";
-import { Chip } from "../ui/chip";
-import { cn } from "../ui/cn";
+import { Chip } from "@mhai/ui/chip";
+import { cn } from "@mhai/ui/cn";
 
 /** The left column (desktop) or the card list (phones) of the review queue. */
 export function QueueList({

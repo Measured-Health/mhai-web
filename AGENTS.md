@@ -10,14 +10,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Agent guide: mhai-web
 
-The clinician-facing frontend for MHAI. Backend and API:
+The MHAI frontends: the clinician-facing app and the platform admin app.
+Backend and API:
 Measured-Health/mhai-multiagent (read its SKILLS.md for the security
 model).
 
 ## Read first
 
-- [ARCHITECTURE.md](ARCHITECTURE.md): the clinical app, the planned
-  platform admin app, and how both talk to the API.
+- [ARCHITECTURE.md](ARCHITECTURE.md): the clinical app, the platform
+  admin app, and how both talk to the API.
 - [CONTRIBUTING.md](CONTRIBUTING.md): conventions, the clinical UI rules,
   the rules for patient data in the browser, and the agent contribution
   workflow.
@@ -33,13 +34,16 @@ model).
 
 ## Commands
 
-The repository is npm workspaces: the app is in `apps/clinical` and the
-design tokens are in `packages/tokens`. Run these from the root. Paths
-below are from the root.
+The repository is npm workspaces: the clinical app is in `apps/clinical`,
+the platform admin app in `apps/platform`, the design tokens in
+`packages/tokens`, the shared components in `packages/ui` and the shared
+API and sign-in helpers in `packages/api-client`. Neither app imports from
+the other. Run these from the root. Paths below are from the root.
 
 ```bash
 nvm use && npm ci          # Node from .nvmrc, exact lockfile install
-npm run dev                # http://localhost:3000
+npm run dev                # clinical app, http://localhost:3000
+npm run dev:platform       # platform admin app, http://localhost:3001
 npm run lint               # ESLint
 npm run typecheck          # tsc --noEmit
 npm run format             # Prettier (format:check in CI)

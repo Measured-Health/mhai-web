@@ -3,7 +3,7 @@ import { AlertTriangle, Check, ShieldCheck, X } from "lucide-react";
 import type { SourceStatus } from "@/lib/labels";
 import type { ResultView } from "@/lib/result-view";
 import { useHighlight } from "@/lib/highlight";
-import { cn } from "../ui/cn";
+import { cn } from "@mhai/ui/cn";
 
 /**
  * "Why this confidence" only appears when a confidence level is shown and

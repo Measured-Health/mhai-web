@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PanelRight } from "lucide-react";
 import type { Stage } from "@/lib/api/contract";
 import { HighlightProvider } from "@/lib/highlight";
-import { useNow } from "@/lib/hooks/use-now";
+import { useNow } from "@mhai/ui/hooks/use-now";
 import { useShortcuts } from "@/lib/hooks/use-shortcuts";
 import { useOutbox } from "@/lib/offline/outbox-context";
 import { useQueryStatus, useResult, useSubmitQuery } from "@/lib/queries";

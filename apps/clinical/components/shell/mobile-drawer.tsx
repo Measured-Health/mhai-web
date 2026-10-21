@@ -1,9 +1,9 @@
 "use client";
 import { Suspense, useRef } from "react";
 import type { SessionItem } from "@/lib/session-store";
-import { useEscape } from "@/lib/hooks/use-escape";
-import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
-import { cn } from "../ui/cn";
+import { useEscape } from "@mhai/ui/hooks/use-escape";
+import { useFocusTrap } from "@mhai/ui/hooks/use-focus-trap";
+import { cn } from "@mhai/ui/cn";
 import { Sidebar } from "./sidebar";
 
 export function MobileDrawer({

@@ -44,6 +44,10 @@ jobs:
       - name: Bundle check
         run: npm run check:bundle
 
+      - name: Platform marker check
+        run: npm run check:platform-marker
+
+      # Runs both apps' suites (clinical, then platform).
       - name: E2E (mock mode)
         run: |
           npx playwright install --with-deps chromium
@@ -59,6 +63,8 @@ jobs:
           path: |
             apps/clinical/playwright-report/
             apps/clinical/test-results/
+            apps/platform/playwright-report/
+            apps/platform/test-results/
           retention-days: 7
 
   secrets:

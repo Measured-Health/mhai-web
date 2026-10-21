@@ -5,15 +5,15 @@ import { useId, useRef, useState, type FormEvent } from "react";
 import { homeFor, useAuth } from "@/lib/auth/auth-context";
 import { useRedirect } from "@/lib/auth/use-redirect";
 import type { AuthError } from "@/lib/auth/types";
-import { Button } from "../ui/button";
+import { Button } from "@mhai/ui/button";
 import { AuthHeading } from "./auth-layout";
 import {
   BACKUP_FAILED_BODY,
   BackupCodeInput,
   BackupCodeToggle,
   useCodeOrBackup,
-} from "./backup-code-toggle";
-import { CodeInput } from "./code-input";
+} from "@mhai/ui/auth/backup-code-toggle";
+import { CodeInput } from "@mhai/ui/auth/code-input";
 import { AuthErrorBanner } from "./auth-error-banner";
 import { errorCode } from "./auth-error-copy";
 

@@ -16,7 +16,7 @@ import {
   SEVERITY,
   severityOf,
 } from "@/lib/notifications/alert-view";
-import { Chip } from "../ui/chip";
+import { Chip } from "@mhai/ui/chip";
 
 export const SEVERITY_ICON = {
   critical: OctagonAlert,

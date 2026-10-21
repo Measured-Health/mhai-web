@@ -18,7 +18,7 @@ import {
 } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { initials, isAdminOnly, isHospitalAdmin } from "@/lib/auth/types";
-import { cn } from "../ui/cn";
+import { cn } from "@mhai/ui/cn";
 import { useShell } from "./app-shell";
 
 export function Avatar({

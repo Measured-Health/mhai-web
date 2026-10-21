@@ -1,7 +1,7 @@
 import { Check } from "lucide-react";
 import type { Stage } from "@/lib/api/contract";
 import { STAGES, stageIndex } from "@/lib/labels";
-import { cn } from "../ui/cn";
+import { cn } from "@mhai/ui/cn";
 
 export function StageList({ stage }: { stage: Stage | null }) {
   const current = stageIndex(stage);
