@@ -22,3 +22,6 @@ export const reasonLabel = (r: DeactivateReason) => REASON[r];
 
 /** Why Add hospital can't be used while offline. */
 export const ADD_OFFLINE = "You're offline. Reconnect to add a hospital.";
+
+/** Single sign-on copy. */
+export const SSO_TEST_FIRST = "Test sign-in first.";

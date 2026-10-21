@@ -598,4 +598,42 @@ describe("mock platform API", () => {
       "removal_requested",
     ]);
   });
+
+  it("a change to the sign-in set-up voids the last test", async () => {
+    const { m } = setup();
+    const before = await m.getSso("h_northgate");
+    expect(before.last_test?.ok).toBe(true);
+    const same = {
+      enabled: true,
+      sign_in_url: before.sign_in_url!,
+      client_id: before.client_id!,
+      issuer: before.issuer!,
+      allowed_domains: before.allowed_domains,
+    };
+    const kept = await m.saveSso(
+      "h_northgate",
+      { ...same, version: before.version },
+      KEY(),
+    );
+    expect(kept.last_test).toEqual(before.last_test);
+    const changed = await m.saveSso(
+      "h_northgate",
+      { ...same, client_id: "other", version: kept.version },
+      KEY(),
+    );
+    expect(changed.last_test).toBeNull();
+    const again = await m.testSso("h_northgate", KEY());
+    expect(again.last_test?.ok).toBe(true);
+    const secret = await m.saveSso(
+      "h_northgate",
+      {
+        ...same,
+        client_id: "other",
+        client_secret: "a-new-secret-1234",
+        version: changed.version,
+      },
+      KEY(),
+    );
+    expect(secret.last_test).toBeNull();
+  });
 });
