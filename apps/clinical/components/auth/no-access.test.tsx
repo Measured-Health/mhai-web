@@ -49,12 +49,11 @@ describe("NoAccess", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
     expect(await outboxCount(ADMIN.username)).toBe(0);
   });
-  it("links to the platform admin app when its address is set", () => {
+  it("says to use the platform admin app, with no link (spec §2)", () => {
     vi.stubEnv("NEXT_PUBLIC_ADMIN_APP_URL", "https://admin.example.org");
     renderWithAuth(<NoAccess />, ADMIN);
-    expect(
-      screen.getByRole("link", { name: "Go to the platform admin app" }),
-    ).toHaveAttribute("href", "https://admin.example.org");
+    expect(screen.getByText("Use the platform admin app.")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).toBeNull();
   });
   it("sends a hospital admin to the admin side, not the 403 page", async () => {
     renderWithAuth(<NoAccess />, { ...TEST_USER, roles: ["hospital_admin"] });

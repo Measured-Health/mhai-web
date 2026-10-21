@@ -17,8 +17,9 @@ All notable changes to this project are documented here. The format follows
 - The decisions bell is now the notification bell, shared with patient
   alerts.
 - The 403 page is now only for Measured Health platform admin and auditor
-  accounts, and points them to the platform admin app. Hospital admins use
-  the hospital admin side instead.
+  accounts, and says "Use the platform admin app." with no link to it.
+  `NEXT_PUBLIC_ADMIN_APP_URL` is gone. Hospital admins use the hospital
+  admin side instead.
 - The demo's sign-in page lists a hospital admin (Grace Nwosu), a medical
   director (Dr. Obi, clinician and hospital admin), a platform admin (the
   403 page), and a new hospital admin (Chike Okoro) who accepts the terms,
@@ -26,6 +27,25 @@ All notable changes to this project are documented here. The format follows
   removing staff takes the code `123456`.
 
 ### Added
+
+- The platform admin app (`apps/platform`, `npm run dev:platform`) for
+  Measured Health's platform admins and auditors, on sample data. Sign in
+  with a password and two-step (no skip, no "trust this device"); a new
+  platform admin sets a password, accepts the terms and sets up two-step
+  first. **Hospitals:** list and search, add a hospital and invite its
+  first admin, edit details, deactivate and reactivate with your own code,
+  single sign-on set-up with write-only secrets, and removal that a second
+  platform admin must approve, held back by legal holds and records
+  retention. **Team:** invite, change role and remove with your code;
+  nobody changes their own role or removes themselves. **Activity** lists
+  every platform action, and **Account** has the password, backup codes
+  and signed-in devices. Auditors see everything and change nothing. The
+  app signs out after 15 minutes without activity, keeps nothing in
+  browser storage, and needs `PLATFORM_SESSION_SECRET` in live mode. It is
+  served at `platforms.<domain>` behind an IP allow list, from its own
+  compose project. End-to-end tests cover it on desktop and phone.
+- Shared packages `@mhai/ui` (components) and `@mhai/api-client` (API,
+  session and two-step helpers), used by both apps.
 
 - Patient alerts on Usage for hospital admins, when alerts are switched on:
   volumes by severity, still unhandled, median time to acknowledge (overall

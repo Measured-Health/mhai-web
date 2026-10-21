@@ -4,10 +4,10 @@ MHAI has **two frontend apps** and **three kinds of user**. Both apps talk
 only to the MHAI API (`Measured-Health/mhai-multiagent`, base path
 `/api/v1`).
 
-| App                    | Who uses it                                         | What it does                                                                                                                                                                     | Status                                                                  |
-| ---------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| **Clinical app**       | Clinicians, and hospital admins                     | **Clinical side:** ask questions, read evidence-checked results, give feedback, review corrections. **Hospital admin side:** manage the hospital's own staff, settings and usage | This repo, Phase 1                                                      |
-| **Platform admin app** | Measured Health staff: platform admins and auditors | Run the service: hospitals, system health, failed jobs, legal holds, platform settings, audit log                                                                                | Planned ([ADR 0002](docs/adr/0002-separate-clinical-and-admin-apps.md)) |
+| App                    | Who uses it                                         | What it does                                                                                                                                                                     | Status                                                                                    |
+| ---------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Clinical app**       | Clinicians, and hospital admins                     | **Clinical side:** ask questions, read evidence-checked results, give feedback, review corrections. **Hospital admin side:** manage the hospital's own staff, settings and usage | This repo, Phase 1                                                                        |
+| **Platform admin app** | Measured Health staff: platform admins and auditors | Run the service: hospitals (add, deactivate, two-person removal, single sign-on), the platform team and its activity. Later: system health, failed jobs, legal holds, settings   | This repo, on sample data ([ADR 0002](docs/adr/0002-separate-clinical-and-admin-apps.md)) |
 
 The three kinds of user:
 
@@ -36,7 +36,7 @@ flowchart LR
             cside["Clinical side"]
             hside["Hospital admin side"]
         end
-        aapp["Platform admin app<br/>platforms.&lt;domain&gt;<br/>(planned)"]
+        aapp["Platform admin app<br/>platforms.&lt;domain&gt;"]
     end
 
     idp["Hospital identity provider<br/>(OIDC single sign-on)"]
@@ -138,10 +138,11 @@ flowchart TB
   usage call is filtered by the hospital in the session. The hospital
   admin side never shows question text, results or patient details.
 - **Wrong-app 403s:** only a platform account (platform admin or
-  auditor) signing in to this app gets the 403 page, which links to the
-  platform admin app. Hospital admins use the hospital admin side here; a
-  clinician or hospital admin signing in to the platform admin app gets
-  its 403 page, which links back here.
+  auditor) signing in to this app gets the 403 page, which says to use
+  the platform admin app, with no link. Hospital admins use the hospital
+  admin side here; a clinician or hospital admin signing in to the
+  platform admin app is told "This account can't use the platform admin
+  app." and signed out.
 - **Researcher** has no endpoints yet, so it has no app.
 
 ## 3. Repository layout
@@ -153,12 +154,12 @@ packages.
 mhai-web/
 ├── apps/
 │   ├── clinical/        the clinical app (@mhai/clinical)
-│   └── platform/        the platform admin app (planned, Plan 7b)
+│   └── platform/        the platform admin app (@mhai/platform)
 ├── packages/
 │   ├── tokens/          colours, type, radius, shadows (design v3)
-│   ├── ui/              shared components (added with the platform admin app)
-│   └── api-client/      types generated from the backend's openapi.json
-│                        (added with the platform admin app)
+│   ├── ui/              shared components (@mhai/ui)
+│   └── api-client/      shared API, session and two-step helpers
+│                        (@mhai/api-client)
 ├── scripts/             bundle check and repo tests
 ├── design/              approved designs (v2 mockup, v3 boards, brand assets)
 ├── docs/                adr/ decisions, specs/ design specs, plans/
@@ -168,10 +169,10 @@ mhai-web/
 ```mermaid
 flowchart LR
     tokens[packages/tokens] --> clinical[apps/clinical]
-    tokens --> platform["apps/platform (planned)"]
-    ui["packages/ui (added with the platform admin app)"] -.-> clinical
+    tokens --> platform[apps/platform]
+    ui[packages/ui] -.-> clinical
     ui -.-> platform
-    apic["packages/api-client (added with the platform admin app)"] -.-> clinical
+    apic[packages/api-client] -.-> clinical
     apic -.-> platform
     clinical -. never imports .- platform
 ```
@@ -443,46 +444,47 @@ Spec: `docs/specs/2026-10-17-notifications-design.md`. Clinicians only.
   state, pop-ups), never in storage or the URL, and clear on sign-out. "Ask
   MHAI about it" copies no identifiers into the consultation.
 
-## 5. Platform admin app (planned)
+## 5. Platform admin app
 
-This app is for Measured Health staff. **Scope** comes from the backend's admin endpoints (API spec §4.1, §11).
-Every admin action is audited.
+`apps/platform` (`@mhai/platform`) is for Measured Health staff: platform
+admins and auditors. It runs on sample data until the backend has the
+platform endpoints; the contract it assumes is in
+[the platform admin spec, §13](docs/specs/2026-10-17-platform-admin-design.md).
 
-| Area                              | Endpoints                                         | Who            |
-| --------------------------------- | ------------------------------------------------- | -------------- |
-| Users and roles                   | `GET/POST/PATCH /admin/users`                     | admin          |
-| Usage stats                       | `GET /hga/stats`                                  | admin          |
-| Agent status and queues           | `GET /agents/status`, `/admin/dlq`, retry, cancel | admin          |
-| Feedback buffer reset             | `POST /admin/feedback-buffer/reset`               | admin          |
-| Legal holds                       | `PUT/DELETE /admin/legal-holds`                   | admin          |
-| Settings (retention, triage gate) | `GET/PATCH /admin/settings`                       | admin          |
-| Audit log and integrity check     | `GET /security/audit`, `/security/audit/verify`   | auditor, admin |
+| Page      | What it does                                                                                                                | Who                            |
+| --------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Hospitals | List, search, add a hospital and invite its first admin                                                                     | platform admin (auditors read) |
+| Hospital  | Details, deactivate and reactivate, single sign-on, two-person removal with retention and legal-hold checks, recent actions | platform admin (auditors read) |
+| Team      | Invite, change role, remove (never your own row)                                                                            | platform admin (auditors read) |
+| Activity  | Every platform action, newest first, by hospital                                                                            | both                           |
+| Account   | Password, backup codes, signed-in devices                                                                                   | both                           |
 
 ```text
-┌────────────┬─────────────────────────────────────────────────────┐
-│ [M] Admin  │ System health                          ● All good   │
-│            ├─────────────────────────────────────────────────────┤
-│ ◉ Health   │ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐     │
-│ ☺ Users    │ │ Queue 3 │ │ DLQ 0   │ │ p95 14s │ │ Workers │     │
-│ ▤ Stats    │ └─────────┘ └─────────┘ └─────────┘ └─────────┘     │
-│ ⚑ Holds    │ Decision mix (PASS / REGENERATE / ESCALATE) ▇▅▂     │
-│ ⚙ Settings │ Recent failed jobs …                    [Retry]     │
-│ ⛨ Audit    │                                                     │
-│ AD admin   │                                                     │
-└────────────┴─────────────────────────────────────────────────────┘
+browser ──> platforms.<domain> (IP allow list)
+              Next.js: pages + /api/auth/* + /api/v1/[...path] proxy
+                 │  sealed httpOnly cookie holds the platform token
+                 ▼
+            api.<domain>/api/v1/platform/*   (X-MHAI-Audience: platform)
 ```
 
 **Rules:**
 
-- MFA is required for admin and auditor. A single sign-on login must
-  carry the IdP's MFA assertion.
-- Served from its own origin (`platforms.<domain>`), ideally reachable only
-  over VPN or an IP allowlist. Its cookie is scoped to that origin, and
-  it has its own CSP.
-- **It never shows patient data.** Admin endpoints return ids and counts
-  only.
-- It uses the same design tokens and components as the clinical app.
-  Its layout is denser, and it uses tables and charts.
+- **Two-step always.** Every platform account signs in with a two-step
+  code; there is no skip and no "trust this device". Deactivate,
+  reactivate, request or approve removal, and removing a team member also
+  need the person's own code at the time.
+- **15-minute idle limit**, on the screen and on the server: a warning at
+  13 minutes, signed out at 15.
+- **The proxy allows only the calls the app makes:** exact methods and
+  paths, opaque ids, writes only from the app's own pages, and auditors
+  never write (403). The token never reaches browser JavaScript.
+- **It never shows patient data**, and keeps nothing in browser storage.
+- **Its own origin** (`platforms.<domain>`), behind an IP allow list, with
+  its own cookie and a strict CSP with a fresh nonce on every page.
+- **Shared look, separate code:** the same tokens and `@mhai/ui`
+  components as the clinical app, a "Platform" label beside the logo, a
+  `bloom` page header, tables on desktop and cards on phones. It never
+  imports from the clinical app.
 
 ## 6. Deployment
 

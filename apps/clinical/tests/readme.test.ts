@@ -88,6 +88,28 @@ describe("README demo instructions", () => {
     expect(contributing).not.toMatch(/\blab\b/i);
   });
 
+  it("documents the platform admin app demo", () => {
+    expect(readme).toMatch(/\*\*Platform admin app\.\*\*/);
+    for (const email of [
+      "ada.bakare@measured-health.example",
+      "tunde.okafor@measured-health.example",
+      "amara.eze@measured-health.example",
+      "new.admin@measured-health.example",
+    ])
+      expect(readme).toContain(email);
+    expect(readme).toContain("npm run dev:platform");
+    expect(readme).toMatch(
+      /`PLATFORM_SESSION_SECRET`\s+is\s+required\s+in\s+live\s+mode/,
+    );
+  });
+
+  it("says the 403 page has no link, and no longer sets its address", () => {
+    expect(readme).not.toMatch(/NEXT_PUBLIC_ADMIN_APP_URL/);
+    expect(readme).toMatch(
+      /say[s]?\s+to\s+use\s+the\s+platform\s+admin\s+app,\s+with\s+no\s+link/,
+    );
+  });
+
   it("documents the patient alerts on Usage and the small-group rule", () => {
     expect(readme).toMatch(/\*\*Patient alerts on Usage\.\*\*/);
     expect(readme).toMatch(/What\s+changed/);

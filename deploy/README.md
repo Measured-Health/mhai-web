@@ -117,9 +117,9 @@ above:
 
    Then add the `:443` block to `/etc/nginx/sites-available/mhai-platform`
    yourself: copy the `server` block, change `listen 80` to
-   `listen 443 ssl`, add `ssl_certificate
-   /etc/letsencrypt/live/platforms.measured-health.org/fullchain.pem;` and
-   `ssl_certificate_key .../privkey.pem;`, and keep the
+   `listen 443 ssl`, add
+   `ssl_certificate /etc/letsencrypt/live/platforms.measured-health.org/fullchain.pem;`
+   and `ssl_certificate_key .../privkey.pem;`, and keep the
    `include /etc/nginx/mhai-platform-allow.conf;` and `deny all;` lines (and
    the challenge `location`) in it. Optionally make the `:80` block redirect to
    https, keeping the challenge `location`. Then

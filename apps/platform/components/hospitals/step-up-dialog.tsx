@@ -8,6 +8,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import type { StepUp } from "@/lib/api/contract";
 import { platformError } from "@/lib/errors";
 import { ApiError } from "@mhai/api-client/errors";
@@ -82,12 +83,18 @@ export function StepUpDialog(props: StepUpDialogProps) {
       {form}
     </Dialog>
   ) : (
-    <Sheet open={open} onClose={close} title={title}>
-      <h2 className="mb-3 font-display text-[28px] font-black leading-none">
-        {title}
-      </h2>
-      {form}
-    </Sheet>
+    // On the body: a card's backdrop blur would otherwise hold this fixed
+    // sheet inside the card instead of the screen. Phones only, so never
+    // on the server (which counts as desktop).
+    createPortal(
+      <Sheet open={open} onClose={close} title={title}>
+        <h2 className="mb-3 font-display text-[28px] font-black leading-none">
+          {title}
+        </h2>
+        {form}
+      </Sheet>,
+      document.body,
+    )
   );
 }
 
