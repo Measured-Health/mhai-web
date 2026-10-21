@@ -48,4 +48,16 @@ describe("platformError", () => {
       "Something went wrong. Try again.",
     );
   });
+
+  it("a screen's own wording for a code replaces the default", () => {
+    const dup = { duplicate: "That email is already on the team." };
+    const err = (code: string) => new ApiError(409, code);
+    expect(platformError(err("duplicate"), dup).title).toBe(
+      "That email is already on the team.",
+    );
+    expect(platformError(err("duplicate")).title).toBe(
+      "That short code is already used.",
+    );
+    expect(platformError(err("conflict"), dup).stale).toBe(true);
+  });
 });

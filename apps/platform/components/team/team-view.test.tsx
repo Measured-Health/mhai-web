@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ApiError } from "@mhai/api-client/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetPlatformClientForTests,
@@ -113,7 +114,7 @@ describe("the team page", () => {
     ).toBeInTheDocument();
   });
 
-  it("your own row has no Change role", async () => {
+  it("your own row has no Change role and no Remove", async () => {
     renderWithAuth(<TeamView />);
     const table = await screen.findByRole("table");
     expect(
@@ -122,8 +123,13 @@ describe("the team page", () => {
       }),
     ).toBeNull();
     expect(
+      within(rowOf(table, "Ada Bakare")).queryByRole("button", {
+        name: /Remove/,
+      }),
+    ).toBeNull();
+    expect(
       within(rowOf(table, "Ada Bakare")).getByText(
-        "You can't change your own role.",
+        "You can't change your own role or remove yourself. Another platform admin can.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -190,23 +196,18 @@ describe("the team page", () => {
 
   it("removing the last platform admin shows the last-admin message", async () => {
     const api = install();
-    const { members } = await api.listTeam();
-    for (const m of members.filter(
-      (x) => x.role === "platform_admin" && !x.is_you,
-    ))
-      await api.removeMember(
-        m.id,
-        { mfa_code: "123456" },
-        { idempotencyKey: `k-${m.id}` },
-      );
+    // The server says Tunde is the last admin (e.g. the others went meanwhile).
+    vi.spyOn(api, "removeMember").mockRejectedValue(
+      new ApiError(409, "last_admin"),
+    );
     renderWithAuth(<TeamView />);
     const table = await screen.findByRole("table");
     await userEvent.click(
-      within(rowOf(table, "Ada Bakare")).getByRole("button", {
-        name: "Remove Ada Bakare",
+      within(rowOf(table, "Tunde Okafor")).getByRole("button", {
+        name: "Remove Tunde Okafor",
       }),
     );
-    const d = screen.getByRole("dialog", { name: "Remove Ada Bakare?" });
+    const d = screen.getByRole("dialog", { name: "Remove Tunde Okafor?" });
     await userEvent.keyboard("123456");
     await userEvent.click(within(d).getByRole("button", { name: "Remove" }));
     expect(

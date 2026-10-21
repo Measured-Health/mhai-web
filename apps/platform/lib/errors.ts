@@ -18,9 +18,14 @@ const W = (
 const UNREACHABLE = "Couldn't reach the service. Try again.";
 
 /** Plain words for every platform refusal; never a backend code on screen. */
-export function platformError(e: unknown): PlatformErrorWords {
+export function platformError(
+  e: unknown,
+  /** Wording for a code in this screen's own terms, by backend code. */
+  context: Partial<Record<string, string>> = {},
+): PlatformErrorWords {
   if (!(e instanceof ApiError) || e.status === 0 || e.code === "network")
     return W(UNREACHABLE);
+  if (context[e.code]) return W(context[e.code]!);
   switch (e.code) {
     case "conflict":
       return W("Changed by someone else", "Reload to see the latest.", {

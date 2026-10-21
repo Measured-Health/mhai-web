@@ -10,7 +10,8 @@ import { Button } from "@mhai/ui/button";
 import { Chip } from "@mhai/ui/chip";
 import { dateLabel } from "../hospitals/format";
 
-export const OWN_ROLE_NOTE = "You can't change your own role.";
+export const OWN_ROW_NOTE =
+  "You can't change your own role or remove yourself. Another platform admin can.";
 
 export const signInLabel = (iso: string | null) =>
   iso ? dateLabel(iso) : "Not yet";
@@ -57,27 +58,29 @@ export function RowActions({ m, h }: { m: TeamMember; h: RowHandlers }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       {m.is_you ? (
-        <span className="text-[12px] text-ink-3">{OWN_ROLE_NOTE}</span>
+        <span className="text-[12px] text-ink-3">{OWN_ROW_NOTE}</span>
       ) : (
-        <Button
-          size={size}
-          variant="ghost"
-          aria-label={`Change role for ${m.name}`}
-          {...h.netProps}
-          onClick={() => h.onRole(m)}
-        >
-          Change role
-        </Button>
+        <>
+          <Button
+            size={size}
+            variant="ghost"
+            aria-label={`Change role for ${m.name}`}
+            {...h.netProps}
+            onClick={() => h.onRole(m)}
+          >
+            Change role
+          </Button>
+          <Button
+            size={size}
+            variant="danger"
+            aria-label={`Remove ${m.name}`}
+            {...h.netProps}
+            onClick={() => h.onRemove(m)}
+          >
+            Remove
+          </Button>
+        </>
       )}
-      <Button
-        size={size}
-        variant="danger"
-        aria-label={`Remove ${m.name}`}
-        {...h.netProps}
-        onClick={() => h.onRemove(m)}
-      >
-        Remove
-      </Button>
     </div>
   );
 }

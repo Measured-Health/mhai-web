@@ -4,7 +4,6 @@ import type { TeamRole } from "@/lib/api/contract";
 import { platformError, type PlatformErrorWords } from "@/lib/errors";
 import { parseInvite } from "@/lib/hospitals/form";
 import { useInviteTeam } from "@/lib/queries/team";
-import { ApiError } from "@mhai/api-client/errors";
 import { inputClass } from "@mhai/ui/auth/password-fields";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
@@ -64,12 +63,9 @@ function InviteForm({ onClose }: { onClose(): void }) {
         },
         onError: (err) =>
           setFailure(
-            err instanceof ApiError && err.code === "duplicate"
-              ? {
-                  ...platformError(err),
-                  title: "That email is already on the team.",
-                }
-              : platformError(err),
+            platformError(err, {
+              duplicate: "That email is already on the team.",
+            }),
           ),
       },
     );
