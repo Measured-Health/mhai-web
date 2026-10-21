@@ -553,8 +553,16 @@ export function createMockPlatform({
             : text(body.client_secret, 500);
         if (secret !== null && secret.length < 8) invalid();
         if (enabled && !s.secret_saved && secret === null) invalid();
+        /** Any change to how sign-in works voids the last test. */
+        const changed =
+          sign_in_url !== s.sign_in_url ||
+          issuer !== s.issuer ||
+          client_id !== s.client_id ||
+          allowed_domains.join(",") !== s.allowed_domains.join(",") ||
+          secret !== null;
         r.sso = {
           ...s,
+          last_test: changed ? null : s.last_test,
           enabled,
           sign_in_url,
           issuer,

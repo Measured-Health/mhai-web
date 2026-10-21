@@ -34,6 +34,8 @@ const type = async (label: string, v: string) => {
 };
 const save = () =>
   userEvent.click(screen.getByRole("button", { name: "Save" }));
+const confirmSave = () =>
+  userEvent.click(screen.getByRole("button", { name: "Save and switch off" }));
 const sw = () => screen.getByRole("switch", { name: "Single sign-on" });
 
 async function fillRiverside() {
@@ -96,6 +98,7 @@ describe("the single sign-on section", () => {
     await screen.findByText("Saved · ends ··3f2a");
     await type("Client ID", "measured-health-2");
     await save();
+    await confirmSave();
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
     expect("client_secret" in spy.mock.calls[0]![1]).toBe(false);
     expect(spy.mock.calls[0]![1].version).toBe(1);
@@ -123,10 +126,13 @@ describe("the single sign-on section", () => {
     await screen.findByText("Saved · ends ··3f2a");
     await userEvent.click(sw());
     await userEvent.click(screen.getByRole("button", { name: "Switch off" }));
+    await waitFor(async () =>
+      expect((await api.getSso("h_northgate")).enabled).toBe(false),
+    );
     await type("Client ID", "other");
     await save();
     await waitFor(async () =>
-      expect((await api.getSso("h_northgate")).client_id).toBe("other"),
+      expect((await api.getSso("h_northgate")).last_test).toBeNull(),
     );
     await waitFor(() => expect(sw()).toBeDisabled());
     expect(screen.getByText("Test sign-in first.")).toBeVisible();
@@ -149,10 +155,15 @@ describe("the single sign-on section", () => {
     await userEvent.click(
       within(d).getByRole("button", { name: "Switch off" }),
     );
-    await save();
     await waitFor(async () =>
       expect((await api.getSso("h_northgate")).enabled).toBe(false),
     );
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]![1]).toMatchObject({
+      enabled: false,
+      version: 1,
+    });
+    expect("client_secret" in spy.mock.calls[0]![1]).toBe(false);
   });
 
   it("cancelling the switch-off dialog leaves it on", async () => {
@@ -166,6 +177,86 @@ describe("the single sign-on section", () => {
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Keep it on" }));
     expect(sw()).toBeChecked();
+  });
+
+  it("saving edits to a live set-up asks before switching it off", async () => {
+    const spy = vi.spyOn(api, "saveSso");
+    renderWithAuth(
+      <SsoSection hospitalId="h_northgate" hospitalName="Northgate General" />,
+    );
+    await screen.findByText("Saved · ends ··3f2a");
+    expect(
+      screen.queryByText(/Saving changes switches single sign-on off/),
+    ).toBeNull();
+    await type("Client ID", "other");
+    expect(
+      screen.getByText(
+        "Saving changes switches single sign-on off until you test them.",
+      ),
+    ).toBeVisible();
+    await save();
+    const d = screen.getByRole("dialog", {
+      name: "Save and switch off single sign-on?",
+    });
+    expect(
+      within(d).getByText(
+        "Saving these changes switches single sign-on off until you test them. Staff at Northgate General will sign in with email and password instead.",
+      ),
+    ).toBeVisible();
+    expect(within(d).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    expect(spy).not.toHaveBeenCalled();
+    await userEvent.click(within(d).getByRole("button", { name: "Cancel" }));
+    expect(spy).not.toHaveBeenCalled();
+    expect((await api.getSso("h_northgate")).enabled).toBe(true);
+    await save();
+    await confirmSave();
+    await waitFor(async () => {
+      const r = await api.getSso("h_northgate");
+      expect(r.enabled).toBe(false);
+      expect(r.client_id).toBe("other");
+    });
+  });
+
+  it("a live address can't be blanked", async () => {
+    const spy = vi.spyOn(api, "saveSso");
+    renderWithAuth(<SsoSection hospitalId="h_northgate" />);
+    await screen.findByText("Saved · ends ··3f2a");
+    await userEvent.clear(screen.getByLabelText("Sign-in address"));
+    await save();
+    expect(await screen.findByText("Enter the sign-in address.")).toBeVisible();
+    expect(
+      screen.queryByRole("dialog", { name: /Save and switch off/ }),
+    ).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("an unsaved switch-on says to save, and switch-off with edits saves them", async () => {
+    renderWithAuth(<SsoSection hospitalId="h_northgate" />);
+    await screen.findByText("Saved · ends ··3f2a");
+    await type("Client ID", "other");
+    await userEvent.click(sw());
+    expect(
+      screen.getByRole("button", { name: "Switch off and save" }),
+    ).toBeVisible();
+  });
+
+  it("the secret does not linger in the mutation cache after a failed save", async () => {
+    const { QueryClient } = await import("@tanstack/react-query");
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    vi.spyOn(api, "saveSso").mockRejectedValueOnce(
+      new ApiError(422, "invalid"),
+    );
+    renderWithAuth(<SsoSection hospitalId="h_riverside" />, { queryClient });
+    await fillRiverside();
+    await save();
+    await screen.findByText("Check the details and try again.");
+    await waitFor(() =>
+      expect(
+        JSON.stringify(queryClient.getMutationCache().getAll()),
+      ).not.toContain(SECRET),
+    );
   });
 
   it("a http:// sign-in address is refused", async () => {
@@ -203,6 +294,7 @@ describe("the single sign-on section", () => {
       new ApiError(409, "conflict"),
     );
     await save();
+    await confirmSave();
     expect(await screen.findByText("Changed by someone else")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Reload" }));
     await waitFor(() =>

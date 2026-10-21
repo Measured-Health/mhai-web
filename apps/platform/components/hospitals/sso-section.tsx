@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "@mhai/api-client/errors";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
 import { platformError } from "@/lib/errors";
@@ -15,7 +15,6 @@ import { useToast } from "@mhai/ui/toast";
 import { CouldntLoad } from "../states/couldnt-load";
 import { Loading } from "../states/loading";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
-import { dateLabel } from "./format";
 
 const HTTPS = "Use an address that starts with https://.";
 const DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
@@ -23,7 +22,21 @@ const DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 type Field = "url" | "clientId" | "issuer" | "domains" | "secret";
 const ORDER: Field[] = ["url", "clientId", "issuer", "domains", "secret"];
 
-const when = (iso: string) => `${dateLabel(iso)}, ${iso.slice(11, 16)}`;
+/** In the viewer's own time zone: "20 Oct 2026, 10:42". */
+const when = (iso: string) => {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const time = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return `${date}, ${time}`;
+};
 const split = (t: string) => [
   ...new Set(
     t
@@ -64,8 +77,6 @@ export function SsoSection({
 }) {
   const { user } = useAuth();
   const q = useSso(hospitalId);
-  // Any saved change since the last passing test: switching on needs a new one.
-  const [changedSinceTest, setChangedSinceTest] = useState(false);
   // Bumped by Reload so the form starts again from the server's copy.
   const [fresh, setFresh] = useState(0);
   const admin = isPlatformAdmin(user);
@@ -78,8 +89,6 @@ export function SsoSection({
         hospitalId={hospitalId}
         hospitalName={hospitalName}
         sso={q.data}
-        changedSinceTest={changedSinceTest}
-        setChangedSinceTest={setChangedSinceTest}
         onReload={async () => {
           await q.refetch();
           setFresh((n) => n + 1);
@@ -139,15 +148,11 @@ function Editor({
   hospitalId,
   hospitalName,
   sso,
-  changedSinceTest,
-  setChangedSinceTest,
   onReload,
 }: {
   hospitalId: string;
   hospitalName?: string;
   sso: SsoOut;
-  changedSinceTest: boolean;
-  setChangedSinceTest(v: boolean): void;
   onReload(): Promise<void>;
 }) {
   const id = useId();
@@ -169,7 +174,9 @@ function Editor({
   } | null>(null);
   const [testFailure, setTestFailure] = useState<string | null>(null);
   const [confirmOff, setConfirmOff] = useState(false);
-  const [focusReq, setFocusReq] = useState<{ k: Field } | null>(null);
+  const [focusReq, setFocusReq] = useState<{ k: string } | null>(null);
+  const [confirmSave, setConfirmSave] = useState(false);
+  const cancelSave = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (focusReq) document.getElementById(`${id}-${focusReq.k}`)?.focus();
   }, [focusReq, id]);
@@ -181,8 +188,9 @@ function Editor({
     issuer.trim() !== (sso.issuer ?? "") ||
     split(domains).join(",") !== sso.allowed_domains.join(",") ||
     secret !== "";
-  const tested =
-    sso.last_test?.ok === true && !changedSinceTest && !configDirty;
+  // The server clears its last test whenever the set-up changes, so a passing
+  // one is about the saved copy; unsaved edits have not been tested.
+  const tested = sso.last_test?.ok === true && !configDirty;
   const lockedOff = !enabled && !tested;
 
   const edit = (k: Field, set: (v: string) => void) => (v: string) => {
@@ -190,38 +198,51 @@ function Editor({
     setErrors((p) => ({ ...p, [k]: undefined }));
   };
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (save.isPending || net.offline) return;
-    setFailure(null);
-    // Changing the set-up switches it off until it has been tested again.
-    const wantOn = enabled && !configDirty;
+  /** Field checks; `requireAll` is true when the result will be switched on. */
+  const check = (requireAll: boolean) => {
     const errs: Partial<Record<Field, string>> = {};
     const u = url.trim();
     const iss = issuer.trim();
     if (u && !isHttps(u)) errs.url = HTTPS;
-    else if (wantOn && !u) errs.url = "Enter the sign-in address.";
+    else if (requireAll && !u) errs.url = "Enter the sign-in address.";
     if (iss && !isHttps(iss)) errs.issuer = HTTPS;
-    else if (wantOn && !iss) errs.issuer = "Enter the issuer.";
-    if (wantOn && !clientId.trim()) errs.clientId = "Enter the client ID.";
+    else if (requireAll && !iss) errs.issuer = "Enter the issuer.";
+    if (requireAll && !clientId.trim()) errs.clientId = "Enter the client ID.";
     if (split(domains).some((d) => !DOMAIN.test(d)))
       errs.domains = "Use domains like hospital.org, separated by commas.";
     if (secret !== "" && secret.length < 8)
       errs.secret = "Use at least 8 characters.";
-    if (Object.keys(errs).length) {
-      setErrors(errs);
-      const first = ORDER.find((k) => errs[k]);
-      if (first) setFocusReq({ k: first });
-      return;
-    }
-    setErrors({});
+    setErrors(errs);
+    const first = ORDER.find((k) => errs[k]);
+    if (first) setFocusReq({ k: first });
+    return !first;
+  };
+
+  /** Edits to a live set-up switch it off until they are tested. */
+  const switchesOff = sso.enabled && enabled && configDirty;
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (save.isPending || net.offline) return;
+    setFailure(null);
+    if (!check(enabled)) return;
+    if (switchesOff) return setConfirmSave(true);
+    send(false);
+  };
+
+  /** Sends the draft; `off` saves it switched off whatever the switch says. */
+  const send = (off: boolean) => {
+    if (save.isPending || net.offline) return;
+    setFailure(null);
+    if (!check(off ? false : enabled)) return;
+    // Changing the set-up switches it off until it has been tested again.
+    const sendOn = !off && enabled && !configDirty;
     const sentSecret = secret;
-    const changed = configDirty;
     const input: SsoIn = {
-      enabled: wantOn,
-      sign_in_url: u,
+      enabled: sendOn,
+      sign_in_url: url.trim(),
       client_id: clientId.trim(),
-      issuer: iss,
+      issuer: issuer.trim(),
       allowed_domains: split(domains),
       version: sso.version,
       // Only a new secret is sent, never an empty one.
@@ -231,17 +252,15 @@ function Editor({
     setSecret("");
     setReplacing(false);
     save.mutate(input, {
-      onSuccess: () => {
-        if (changed) setChangedSinceTest(true);
+      onSuccess: () =>
         toast.show({
           title:
-            enabled && !wantOn
+            sso.enabled && !off && !sendOn
               ? "Saved. Single sign-on is off until you test it."
               : "Saved.",
           tone: "ok",
           live: "polite",
-        });
-      },
+        }),
       onError: (err) => {
         if (err instanceof ApiError && err.code === "invalid")
           return setFailure({
@@ -257,9 +276,6 @@ function Editor({
   const runTest = () => {
     setTestFailure(null);
     test.mutate(undefined, {
-      onSuccess: (r) => {
-        if (r.last_test?.ok) setChangedSinceTest(false);
-      },
       onError: (err) =>
         setTestFailure(
           err instanceof ApiError && err.code === "conflict"
@@ -330,6 +346,7 @@ function Editor({
   };
 
   const lockedId = `${id}-locked`;
+  const staff = `Staff at ${hospitalName ?? "this hospital"} will sign in with email and password instead.`;
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
       {failure && (
@@ -354,12 +371,21 @@ function Editor({
           checked={enabled}
           disabled={lockedOff}
           describedBy={lockedOff ? lockedId : undefined}
-          onChange={(v) => (v ? setEnabled(true) : setConfirmOff(true))}
+          onChange={(v) =>
+            v
+              ? setEnabled(true)
+              : sso.enabled
+                ? setConfirmOff(true)
+                : setEnabled(false)
+          }
         />
         {lockedOff && (
           <p id={lockedId} className="text-[13px] text-ink-3">
             {SSO_TEST_FIRST}
           </p>
+        )}
+        {enabled && !sso.enabled && (
+          <p className="text-[13px] text-ink-3">Save to switch on.</p>
         )}
       </div>
       {field("url", "Sign-in address", url, setUrl, {
@@ -388,6 +414,7 @@ function Editor({
               onClick={() => {
                 setSecret("");
                 setReplacing(false);
+                setFocusReq({ k: "replace" });
               }}
             >
               Keep current secret
@@ -404,7 +431,11 @@ function Editor({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setReplacing(true)}
+              id={`${id}-replace`}
+              onClick={() => {
+                setReplacing(true);
+                setFocusReq({ k: "secret" });
+              }}
             >
               Replace secret
             </Button>
@@ -415,7 +446,16 @@ function Editor({
         <p className="text-[14px]" aria-live="polite">
           <TestResult t={sso.last_test} />
         </p>
-        {testFailure && <p className="text-[13px] text-bad">{testFailure}</p>}
+        {testFailure && (
+          <p role="alert" className="text-[13px] text-bad">
+            {testFailure}
+          </p>
+        )}
+        {switchesOff && (
+          <p className="text-[13px] text-ink-2">
+            Saving changes switches single sign-on off until you test them.
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="ghost"
@@ -452,9 +492,7 @@ function Editor({
         onClose={() => setConfirmOff(false)}
         title="Switch off single sign-on?"
       >
-        <p className="mb-5 text-[14px] text-ink-2">
-          {`Staff at ${hospitalName ?? "this hospital"} will sign in with email and password instead.`}
-        </p>
+        <p className="mb-5 text-[14px] text-ink-2">{staff}</p>
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="ghost" onClick={() => setConfirmOff(false)}>
             Keep it on
@@ -462,11 +500,39 @@ function Editor({
           <Button
             variant="danger"
             onClick={() => {
-              setEnabled(false);
               setConfirmOff(false);
+              send(true);
             }}
           >
-            Switch off
+            {configDirty ? "Switch off and save" : "Switch off"}
+          </Button>
+        </div>
+      </Dialog>
+      <Dialog
+        open={confirmSave}
+        onClose={() => setConfirmSave(false)}
+        title="Save and switch off single sign-on?"
+        initialFocus={cancelSave}
+      >
+        <p className="mb-5 text-[14px] text-ink-2">
+          {`Saving these changes switches single sign-on off until you test them. ${staff}`}
+        </p>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            ref={cancelSave}
+            variant="ghost"
+            onClick={() => setConfirmSave(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              setConfirmSave(false);
+              send(false);
+            }}
+          >
+            Save and switch off
           </Button>
         </div>
       </Dialog>

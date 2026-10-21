@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useKeyedMutation } from "@mhai/api-client/keyed-mutation";
 import { getPlatformClient } from "../api/client";
@@ -18,7 +19,7 @@ export function useSso(id: string) {
 /** Saves the set-up; `client_secret` goes only when the user typed one. */
 export function useSaveSso(id: string) {
   const qc = useQueryClient();
-  return useKeyedMutation(
+  const m = useKeyedMutation(
     (body: SsoIn, key) =>
       getPlatformClient().saveSso(id, body, { idempotencyKey: key }),
     {
@@ -27,7 +28,14 @@ export function useSaveSso(id: string) {
         void qc.invalidateQueries({ queryKey: queryKeys.hospitals });
       },
     },
+    // The request holds the secret: keep it out of the cache once settled.
+    { gcTime: 0 },
   );
+  const { isSuccess, isError, reset } = m;
+  useEffect(() => {
+    if (isSuccess || isError) reset();
+  }, [isSuccess, isError, reset]);
+  return m;
 }
 
 /** Tries the saved set-up and records the result. */
