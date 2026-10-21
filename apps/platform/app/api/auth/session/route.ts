@@ -1,10 +1,5 @@
 import { forbidden, json, sameOrigin, sessionExpired } from "@/lib/server/http";
-import {
-  clearSession,
-  endSession,
-  readSession,
-  touchSession,
-} from "@/lib/server/session";
+import { endSession, readSession, touchSession } from "@/lib/server/session";
 
 /** The signed-in user and owed steps. Reading it doesn't count as activity. */
 export async function GET() {
@@ -24,8 +19,8 @@ export async function POST(req: Request) {
   if (!sameOrigin(req)) return forbidden();
   const s = await readSession();
   if (!s) {
-    // No upstream call here: a keep-alive never touches the API.
-    await clearSession();
+    // As GET: the idle token is only used to revoke itself, then cleared.
+    await endSession();
     return sessionExpired();
   }
   await touchSession(s);

@@ -340,17 +340,25 @@ describe("keep-alive", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("keep-alive on an idle session is 401 and never calls upstream", async () => {
+  it("keep-alive on an idle session is 401, revokes the token and calls nothing else upstream", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(T("09:00"));
     await signedIn();
     fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(reply());
     vi.setSystemTime(Date.parse("2026-10-20T09:15:01Z"));
     const res = await keepAlive(post());
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ code: "session_expired" });
     expect(jar.values.get(SESSION_COOKIE)).toBeUndefined();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(jar.values.get(MFA_COOKIE)).toBeUndefined();
+    expect(calls()).toHaveLength(1);
+    const [url, init] = calls()[0];
+    expect(url).toBe("http://api.test/api/v1/auth/logout");
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("Authorization")).toBe(
+      "Bearer tok-123",
+    );
   });
 
   it("keep-alive cross-origin is 403", async () => {
