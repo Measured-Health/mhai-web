@@ -9,7 +9,9 @@ import { CouldntLoad } from "../states/couldnt-load";
 import { Loading } from "../states/loading";
 import { DetailsSection } from "./details-section";
 import { FirstAdminSection } from "./first-admin-section";
+import { DangerZone } from "./danger-zone";
 import { RecentActions } from "./recent-actions";
+import { RemovalPanel } from "./removal-panel";
 import { SsoSection } from "./sso-section";
 import { StatusSection } from "./status-section";
 
@@ -53,6 +55,7 @@ export function HospitalView({ id }: { id: string }) {
                 canAct={canAct}
                 onGone={() => void refetch()}
               />
+              <RemovalPanel hospital={h} />
               <DetailsSection
                 hospital={h}
                 canEdit={canAct && h.status !== "removed"}
@@ -65,6 +68,7 @@ export function HospitalView({ id }: { id: string }) {
               />
               <SsoSection hospitalId={h.id} hospitalName={h.name} />
               <RecentActions hospitalId={h.id} />
+              <DangerZone hospital={h} />
             </>
           )}
         </div>
