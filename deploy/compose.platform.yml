@@ -1,0 +1,23 @@
+# The platform admin app (platforms.measured-health.org), behind an IP allow
+# list in nginx. Lives at /srv/mhai-web-platform on the instance, separate from
+# the demo's /srv/mhai-web so the demo deploy never depends on this app's
+# secret. PLATFORM_SESSION_SECRET (openssl rand -base64 48) lives in
+# /srv/mhai-web-platform/.env, mode 600; compose reads it from there.
+
+name: mhai-web-platform
+
+services:
+  platform:
+    image: ${PLATFORM_IMAGE:-ghcr.io/measured-health/mhai-web-platform:latest}
+    # The workflow pulls before every `up`, so a plain restart needs no GHCR login.
+    pull_policy: missing
+    restart: unless-stopped
+    # Loopback only: nginx is the only way in.
+    ports:
+      - "127.0.0.1:8091:8080"
+    mem_limit: 256m
+    environment:
+      PLATFORM_SESSION_SECRET: ${PLATFORM_SESSION_SECRET:?set in /srv/mhai-web-platform/.env}
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
