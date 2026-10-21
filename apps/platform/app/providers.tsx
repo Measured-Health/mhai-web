@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { IdleGuard } from "@/components/states/idle-guard";
 import { AuthProvider } from "@/lib/auth/auth-context";
-import { READ_RETRY } from "@mhai/api-client/network";
+import { QUERY_DEFAULTS } from "@/lib/queries/keys";
 import { ToastProvider } from "@mhai/ui/toast";
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -11,10 +11,8 @@ export function Providers({ children }: { children: ReactNode }) {
   const [qc] = useState(
     () =>
       new QueryClient({
-        defaultOptions: {
-          // A 4xx won't change on retry (and a 401 has already signed out).
-          queries: { ...READ_RETRY, refetchOnWindowFocus: false },
-        },
+        // A 4xx won't change on retry (and a 401 has already signed out).
+        defaultOptions: QUERY_DEFAULTS,
       }),
   );
   return (

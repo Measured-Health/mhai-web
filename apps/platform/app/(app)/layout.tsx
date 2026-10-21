@@ -1,6 +1,10 @@
 import { AuthGate } from "@/components/auth/auth-gate";
+import { AppShell } from "@/components/shell/app-shell";
 
-// The shell (Task 8) goes inside the gate.
 export default function AppLayout({ children }: LayoutProps<"/">) {
-  return <AuthGate>{children}</AuthGate>;
+  return (
+    <AuthGate>
+      <AppShell>{children}</AppShell>
+    </AuthGate>
+  );
 }
