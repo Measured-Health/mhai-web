@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { Button } from "@mhai/ui/button";
 import { roleLabel, Avatar } from "../shell/account-menu";
 import { TopBar } from "../shell/top-bar";
-import { useNeedsConnection } from "../states/offline-strip";
+import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { BackupCodesDialog } from "./backup-codes-dialog";
 import { ChangePasswordDialog } from "./change-password-dialog";
 import { DevicesSection } from "./devices-section";
@@ -68,8 +68,7 @@ export function AccountView() {
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={net.offline}
-                title={net.props.title}
+                {...net.props}
                 onClick={() => setPwOpen(true)}
               >
                 Change password
@@ -87,8 +86,7 @@ export function AccountView() {
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={net.offline}
-                title={net.props.title}
+                {...net.props}
                 onClick={() => setCodesOpen(true)}
               >
                 New backup codes
@@ -96,6 +94,7 @@ export function AccountView() {
             </div>
           </section>
 
+          <OfflineNote />
           <DevicesSection />
         </div>
       </div>

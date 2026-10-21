@@ -5,7 +5,7 @@ import type { AuthError } from "@/lib/auth/types";
 import { passwordError } from "@mhai/api-client/password-rules";
 import { inputClass, PasswordFields } from "@mhai/ui/auth/password-fields";
 import { AuthErrorBanner, errorCode } from "../auth/auth-error";
-import { useNeedsConnection } from "../states/offline-strip";
+import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { Button } from "@mhai/ui/button";
 import { Dialog } from "@mhai/ui/dialog";
 import { useToast } from "@mhai/ui/toast";
@@ -19,7 +19,7 @@ export function ChangePasswordDialog({
 }) {
   const { client, user, signOut } = useAuth();
   const toast = useToast();
-  const net = useNeedsConnection();
+  const net = useNeedsConnection("pw-offline");
   const id = useId();
   const identity = user?.email ?? null;
   const [current, setCurrent] = useState("");
@@ -89,15 +89,12 @@ export function ChangePasswordDialog({
           identity={identity}
           showErrors={showErrors}
         />
+        <OfflineNote id="pw-offline" />
         <div className="mt-1 flex justify-end gap-2">
           <Button variant="ghost" onClick={close}>
             Cancel
           </Button>
-          <Button
-            type="submit"
-            disabled={busy || net.offline}
-            title={net.props.title}
-          >
+          <Button type="submit" {...net.props} disabled={busy || net.offline}>
             Save password
           </Button>
         </div>

@@ -10,7 +10,7 @@ import { useNow } from "@mhai/ui/hooks/use-now";
 import { AuthErrorBanner, errorCode } from "../auth/auth-error";
 import { CouldntLoad } from "../states/couldnt-load";
 import { Loading } from "../states/loading";
-import { useNeedsConnection } from "../states/offline-strip";
+import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { Button } from "@mhai/ui/button";
 import { Dialog } from "@mhai/ui/dialog";
 
@@ -30,20 +30,25 @@ export function DevicesSection() {
   const net = useNeedsConnection();
   const devices = useDevices();
   const [confirm, setConfirm] = useState(false);
+  const [signingOut, setSigningOut] = useState<string | null>(null);
+  const confirmNet = useNeedsConnection("all-offline");
   const [failed, setFailed] = useState<AuthError | null>(null);
   const [failedOne, setFailedOne] = useState<AuthError | null>(null);
 
   const signOutOne = async (id: string) => {
+    if (signingOut) return;
+    setSigningOut(id);
     setFailedOne(null);
     try {
       await client.signOutDevice(id);
+      await qc.invalidateQueries({ queryKey: queryKeys.devices });
     } catch (e) {
       const ae = errorCode(e);
       if (ae.code === "session_expired") return void signOut("expired");
       setFailedOne(ae);
-      return;
+    } finally {
+      setSigningOut(null);
     }
-    await qc.invalidateQueries({ queryKey: queryKeys.devices });
   };
   const everywhere = async () => {
     setConfirm(false);
@@ -121,8 +126,8 @@ export function DevicesSection() {
                   variant="ghost"
                   size="sm"
                   aria-label={`Sign out ${d.label}`}
-                  disabled={net.offline}
-                  title={net.props.title}
+                  {...net.props}
+                  disabled={net.offline || signingOut === d.id}
                   onClick={() => void signOutOne(d.id)}
                 >
                   Sign out
@@ -134,8 +139,7 @@ export function DevicesSection() {
         <Button
           variant="danger"
           className="mt-3"
-          disabled={net.offline}
-          title={net.props.title}
+          {...net.props}
           onClick={() => setConfirm(true)}
         >
           Sign out everywhere
@@ -150,11 +154,16 @@ export function DevicesSection() {
         <p className="mb-[18px] text-[14.5px] text-ink-2">
           You&apos;ll be signed out on every device, including this one.
         </p>
+        <OfflineNote id="all-offline" />
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setConfirm(false)}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={() => void everywhere()}>
+          <Button
+            variant="danger"
+            {...confirmNet.props}
+            onClick={() => void everywhere()}
+          >
             Sign out everywhere
           </Button>
         </div>
