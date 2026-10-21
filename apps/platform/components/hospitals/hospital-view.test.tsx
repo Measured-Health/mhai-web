@@ -467,6 +467,12 @@ describe("the hospital page", () => {
     expect(
       within(d).getByRole("radio", { name: "Contract ended" }),
     ).toHaveFocus();
-    expect(document.querySelector("dialog")).toBeNull();
+    // The step-up is only the sheet: no <dialog> (open or closed) carries
+    // its title. Other sections may keep their own closed dialogs.
+    expect(
+      screen.getAllByRole("dialog", { name: DEACTIVATE, hidden: true }),
+    ).toEqual([d]);
+    for (const el of document.querySelectorAll("dialog"))
+      expect(el.textContent).not.toContain(DEACTIVATE);
   });
 });

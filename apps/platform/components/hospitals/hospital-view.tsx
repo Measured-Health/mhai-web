@@ -10,6 +10,7 @@ import { Loading } from "../states/loading";
 import { DetailsSection } from "./details-section";
 import { FirstAdminSection } from "./first-admin-section";
 import { RecentActions } from "./recent-actions";
+import { SsoSection } from "./sso-section";
 import { StatusSection } from "./status-section";
 
 /**
@@ -62,7 +63,7 @@ export function HospitalView({ id }: { id: string }) {
                 canAct={canAct}
                 onGone={() => void refetch()}
               />
-              {/* Single sign-on (Task 12): <SsoSection hospitalId={h.id} /> goes here. */}
+              <SsoSection hospitalId={h.id} hospitalName={h.name} />
               <RecentActions hospitalId={h.id} />
             </>
           )}
