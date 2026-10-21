@@ -21,7 +21,7 @@ import { POST as confirm } from "./mfa/setup/confirm/route";
 import { POST as newCodes } from "./mfa/recovery-codes/route";
 import { POST as password } from "./password/route";
 import { POST as terms } from "./terms/route";
-import { GET as session } from "./session/route";
+import { GET as session, POST as keepAlive } from "./session/route";
 import { POST as logout } from "./logout/route";
 import { GET as devices } from "./devices/route";
 import { DELETE as dropDevice } from "./devices/[id]/route";
@@ -127,6 +127,7 @@ describe("login", () => {
     await signedIn(); // an earlier platform session in the same browser
     fetchMock.mockResolvedValueOnce(reply(CLINICIAN));
     fetchMock.mockResolvedValueOnce(reply());
+    fetchMock.mockResolvedValueOnce(reply());
     const res = await login(
       post({ login: "c@hospital.example", password: "pw" }),
     );
@@ -140,6 +141,38 @@ describe("login", () => {
     expect(new Headers(init.headers).get("Authorization")).toBe(
       "Bearer tok-clin",
     );
+    // The earlier platform session's token is revoked too.
+    const revoked = calls()
+      .filter(([u]) => u.endsWith("/auth/logout"))
+      .map(([, i]) => new Headers(i.headers).get("Authorization"));
+    expect(revoked).toEqual(["Bearer tok-123", "Bearer tok-clin"]);
+  });
+
+  it("a new sign-in revokes the platform session it replaces", async () => {
+    await signedIn();
+    fetchMock.mockResolvedValueOnce(
+      reply({ ...LOGIN_OK, access_token: "tok-456" }),
+    );
+    fetchMock.mockResolvedValueOnce(reply());
+    const res = await login(post({ login: ADMIN.email, password: "pw" }));
+    expect(res.status).toBe(200);
+    const [url, init] = lastCall();
+    expect(url).toBe("http://api.test/api/v1/auth/logout");
+    expect(new Headers(init.headers).get("Authorization")).toBe(
+      "Bearer tok-123",
+    );
+    expect(await readSession()).toMatchObject({ token: "tok-456" });
+  });
+
+  it.each([
+    [{ code: "forbidden" }, 403],
+    [{ code: "not_platform" }, 403],
+  ])("maps an upstream refusal %o to 403 not_platform", async (p, st) => {
+    fetchMock.mockResolvedValueOnce(reply(p, st));
+    const res = await login(post({ login: "a", password: "pw" }));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ code: "not_platform" });
+    expect(jar.values.get(SESSION_COOKIE)).toBeUndefined();
   });
 
   it("login never sends a device token", async () => {
@@ -215,6 +248,22 @@ describe("mfa", () => {
     expect(lastCall()[0]).toBe("http://api.test/api/v1/auth/logout");
   });
 
+  it("passes too many wrong codes through as 429 mfa_locked", async () => {
+    await pending();
+    fetchMock.mockResolvedValueOnce(reply({ code: "mfa_locked" }, 429));
+    const res = await mfa(post({ code: "000000", backup: false }));
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ code: "mfa_locked" });
+  });
+
+  it("maps an upstream not_platform after two-step to 403", async () => {
+    await pending();
+    fetchMock.mockResolvedValueOnce(reply({ code: "not_platform" }, 403));
+    const res = await mfa(post({ code: "123456", backup: false }));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ code: "not_platform" });
+  });
+
   it("says the step expired when nothing is held", async () => {
     const res = await mfa(post({ code: "123456", backup: false }));
     expect(res.status).toBe(401);
@@ -270,6 +319,59 @@ describe("session", () => {
     expect((await newCodes(post())).status).toBe(200);
     vi.setSystemTime(Date.parse("2026-10-20T09:28:00Z"));
     expect((await session()).status).toBe(200);
+  });
+});
+
+describe("keep-alive", () => {
+  const T = (hm: string) => Date.parse(`2026-10-20T${hm}:00Z`);
+
+  it("keep-alive moves lastSeenAt and returns 204", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(T("09:00"));
+    await signedIn();
+    fetchMock.mockReset();
+    vi.setSystemTime(T("09:14"));
+    const res = await keepAlive(post());
+    expect(res.status).toBe(204);
+    expect(await res.text()).toBe("");
+    expect((await readSession())?.lastSeenAt).toBe(T("09:14"));
+    vi.setSystemTime(T("09:28"));
+    expect(await readSession()).not.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keep-alive on an idle session is 401 and never calls upstream", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(T("09:00"));
+    await signedIn();
+    fetchMock.mockReset();
+    vi.setSystemTime(Date.parse("2026-10-20T09:15:01Z"));
+    const res = await keepAlive(post());
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ code: "session_expired" });
+    expect(jar.values.get(SESSION_COOKIE)).toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keep-alive cross-origin is 403", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(T("09:00"));
+    await signedIn();
+    vi.setSystemTime(T("09:10"));
+    const res = await keepAlive(post(undefined, "https://evil.test"));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ code: "forbidden" });
+    expect((await readSession())?.lastSeenAt).toBe(T("09:00"));
+  });
+
+  it("viewing devices counts as activity", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(T("09:00"));
+    await signedIn();
+    vi.setSystemTime(T("09:14"));
+    fetchMock.mockResolvedValueOnce(reply([]));
+    expect((await devices()).status).toBe(200);
+    expect((await readSession())?.lastSeenAt).toBe(T("09:14"));
   });
 });
 

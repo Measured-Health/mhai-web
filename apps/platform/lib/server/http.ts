@@ -58,6 +58,7 @@ export type AuthErrorCode =
   | "mfa_expired"
   | "mfa_locked"
   | "rate_limited"
+  | "not_platform"
   | "weak_password"
   | "wrong_password"
   | "session_expired"
@@ -77,6 +78,14 @@ export function authCode(
       return { status: 429, code: "mfa_locked" };
     case "rate_limited":
       return { status: 429, code: "rate_limited" };
+    case "not_platform":
+      return { status: 403, code: "not_platform" };
+    case "forbidden":
+      // Under the platform audience, a refused sign-in means the account
+      // can't use this app.
+      return ctx === "login" || ctx === "mfa"
+        ? { status: 403, code: "not_platform" }
+        : { status: 503, code: "unavailable" };
     case "mfa_invalid":
       return { status: 401, code: "mfa_invalid" };
     case "validation_failed":

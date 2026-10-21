@@ -1,6 +1,6 @@
 import type { ApiSession } from "@/lib/api/auth-contract";
 import { api, authCode, json, sessionExpired } from "@/lib/server/http";
-import { readSession } from "@/lib/server/session";
+import { readSession, touchSession } from "@/lib/server/session";
 
 interface Device {
   id: string;
@@ -25,6 +25,8 @@ function toDevice(s: ApiSession): Device {
 export async function GET() {
   const s = await readSession();
   if (!s) return sessionExpired();
+  // Viewing devices counts as activity.
+  await touchSession(s);
   try {
     const r = await api<ApiSession[]>("/auth/sessions", { token: s.token });
     return json(200, r.map(toDevice));

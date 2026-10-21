@@ -125,6 +125,11 @@ describe("platform session", () => {
     await expect(writeSession(S, T0)).rejects.toThrow(
       /PLATFORM_SESSION_SECRET/,
     );
+    vi.stubEnv("PLATFORM_SESSION_SECRET", undefined);
+    await expect(writeSession(S, T0)).rejects.toThrow(
+      /PLATFORM_SESSION_SECRET/,
+    );
+    await expect(readSession(T0)).rejects.toThrow(/PLATFORM_SESSION_SECRET/);
   });
 
   it("stepsFor always owes mfa without two-step", () => {

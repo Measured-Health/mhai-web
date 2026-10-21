@@ -191,6 +191,11 @@ export async function startSession(
   )
     throw new Error("Malformed sign-in response");
   const user = toPlatformUser(r.user);
+  // A sign-in replaces any earlier platform session in this browser: revoke
+  // its token upstream so it can't outlive the cookie that held it.
+  const prev = await rawSession().catch(() => null);
+  if (prev && prev.token !== r.access_token && prev.expiresAt > now)
+    await revoke(prev.token);
   if (user.roles.length === 0) {
     await revoke(r.access_token);
     await clearSession();
