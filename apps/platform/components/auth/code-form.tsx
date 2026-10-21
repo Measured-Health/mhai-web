@@ -1,10 +1,10 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { homeFor, useAuth } from "@/lib/auth/auth-context";
 import { useRedirect } from "@/lib/auth/use-redirect";
-import { AuthError } from "@/lib/auth/types";
+import type { AuthError } from "@/lib/auth/types";
 import {
   BACKUP_FAILED_BODY,
   BackupCodeInput,
@@ -30,6 +30,11 @@ export function CodeForm() {
   const [busy, setBusy] = useState(false);
   const [focusKey, setFocusKey] = useState(0);
   const backupRef = useRef<HTMLInputElement>(null);
+  // After the error banner has taken focus (a child effect runs first), the
+  // backup field takes it back, so the next code can be typed at once.
+  useEffect(() => {
+    if (focusKey && backup) backupRef.current?.focus();
+  }, [focusKey, backup]);
 
   const target =
     auth.status === "signed_in"
@@ -46,15 +51,15 @@ export function CodeForm() {
     setBusy(true);
     setError(null);
     try {
-      const r = await auth.verifyCode(value, { backup });
-      if (r.status === "not_platform") setError(new AuthError("not_platform"));
+      // Signed in: home. Turned away (not_platform): signed out, and the
+      // sign-in page says why.
+      await auth.verifyCode(value, { backup });
     } catch (err) {
       const ae = errorCode(err);
       setError(ae);
       // Whatever went wrong, the code is never left on screen to resend.
       setCode("");
-      if (backup) backupRef.current?.focus();
-      else setFocusKey((k) => k + 1);
+      setFocusKey((k) => k + 1);
     } finally {
       setBusy(false);
     }
@@ -77,7 +82,7 @@ export function CodeForm() {
           error={error}
           copy={wrongBackup ? BACKUP_FAILED : undefined}
         >
-          {(error.code === "mfa_expired" || error.code === "not_platform") && (
+          {error.code === "mfa_expired" && (
             <Link
               className="mt-1.5 inline-block font-semibold underline"
               href="/sign-in"

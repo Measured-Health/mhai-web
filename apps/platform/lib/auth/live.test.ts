@@ -119,4 +119,32 @@ describe("live auth client", () => {
       "POST /api/auth/logout",
     ]);
   });
+
+  it("signs out everywhere: tries every device, always signs this one out, then reports a failure", async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/auth/devices" && init?.method === "GET")
+        return Response.json([
+          { id: "this", current: true },
+          { id: "a_1", current: false },
+          { id: "b_2", current: false },
+        ]);
+      if (url === "/api/auth/devices/a_1")
+        return Response.json({ code: "unavailable" }, { status: 503 });
+      return new Response(null, { status: 204 });
+    });
+    await expect(
+      createLiveAuthClient({
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }).signOutEverywhere(),
+    ).rejects.toMatchObject({ code: "unavailable" });
+    const calls = fetchImpl.mock.calls.map(
+      ([u, i]) => `${(i as RequestInit).method} ${u}`,
+    );
+    expect(calls).toEqual([
+      "GET /api/auth/devices",
+      "DELETE /api/auth/devices/a_1",
+      "DELETE /api/auth/devices/b_2",
+      "POST /api/auth/logout",
+    ]);
+  });
 });

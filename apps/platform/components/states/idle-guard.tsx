@@ -51,26 +51,37 @@ function IdleTimer({
   const expired = deadline !== null && now >= deadline;
   const open = deadline !== null && !expired;
 
+  // When a keep-alive was last sent, and when the server last confirmed
+  // one: the sign-in itself has just touched the session.
+  const lastPing = useRef(0);
+  const lastAlive = useRef(0);
+  useEffect(() => {
+    lastPing.current = lastAlive.current = Date.now();
+  }, []);
+  const keepAlive = useCallback(() => {
+    const sentAt = Date.now();
+    lastPing.current = sentAt;
+    client.keepAlive().then(
+      () => {
+        lastAlive.current = Math.max(lastAlive.current, sentAt);
+      },
+      (e: unknown) => {
+        // The server's session is over: sign out now. A network error isn't.
+        if (e instanceof AuthError && e.code === "session_expired")
+          void signOut("expired");
+      },
+    );
+  }, [client, signOut]);
+
   const restart = useIdle(warnAfterMs, (lastActivityAt) => {
     if (open) return;
     // Already past (woken from sleep)? `expired` signs out at once.
     setNow(Date.now());
-    setDeadline(lastActivityAt + signOutAfterMs);
+    // Activity between keep-alives hasn't reached the server: count from
+    // whichever is older, so "Stay signed in" never arrives after the
+    // server has already ended the session.
+    setDeadline(Math.min(lastActivityAt, lastAlive.current) + signOutAfterMs);
   });
-
-  // When the server was last told: the sign-in itself just told it.
-  const lastPing = useRef(0);
-  useEffect(() => {
-    lastPing.current = Date.now();
-  }, []);
-  const keepAlive = useCallback(() => {
-    lastPing.current = Date.now();
-    client.keepAlive().catch((e: unknown) => {
-      // The server's session is over: sign out now. A network error isn't.
-      if (e instanceof AuthError && e.code === "session_expired")
-        void signOut("expired");
-    });
-  }, [client, signOut]);
 
   useEffect(() => {
     // While the warning shows, only "Stay signed in" keeps the session.

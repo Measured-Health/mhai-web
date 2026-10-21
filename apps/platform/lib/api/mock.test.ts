@@ -417,6 +417,7 @@ describe("mock platform API", () => {
       ["tm_tunde", "platform_admin", "active", false],
       ["tm_amara", "auditor", "active", false],
       ["tm_kemi", "auditor", "invite_pending", false],
+      ["tm_new", "platform_admin", "active", false],
     ]);
     const ada = team[0]!;
     expect(
@@ -425,6 +426,7 @@ describe("mock platform API", () => {
       ),
     ).toEqual([409, "own_role"]);
     await m.removeMember("tm_tunde", CODE, KEY());
+    await m.removeMember("tm_new", CODE, KEY());
     expect(await failure(m.removeMember("tm_ada", CODE, KEY()))).toEqual([
       409,
       "last_admin",

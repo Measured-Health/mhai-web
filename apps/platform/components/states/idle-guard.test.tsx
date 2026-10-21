@@ -100,6 +100,23 @@ describe("IdleGuard", () => {
     expect(keepAlive).toHaveBeenCalledTimes(2);
   });
 
+  it("counts from the last keep-alive the server confirmed, not later unsent activity", async () => {
+    const { keepAlive } = mount();
+    tick(30_000);
+    // Within the minute: the server isn't told.
+    fireEvent.pointerDown(window);
+    expect(keepAlive).not.toHaveBeenCalled();
+    tick(13 * MIN);
+    expect(warning()).toBeInTheDocument();
+    // 15 minutes after the server last heard, not 15:30.
+    tick(MIN + 29_000);
+    expect(auth.current.status).toBe("signed_in");
+    tick(1000);
+    await flush();
+    expect(auth.current.status).toBe("signed_out");
+    expect(auth.current.signedOutReason).toBe("idle");
+  });
+
   it("an expired session on keep-alive signs out with the reason expired", async () => {
     const client = testAuthClient();
     vi.spyOn(client, "keepAlive").mockRejectedValue(

@@ -18,7 +18,11 @@ import type { AuthClient, FirstStep, SignInResult, User } from "./types";
 
 export { isAuditor, isPlatformAdmin } from "./types";
 
-export type SignOutReason = "idle" | "manual" | "expired";
+/**
+ * Why the person is signed out, shown on the sign-in page. `not_platform`:
+ * a hospital account was turned away (at the password or the code step).
+ */
+export type SignOutReason = "idle" | "manual" | "expired" | "not_platform";
 type Status = "loading" | "signed_out" | "signed_in";
 type State = { status: Status; user: User | null; steps: FirstStep[] };
 
@@ -108,8 +112,10 @@ export function AuthProvider({
     }
     setMfaPending(false);
     if (r.status === "not_platform") {
-      // The server (or mock) has already ended it; nothing is kept.
+      // The server (or mock) has already ended it; nothing is kept. The
+      // sign-in page says why (the code page sends them back there).
       setState(SIGNED_OUT);
+      setReason("not_platform");
       return r;
     }
     setReason(null);

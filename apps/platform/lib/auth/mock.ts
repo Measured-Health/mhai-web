@@ -16,8 +16,8 @@ import {
   type User,
 } from "./types";
 
-/** A new platform admin: first sign-in steps, then two-step setup. */
-export const NEW_ADMIN_EMAIL = "new.admin@measured-health.example";
+/** The sample team's new platform admin (first sign-in steps). */
+export const NEW_ADMIN_EMAIL = TEAM_EMAILS.newAdmin;
 /** Regenerated demo backup codes: the originals reversed. */
 export const MOCK_NEW_BACKUP_CODES = MOCK_BACKUP_CODES.map((c) =>
   c.split("").reverse().join(""),
@@ -32,21 +32,16 @@ interface Account {
   mfaEnabled: boolean;
 }
 
-/** The team members from the sample data, plus the new admin. */
+/** The sample team's members, by email. */
 function accounts(): Map<string, Account> {
   const m = new Map<string, Account>();
   for (const t of seedTeam(Date.now()))
     m.set(t.email, {
       name: t.name,
       roles: [t.role],
-      // An unaccepted invite hasn't set up two-step yet.
+      // An unaccepted invite or a new admin hasn't set up two-step yet.
       mfaEnabled: t.status === "active" && t.mfa_enabled,
     });
-  m.set(NEW_ADMIN_EMAIL, {
-    name: "New platform admin",
-    roles: ["platform_admin"],
-    mfaEnabled: false,
-  });
   return m;
 }
 
@@ -156,7 +151,8 @@ export function createMockAuthClient({
         return { status: "mfa_required" };
       }
       // Not set up yet (the new admin, an unaccepted invite): every first
-      // sign-in step is owed, two-step last.
+      // sign-in step is owed, two-step last. The sample team never records
+      // the setup, so the new admin repeats it on each sign-in (on purpose).
       start(u, ALL_STEPS);
       return { status: "signed_in", user: u, steps: [...ALL_STEPS] };
     },

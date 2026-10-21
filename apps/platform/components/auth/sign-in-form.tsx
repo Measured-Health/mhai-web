@@ -2,27 +2,39 @@
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState, type FormEvent } from "react";
 import { useAuth, type SignOutReason } from "@/lib/auth/auth-context";
-import { AuthError } from "@/lib/auth/types";
+import type { AuthError } from "@/lib/auth/types";
 import { inputClass } from "@mhai/ui/auth/password-fields";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
-import { AuthErrorBanner, errorCode } from "./auth-error";
+import { AuthErrorBanner, authErrorCopy, errorCode } from "./auth-error";
 import { AuthHeading } from "./auth-layout";
 import { DemoHint } from "./demo-hint";
 
-const SIGNED_OUT: Record<SignOutReason, string> = {
-  idle: "You were signed out after 15 minutes without activity.",
-  manual: "You've signed out.",
-  expired: "Your session ended. Sign in again to continue.",
+const SIGNED_OUT: Record<
+  SignOutReason,
+  { tone: "info" | "bad"; title: string; body?: string }
+> = {
+  idle: {
+    tone: "info",
+    title: "You were signed out after 15 minutes without activity.",
+  },
+  manual: { tone: "info", title: "You've signed out." },
+  expired: {
+    tone: "info",
+    title: "Your session ended. Sign in again to continue.",
+  },
+  not_platform: { tone: "bad", ...authErrorCopy("not_platform") },
 };
 
 /** Why you were signed out, until dismissed. Memory only. */
 function SignedOutNotice() {
   const { signedOutReason, dismissNotice } = useAuth();
   if (!signedOutReason) return null;
+  const { tone, title, body } = SIGNED_OUT[signedOutReason];
   return (
     <div className="mb-5">
-      <Banner tone="info" title={SIGNED_OUT[signedOutReason]}>
+      <Banner tone={tone} title={title}>
+        {body && <p>{body}</p>}
         <Button variant="ghost" className="mt-2" onClick={dismissNotice}>
           Dismiss
         </Button>
@@ -55,10 +67,8 @@ export function SignInForm() {
     try {
       const r = await auth.signIn(login.trim(), password);
       if (r.status === "mfa_required") router.push("/sign-in/code");
-      else if (r.status === "not_platform") {
-        setPassword("");
-        setError(new AuthError("not_platform"));
-      }
+      // Turned away: the signed-out notice above says why.
+      else if (r.status === "not_platform") setPassword("");
       // Signed in: GuestGate sends them where they belong.
     } catch (err) {
       setError(errorCode(err));

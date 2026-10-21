@@ -85,10 +85,15 @@ export function createLiveAuthClient({
     listDevices: () => call<Device[]>("/devices", undefined, "GET"),
     signOutDevice,
     async signOutEverywhere() {
-      // Every other session, then this one.
+      // Every other session (all tried, whatever fails), then always this
+      // one; then any failure is reported.
       const devices = await call<Device[]>("/devices", undefined, "GET");
-      for (const d of devices) if (!d.current) await signOutDevice(d.id);
+      const others = await Promise.allSettled(
+        devices.filter((d) => !d.current).map((d) => signOutDevice(d.id)),
+      );
       await call("/logout").catch(() => {});
+      const failed = others.find((r) => r.status === "rejected");
+      if (failed) throw (failed as PromiseRejectedResult).reason;
     },
   };
 }

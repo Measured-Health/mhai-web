@@ -109,6 +109,11 @@ describe("mock auth client", () => {
     });
   });
 
+  it("the new admin is on the sample team, so the sample API answers", async () => {
+    await client.signIn(NEW_ADMIN_EMAIL, "temporary");
+    await expect(api().listHospitals({})).resolves.toBeTruthy();
+  });
+
   it("a not_platform sign-in leaves the sample API signed out", async () => {
     await client.signIn(TEAM_EMAILS.ada, "pw");
     await client.verifyCode("123456", { backup: false });

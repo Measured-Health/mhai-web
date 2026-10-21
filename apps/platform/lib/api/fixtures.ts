@@ -20,6 +20,8 @@ export const TEAM_EMAILS = {
   tunde: "tunde.okafor@measured-health.example",
   amara: "amara.eze@measured-health.example",
   kemi: "kemi.lawal@measured-health.example",
+  /** A new platform admin: first sign-in steps, then two-step setup. */
+  newAdmin: "new.admin@measured-health.example",
 } as const;
 
 const ADA: Person = { id: "tm_ada", name: "Ada Bakare" };
@@ -83,6 +85,18 @@ export function seedTeam(now: number): TeamMember[] {
       null,
       true,
     ),
+    // Active but not set up: the demo's first sign-in. The sample team
+    // never records the setup, so this admin repeats the welcome flow on
+    // every sign-in in a tab, on purpose, so the demo is repeatable.
+    {
+      ...m(
+        { id: "tm_new", name: "Chidi Nwosu" },
+        TEAM_EMAILS.newAdmin,
+        "platform_admin",
+        null,
+      ),
+      mfa_enabled: false,
+    },
   ];
 }
 
