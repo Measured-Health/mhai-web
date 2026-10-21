@@ -10,6 +10,7 @@ import {
   type Person,
   type PlatformClient,
   type RemovalBlock,
+  type RemovalRequest,
   type TeamMember,
   type TeamRole,
   type WriteOpts,
@@ -235,10 +236,21 @@ export function createMockPlatform({
     return b;
   }
 
+  /**
+   * A reply as the signed-in member sees it: a hospital's removal says
+   * whether they asked for it (like TeamMember.is_you). `v` is a copy.
+   */
+  function forYou<T>(v: T, m: TeamMember): T {
+    const r = (v as { removal?: RemovalRequest | null } | null)?.removal;
+    if (r) r.requested_by_you = r.requested_by.id === m.id;
+    return v;
+  }
+
   /** A read: someone must be signed in. */
   async function read<T>(fn: (m: TeamMember) => T): Promise<T> {
     await wait();
-    return copy(fn(you()));
+    const m = you();
+    return forYou(copy(fn(m)), m);
   }
   /**
    * A write: platform admins only; the same Idempotency-Key gets the same
@@ -252,10 +264,10 @@ export function createMockPlatform({
     const m = you();
     if (m.role !== "platform_admin") fail(403, "forbidden");
     const key = opts?.idempotencyKey;
-    if (key && done.has(key)) return copy(done.get(key) as T);
+    if (key && done.has(key)) return forYou(copy(done.get(key) as T), m);
     const out = await fn(m);
     if (key) done.set(key, copy(out));
-    return copy(out);
+    return forYou(copy(out), m);
   }
 
   const summary = (h: Hospital): HospitalSummary => ({
@@ -463,6 +475,7 @@ export function createMockPlatform({
         h.removal = {
           status: "requested",
           requested_by: person(m),
+          requested_by_you: true,
           requested_at: iso(now()),
           reason,
           approved_by: null,

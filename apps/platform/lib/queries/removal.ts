@@ -3,36 +3,20 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useKeyedMutation } from "@mhai/api-client/keyed-mutation";
 import { getPlatformClient } from "../api/client";
 import type { Hospital, StepUp } from "../api/contract";
-import { hospitalKey, hospitalListKey } from "./hospitals";
-import { queryKeys } from "./keys";
+import { hospitalKey, saved } from "./hospitals";
 
 export type RequestRemovalInput = { reason: string } & StepUp;
 
 /** How often a scheduled removal is checked until the backend says Removed. */
 export const REMOVAL_POLL_MS = 15_000;
 
-/**
- * A removal write whose reply is the updated hospital: the page shows the
- * reply; the lists and the hospital's activity refetch (as Task 10's writes).
- */
+/** A removal write whose reply is the updated hospital (as Task 10's). */
 function useRemovalWrite<V>(
   send: (v: V, key: string) => Promise<Hospital>,
   extra: { gcTime?: number } = {},
 ) {
   const qc = useQueryClient();
-  return useKeyedMutation(
-    send,
-    {
-      onSuccess: (h) => {
-        qc.setQueryData(hospitalKey(h.id), h);
-        void qc.invalidateQueries({ queryKey: hospitalListKey });
-        void qc.invalidateQueries({
-          queryKey: [...queryKeys.activity, "feed", h.id],
-        });
-      },
-    },
-    extra,
-  );
+  return useKeyedMutation(send, { onSuccess: (h) => saved(qc, h) }, extra);
 }
 
 /**
@@ -80,5 +64,5 @@ export function useWatchRemoval(h: Hospital) {
 /** Re-reads one hospital, e.g. after a refusal that says it changed or went. */
 export function useRefreshHospital(id: string) {
   const qc = useQueryClient();
-  return () => void qc.invalidateQueries({ queryKey: hospitalKey(id) });
+  return () => qc.invalidateQueries({ queryKey: hospitalKey(id) });
 }

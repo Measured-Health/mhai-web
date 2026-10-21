@@ -19,7 +19,7 @@ import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp, MOCK_CODE } from "@/lib/api/step-up";
 import type { User } from "@/lib/auth/types";
 import { hospitalKey, useHospital } from "@/lib/queries/hospitals";
-import { useApproveRemoval } from "@/lib/queries/removal";
+import { REMOVAL_POLL_MS, useApproveRemoval } from "@/lib/queries/removal";
 import { ADA, AMARA, renderWithAuth, TestProviders } from "@/tests/render";
 import { DangerZone } from "./danger-zone";
 import { dateLabel } from "./format";
@@ -86,7 +86,10 @@ function Page({ id }: { id: string }) {
   );
 }
 
+let lastQc: QueryClient;
+const qcOf = () => lastQc;
 async function open(id: string, user: User = ADA, queryClient = newQc()) {
+  lastQc = queryClient;
   renderWithAuth(<Page id={id} />, { user, queryClient });
   await screen.findByRole("region", {
     name: /^(Danger zone|Removal)$/,
@@ -168,7 +171,9 @@ describe("the removal panel", () => {
     expect(within(p).queryByText("All checks are clear")).toBeNull();
     const approve = within(p).getByRole("button", { name: "Approve removal" });
     expect(approve).toBeDisabled();
-    expect(approve).toHaveAccessibleDescription(BLOCKED);
+    expect(approve).toHaveAccessibleDescription(
+      `${BLOCKED} Legal holds are managed in a later release.`,
+    );
     expect(within(p).getByText(BLOCKED)).toBeVisible();
     expect(
       within(p).getByText("Legal holds are managed in a later release."),
@@ -181,7 +186,7 @@ describe("the removal panel", () => {
   it("writes the checks in plain words with plurals and dates", () => {
     const checks = {
       legal_holds: 2,
-      retention_until: "2031-03-03T00:00:00Z",
+      retention_until: "2031-03-03",
       export_required: true,
       export_done: false,
     };
@@ -220,8 +225,9 @@ describe("the removal panel", () => {
   });
 
   it("the requester sees 'Waiting for a different platform admin to approve'", async () => {
+    // The server says who asked (requested_by_you), not the session's name.
     install(TEAM_EMAILS.tunde);
-    await open("h_southpoint", TUNDE);
+    await open("h_southpoint", { ...TUNDE, name: "T. Okafor" });
     const p = panel();
     expect(
       within(p).getByText("Waiting for a different platform admin to approve"),
@@ -232,6 +238,20 @@ describe("the removal panel", () => {
     expect(
       within(p).getByRole("button", { name: "Cancel request" }),
     ).toBeEnabled();
+  });
+
+  it("another admin with the requester's name still sees Approve", async () => {
+    // Ada signed in, with the same name as Tunde who asked.
+    await open("h_southpoint", { ...ADA, name: "Tunde Okafor" });
+    const p = panel();
+    expect(
+      within(p).getByRole("button", { name: "Approve removal" }),
+    ).toBeEnabled();
+    expect(
+      within(p).queryByText(
+        "Waiting for a different platform admin to approve",
+      ),
+    ).toBeNull();
   });
 
   it("Ada approves Southpoint (requested by Tunde) with a code; it shows Removal scheduled", async () => {
@@ -287,8 +307,93 @@ describe("the removal panel", () => {
         "Removed. Only the audit trail remains.",
       ),
     ).toBeInTheDocument();
+    const h = await api.getHospital("h_southpoint");
+    expect(
+      within(panel()).getByText(
+        `Approved by Ada Bakare · ${dateLabel(h.removal!.approved_at!)}`,
+      ),
+    ).toBeInTheDocument();
+    expect(within(panel()).queryByText(/Removal scheduled/)).toBeNull();
     expect(screen.queryAllByRole("button")).toEqual([]);
     expect(screen.queryByRole("region", { name: "Danger zone" })).toBeNull();
+  });
+
+  it("while scheduled the page re-reads the hospital every 15 seconds until Removed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await api.approveRemoval(
+        "h_southpoint",
+        { mfa_code: MOCK_CODE },
+        { idempotencyKey: "a" },
+      );
+      const reads = vi.spyOn(api, "getHospital");
+      await open("h_southpoint");
+      await within(panel()).findByText(/^Removal scheduled/);
+      const before = reads.mock.calls.length;
+      await act(() => vi.advanceTimersByTimeAsync(REMOVAL_POLL_MS));
+      expect(reads.mock.calls.length).toBeGreaterThan(before);
+      expect(within(panel()).getByText(/^Removal scheduled/)).toBeVisible();
+      clock += 60_000;
+      await act(() => vi.advanceTimersByTimeAsync(REMOVAL_POLL_MS));
+      expect(
+        await within(panel()).findByText(
+          "Removed. Only the audit trail remains.",
+        ),
+      ).toBeInTheDocument();
+      // Removed: no more reading.
+      const after = reads.mock.calls.length;
+      await act(() => vi.advanceTimersByTimeAsync(4 * REMOVAL_POLL_MS));
+      expect(reads.mock.calls.length).toBe(after);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a requested removal is not polled", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const reads = vi.spyOn(api, "getHospital");
+      await open("h_harbour");
+      const before = reads.mock.calls.length;
+      await act(() => vi.advanceTimersByTimeAsync(4 * REMOVAL_POLL_MS));
+      expect(reads.mock.calls.length).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancelling an approved removal asks first; Keep keeps it", async () => {
+    await api.approveRemoval(
+      "h_southpoint",
+      { mfa_code: MOCK_CODE },
+      { idempotencyKey: "a" },
+    );
+    const spy = vi.spyOn(api, "cancelRemoval");
+    await open("h_southpoint");
+    await userEvent.click(btn("Cancel request"));
+    const d = screen.getByRole("dialog", {
+      name: "Cancel the removal of Southpoint Hospital?",
+    });
+    expect(
+      within(d).getByText("It will need a new request and approval."),
+    ).toBeInTheDocument();
+    expect(within(d).getByRole("button", { name: "Keep" })).toHaveFocus();
+    await userEvent.click(within(d).getByRole("button", { name: "Keep" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+    await userEvent.click(btn("Cancel request"));
+    await userEvent.click(
+      within(
+        screen.getByRole("dialog", {
+          name: "Cancel the removal of Southpoint Hospital?",
+        }),
+      ).getByRole("button", { name: "Cancel removal" }),
+    );
+    expect(
+      await screen.findByRole("region", { name: "Danger zone" }),
+    ).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((await api.getHospital("h_southpoint")).status).toBe("deactivated");
   });
 
   it("approve after the other admin cancelled shows 'This was removed or no longer exists.' and refreshes", async () => {
@@ -331,6 +436,17 @@ describe("the removal panel", () => {
       new BlockedError(["legal_hold", "retention"]),
     );
     await open("h_southpoint");
+    // After the refusal the server's re-read names what blocks.
+    const read = api.getHospital.bind(api);
+    const reads = vi
+      .spyOn(api, "getHospital")
+      .mockImplementation(async (id) => {
+        const h = await read(id);
+        h.removal!.checks.legal_holds = 1;
+        h.removal!.checks.retention_until = "2031-03-03";
+        h.removal!.blocking = ["legal_hold", "retention"];
+        return h;
+      });
     await userEvent.click(btn("Approve removal"));
     const d = screen.getByRole("dialog", {
       name: "Approve removal of Southpoint Hospital?",
@@ -341,34 +457,19 @@ describe("the removal panel", () => {
     );
     const alert = await within(panel()).findByRole("alert");
     expect(alert).toHaveTextContent("Removal can't go ahead yet.");
+    const p = panel();
+    expect(within(p).getByText("1 legal hold is active")).toBeVisible();
     expect(
-      within(alert).getByText("A legal hold is active"),
-    ).toBeInTheDocument();
-    expect(
-      within(alert).getByText(
-        "Records are still inside their retention period",
-      ),
-    ).toBeInTheDocument();
+      within(p).getByText("Records must be kept until 3 Mar 2031"),
+    ).toBeVisible();
+    expect(btn("Approve removal")).toBeDisabled();
     expect(screen.queryByRole("dialog")).toBeNull();
-  });
-
-  it("the requester's own approval refused by the server says a different admin must approve", async () => {
-    // The panel can't always tell who asked; the server's same_person is the truth.
-    install(TEAM_EMAILS.tunde);
-    await open("h_southpoint", { ...TUNDE, name: "T. Okafor" });
-    await userEvent.click(btn("Approve removal"));
-    const d = screen.getByRole("dialog", {
-      name: "Approve removal of Southpoint Hospital?",
-    });
-    await typeCode(d);
-    await userEvent.click(
-      within(d).getByRole("button", { name: "Approve removal" }),
-    );
-    expect(
-      await within(d).findByText(
-        "A different platform admin must approve this.",
-      ),
-    ).toBeInTheDocument();
+    // Once a refresh says the checks are clear, the refusal goes too.
+    reads.mockRestore();
+    await act(() => qcOf().refetchQueries());
+    await waitFor(() => expect(within(p).queryByRole("alert")).toBeNull());
+    expect(within(p).getByText("All checks are clear")).toBeVisible();
+    expect(btn("Approve removal")).toBeEnabled();
   });
 
   it("cancel returns the hospital to Deactivated", async () => {

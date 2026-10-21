@@ -280,6 +280,7 @@ export function seedHospitals(now: number): HospitalRecord[] {
           removal: {
             status: "requested",
             requested_by: TUNDE,
+            requested_by_you: false,
             requested_at: iso(now - D),
             reason: "The hospital closed in June.",
             approved_by: null,
@@ -326,6 +327,7 @@ export function seedHospitals(now: number): HospitalRecord[] {
           removal: {
             status: "requested",
             requested_by: TUNDE,
+            requested_by_you: false,
             requested_at: iso(now - 2 * H),
             reason: "Contract ended; the data export was delivered.",
             approved_by: null,

@@ -1,6 +1,6 @@
 "use client";
 import { CheckCircle2, OctagonAlert } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   BlockedError,
   type Hospital,
@@ -8,7 +8,6 @@ import {
   type RemovalRequest,
 } from "@/lib/api/contract";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
-import type { User } from "@/lib/auth/types";
 import { platformError } from "@/lib/errors";
 import {
   useApproveRemoval,
@@ -18,6 +17,7 @@ import {
 } from "@/lib/queries/removal";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
+import { Dialog } from "@mhai/ui/dialog";
 import { useToast } from "@mhai/ui/toast";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { REMOVAL_WARNING } from "./danger-zone";
@@ -68,18 +68,6 @@ export function checkLines(
   return lines;
 }
 
-/**
- * Whether the signed-in person asked for this removal. The session's user id
- * is not the team id the API puts in `requested_by`, so the name is the
- * fallback; the server's `same_person` refusal is the truth either way.
- */
-function asked(r: RemovalRequest, user: User | null) {
-  return (
-    !!user &&
-    (r.requested_by.id === user.id || r.requested_by.name === user.name)
-  );
-}
-
 function Checks({ lines, id }: { lines: CheckLine[]; id?: string }) {
   return (
     <ul id={id} className="flex flex-col gap-1.5 text-[13.5px]">
@@ -106,8 +94,11 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
   const { user, updateUser } = useAuth();
   const canAct = isPlatformAdmin(user);
   const [asking, setAsking] = useState(false);
-  // What the server said blocks an approval, when the page didn't know yet.
-  const [refused, setRefused] = useState<RemovalBlock[] | null>(null);
+  // The server refused an approval as blocked; the refreshed checks say why.
+  const [refused, setRefused] = useState(false);
+  // Cancelling an approved removal asks first.
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const keep = useRef<HTMLButtonElement>(null);
   const approve = useApproveRemoval(h.id);
   const cancel = useCancelRemoval(h.id);
   const refresh = useRefreshHospital(h.id);
@@ -121,7 +112,8 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
   const scheduled = !done && r.status === "scheduled";
   const requested = !done && r.status === "requested";
   const blocked = r.blocking.length > 0;
-  const mine = asked(r, user);
+  // The server says who asked: names can repeat, ids differ by source.
+  const mine = r.requested_by_you;
   const actions = canAct && !done;
 
   const close = () => {
@@ -134,7 +126,7 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
     const w = platformError(e);
     if (!w.gone && !w.stale) return false;
     toast.show({ title: w.title, body: w.body, live: "assertive" });
-    refresh();
+    void refresh();
     return true;
   };
 
@@ -143,7 +135,6 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
       "backup_code" in input
         ? { backup_code: input.backup_code }
         : { mfa_code: input.mfa_code };
-    setRefused(null);
     approve.mutate(code, {
       onSuccess: () => {
         toast.show({
@@ -161,13 +152,14 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
       onError: (e) => {
         if (e instanceof BlockedError) {
           close();
-          setRefused(e.blocking);
-          refresh();
+          setRefused(true);
+          void refresh();
         } else if (changed(e)) close();
       },
     });
   };
-  const doCancel = () =>
+  const doCancel = () => {
+    setConfirmCancel(false);
     cancel.mutate(undefined, {
       onSuccess: () =>
         toast.show({
@@ -184,11 +176,18 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
           });
       },
     });
+  };
 
+  const holds = r.blocking.includes("legal_hold");
   const approveOff = net.offline
     ? net.props
     : blocked
-      ? { disabled: true, "aria-describedby": "removal-blocked" }
+      ? {
+          disabled: true,
+          "aria-describedby": holds
+            ? "removal-blocked removal-holds-later"
+            : "removal-blocked",
+        }
       : {};
 
   return (
@@ -199,7 +198,7 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
       </p>
       {r.approved_by && r.approved_at && (scheduled || done) && (
         <p className="mt-1 text-[13.5px] text-ink-2">
-          {scheduled ? "Removal scheduled" : "Removal approved"} · approved by{" "}
+          {scheduled ? "Removal scheduled · approved by" : "Approved by"}{" "}
           {r.approved_by.name} · {dateLabel(r.approved_at)}
         </p>
       )}
@@ -211,18 +210,15 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
           {requested && blocked && (
             <div className="mt-2 text-[13px] text-ink-3">
               <p id="removal-blocked">{BLOCKED_NOTE}</p>
-              {r.blocking.includes("legal_hold") && <p>{HOLDS_LATER}</p>}
+              {holds && <p id="removal-holds-later">{HOLDS_LATER}</p>}
             </div>
           )}
         </div>
       )}
-      {refused && !done && (
+      {/* Shown once the refreshed checks say what blocks; gone when clear. */}
+      {refused && requested && blocked && (
         <div className="mt-3">
-          <Banner tone="bad" title="Removal can't go ahead yet.">
-            <Checks
-              lines={checkLines(r.checks, refused).filter((l) => l.blocks)}
-            />
-          </Banner>
+          <Banner tone="bad" title="Removal can't go ahead yet." />
         </div>
       )}
       {actions && (
@@ -236,7 +232,10 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
                 size="sm"
                 variant="danger"
                 {...approveOff}
-                onClick={() => setAsking(true)}
+                onClick={() => {
+                  setRefused(false);
+                  setAsking(true);
+                }}
               >
                 Approve removal
               </Button>
@@ -246,7 +245,7 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
               variant="ghost"
               disabled={cancel.isPending}
               {...net.props}
-              onClick={doCancel}
+              onClick={() => (scheduled ? setConfirmCancel(true) : doCancel())}
             >
               Cancel request
             </Button>
@@ -266,6 +265,30 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
           onClose={close}
           onConfirm={confirmApprove}
         />
+      )}
+      {actions && (
+        <Dialog
+          open={confirmCancel && scheduled}
+          onClose={() => setConfirmCancel(false)}
+          title={`Cancel the removal of ${h.name}?`}
+          initialFocus={keep}
+        >
+          <p className="mb-[18px] text-[14.5px] text-ink-2">
+            It will need a new request and approval.
+          </p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              ref={keep}
+              variant="ghost"
+              onClick={() => setConfirmCancel(false)}
+            >
+              Keep
+            </Button>
+            <Button variant="danger" {...net.props} onClick={doCancel}>
+              Cancel removal
+            </Button>
+          </div>
+        </Dialog>
       )}
     </Section>
   );

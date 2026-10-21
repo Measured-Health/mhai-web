@@ -63,7 +63,7 @@ export function DangerZone({ hospital: h }: { hospital: Hospital }) {
           if (w.gone || w.stale) {
             close();
             toast.show({ title: w.title, body: w.body, live: "assertive" });
-            refresh();
+            void refresh();
           }
         },
       },

@@ -51,6 +51,8 @@ export type RemovalBlock = "legal_hold" | "retention" | "export_required";
 export type RemovalRequest = {
   status: "requested" | "scheduled" | "done";
   requested_by: Person;
+  /** Whether the signed-in person asked for it (they can't approve it). */
+  requested_by_you: boolean;
   requested_at: string;
   reason: string;
   approved_by: Person | null;

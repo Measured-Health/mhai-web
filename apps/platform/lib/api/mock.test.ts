@@ -335,11 +335,37 @@ describe("mock platform API", () => {
     expect(h.removal).toMatchObject({
       status: "requested",
       requested_by: { id: "tm_ada", name: "Ada Bakare" },
+      requested_by_you: true,
       reason: "Contract ended a year ago",
       approved_by: null,
       blocking: [],
       checks: { legal_holds: 0, export_required: false },
     });
+  });
+
+  it("requested_by_you is true for the requester only, on every read and write", async () => {
+    const { m, as } = setup(TEAM_EMAILS.tunde);
+    expect(
+      (await m.getHospital("h_southpoint")).removal?.requested_by_you,
+    ).toBe(true);
+    as(TEAM_EMAILS.ada);
+    expect(
+      (await m.getHospital("h_southpoint")).removal?.requested_by_you,
+    ).toBe(false);
+    const h = await m.requestRemoval(
+      "h_westfield",
+      { reason: "Closed", ...CODE },
+      KEY(),
+    );
+    expect(h.removal?.requested_by_you).toBe(true);
+    as(TEAM_EMAILS.tunde);
+    expect((await m.getHospital("h_westfield")).removal?.requested_by_you).toBe(
+      false,
+    );
+    expect(
+      (await m.approveRemoval("h_westfield", CODE, KEY())).removal
+        ?.requested_by_you,
+    ).toBe(false);
   });
 
   it("approve by the requester is same_person", async () => {
