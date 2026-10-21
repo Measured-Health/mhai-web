@@ -1,4 +1,8 @@
-import type { DeactivateReason, HospitalStatus } from "./api/contract";
+import type {
+  DeactivateReason,
+  HospitalStatus,
+  TeamRole,
+} from "./api/contract";
 
 const STATUS: Record<HospitalStatus, string> = {
   active: "Active",
@@ -25,3 +29,10 @@ export const ADD_OFFLINE = "You're offline. Reconnect to add a hospital.";
 
 /** Single sign-on copy. */
 export const SSO_TEST_FIRST = "Test sign-in first.";
+
+const ROLE: Record<TeamRole, string> = {
+  platform_admin: "Platform admin",
+  auditor: "Auditor",
+};
+export const ROLES = Object.keys(ROLE) as TeamRole[];
+export const roleLabel = (r: TeamRole) => ROLE[r];
