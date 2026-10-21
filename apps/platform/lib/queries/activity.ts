@@ -18,7 +18,6 @@ export function useActivityFeed({ hospital }: { hospital?: string } = {}) {
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor,
-    staleTime: 0,
     refetchOnMount: "always",
   });
 }
@@ -27,6 +26,7 @@ export function useActivityFeed({ hospital }: { hospital?: string } = {}) {
 export function useHospitalOptions() {
   return useQuery({
     queryKey: [...queryKeys.activity, "hospital-options"] as const,
+    refetchOnMount: "always",
     queryFn: async () => {
       const all: HospitalSummary[] = [];
       let cursor: string | undefined;

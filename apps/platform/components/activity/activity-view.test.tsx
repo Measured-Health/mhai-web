@@ -156,4 +156,68 @@ describe("Activity", () => {
       .click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("No activity yet.")).toBeInTheDocument();
   });
+
+  it("keeps loaded rows and shows a notice when Load more fails", async () => {
+    const m = mock();
+    let fail = false;
+    mock({
+      listActivity: async (q) => {
+        const all = (await m.listActivity({})).events;
+        if (q.cursor) {
+          if (fail) throw new Error("down");
+          return { events: all.slice(5), next_cursor: null };
+        }
+        return { events: all.slice(0, 5), next_cursor: "5" };
+      },
+    });
+    renderWithAuth(<ActivityView />);
+    await screen.findByRole("list");
+    fail = true;
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: "Load more" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't refresh",
+    );
+    expect(rows()).toHaveLength(5);
+    expect(screen.queryByText("Couldn't load activity.")).toBeNull();
+    fail = false;
+    await u.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(rows()).toHaveLength(12));
+  });
+
+  it("Load more is busy while the next page loads", async () => {
+    const m = mock();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    mock({
+      listActivity: async (q) => {
+        const all = (await m.listActivity({})).events;
+        if (q.cursor) {
+          await gate;
+          return { events: all.slice(5), next_cursor: null };
+        }
+        return { events: all.slice(0, 5), next_cursor: "5" };
+      },
+    });
+    renderWithAuth(<ActivityView />);
+    await screen.findByRole("list");
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Load more" }));
+    const busy = await screen.findByRole("button", { name: "Loading…" });
+    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute("aria-busy", "true");
+    release();
+    await waitFor(() => expect(rows()).toHaveLength(12));
+  });
+
+  it("never shows a raw id in the hospital select", async () => {
+    mock();
+    search = "hospital=h_nope";
+    renderWithAuth(<ActivityView />);
+    expect(
+      await screen.findByRole("option", { name: "Unknown hospital" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "h_nope" })).toBeNull();
+  });
 });

@@ -2,38 +2,38 @@ import { describe, expect, it } from "vitest";
 import type { ActivityAction } from "@/lib/api/contract";
 import { actionLabel, formatWhen } from "./activity-labels";
 
+const WITH: Record<ActivityAction, string> = {
+  hospital_added: "added the hospital",
+  hospital_updated: "updated the hospital details",
+  hospital_deactivated: "deactivated the hospital",
+  hospital_reactivated: "reactivated the hospital",
+  removal_requested: "requested removal",
+  removal_blocked: "tried to approve removal, but a check blocked it",
+  removal_approved: "approved removal",
+  removal_cancelled: "cancelled the removal request",
+  hospital_removed: "removed the hospital",
+  sso_updated: "updated single sign-on",
+  sso_tested: "tested single sign-on",
+  admin_invited: "invited Kemi as first hospital admin",
+  admin_invite_resent: "resent the invite to Kemi",
+  team_invited: "invited Kemi to the team",
+  team_role_changed: "changed Kemi's role",
+  team_removed: "removed Kemi from the team",
+};
+const WITHOUT: Partial<Record<ActivityAction, string>> = {
+  admin_invited: "invited the first hospital admin",
+  admin_invite_resent: "resent the invite",
+  team_invited: "invited someone to the team",
+  team_role_changed: "changed a team member's role",
+  team_removed: "removed a team member",
+};
+
 describe("actionLabel", () => {
-  it("has a plain sentence for every action", () => {
-    const all: ActivityAction[] = [
-      "hospital_added",
-      "hospital_updated",
-      "hospital_deactivated",
-      "hospital_reactivated",
-      "removal_requested",
-      "removal_blocked",
-      "removal_approved",
-      "removal_cancelled",
-      "hospital_removed",
-      "sso_updated",
-      "sso_tested",
-      "admin_invited",
-      "admin_invite_resent",
-      "team_invited",
-      "team_role_changed",
-      "team_removed",
-    ];
-    for (const a of all) {
-      const s = actionLabel(a, "Kemi");
-      expect(s).toMatch(/^[a-z]/);
-      expect(s).not.toContain("_");
-    }
-    expect(actionLabel("team_role_changed", "Amara Eze")).toBe(
-      "changed Amara Eze's role",
-    );
-    expect(actionLabel("team_removed", "Amara Eze")).toBe(
-      "removed Amara Eze from the team",
-    );
-    expect(actionLabel("team_removed", null)).toBe("removed a team member");
+  it.each(Object.entries(WITH))("%s reads as a sentence", (a, text) => {
+    expect(actionLabel(a as ActivityAction, "Kemi")).toBe(text);
+  });
+  it.each(Object.entries(WITHOUT))("%s without a target", (a, text) => {
+    expect(actionLabel(a as ActivityAction, null)).toBe(text);
   });
   it("formats a time plainly", () => {
     expect(formatWhen("2026-10-21T10:42:00")).toBe("21 Oct 2026, 10:42");

@@ -23,7 +23,9 @@ export function ActivityView() {
   const q = useActivityFeed({ hospital });
   const events = q.data?.pages.flatMap((p) => p.events) ?? [];
   const names = options.data ?? [];
-  const known = !hospital || names.some((h) => h.id === hospital);
+  const unknown =
+    !!hospital && options.isSuccess && !names.some((h) => h.id === hospital);
+  const loadingOptions = options.isPending;
 
   function choose(id: string) {
     router.replace(
@@ -43,11 +45,14 @@ export function ActivityView() {
             <select
               id={selectId}
               value={hospital ?? ""}
+              disabled={loadingOptions}
               onChange={(e) => choose(e.target.value)}
               className={control}
             >
-              <option value="">All hospitals</option>
-              {!known && <option value={hospital}>{hospital}</option>}
+              <option value="">
+                {loadingOptions ? "Loading hospitals…" : "All hospitals"}
+              </option>
+              {unknown && <option value={hospital}>Unknown hospital</option>}
               {names.map((h) => (
                 <option key={h.id} value={h.id}>
                   {h.name}
@@ -56,7 +61,7 @@ export function ActivityView() {
             </select>
           </div>
 
-          {q.isError ? (
+          {q.isError && !q.data ? (
             <CouldntLoad what="activity" onRetry={() => void q.refetch()} />
           ) : q.isPending ? (
             <Loading label="Loading activity" />
@@ -77,7 +82,8 @@ export function ActivityView() {
                     <strong className="font-semibold">{e.actor.name}</strong>{" "}
                     {actionLabel(e.action, e.target)}
                     {e.hospital && ` · ${e.hospital.name}`}
-                    {` · ${formatWhen(e.at)}`}
+                    {" · "}
+                    <time dateTime={e.at}>{formatWhen(e.at)}</time>
                   </p>
                   {e.detail && (
                     <p className="mt-0.5 text-[12.5px] text-ink-3 [overflow-wrap:anywhere]">
@@ -87,6 +93,28 @@ export function ActivityView() {
                 </li>
               ))}
             </ul>
+          )}
+
+          {q.isError && q.data && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-2 rounded-xl border border-lilac-2 bg-white px-4 py-3 text-[13.5px]"
+            >
+              <span>
+                Couldn&apos;t refresh the activity. Showing what was loaded.
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  void (q.isFetchNextPageError
+                    ? q.fetchNextPage()
+                    : q.refetch())
+                }
+              >
+                Try again
+              </Button>
+            </div>
           )}
 
           {q.hasNextPage && (

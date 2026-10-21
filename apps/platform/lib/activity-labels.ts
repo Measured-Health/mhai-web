@@ -15,7 +15,7 @@ export function actionLabel(a: ActivityAction, target?: string | null): string {
     case "removal_requested":
       return "requested removal";
     case "removal_blocked":
-      return "removal was blocked by a check";
+      return "tried to approve removal, but a check blocked it";
     case "removal_approved":
       return "approved removal";
     case "removal_cancelled":
