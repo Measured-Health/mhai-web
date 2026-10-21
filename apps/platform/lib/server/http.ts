@@ -13,7 +13,7 @@ export function apiBase(): string {
 }
 
 /** `fetch` with the platform audience header added. */
-const platformFetch: typeof fetch = (input, init) => {
+export const platformFetch: typeof fetch = (input, init) => {
   const headers = new Headers(init?.headers);
   headers.set(AUDIENCE_HEADER, AUDIENCE);
   return fetch(input, { ...init, headers });
