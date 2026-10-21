@@ -10,7 +10,7 @@ import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp } from "@/lib/api/step-up";
 import { ADA, AMARA, renderWithAuth } from "@/tests/render";
 import { AddHospitalForm } from "./add-hospital-form";
-import { HospitalPlaceholder } from "./hospital-placeholder";
+import { HospitalView } from "./hospital-view";
 
 const push = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({
@@ -119,8 +119,10 @@ describe("the add hospital form", () => {
       ).length,
     ).toBeGreaterThan(0);
     // The page it lands on shows the new hospital's status.
-    renderWithAuth(<HospitalPlaceholder id="h_lakeside_hospital" />);
-    expect(await screen.findByText("Lakeside Hospital")).toBeInTheDocument();
+    renderWithAuth(<HospitalView id="h_lakeside_hospital" />);
+    expect(
+      await screen.findByRole("heading", { name: "Lakeside Hospital" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Set-up incomplete")).toBeInTheDocument();
   });
 

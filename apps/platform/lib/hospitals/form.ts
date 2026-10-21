@@ -32,8 +32,11 @@ export function splitDomains(text: string): string[] {
   return out;
 }
 
-export function parseHospitalForm(v: FormValues): FormResult {
-  const errors: Partial<Record<FieldName, string>> = {};
+export type DetailValues = Omit<FormValues, "adminName" | "adminEmail">;
+type Details = Omit<HospitalIn, "first_admin">;
+type Errors = Partial<Record<FieldName, string>>;
+
+function details(v: DetailValues, errors: Errors): Details {
   const len = (s: string, max: number) => s.length >= 1 && s.length <= max;
   const name = v.name.trim();
   if (!len(name, NAME_MAX)) errors.name = "Use 1 to 120 characters.";
@@ -47,21 +50,51 @@ export function parseHospitalForm(v: FormValues): FormResult {
   const email_domains = splitDomains(v.domains);
   if (email_domains.some((d) => !DOMAIN.test(d)))
     errors.domains = "Use domains like hospital.org, separated by commas.";
+  return { name, short_code, country, time_zone, email_domains };
+}
+
+/** A hospital's details on their own, as its page edits them. */
+export function parseDetailsForm(
+  v: DetailValues,
+): { ok: true; value: Details } | { ok: false; errors: Errors } {
+  const errors: Errors = {};
+  const value = details(v, errors);
+  return Object.keys(errors).length
+    ? { ok: false, errors }
+    : { ok: true, value };
+}
+
+export function parseHospitalForm(v: FormValues): FormResult {
+  const errors: Errors = {};
+  const value = details(v, errors);
   const adminName = v.adminName.trim();
-  if (!len(adminName, NAME_MAX)) errors.adminName = "Use 1 to 120 characters.";
+  if (adminName.length < 1 || adminName.length > NAME_MAX)
+    errors.adminName = "Use 1 to 120 characters.";
   const adminEmail = v.adminEmail.trim().toLowerCase();
   if (!EMAIL.test(adminEmail) || adminEmail.length > 254)
     errors.adminEmail = "Enter a valid email address.";
   if (Object.keys(errors).length) return { ok: false, errors };
   return {
     ok: true,
-    value: {
-      name,
-      short_code,
-      country,
-      time_zone,
-      email_domains,
-      first_admin: { name: adminName, email: adminEmail },
-    },
+    value: { ...value, first_admin: { name: adminName, email: adminEmail } },
   };
+}
+
+/** The first hospital admin's invite: a name and an email. */
+export function parseInvite(
+  name: string,
+  email: string,
+):
+  | { ok: true; value: { name: string; email: string } }
+  | { ok: false; errors: { name?: string; email?: string } } {
+  const n = name.trim();
+  const e = email.trim().toLowerCase();
+  const errors: { name?: string; email?: string } = {};
+  if (n.length < 1 || n.length > NAME_MAX)
+    errors.name = "Use 1 to 120 characters.";
+  if (!EMAIL.test(e) || e.length > 254)
+    errors.email = "Enter a valid email address.";
+  return Object.keys(errors).length
+    ? { ok: false, errors }
+    : { ok: true, value: { name: n, email: e } };
 }

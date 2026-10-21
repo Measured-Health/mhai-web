@@ -25,9 +25,10 @@ const FALLBACK_ZONES = [
   "Africa/Nairobi",
   "UTC",
 ];
-const DEFAULT_ZONE = "Africa/Lagos";
+export const DEFAULT_ZONE = "Africa/Lagos";
 
-function timeZones(): string[] {
+/** The time zones this browser knows, or a short list. */
+export function timeZones(): string[] {
   try {
     const f = (
       Intl as unknown as { supportedValuesOf?: (k: string) => string[] }
