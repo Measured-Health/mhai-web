@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAuth } from "@/lib/auth/auth-context";
+import { useAuth, type SignOutReason } from "@/lib/auth/auth-context";
 import { AuthError } from "@/lib/auth/types";
 import { useIdle } from "@mhai/ui/hooks/use-idle";
 import { Button } from "@mhai/ui/button";
@@ -21,6 +21,19 @@ export const KEEP_ALIVE_EVERY_MS = 60_000;
 
 const ACTIVITY = ["pointerdown", "keydown", "wheel", "touchstart"] as const;
 
+/** Tabs share one session, so they share its idle clock (no storage). */
+export const TAB_CHANNEL = "mhai-platform-activity";
+type TabMessage =
+  { type: "alive"; at: number } | { type: "signed-out"; reason: SignOutReason };
+
+/** Opens the tab channel, or does nothing where the browser has none. */
+function openTabChannel(onMessage: (m: TabMessage) => void) {
+  if (typeof BroadcastChannel === "undefined") return null;
+  const c = new BroadcastChannel(TAB_CHANNEL);
+  c.onmessage = (e: MessageEvent<TabMessage>) => onMessage(e.data);
+  return c;
+}
+
 type Timing = {
   warnAfterMs?: number;
   signOutAfterMs?: number;
@@ -34,7 +47,40 @@ type Timing = {
  * with the reason "expired".
  */
 export function IdleGuard(timing: Timing) {
-  const { status } = useAuth();
+  const { status, signedOutReason, signOut } = useAuth();
+
+  // A sign-out in one tab ends the shared session, so the other tabs follow
+  // with the same reason, without asking the server again.
+  const channel = useRef<BroadcastChannel | null>(null);
+  const fromPeer = useRef(false);
+  const onPeer = useEffectEvent((m: TabMessage) => {
+    if (m.type !== "signed-out" || status !== "signed_in") return;
+    fromPeer.current = true;
+    void signOut(m.reason, { elsewhere: true });
+  });
+  useEffect(() => {
+    const c = openTabChannel(onPeer);
+    channel.current = c;
+    return () => {
+      c?.close();
+      channel.current = null;
+    };
+  }, []);
+
+  const was = useRef(status);
+  useEffect(() => {
+    const signedOut = was.current === "signed_in" && status === "signed_out";
+    was.current = status;
+    if (!signedOut) return;
+    const peer = fromPeer.current;
+    fromPeer.current = false;
+    if (peer || !signedOutReason || signedOutReason === "not_platform") return;
+    channel.current?.postMessage({
+      type: "signed-out",
+      reason: signedOutReason,
+    } satisfies TabMessage);
+  }, [status, signedOutReason]);
+
   return status === "signed_in" ? <IdleTimer {...timing} /> : null;
 }
 
@@ -51,19 +97,22 @@ function IdleTimer({
   const expired = deadline !== null && now >= deadline;
   const open = deadline !== null && !expired;
 
-  // When a keep-alive was last sent, and when the server last confirmed
-  // one: the sign-in itself has just touched the session.
+  // When a keep-alive was last sent (by any tab), and when the server last
+  // confirmed one.
   const lastPing = useRef(0);
   const lastAlive = useRef(0);
-  useEffect(() => {
-    lastPing.current = lastAlive.current = Date.now();
-  }, []);
+  const channel = useRef<BroadcastChannel | null>(null);
   const keepAlive = useCallback(() => {
     const sentAt = Date.now();
     lastPing.current = sentAt;
     client.keepAlive().then(
       () => {
         lastAlive.current = Math.max(lastAlive.current, sentAt);
+        // The other tabs share this session: their clocks restart too.
+        channel.current?.postMessage({
+          type: "alive",
+          at: sentAt,
+        } satisfies TabMessage);
       },
       (e: unknown) => {
         // The server's session is over: sign out now. A network error isn't.
@@ -82,6 +131,33 @@ function IdleTimer({
     // server has already ended the session.
     setDeadline(Math.min(lastActivityAt, lastAlive.current) + signOutAfterMs);
   });
+
+  // Another tab's activity reached the server: this tab's clock (and any
+  // warning) starts again from it.
+  const onPeer = useEffectEvent((m: TabMessage) => {
+    if (m.type !== "alive") return;
+    lastAlive.current = Math.max(lastAlive.current, m.at);
+    lastPing.current = Math.max(lastPing.current, m.at);
+    setDeadline(null);
+    restart();
+  });
+
+  // After a reload or in a new tab the server's idle clock may be older
+  // than this screen's: touch it once so the two agree (a session already
+  // over signs out as "expired").
+  const start = useEffectEvent(() => {
+    lastPing.current = lastAlive.current = Date.now();
+    keepAlive();
+  });
+  useEffect(() => {
+    const c = openTabChannel(onPeer);
+    channel.current = c;
+    start();
+    return () => {
+      c?.close();
+      channel.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     // While the warning shows, only "Stay signed in" keeps the session.

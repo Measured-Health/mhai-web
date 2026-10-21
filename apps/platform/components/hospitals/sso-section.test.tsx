@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient } from "@tanstack/react-query";
 import { ApiError } from "@mhai/api-client/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -8,6 +9,7 @@ import {
 } from "@/lib/api/client";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp } from "@/lib/api/step-up";
+import { queryKeys } from "@/lib/queries/keys";
 import { ADA, AMARA, renderWithAuth } from "@/tests/render";
 import { SsoSection } from "./sso-section";
 
@@ -318,5 +320,24 @@ describe("the single sign-on section", () => {
     });
     await userEvent.click(screen.getByRole("button", { name: "Test sign-in" }));
     expect(await screen.findByText("Didn't work: Bad issuer.")).toBeVisible();
+  });
+
+  it("saving and testing refresh the hospital's Recent actions", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    const feed = { queryKey: [...queryKeys.activity, "feed", "h_riverside"] };
+    renderWithAuth(<SsoSection hospitalId="h_riverside" />, {
+      queryClient: qc,
+    });
+    await fillRiverside();
+    await save();
+    await screen.findByText("Saved · ends ··9z8y");
+    expect(invalidate).toHaveBeenCalledWith(feed);
+    invalidate.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "Test sign-in" }));
+    expect(await screen.findByText(/^Worked · /)).toBeVisible();
+    expect(invalidate).toHaveBeenCalledWith(feed);
   });
 });

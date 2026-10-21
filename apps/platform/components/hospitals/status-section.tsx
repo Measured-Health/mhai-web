@@ -69,9 +69,13 @@ export function StatusSection({
     },
     onError: (e: Error) => {
       const w = platformError(e);
-      // It changed or went while the dialog was open: show the latest.
-      if (w.gone) close();
-      if (w.gone || w.stale) onGone();
+      // It changed or went while the dialog was open: close it, say so and
+      // show the latest (no second code for a change that may be done).
+      if (w.gone || w.stale) {
+        close();
+        toast.show({ title: w.title, body: w.body, live: "assertive" });
+        onGone();
+      }
     },
   });
   const confirm = (input: StepUpInput) => {

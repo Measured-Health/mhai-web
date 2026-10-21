@@ -7,6 +7,7 @@ import {
   __setPlatformClientForTests,
 } from "@/lib/api/client";
 import type { PlatformClient } from "@/lib/api/contract";
+import { ApiError } from "@mhai/api-client/errors";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp, MOCK_CODE } from "@/lib/api/step-up";
 import { AMARA, ADA, renderWithAuth } from "@/tests/render";
@@ -258,6 +259,39 @@ describe("the hospital page", () => {
     expect((await api.getHospital("h_eastbrook")).status).toBe(
       "setup_incomplete",
     );
+  });
+
+  it("a deactivation someone else already made closes the dialog, says so and shows the latest", async () => {
+    const d = await startDeactivate();
+    // Someone else deactivates it first; this request then clashes.
+    await api.deactivate(
+      "h_eastbrook",
+      { reason: "security_concern", mfa_code: MOCK_CODE },
+      { idempotencyKey: "other" },
+    );
+    vi.spyOn(api, "deactivate").mockRejectedValueOnce(
+      new ApiError(409, "conflict"),
+    );
+    await userEvent.click(
+      within(d).getByRole("radio", { name: "Contract ended" }),
+    );
+    await typeCode(d, MOCK_CODE);
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Deactivate" }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: DEACTIVATE })).toBeNull(),
+    );
+    expect(
+      await screen.findByText("Changed by someone else"),
+    ).toBeInTheDocument();
+    const status = region("Status");
+    expect(
+      await within(status).findByText(/^Deactivated by .* · Security concern$/),
+    ).toBeInTheDocument();
+    expect(
+      within(status).getByRole("button", { name: "Reactivate" }),
+    ).toBeInTheDocument();
   });
 
   it("after deactivating, the page shows Deactivated by Ada Bakare · date · Contract ended", async () => {

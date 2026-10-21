@@ -18,6 +18,7 @@ const jar = vi.hoisted(() => {
 });
 vi.mock("next/headers", () => ({ cookies: async () => jar }));
 
+import { unsealSync } from "@mhai/api-client/server/seal";
 import type { ApiUser } from "@/lib/api/auth-contract";
 import {
   IDLE_LIMIT_MS,
@@ -32,9 +33,11 @@ import {
   type ServerSession,
 } from "./session";
 
+// Distinctive, so "the cookie doesn't contain it" can't pass or fail by chance.
+const TOKEN = "plain-token-marker-7f3c9a";
 const T0 = Date.parse("2026-10-20T09:00:00Z");
 const S: ServerSession = {
-  token: "tok",
+  token: TOKEN,
   expiresAt: T0 + 60 * 60_000,
   lastSeenAt: T0,
   user: {
@@ -70,7 +73,7 @@ describe("platform session", () => {
     await writeSession(S, T0);
     const now = T0 + 14 * 60_000;
     const s = await readSession(now);
-    expect(s).toMatchObject({ token: "tok", lastSeenAt: T0 });
+    expect(s).toMatchObject({ token: TOKEN, lastSeenAt: T0 });
     await touchSession(s!, now);
     expect((await readSession(now))?.lastSeenAt).toBe(now);
     // Another 14 minutes from the touch is still fine.
@@ -107,8 +110,10 @@ describe("platform session", () => {
     expect(jar.options.get(MFA_COOKIE)?.maxAge).toBe(300);
     // The session cookie never outlives the idle limit.
     expect(jar.options.get(SESSION_COOKIE)?.maxAge).toBe(900);
-    // The token is sealed, never readable.
-    expect(jar.values.get(SESSION_COOKIE)).not.toContain("tok");
+    // The token is sealed, never readable, and another secret can't open it.
+    const raw = jar.values.get(SESSION_COOKIE)!;
+    expect(raw).not.toContain(TOKEN);
+    expect(unsealSync(raw, "x".repeat(32))).toBeNull();
     vi.stubEnv("NODE_ENV", "production");
     await writeSession(S, T0);
     expect(jar.options.get(SESSION_COOKIE)?.secure).toBe(true);

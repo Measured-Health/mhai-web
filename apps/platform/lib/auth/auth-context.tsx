@@ -37,8 +37,12 @@ export interface AuthCtx extends State {
   cancelMfa(): void;
   completeStep(step: FirstStep): void;
   updateUser(patch: Partial<User>): void;
-  /** Ends the session, clears the cached data and goes to /sign-in. */
-  signOut(reason: SignOutReason): Promise<void>;
+  /**
+   * Ends the session, clears the cached data and goes to /sign-in. With
+   * `elsewhere`, another tab has already ended the shared session: this tab
+   * only follows, without asking the server again.
+   */
+  signOut(reason: SignOutReason, opts?: { elsewhere?: boolean }): Promise<void>;
   /**
    * Ends a session that can't use this app (no platform role) without
    * leaving the page, so the refusal stays on screen.
@@ -132,7 +136,7 @@ export function AuthProvider({
   );
 
   const end = useCallback(
-    async (after: () => void) => {
+    async (after: () => void, elsewhere = false) => {
       if (!live.current.signedIn && !live.current.mfaPending) return;
       live.current = { signedIn: false, mfaPending: false };
       startTransition(() => {
@@ -142,6 +146,7 @@ export function AuthProvider({
         setMfaPending(false);
         after();
       });
+      if (elsewhere) return;
       const finish = client.signOut().catch(() => {});
       signingOut.current = finish;
       await finish;
@@ -151,11 +156,11 @@ export function AuthProvider({
   );
 
   const signOut = useCallback(
-    (why: SignOutReason) =>
+    (why: SignOutReason, opts?: { elsewhere?: boolean }) =>
       end(() => {
         setReason(why);
         router.replace("/sign-in");
-      }),
+      }, opts?.elsewhere),
     [end, router],
   );
   const refuse = useCallback(() => end(() => setReason(null)), [end]);

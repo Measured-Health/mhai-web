@@ -7,6 +7,8 @@ import type { SsoIn, SsoOut } from "../api/contract";
 import { queryKeys } from "./keys";
 
 const ssoKey = (id: string) => [...queryKeys.hospitals, id, "sso"] as const;
+/** The hospital's Recent actions, which list single sign-on changes too. */
+const feedKey = (id: string) => [...queryKeys.activity, "feed", id] as const;
 
 /** One hospital's single sign-on set-up. The secret is never in it. */
 export function useSso(id: string) {
@@ -26,6 +28,7 @@ export function useSaveSso(id: string) {
       onSuccess: (sso: SsoOut) => {
         qc.setQueryData(ssoKey(id), sso);
         void qc.invalidateQueries({ queryKey: queryKeys.hospitals });
+        void qc.invalidateQueries({ queryKey: feedKey(id) });
       },
     },
     // The request holds the secret: keep it out of the cache once settled.
@@ -43,6 +46,11 @@ export function useTestSso(id: string) {
   const qc = useQueryClient();
   return useKeyedMutation(
     (_: void, key) => getPlatformClient().testSso(id, { idempotencyKey: key }),
-    { onSuccess: (sso: SsoOut) => qc.setQueryData(ssoKey(id), sso) },
+    {
+      onSuccess: (sso: SsoOut) => {
+        qc.setQueryData(ssoKey(id), sso);
+        void qc.invalidateQueries({ queryKey: feedKey(id) });
+      },
+    },
   );
 }
