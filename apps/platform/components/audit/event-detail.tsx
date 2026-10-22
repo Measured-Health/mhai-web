@@ -215,7 +215,7 @@ function Fields({
         </Field>
         {hasPatients(e) && (
           <Field term="Patients">
-            <PatientIds id={e.id} count={e.patients.count} />
+            <PatientIds key={e.id} id={e.id} count={e.patients.count} />
           </Field>
         )}
         {e.letter && (
