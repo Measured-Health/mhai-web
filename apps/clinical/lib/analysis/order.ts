@@ -2,7 +2,9 @@
 // first. Hidden rows come after them in a fixed order (the display name,
 // with "Not standardised" and "… not recorded" last), so their order never
 // gives away their true size. With every row hidden, every row sorts by
-// name. The views, the tables and the CSV all use this order.
+// name. Age band, sex and location type always keep their fixed order,
+// whatever order the server sends. The views, the tables and the CSV all use
+// this order.
 import type { GuardedOut } from "../api/admin-contract";
 import type { ConditionRef, ViewId, ViewOut } from "../api/analysis-contract";
 import { dismissReasonLabel } from "../notifications/alert-view";
@@ -13,6 +15,7 @@ import {
   locationText,
   specialtyText,
 } from "./labels";
+import { AGE_BANDS, SETTINGS, SEXES } from "./read";
 
 /** A row's fixed sort key: its display name, a tie-breaker, and whether it goes last. */
 export type RowKey = { name: string; tie?: string; last: boolean };
@@ -48,6 +51,19 @@ export function orderRows<R>(
   ];
 }
 
+/** Rows in the fixed order of `order`, anything unknown (or null) last. */
+function fixedOrder<R, K>(
+  rows: readonly R[],
+  key: (r: R) => K,
+  order: readonly K[],
+): R[] {
+  const at = (r: R) => {
+    const i = order.indexOf(key(r));
+    return i < 0 ? order.length : i;
+  };
+  return [...rows].sort((a, b) => at(a) - at(b));
+}
+
 const conditionKey = (c: ConditionRef): RowKey => ({
   name: conditionName(c),
   tie: `${c.icd10 ?? ""} ${c.id}`,
@@ -64,9 +80,13 @@ const ORDER: Orderer = {
       (r) => conditionKey(r.condition),
     ),
   }),
-  // Age band, sex and location type keep their fixed order.
+  // Age band, sex and location type always use their fixed order, shown or
+  // hidden, so a hidden row's place never gives away its size.
   affected: (d) => ({
     ...d,
+    by_age: fixedOrder(d.by_age, (r) => r.band, AGE_BANDS),
+    by_sex: fixedOrder(d.by_sex, (r) => r.sex, SEXES),
+    by_setting: fixedOrder(d.by_setting, (r) => r.setting, [...SETTINGS, null]),
     by_location: orderRows(
       d.by_location,
       (r) => r.patients,

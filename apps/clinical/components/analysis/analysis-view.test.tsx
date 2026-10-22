@@ -18,7 +18,13 @@ import { createMockAnalysis } from "@/lib/api/mock-analysis";
 import { hideAllWhenFew } from "@/lib/analysis-queries";
 import { analysisCsv } from "@/lib/analysis/csv";
 import { defaultFilters, rangeFor } from "@/lib/analysis/filters";
-import { conditionText, countText } from "@/lib/analysis/labels";
+import {
+  AGE_LABEL,
+  SEX_LABEL,
+  conditionText,
+  countText,
+  settingText,
+} from "@/lib/analysis/labels";
 import { readView } from "@/lib/analysis/read";
 import { viewSummary } from "@/lib/analysis/summary";
 import { renderAdmin } from "@/tests/admin-render";
@@ -556,6 +562,74 @@ describe("AnalysisView", () => {
     expect(csv).toContain("Analysis,Who is affected");
     expect(csv).toContain("Sex,Female");
     expect(csv).not.toMatch(/P-[A-Z0-9]{4,}|drill|age-|sex-female/);
+  });
+
+  it("age band, sex and location type keep their fixed order in the chart, the table and the CSV, whatever the server's order", async () => {
+    const real = holder.client;
+    // The server's rows backwards: never the fixed order.
+    holder.client = {
+      ...real,
+      getView: (async (v: ViewId, f: AnalysisFilters) => {
+        const out = await real.getView(v, f);
+        if (v !== "affected") return out;
+        const a = structuredClone(out) as AffectedOut;
+        a.by_age.reverse();
+        a.by_sex.reverse();
+        a.by_setting.reverse();
+        return a;
+      }) as AnalysisClient["getView"],
+    };
+    // The mock sends the fixed order; the client above sends it backwards.
+    const a = await expected("affected", F90);
+    const fixedAges = a.by_age.map((r) => AGE_LABEL[r.band]);
+    const fixedSexes = a.by_sex.map((r) => SEX_LABEL[r.sex]);
+    const fixedSettings = a.by_setting.map((r) => settingText(r.setting));
+    expect(fixedAges).toEqual([
+      "0–17",
+      "18–39",
+      "40–64",
+      "65–79",
+      "80 and over",
+    ]);
+    const served = await holder.client.getView("affected", F90);
+    expect(
+      (served as AffectedOut).by_age.map((r) => AGE_LABEL[r.band]),
+    ).toEqual([...fixedAges].reverse());
+    const ages = fixedAges;
+    const sexes = fixedSexes;
+    const settings = fixedSettings;
+
+    render();
+    await loaded();
+    await userEvent.click(screen.getByRole("tab", { name: "Who is affected" }));
+    await screen.findByText(viewSummary("affected", a));
+    const firstWords = (name: string, labels: string[]) =>
+      listItems(screen.getByRole("list", { name })).map(
+        (li) => labels.find((l) => li.textContent!.startsWith(l)) ?? "",
+      );
+    expect(firstWords("Patients by age band", ages)).toEqual(fixedAges);
+    expect(firstWords("Patients by sex", sexes)).toEqual(fixedSexes);
+    expect(firstWords("Patients by location type", settings)).toEqual(
+      fixedSettings,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Table" }));
+    const rowNames = (caption: string) =>
+      within(screen.getByRole("table", { name: caption }))
+        .getAllByRole("row")
+        .slice(1)
+        .map((r) => within(r).getByRole("rowheader").textContent);
+    expect(rowNames("Patients by age band")).toEqual(fixedAges);
+    expect(rowNames("Patients by sex")).toEqual(fixedSexes);
+    expect(rowNames("Patients by location type")).toEqual(fixedSettings);
+
+    await userEvent.click(screen.getByRole("button", { name: "Download CSV" }));
+    const csv = download.mock.calls[0]![1] as string;
+    for (const labels of [fixedAges, fixedSexes, fixedSettings]) {
+      const at = labels.map((l) => csv.indexOf(`\r\n${l},`));
+      expect(at.every((i) => i > 0)).toBe(true);
+      expect([...at].sort((x, y) => x - y)).toEqual(at);
+    }
   });
 
   it("offline disables the filters with the reason and keeps Download CSV", async () => {

@@ -327,6 +327,18 @@ test("See patients opens the de-identified list; Activity shows the event", asyn
   await expect(
     list.getByText("De-identified: no names or record numbers"),
   ).toBeVisible();
+  if (!isMobile(page)) {
+    // A side panel against the window's right edge, full height, not
+    // against the edge of the card it was opened from.
+    const box = (await list.boundingBox())!;
+    const [w, h] = await page.evaluate(() => [
+      document.documentElement.clientWidth,
+      window.innerHeight,
+    ]);
+    expect(Math.round(box.x + box.width)).toBe(w);
+    expect(Math.round(box.y)).toBe(0);
+    expect(Math.round(box.height)).toBe(h);
+  }
   const rows = list
     .getByRole("list", { name: "Patients" })
     .getByRole("listitem");
@@ -399,9 +411,22 @@ test("phone: filters in a sheet, the view select, the patient list as a sheet", 
   await see.click();
   const list = page.getByRole("dialog", { name: /patients ·/ });
   await expect(list).toBeVisible();
-  // It fits the screen (a 440 px side panel would not).
-  const box = await list.boundingBox();
-  expect(box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  // It covers the screen, edge to edge from the bottom, not a card inside
+  // the page (a 440 px side panel, or one trapped in a card, would not).
+  const [vw, vh] = await page.evaluate(() => [
+    document.documentElement.clientWidth,
+    window.innerHeight,
+  ]);
+  const box = (await list.boundingBox())!;
+  expect(Math.round(box.x)).toBe(0);
+  expect(Math.round(box.width)).toBe(vw);
+  expect(Math.round(box.y + box.height)).toBe(vh);
+  // Nothing sits on top of it: the point at its centre is inside the dialog.
+  const onTop = await list.evaluate(
+    (el, p) => el.contains(document.elementFromPoint(p.x, p.y)),
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+  );
+  expect(onTop).toBe(true);
   await expect(
     list.getByRole("list", { name: "Patients" }).getByRole("listitem").first(),
   ).toContainText(/P-[A-Z0-9]{5}/);

@@ -139,62 +139,57 @@ export function PatientsPanel({
     q.data?.status === "failed" || (q.isError && !tooSmall(q.error));
 
   return (
-    <div className="print:hidden">
-      <SidePanel open onClose={onClose} title={title}>
-        <p className="mb-3 flex items-center gap-1.5 text-[13px] text-ink-2">
-          <Users aria-hidden className="size-4 shrink-0" />
-          {LEVEL_NOTE[level]}
+    <SidePanel open onClose={onClose} title={title} className="print:hidden">
+      <p className="mb-3 flex items-center gap-1.5 text-[13px] text-ink-2">
+        <Users aria-hidden className="size-4 shrink-0" />
+        {LEVEL_NOTE[level]}
+      </p>
+      {d ? (
+        <>
+          {d.count > d.patients.length && (
+            <p className="mb-2 text-[13px] text-ink-2">
+              Showing the first {countLabel(d.patients.length)} of{" "}
+              {countLabel(d.count)}
+            </p>
+          )}
+          <ul aria-label="Patients" className="flex flex-col gap-2">
+            {d.patients.map((p) => (
+              <PatientRow key={p.pid} p={p} />
+            ))}
+          </ul>
+        </>
+      ) : q.isError && tooSmall(q.error) ? (
+        <p role="status" className="text-[14px]">
+          This group is too small to list
         </p>
-        {d ? (
-          <>
-            {d.count > d.patients.length && (
-              <p className="mb-2 text-[13px] text-ink-2">
-                Showing the first {countLabel(d.patients.length)} of{" "}
-                {countLabel(d.count)}
-              </p>
-            )}
-            <ul aria-label="Patients" className="flex flex-col gap-2">
-              {d.patients.map((p) => (
-                <PatientRow key={p.pid} p={p} />
-              ))}
-            </ul>
-          </>
-        ) : q.isError && tooSmall(q.error) ? (
-          <p role="status" className="text-[14px]">
-            This group is too small to list
-          </p>
-        ) : failed ? (
-          <div
-            role="alert"
-            className="flex flex-wrap items-center gap-3 text-[14px]"
+      ) : failed ? (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 text-[14px]"
+        >
+          <OctagonAlert aria-hidden className="size-5 shrink-0 text-bad-deep" />
+          <span className="flex-1">Couldn&apos;t load these patients</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="min-h-11"
+            onClick={() => void q.refetch()}
           >
-            <OctagonAlert
-              aria-hidden
-              className="size-5 shrink-0 text-bad-deep"
-            />
-            <span className="flex-1">Couldn&apos;t load these patients</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="min-h-11"
-              onClick={() => void q.refetch()}
-            >
-              Try again
-            </Button>
-          </div>
-        ) : q.fetchStatus === "paused" ? (
-          <p
-            role="status"
-            className="flex items-center gap-2 text-[14px] text-ink-2"
-          >
-            <WifiOff aria-hidden className="size-4 shrink-0" />
-            You&apos;re offline. The list will load when you reconnect.
-          </p>
-        ) : (
-          <Skeleton className="h-40 rounded-2xl" />
-        )}
-      </SidePanel>
-    </div>
+            Try again
+          </Button>
+        </div>
+      ) : q.fetchStatus === "paused" ? (
+        <p
+          role="status"
+          className="flex items-center gap-2 text-[14px] text-ink-2"
+        >
+          <WifiOff aria-hidden className="size-4 shrink-0" />
+          You&apos;re offline. The list will load when you reconnect.
+        </p>
+      ) : (
+        <Skeleton className="h-40 rounded-2xl" />
+      )}
+    </SidePanel>
   );
 }
 

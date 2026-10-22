@@ -128,8 +128,71 @@ describe("orderRows", () => {
       "Paediatrics",
       null,
     ]);
-    // Age bands keep their fixed order.
-    expect(out.by_age.map((r) => r.band)).toEqual(["80+", "0-17"]);
+    // Age bands always sort by their fixed order.
+    expect(out.by_age.map((r) => r.band)).toEqual(["0-17", "80+"]);
+  });
+
+  it("age band, sex and location type use their fixed order, whatever order the server sends", () => {
+    // Sent by size, as a careless server might: shown largest first, then
+    // the hidden groups from largest to smallest.
+    const affected: AffectedOut = {
+      ...meta(S(300)),
+      by_age: [
+        { band: "40-64", patients: D(S(120)) },
+        { band: "18-39", patients: D(S(90)) },
+        { band: "65-79", patients: D(H) },
+        { band: "80+", patients: D(H) },
+        { band: "0-17", patients: D(S(86)) },
+      ],
+      by_sex: [
+        { sex: "male", patients: D(S(160)) },
+        { sex: "female", patients: D(S(137)) },
+        { sex: "not_recorded", patients: D(H) },
+        { sex: "other", patients: D(H) },
+      ],
+      by_setting: [
+        { setting: null, patients: D(S(150)) },
+        { setting: "emergency", patients: D(H) },
+        { setting: "outpatient", patients: D(S(100)) },
+        { setting: "admitted", patients: D(S(46)) },
+      ],
+      by_location: [],
+      by_specialty: [],
+    };
+    const fixed = (d: AffectedOut) => ({
+      age: d.by_age.map((r) => r.band),
+      sex: d.by_sex.map((r) => r.sex),
+      setting: d.by_setting.map((r) => r.setting),
+    });
+    const want = {
+      age: ["0-17", "18-39", "40-64", "65-79", "80+"],
+      sex: ["female", "male", "other", "not_recorded"],
+      setting: ["admitted", "outpatient", "emergency", null],
+    };
+    expect(fixed(orderView("affected", affected))).toEqual(want);
+    for (const ages of permutations(affected.by_age))
+      expect(
+        fixed(orderView("affected", { ...affected, by_age: ages })).age,
+      ).toEqual(want.age);
+    expect(fixed(affected).age[0]).toBe("40-64");
+
+    // The CSV writes the same fixed order.
+    const csv = analysisCsv("affected", affected, {
+      hospital: "Havana Hospital",
+      filters: defaultFilters("2026-10-22"),
+      options: null,
+    });
+    const order = (labels: string[]) =>
+      labels.map((l) => csv.indexOf(`\r\n${l},`));
+    for (const labels of [
+      ["0–17", "18–39", "40–64", "65–79", "80 and over"],
+      ["Female", "Male", "Other", "Not recorded"],
+      ["Admitted", "Outpatient", "Emergency"],
+    ]) {
+      const at = order(labels);
+      expect(at.every((i) => i > 0)).toBe(true);
+      expect([...at].sort((a, b) => a - b)).toEqual(at);
+    }
   });
 
   it("sorts shown rows by value, largest first, and leaves the input alone", () => {

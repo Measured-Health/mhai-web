@@ -169,6 +169,25 @@ describe("See patients", () => {
     ).toBeNull();
   });
 
+  it("portals the panel to the page, with print:hidden on its own root", async () => {
+    prevalenceWith(
+      vi.fn(async () =>
+        reply(
+          6,
+          [1, 2, 3, 4, 5, 6].map((i) => row(i)),
+        ),
+      ),
+    );
+    const { panel } = await openList();
+    const root = panel.parentElement!;
+    // The panel's own root sits on document.body, not inside a card.
+    expect(root.parentElement).toBe(document.body);
+    expect(root).toHaveClass("fixed", "inset-0", "print:hidden");
+    expect(
+      within(panel).queryByRole("button", { name: /download|export|print/i }),
+    ).toBeNull();
+  });
+
   it("a hidden count has no See patients", async () => {
     prevalenceWith(vi.fn());
     const list = await screen.findByRole("list", {

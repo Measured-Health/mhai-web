@@ -41,15 +41,24 @@ export const PATIENTS_MAX = 200;
 const FAILED = { status: "failed" } as const;
 const ID = /^[A-Za-z0-9_-]+$/;
 const PID = /^P-[A-Z0-9]{4,12}$/;
-const AGE_BANDS: readonly AgeBand[] = [
+export const AGE_BANDS: readonly AgeBand[] = [
   "0-17",
   "18-39",
   "40-64",
   "65-79",
   "80+",
 ];
-const SEXES: readonly Sex[] = ["female", "male", "other", "not_recorded"];
-const SETTINGS: readonly Setting[] = ["admitted", "outpatient", "emergency"];
+export const SEXES: readonly Sex[] = [
+  "female",
+  "male",
+  "other",
+  "not_recorded",
+];
+export const SETTINGS: readonly Setting[] = [
+  "admitted",
+  "outpatient",
+  "emergency",
+];
 const FLAGS = ["low", "high", "abnormal"];
 const SEVERITIES = ["critical", "urgent", "info"] as const;
 const REASONS = ["not_relevant", "already_known", "wrong_patient", "other"];

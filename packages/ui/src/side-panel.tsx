@@ -12,6 +12,8 @@ export function SidePanel(props: {
   onClose(): void;
   title: string;
   children: ReactNode;
+  /** Classes for the portaled root, e.g. `print:hidden`. */
+  className?: string;
 }) {
   return <Sheet side="right" {...props} />;
 }
