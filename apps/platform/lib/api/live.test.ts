@@ -265,6 +265,93 @@ const ROWS: Row[] = [
     "/api/v1/platform/me/analytics-email",
     { mode: "critical", version: 2 },
   ],
+  [
+    "listHolds",
+    (c) =>
+      c.listHolds({
+        status: "lifted",
+        hospital: "h_north",
+        q: "HC/2026",
+        cursor: "50",
+      }),
+    "GET",
+    "/api/v1/platform/legal-holds?status=lifted&hospital=h_north&q=HC%2F2026&cursor=50",
+    undefined,
+  ],
+  [
+    "placeHold",
+    (c) =>
+      c.placeHold(
+        {
+          hospital_id: "h_north",
+          from: "2025-01-01",
+          reason: "court_case",
+          reference: "HC/1",
+          asked_by: "Solicitors",
+          review_on: "2027-04-22",
+          ...CODE,
+        },
+        K,
+      ),
+    "POST",
+    "/api/v1/platform/legal-holds",
+    {
+      hospital_id: "h_north",
+      from: "2025-01-01",
+      reason: "court_case",
+      reference: "HC/1",
+      asked_by: "Solicitors",
+      review_on: "2027-04-22",
+      mfa_code: "123456",
+    },
+  ],
+  [
+    "getHold",
+    (c) => c.getHold("hold_hv"),
+    "GET",
+    "/api/v1/platform/legal-holds/hold_hv",
+    undefined,
+  ],
+  [
+    "editHold",
+    (c) => c.editHold("hold_hv", { note: null, version: 2 }, K),
+    "PATCH",
+    "/api/v1/platform/legal-holds/hold_hv",
+    { note: null, version: 2 },
+  ],
+  [
+    "requestLift",
+    (c) =>
+      c.requestLift(
+        "hold_hv",
+        { reason: "case_closed", authority: "Letter", ...CODE },
+        K,
+      ),
+    "POST",
+    "/api/v1/platform/legal-holds/hold_hv/lift",
+    { reason: "case_closed", authority: "Letter", mfa_code: "123456" },
+  ],
+  [
+    "approveLift",
+    (c) => c.approveLift("hold_hv", CODE, K),
+    "POST",
+    "/api/v1/platform/legal-holds/hold_hv/lift/approve",
+    CODE,
+  ],
+  [
+    "cancelLift",
+    (c) => c.cancelLift("hold_hv", K),
+    "POST",
+    "/api/v1/platform/legal-holds/hold_hv/lift/cancel",
+    undefined,
+  ],
+  [
+    "undoLift",
+    (c) => c.undoLift("hold_hv", { backup_code: "AAAA-BBBB" }, K),
+    "POST",
+    "/api/v1/platform/legal-holds/hold_hv/lift/undo",
+    { backup_code: "AAAA-BBBB" },
+  ],
 ];
 
 describe("live platform client", () => {
@@ -351,12 +438,16 @@ describe("live platform client", () => {
     await client().getHospital("a b/c");
     await client().getChangeSeries("a/b", "30d");
     await client().followUp("a/b", { version: 1 }, K);
+    await client().listHolds({});
+    await client().approveLift("a/b", CODE, K);
     expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
       "/api/v1/platform/hospitals",
       "/api/v1/platform/activity",
       "/api/v1/platform/hospitals/a%20b%2Fc",
       "/api/v1/platform/analytics/changes/a%2Fb/series?period=30d",
       "/api/v1/platform/analytics/changes/a%2Fb/follow-up",
+      "/api/v1/platform/legal-holds",
+      "/api/v1/platform/legal-holds/a%2Fb/lift/approve",
     ]);
   });
 

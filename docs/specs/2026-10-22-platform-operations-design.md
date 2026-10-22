@@ -441,8 +441,9 @@ review_on, mfa_code}` → the hold. **409** `hospital_removed`; **409** `removal
   `POST …/lift/cancel`; `POST …/lift/undo {mfa_code}` (only before `released_on`) → `active`.
 - `GET /platform/hospitals` items gain `legal_holds_active`; `GET /platform/hospitals/{id}`
   gains `legal_holds` (the active ones, short form). Despite the name, `legal_holds_active`
-  counts the holds that keep records: active, review due, lift requested, or lifted before
-  their `released_on` (the same set as `removal.checks.legal_holds`).
+  counts the holds that keep records: active, review due, lift requested, or lifted within
+  the 7-day grace period, before their `released_on` (the same set as
+  `removal.checks.legal_holds`).
 
 **Server duties for holds** (the app can't keep these):
 
