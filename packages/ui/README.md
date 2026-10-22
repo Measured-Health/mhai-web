@@ -4,12 +4,15 @@ Design v3 components, hooks and sign-in inputs shared by the clinical and
 platform admin apps. The package is TypeScript source; each app compiles it
 (`transpilePackages` in its `next.config.ts`). Import a module by its path:
 
-| Import                  | What it holds                                                                                                      |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `@mhai/ui/cn`           | `cn` (joins class names, skipping empty ones)                                                                      |
-| `@mhai/ui/<component>`  | `button`, `banner`, `chip`, `dialog`, `sheet`, `side-panel`, `skeleton`, `switch`, `toast`, `reason-form`, `brand` |
-| `@mhai/ui/hooks/<hook>` | `use-escape`, `use-focus-trap`, `modal-dialog`, `use-media`, `use-idle`, `use-now`, `use-online`                   |
-| `@mhai/ui/auth/<input>` | `code-input`, `backup-code-toggle`, `password-fields`, `qr-code`, `backup-codes`, `auth-heading`                   |
+| Import                    | What it holds                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `@mhai/ui/cn`             | `cn` (joins class names, skipping empty ones)                                                                      |
+| `@mhai/ui/<component>`    | `button`, `banner`, `chip`, `dialog`, `sheet`, `side-panel`, `skeleton`, `switch`, `toast`, `reason-form`, `brand` |
+| `@mhai/ui/hooks/<hook>`   | `use-escape`, `use-focus-trap`, `modal-dialog`, `use-media`, `use-idle`, `use-now`, `use-online`                   |
+| `@mhai/ui/charts/<chart>` | `bar-list`, `column-chart`; the `Column` and `BarItem` types are in `charts/types`                                 |
+| `@mhai/ui/small-groups`   | `SMALL_GROUP_MIN`, `FEWER_THAN_5`, `isSmallCount`                                                                  |
+| `@mhai/ui/csv`            | `csvCell`, `toCsv`, `downloadCsv`, `CSV_MAX_ROWS`                                                                  |
+| `@mhai/ui/auth/<input>`   | `code-input`, `backup-code-toggle`, `password-fields`, `qr-code`, `backup-codes`, `auth-heading`                   |
 
 What each app provides:
 

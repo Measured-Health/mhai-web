@@ -132,6 +132,11 @@ const SHAPES: [Method, string][] = [
   ["PATCH", "platform/team/{id}"],
   ["DELETE", "platform/team/{id}"],
   ["GET", "platform/activity"],
+  ["GET", "platform/analytics"],
+  ["GET", "platform/analytics/changes/{id}/series"],
+  ["GET", "platform/analytics/hospitals/{id}/series"],
+  ["PUT", "platform/analytics/changes/{id}/follow-up"],
+  ["DELETE", "platform/analytics/changes/{id}/follow-up"],
 ];
 let n = 0;
 const concrete = (shape: string) =>
@@ -206,6 +211,17 @@ describe("platform API proxy", () => {
     ["POST", ["platform", "team"]],
     ["POST", ["platform", "activity"]],
     ["POST", ["platform", "hospitals", "h1", "invites", "i1"]],
+    ["GET", ["platform", "analytics", "x"]],
+    ["GET", ["platform", "analytics", "changes"]],
+    ["GET", ["platform", "analytics", "changes", "c1"]],
+    ["GET", ["platform", "analytics", "changes", "c1", "follow-up"]],
+    ["POST", ["platform", "analytics", "changes", "c1", "follow-up"]],
+    ["PATCH", ["platform", "analytics", "changes", "c1", "follow-up"]],
+    ["PUT", ["platform", "analytics", "changes", "c1", "series"]],
+    ["PUT", ["platform", "analytics"]],
+    ["GET", ["platform", "analytics", "hospitals", "h1"]],
+    ["GET", ["platform", "analytics", "hospitals", "..", "series"]],
+    ["DELETE", ["platform", "analytics", "hospitals", "h1", "series"]],
   ] as [Method, string[]][])(
     "unknown shapes are 404: %s %j",
     async (method, path) => {

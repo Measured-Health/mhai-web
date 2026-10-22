@@ -5,6 +5,9 @@
   "exports": {
     "./base.css": "./src/base.css",
     "./cn": "./src/cn.ts",
+    "./csv": "./src/csv.ts",
+    "./small-groups": "./src/small-groups.ts",
+    "./charts/types": "./src/charts/types.ts",
     "./hooks/*": "./src/hooks/*.ts",
     "./*": "./src/*.tsx"
   },

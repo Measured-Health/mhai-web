@@ -155,11 +155,16 @@ codes work too):
   demo repeats these steps at each sign-in.
 
 Any other email is a hospital account and is turned away with "This account
-can't use the platform admin app." The six sample hospitals:
+can't use the platform admin app." The nine sample hospitals:
 
+- **Havana Hospital**: active, the clinical demo's hospital (admins Grace
+  Nwosu and Dr. Ngozi Obi);
 - **Northgate General Hospital**: active, with single sign-on on and tested;
 - **Riverside Children's Hospital**: active; try editing, deactivating and
   reactivating it;
+- **Lakeside Community Clinic**: active, a small clinic whose counts are 1
+  to 4;
+- **Hilltop Cottage Hospital**: active, new, with no active hospital admin;
 - **Eastbrook Medical Centre**: set-up incomplete, its first admin's invite
   still pending (Resend);
 - **Westfield Clinic**: deactivated, with its records retention period over,
@@ -177,6 +182,23 @@ platform admin. Sign out, sign in as Tunde in the same tab, open Westfield
 Clinic and approve it: it shows Removal scheduled and, about a minute later,
 Removed. The sample data lives in the tab's memory, so a reload starts it
 afresh and signs you out.
+
+**Analytics.** **Analytics** in the sidebar shows how the service is used
+across every active hospital, in counts only: no patient names, questions
+or answers. **What changed** always compares the last 7 days with the 4
+weeks before, whatever period is picked, and lists the biggest changes
+first (serious Critical ones before the rest, then **Show all**). On open,
+Northgate General Hospital's slower Critical alert acknowledgement is
+selected: its chart sits against the other hospitals, with the hospital's
+size and its admins to contact. Platform admins can **Mark followed up**
+with an optional note (500 characters; only the author edits it) and undo
+it. Riverside Children's Hospital's drop in questions has already been
+followed up by Tunde, with a note; auditors see that and change nothing.
+Lakeside Community Clinic has counts of 1 to 4, which show as "Fewer than
+5" (on screen and in **Download CSV**), and Hilltop Cottage Hospital is new,
+with zeros, "Not enough data to compare yet" and "No active hospital
+admin". The period picker (last 7, 30 or 90 days) changes the charts, the
+tabs and the CSV. On a phone, tap a change to see it, then **Back**.
 
 **The auditor** (Amara Eze) sees every hospital, the team and the activity,
 with no buttons to change anything; the server refuses an auditor's changes

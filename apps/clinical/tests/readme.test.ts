@@ -103,6 +103,10 @@ describe("README demo instructions", () => {
     );
   });
 
+  it("documents the platform analytics demo", () => {
+    expect(readme).toMatch(/\*\*Analytics\.\*\*/);
+  });
+
   it("says the 403 page has no link, and no longer sets its address", () => {
     expect(readme).not.toMatch(/NEXT_PUBLIC_ADMIN_APP_URL/);
     expect(readme).toMatch(
