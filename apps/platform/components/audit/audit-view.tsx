@@ -11,6 +11,8 @@ import { AuditFooter } from "./audit-footer";
 import { AuditTabs } from "./audit-tabs";
 import { initialEvents, type EventsState } from "./event-filters";
 import { EventsTab } from "./events-tab";
+import { IntegrityBanner } from "./integrity-banner";
+import { IntegrityTab } from "./integrity-tab";
 
 const TONE: Record<Tone, { Icon: typeof ShieldCheck; className: string }> = {
   ok: { Icon: ShieldCheck, className: "bg-ok-wash text-ok-deep" },
@@ -65,6 +67,11 @@ export function AuditView() {
     initialEvents(Date.now()),
   );
   const status = useIntegrityStatus();
+  // Step 2's Open entry: the entry by its exact id, on Events.
+  const openEntry = (id: string) => {
+    setEvents((e) => ({ ...e, q: id }));
+    setTab("events");
+  };
 
   return (
     <>
@@ -75,11 +82,17 @@ export function AuditView() {
             <IntegrityLine status={status} onOpen={() => setTab("integrity")} />
             {/* Slot: Export CSV. */}
           </div>
-          {/* Slot: the integrity failure banner. */}
+          <IntegrityBanner
+            onOpen={() => setTab("integrity")}
+            className="rounded-2xl border px-4 py-3.5"
+          />
           <AuditTabs tab={tab} onTab={setTab}>
             {(t) =>
               t === "events" ? (
                 <EventsTab value={events} onChange={setEvents} />
+              ) : t === "integrity" ? (
+                // Slot: onExport opens Task 8's export dialog.
+                <IntegrityTab onOpenEntry={openEntry} />
               ) : null
             }
           </AuditTabs>

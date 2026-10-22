@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { checkpoint, intactRun } from "@/tests/audit-event";
 import {
+  SHOWN_WORDS,
   STALE_MS,
   bannerOn,
+  breakRange,
   coverageLine,
   errorWords,
   headerLine,
   integrityOf,
   isRunning,
+  rangeWords,
   runSentence,
   staleness,
 } from "./integrity";
@@ -393,5 +396,44 @@ describe("the run's words", () => {
       on: true,
       date: "21 Oct 2026",
     });
+  });
+});
+
+describe("the history's words", () => {
+  it("states read as words", () => {
+    expect(SHOWN_WORDS).toEqual({
+      intact: "Intact",
+      broken: "Broken",
+      couldnt_check: "Couldn't check",
+      checking: "Checking…",
+    });
+  });
+
+  it("rangeWords names the start and the last entry, or the first broken one", () => {
+    expect(rangeWords(intactRun())).toBe(
+      "From the checkpoint of 4 Jan 2027 to entry 9,881,204",
+    );
+    expect(
+      rangeWords(intactRun({ from_checkpoint: null, from_first: true })),
+    ).toBe("From the first entry to entry 9,881,204");
+    expect(rangeWords(broken)).toBe(
+      "From the checkpoint of 4 Jan 2027 · first broken entry 9,880,117",
+    );
+    expect(rangeWords(intactRun({ from_checkpoint: null }))).toBe(
+      "Up to entry 9,881,204",
+    );
+    expect(
+      rangeWords(
+        intactRun({ from_checkpoint: null, to_seq: null, state: "error" }),
+      ),
+    ).toBe("Range not recorded");
+  });
+
+  it("breakRange runs from a day before the first broken entry to now", () => {
+    expect(breakRange(broken, NOW)).toEqual({
+      from: "2026-10-20T23:14:00.000Z",
+      to: new Date(NOW).toISOString(),
+    });
+    expect(breakRange(intactRun(), NOW)).toBeNull();
   });
 });

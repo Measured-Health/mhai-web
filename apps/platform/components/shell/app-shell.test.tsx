@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -125,5 +125,23 @@ describe("the platform shell", () => {
       "href",
       "/sign-out",
     );
+  });
+
+  it("Hospitals shows no integrity banner while the check is intact, and other pages never read it", async () => {
+    const m = createMockPlatform({ delayMs: 0 });
+    const read = vi.spyOn(m, "getIntegrityStatus");
+    __setPlatformClientForTests(m);
+    const { unmount } = shell();
+    await waitFor(() => expect(read).toHaveBeenCalled());
+    expect(
+      screen.queryByText(/The audit log failed its integrity check/),
+    ).toBeNull();
+    unmount();
+    read.mockClear();
+    pathname.value = "/team";
+    shell();
+    await screen.findAllByRole("navigation", { name: "Platform" });
+    expect(read).not.toHaveBeenCalled();
+    __resetPlatformClientForTests();
   });
 });

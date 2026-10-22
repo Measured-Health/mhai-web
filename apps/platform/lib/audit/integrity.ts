@@ -228,3 +228,45 @@ export function bannerOn(s: ReadStatus | undefined): {
   const at = endOf(failed);
   return { on: true, date: at ? dateLabel(at) : null };
 }
+
+/** Each state in words: shown beside its icon, never colour alone. */
+export const SHOWN_WORDS: Record<Shown, string> = {
+  intact: "Intact",
+  broken: "Broken",
+  couldnt_check: "Couldn't check",
+  checking: "Checking…",
+};
+
+/**
+ * A run's range for the history: "From the checkpoint of 4 Jan 2027 to entry
+ * 9,881,204", with the first broken entry when there is one.
+ */
+export function rangeWords(run: Run): string {
+  const from = startWords(run);
+  const to = run.to_seq !== null ? `entry ${num(run.to_seq)}` : null;
+  const span =
+    from && to
+      ? `From ${from} to ${to}`
+      : from
+        ? `From ${from}`
+        : to
+          ? `Up to ${to}`
+          : "Range not recorded";
+  return run.state === "broken" && run.first_broken_seq !== null
+    ? `${span} · first broken entry ${num(run.first_broken_seq)}`
+    : span;
+}
+
+const DAY_MS = 24 * 3_600_000;
+
+/** The dates to export around a break: a day before it, up to now. */
+export function breakRange(
+  run: Run,
+  now: number,
+): { from: string; to: string } | null {
+  if (run.first_broken_at === null) return null;
+  return {
+    from: new Date(Date.parse(run.first_broken_at) - DAY_MS).toISOString(),
+    to: new Date(now).toISOString(),
+  };
+}
