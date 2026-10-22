@@ -9,6 +9,7 @@ import type {
   Period,
   SeriesOut,
 } from "./analytics-contract";
+import type { AuditClient } from "./audit-contract";
 import type { EmailPref, NotificationsOut } from "./notifications-contract";
 
 export type HospitalStatus =
@@ -181,7 +182,7 @@ export class BlockedError extends ApiError {
   }
 }
 
-export interface PlatformClient {
+export interface PlatformClient extends AuditClient {
   listHospitals(
     q: HospitalQuery,
   ): Promise<{ hospitals: HospitalSummary[]; next_cursor: string | null }>;

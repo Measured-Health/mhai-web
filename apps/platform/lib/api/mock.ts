@@ -1,3 +1,4 @@
+import { unimplementedAudit } from "./mock-audit-stub";
 import { ApiError } from "@mhai/api-client/errors";
 import {
   BlockedError,
@@ -931,5 +932,6 @@ export function createMockPlatform({
         emailPrefs.set(m.id, next);
         return next;
       }),
+    ...unimplementedAudit(),
   };
 }

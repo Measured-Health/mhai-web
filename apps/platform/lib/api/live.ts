@@ -1,6 +1,8 @@
 import { ApiError } from "@mhai/api-client/errors";
 import { createApiRequest, keyHeader } from "@mhai/api-client/request";
 import { reportUnauthorized } from "@/lib/auth/events";
+import { TooManyRowsError } from "./audit-contract";
+import { liveAudit } from "./live-audit";
 import {
   BlockedError,
   type PlatformClient,
@@ -21,6 +23,15 @@ const BLOCKS: readonly RemovalBlock[] = [
 
 /** Marks a read as background: the proxy won't count it as activity. */
 const BACKGROUND = { "X-MHAI-Background": "1" };
+
+/** `ok` as the area clients take it. */
+export type LiveOk = <T>(
+  path: string,
+  method?: string,
+  body?: unknown,
+  opts?: WriteOpts,
+  extraHeaders?: Record<string, string>,
+) => Promise<T>;
 
 /** `?a=1&b=2` from the filters that are set, or "". */
 function query(q: Record<string, string | undefined>): string {
@@ -59,6 +70,14 @@ export function createLivePlatformClient({
           ),
         );
       }
+      if (
+        res.status === 422 &&
+        code === "too_many_rows" &&
+        typeof data?.rows === "number" &&
+        Number.isSafeInteger(data.rows) &&
+        data.rows >= 0
+      )
+        throw new TooManyRowsError(data.rows);
       throw new ApiError(res.status, code);
     }
     return data as T;
@@ -109,5 +128,6 @@ export function createLivePlatformClient({
     markSeen: (b, o) => ok("/notifications/seen", "POST", b, o),
     getEmailPref: () => ok("/me/analytics-email"),
     setEmailPref: (b, o) => ok("/me/analytics-email", "PUT", b, o),
+    ...liveAudit(ok, fetchImpl),
   };
 }
