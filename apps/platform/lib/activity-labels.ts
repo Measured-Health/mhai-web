@@ -38,6 +38,14 @@ export function actionLabel(a: ActivityAction, target?: string | null): string {
       return t ? `changed ${t}'s role` : "changed a team member's role";
     case "team_removed":
       return t ? `removed ${t} from the team` : "removed a team member";
+    case "change_followed_up":
+      return t ? `marked “${t}” followed up` : "marked a change followed up";
+    case "change_note_edited":
+      return t
+        ? `edited the follow-up note on “${t}”`
+        : "edited a follow-up note";
+    case "change_follow_up_undone":
+      return t ? `undid the follow-up on “${t}”` : "undid a follow-up";
   }
 }
 

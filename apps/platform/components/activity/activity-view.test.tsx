@@ -55,10 +55,10 @@ describe("Activity", () => {
     expect(items[0].textContent).toMatch(
       /^Tunde .* requested removal · Southpoint Hospital · \d{2} \w{3} 2026, \d{2}:\d{2}/,
     );
-    expect(items[2].textContent).toContain(
+    expect(items[5].textContent).toContain(
       "invited chiamaka.obi@eastbrook.example as first hospital admin · Eastbrook Medical Centre",
     );
-    expect(items[6].textContent).toContain("invited ");
+    expect(items[4].textContent).toContain("invited ");
     expect(items[10].textContent).toContain("changed Amara Eze's role");
     expect(items[10].textContent).not.toContain("·  ·");
   });

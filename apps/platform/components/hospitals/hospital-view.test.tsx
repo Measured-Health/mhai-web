@@ -81,11 +81,11 @@ describe("the hospital page", () => {
     expect(
       within(admin).getByText("chiamaka.obi@eastbrook.example"),
     ).toBeInTheDocument();
-    expect(within(admin).getByText("Pending")).toBeInTheDocument();
+    expect(within(admin).getByText("Expired")).toBeInTheDocument();
     const h = await api.getHospital("h_eastbrook");
     expect(
       within(admin).getByText(
-        `Expires ${dateLabel(h.first_admin!.expires_at)}`,
+        `Expired ${dateLabel(h.first_admin!.expires_at)}`,
       ),
     ).toBeInTheDocument();
     const recent = region("Recent actions");
@@ -362,7 +362,7 @@ describe("the hospital page", () => {
     const before = (await api.getHospital("h_eastbrook")).first_admin!
       .expires_at;
     expect(
-      within(admin).getByText(`Expires ${dateLabel(before)}`),
+      within(admin).getByText(`Expired ${dateLabel(before)}`),
     ).toBeInTheDocument();
     await userEvent.click(
       within(admin).getByRole("button", { name: "Resend" }),
