@@ -11,6 +11,8 @@ export interface Column {
   value: number;
   /** Why this column is marked, e.g. "about 3× the usual"; null when not. */
   mark?: string | null;
+  /** Under the small-group rule: reads "Fewer than 5", draws no column, `value` is ignored. */
+  hidden?: boolean;
 }
 
 /** One row in a BarList. */
