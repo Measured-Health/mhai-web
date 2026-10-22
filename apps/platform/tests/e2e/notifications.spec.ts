@@ -1,7 +1,25 @@
-import { expect, test } from "@playwright/test";
-import { ADA, AMARA, expectNoStorage, openNav, signIn } from "./helpers";
+import { expect, test, type Page } from "@playwright/test";
+import {
+  ADA,
+  AMARA,
+  TUNDE,
+  expectNoStorage,
+  isMobile,
+  openNav,
+  signIn,
+  signOut,
+} from "./helpers";
 
 test.afterEach(async ({ page }) => expectNoStorage(page));
+
+/** The bell button (visible one: the shell has a single bell). */
+const bell = (page: Page) =>
+  page
+    .getByRole("button", { name: /^Notifications/ })
+    .filter({ visible: true });
+const UNSEEN = /^Notifications, \d+ new$/;
+const list = (page: Page) =>
+  page.getByRole("dialog", { name: "Notifications" });
 
 const HELP_START = "Critical-type changes are sent straight away";
 
@@ -35,15 +53,60 @@ test("an auditor has the bell but no email setting", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Devices" })).toBeVisible();
   await expect(page.getByRole("radiogroup")).toHaveCount(0);
   await expect(page.getByText("Analytics email")).toHaveCount(0);
+  // The auditor still has the bell.
+  await expect(bell(page)).toBeVisible();
 });
 
-test.fixme("an auditor has the bell (enable once the bell is merged)", async ({
+test("the bell counts new changes, the list opens, and they're marked seen", async ({
   page,
 }) => {
-  await signIn(page, AMARA);
+  await signIn(page, ADA);
+  await expect(bell(page)).toHaveAccessibleName(UNSEEN);
+  await bell(page).click();
+  await expect(list(page)).toBeVisible();
+  const items = list(page).getByRole("list", { name: "New analytics changes" });
+  await expect(items.getByRole("listitem").first()).toContainText("New");
   await expect(
-    page.getByRole("button", { name: /^Notifications/ }).filter({
-      visible: true,
-    }),
+    list(page).getByRole("button", { name: "Mark all seen" }),
   ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(list(page)).toBeHidden();
+  await expect(bell(page)).toBeFocused();
+  // Opening the list marked them seen.
+  await expect(bell(page)).toHaveAccessibleName("Notifications");
+});
+
+test("Ada's seen doesn't clear Tunde's bell", async ({ page }) => {
+  await signIn(page, ADA);
+  await bell(page).click();
+  await page.keyboard.press("Escape");
+  await expect(bell(page)).toHaveAccessibleName("Notifications");
+  await signOut(page);
+  await signIn(page, TUNDE);
+  await expect(bell(page)).toHaveAccessibleName(UNSEEN);
+});
+
+test("an item opens Analytics on that change", async ({ page }) => {
+  await signIn(page, ADA);
+  await bell(page).click();
+  await list(page)
+    .getByRole("button", { name: /Critical alerts acknowledged 2× slower/ })
+    .click();
+  await expect(page).toHaveURL(/\/analytics\?change=/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Analytics" }),
+  ).toBeVisible();
+  const words = /Critical alerts acknowledged 2× slower/;
+  if (isMobile(page)) {
+    // Phones open the change's detail alone.
+    await expect(
+      page.getByRole("heading", { level: 2, name: words }),
+    ).toBeVisible();
+  } else {
+    await expect(
+      page.getByRole("list", { name: "Changes" }).getByRole("button", {
+        name: words,
+      }),
+    ).toHaveAttribute("aria-current", "true");
+  }
 });
