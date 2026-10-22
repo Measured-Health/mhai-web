@@ -119,6 +119,33 @@ describe("describeEvent (R9)", () => {
         "Gave themselves the Clinician and Hospital admin roles",
       ],
       [
+        {
+          kind: "analyst_granted",
+          type: "admin",
+          actor: who("Dr. Obi"),
+          target: who("Dr. Kemi Adeyemi"),
+        },
+        "Dr. Obi gave Dr. Kemi Adeyemi Analyst access",
+      ],
+      [
+        {
+          kind: "analyst_removed",
+          type: "admin",
+          actor: who("Dr. Obi"),
+          target: who("Dr. Kemi Adeyemi"),
+        },
+        "Dr. Obi removed Analyst access from Dr. Kemi Adeyemi",
+      ],
+      [
+        {
+          kind: "analysis_patients_viewed",
+          type: "security",
+          actor: who("Dr. Kemi Adeyemi"),
+          count: 12,
+        },
+        "Dr. Kemi Adeyemi opened 12 de-identified patients in Analysis",
+      ],
+      [
         { kind: "self_role_change", type: "security", roles_added: [] },
         "Changed their own roles",
       ],
@@ -209,6 +236,9 @@ const KINDS = [
   "reviewer_assigned",
   "policy_breach",
   "self_role_change",
+  "analyst_granted",
+  "analyst_removed",
+  "analysis_patients_viewed",
 ];
 
 // Same matching rule as the e2e scan: upper-case terms are case-sensitive.

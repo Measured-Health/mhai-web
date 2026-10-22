@@ -6,7 +6,7 @@ import { DEMO_EMAILS, MOCK_CODE } from "@/lib/auth/mock";
 import { ApiError } from "@/lib/api/errors";
 import { LAST_ADMIN } from "@/lib/admin/staff";
 import { screenAdminAs } from "@/tests/admin";
-import { HOSPITAL_ADMIN, renderAdmin } from "@/tests/admin-render";
+import { DIRECTOR, HOSPITAL_ADMIN, renderAdmin } from "@/tests/admin-render";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as AdminClient }));
 vi.mock("@/lib/api/admin", () => ({ getAdminClient: () => holder.client }));
@@ -239,6 +239,85 @@ describe("StaffPanel", () => {
     expect(
       await within(panel).findByText(
         /Gave themselves the Clinician role · by Grace Nwosu/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  const withAnalysis = { ...DIRECTOR, features: { analysis: true } };
+  const openWithAnalysis = async (id: string) => {
+    renderAdmin(<StaffPanel staffId={id} onClose={onClose} />, withAnalysis);
+    return screen.findByRole("dialog", { name: "Staff member" });
+  };
+
+  it("the Analyst box shows only with the feature on", async () => {
+    const off = await open("s-okafor");
+    await within(off).findByRole("checkbox", { name: "Clinician" });
+    expect(within(off).queryByRole("checkbox", { name: "Analyst" })).toBeNull();
+  });
+
+  it("Analyst is disabled without Clinician and dropped from the patch when Clinician is unticked", async () => {
+    const update = vi.spyOn(holder.client, "updateStaff");
+    const panel = await openWithAnalysis("s-kemi");
+    const analyst = await within(panel).findByRole("checkbox", {
+      name: "Analyst",
+    });
+    expect(analyst).toBeChecked();
+    expect(analyst).toHaveAccessibleDescription(
+      /Sees Analysis for this hospital: counts and de-identified patients\./,
+    );
+    // Someone with only Hospital admin: Analyst is off and disabled.
+    await userEvent.click(
+      within(panel).getByRole("checkbox", { name: "Hospital admin" }),
+    );
+    await userEvent.click(
+      within(panel).getByRole("checkbox", { name: "Clinician" }),
+    );
+    expect(analyst).toBeDisabled();
+    expect(analyst).not.toBeChecked();
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(
+        "s-kemi",
+        expect.objectContaining({ roles: ["hospital_admin"] }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("granting Analyst saves and logs 'gave Kemi Adeyemi Analyst access'", async () => {
+    const update = vi.spyOn(holder.client, "updateStaff");
+    const panel = await openWithAnalysis("s-okafor");
+    await userEvent.click(
+      await within(panel).findByRole("checkbox", { name: "Analyst" }),
+    );
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "Save changes" }),
+    );
+    expect(await screen.findByText("Changes saved")).toBeInTheDocument();
+    expect(update).toHaveBeenCalledWith(
+      "s-okafor",
+      expect.objectContaining({ roles: ["clinician", "analyst"] }),
+      expect.anything(),
+    );
+    expect(
+      await within(panel).findByText(/Dr. Obi gave Dr. Okafor Analyst access/),
+    ).toBeInTheDocument();
+  });
+
+  it("removing logs 'removed Analyst access'", async () => {
+    const panel = await openWithAnalysis("s-kemi");
+    await userEvent.click(
+      await within(panel).findByRole("checkbox", { name: "Analyst" }),
+    );
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "Save changes" }),
+    );
+    expect(await screen.findByText("Changes saved")).toBeInTheDocument();
+    expect(
+      await within(panel).findByText(
+        /Dr. Obi removed Analyst access from Dr. Kemi Adeyemi/,
       ),
     ).toBeInTheDocument();
   });

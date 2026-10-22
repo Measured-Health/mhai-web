@@ -11,7 +11,7 @@ import type {
   FindingFlag,
 } from "./alerts-contract";
 
-export type StaffRole = "clinician" | "hospital_admin";
+export type StaffRole = "clinician" | "analyst" | "hospital_admin";
 export type StaffStatus = "active" | "invited" | "deactivated";
 export type SignInMethod = "sso" | "password_mfa" | "password";
 export type StaffIssue = "mfa_not_set_up" | "invite_expired";

@@ -28,6 +28,7 @@ import type {
 } from "./admin-contract";
 import type { AlertLocationOut } from "./alerts-contract";
 import { ApiError } from "./errors";
+import { auditEvents } from "./mock-audit";
 
 export const MOCK_HOSPITAL = "Havana Hospital";
 export const ACTIVITY_PAGE_SIZE = 50;
@@ -83,7 +84,7 @@ function person(now: number, p: Seed): StaffOut {
   };
 }
 
-/** 13 synthetic people at Havana Hospital. Names are invented. */
+/** 14 synthetic people at Havana Hospital. Names are invented. */
 function seedStaff(now: number): StaffOut[] {
   return [
     {
@@ -209,6 +210,15 @@ function seedStaff(now: number): StaffOut[] {
       specialty: "Internal Medicine",
       activeAgo: 4 * D,
       review: ["Internal Medicine"],
+    },
+    {
+      id: "s-kemi",
+      name: "Dr. Kemi Adeyemi",
+      display: "Dr. Kemi Adeyemi",
+      email: DEMO_EMAILS.analyst,
+      roles: ["clinician", "analyst"],
+      specialty: "Internal Medicine",
+      activeAgo: 8 * H,
     },
     {
       id: "s-long",
@@ -934,12 +944,27 @@ export function createMockAdmin({
       if (p.version !== s.version) fail(409, "conflict");
       if (p.roles) {
         if (!p.roles.length) fail(422, "invalid");
+        if (p.roles.includes("analyst") && !p.roles.includes("clinician"))
+          fail(422, "invalid");
         const drops = !p.roles.includes("hospital_admin");
         if (drops && s.roles.includes("hospital_admin")) {
           if (await isYou(s)) fail(403, "self_change");
           if (isLastAdmin(s)) fail(409, "last_admin");
         }
       }
+      const self = !!p.roles && (await isYou(s));
+      const had = s.roles.includes("analyst");
+      const has = !!p.roles?.includes("analyst");
+      const analystChange =
+        p.roles && had !== has
+          ? ((has ? "analyst_granted" : "analyst_removed") as const)
+          : null;
+      const others = p.roles
+        ? [...new Set([...s.roles, ...p.roles])].filter(
+            (r) =>
+              r !== "analyst" && s.roles.includes(r) !== p.roles!.includes(r),
+          )
+        : [];
       const next = save({
         ...s,
         ...(p.roles ? { roles: [...p.roles] } : {}),
@@ -951,13 +976,18 @@ export function createMockAdmin({
       });
       const target = who(s.display_name);
       // Allowed, but audited and flagged (product decision, 2026-10-17).
-      if (p.roles && (await isYou(s)))
+      if (self)
         await log("security", "self_role_change", {
           target,
           flag: "alert",
           roles_added: p.roles.filter((r) => !s.roles.includes(r)),
         });
-      else if (p.roles) await log("admin", "roles_changed", { target });
+      else if (p.roles && !analystChange)
+        await log("admin", "roles_changed", { target });
+      if (p.roles && analystChange)
+        await log("admin", analystChange, { target });
+      if (p.roles && analystChange && others.length && !self)
+        await log("admin", "roles_changed", { target });
       if (p.specialty !== undefined)
         await log("admin", "specialty_changed", {
           target,
@@ -1079,7 +1109,13 @@ export function createMockAdmin({
         : null;
       const from = q.from ? Date.parse(q.from) : -Infinity;
       const to = q.to ? Date.parse(q.to) : Infinity;
-      const all = activity.filter((e) => {
+      const audit = auditEvents();
+      const merged = audit.length
+        ? [...activity, ...audit].sort(
+            (a, b) => Date.parse(b.at) - Date.parse(a.at),
+          )
+        : activity;
+      const all = merged.filter((e) => {
         const t = Date.parse(e.at);
         const names = [e.actor?.display_name, e.target?.display_name];
         return (

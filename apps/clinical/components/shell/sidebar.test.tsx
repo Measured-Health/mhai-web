@@ -215,7 +215,7 @@ describe("Sidebar", () => {
     // One invite is pending; the expired one needs attention instead.
     await waitFor(() =>
       expect(staff).toHaveAccessibleDescription(
-        "12 members · 1 invite pending",
+        "13 members · 1 invite pending",
       ),
     );
     expect(
