@@ -184,6 +184,11 @@ export function JobsView() {
               </option>
             ))}
           </select>
+          {options.isError && (
+            <span role="alert" className="text-[13px] text-bad">
+              Couldn&apos;t load hospitals
+            </span>
+          )}
         </label>
         {field("Why", "why", why ?? "", [
           { value: "", label: "All" },

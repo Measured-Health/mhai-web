@@ -200,6 +200,23 @@ with zeros, "Not enough data to compare yet" and "No active hospital
 admin". The period picker (last 7, 30 or 90 days) changes the charts, the
 tabs and the CSV. On a phone, tap a change to see it, then **Back**.
 
+**System health and failed jobs.** **System** in the sidebar has two tabs.
+**Health** says in one line whether the service is Working normally, Slower
+than usual, Having problems or Couldn't check, then lists the parts (with
+since when), the questions waiting, the failed jobs, how long answers take
+and recent errors by kind, all in counts and times with no patient, question
+or answer content. It refreshes every 30 seconds while the tab is visible
+and online, and **Refresh now** reads it at once; a reading more than 2
+minutes old shows Couldn't check with the last good time, never old
+figures. In the demo, a **Sample data** switch (Normal, Slower, Problems)
+changes the reading. **Failed jobs** lists the jobs that failed, with filters
+for what, which hospital, why and status. Platform admins choose up to 50
+and **Retry** them (a warning appears when some are questions asked more
+than a day ago) or **Cancel jobs** with a reason, an optional note and their
+own two-step code; a cancelled job reads "Cancelled by" the person. Try
+Northgate General Hospital's old question, or cancel the guideline search.
+On a phone the jobs are cards. Auditors see both tabs and no buttons.
+
 **Notifications.** The bell at the top of every page counts the analytics
 changes from **What changed** that you haven't seen. Opening it shows the 20
 newest (the change, the hospital and when) and marks them seen; choosing one opens **Analytics**
