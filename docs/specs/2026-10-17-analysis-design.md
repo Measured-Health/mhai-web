@@ -16,11 +16,11 @@ alerts and MHAI's suggestions relate.
 
 ## 2. Who can use it
 
-| Who | Where | Scope |
-| --- | --- | --- |
-| Hospital admin | Clinical app, "Hospital admin" group → **Analysis** | Their own hospital |
-| Clinician with the **Analyst** role | Clinical app, sidebar → **Analysis** | Their own hospital |
-| Platform admin | Platform admin app (separate) | All hospitals, and one at a time |
+| Who                                 | Where                                               | Scope                            |
+| ----------------------------------- | --------------------------------------------------- | -------------------------------- |
+| Hospital admin                      | Clinical app, "Hospital admin" group → **Analysis** | Their own hospital               |
+| Clinician with the **Analyst** role | Clinical app, sidebar → **Analysis**                | Their own hospital               |
+| Platform admin                      | Platform admin app (separate)                       | All hospitals, and one at a time |
 
 - **Analyst** is a new role a hospital admin can grant to staff (like reviewer rights) in the
   staff panel. Granting or removing it is audited.

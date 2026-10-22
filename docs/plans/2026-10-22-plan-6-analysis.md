@@ -41,8 +41,9 @@ It runs on sample data, under the small-group rule. In live mode it stays switch
 - **The live gate.** The page, its nav entries and its API paths exist only when `canUseAnalysis(user)` is true. `user.features.analysis` is true only when:
   - in the demo (`NEXT_PUBLIC_USE_MOCK=true`): always;
   - in live mode: the API's user says `features.analysis: true` **and** the server's `ANALYSIS_SIGNED_OFF` is exactly `"true"`.
-  
+
   Both are unset by default, so live mode hides the page. The proxy checks `ANALYSIS_SIGNED_OFF` on every call as well as at sign-in. When it is off, `analysis/*` gives 404 `not_found` before the session is read.
+
 - **Who:**
   - hospital admins, and clinicians with the `analyst` role, each for their own hospital only;
   - the hospital is never sent from the browser: the server scopes by session;
@@ -303,7 +304,8 @@ apps/clinical/tests/e2e/analysis.spec.ts
 **Interfaces (`analysis-contract.ts`; `GuardedOut`, `ConfidenceLevel`, `AlertSeverity`, `DismissReason` and `FindingFlag` are imported from the existing contracts):**
 
 ```ts
-type ViewId = "prevalence" | "affected" | "co-occurring" | "findings" | "quality";
+type ViewId =
+  "prevalence" | "affected" | "co-occurring" | "findings" | "quality";
 type AgeBand = "0-17" | "18-39" | "40-64" | "65-79" | "80+";
 type Sex = "female" | "male" | "other" | "not_recorded";
 type Setting = "admitted" | "outpatient" | "emergency";
@@ -311,21 +313,39 @@ type PatientLevel = "deidentified"; // "named" is a later plan
 type ConditionRef = { id: string; name: string | null; icd10: string | null }; // name null: "Not standardised"
 type LocationRef = { id: string; label: string; setting: Setting | null };
 type AnalysisFilters = {
-  from: string; to: string; // "YYYY-MM-DD", the hospital's days
-  condition: string | null; age_band: AgeBand | null; sex: Sex | null;
-  location: string | null; setting: Setting | null;
-  specialty: string | null; source: string | null;
+  from: string;
+  to: string; // "YYYY-MM-DD", the hospital's days
+  condition: string | null;
+  age_band: AgeBand | null;
+  sex: Sex | null;
+  location: string | null;
+  setting: Setting | null;
+  specialty: string | null;
+  source: string | null;
 };
 type Drillable = GuardedOut & { drill: string | null }; // drill only on a shown count ≥ 5
 type FilterOptionsOut = {
   updated_at: string;
-  conditions: ConditionRef[]; locations: LocationRef[]; specialties: string[];
+  conditions: ConditionRef[];
+  locations: LocationRef[];
+  specialties: string[];
   sources: { id: string; label: string }[];
 };
-type Meta = { updated_at: string; from: string; to: string; bucket: "week" | "month"; patients: GuardedOut };
+type Meta = {
+  updated_at: string;
+  from: string;
+  to: string;
+  bucket: "week" | "month";
+  patients: GuardedOut;
+};
 type PrevalenceOut = Meta & {
   total: { cases: GuardedOut; new: GuardedOut; existing: GuardedOut };
-  by_condition: { condition: ConditionRef; cases: Drillable; new: GuardedOut; existing: GuardedOut }[];
+  by_condition: {
+    condition: ConditionRef;
+    cases: Drillable;
+    new: GuardedOut;
+    existing: GuardedOut;
+  }[];
   series: { start: string; cases: GuardedOut; new: GuardedOut }[];
 };
 type AffectedOut = Meta & {
@@ -336,33 +356,69 @@ type AffectedOut = Meta & {
   by_specialty: { specialty: string | null; patients: Drillable }[];
 };
 type CoOccurringOut = Meta & {
-  pairs: { a: ConditionRef; b: ConditionRef; a_patients: GuardedOut; patients: Drillable; share_of_a: GuardedOut }[]; // top 20
+  pairs: {
+    a: ConditionRef;
+    b: ConditionRef;
+    a_patients: GuardedOut;
+    patients: Drillable;
+    share_of_a: GuardedOut;
+  }[]; // top 20
 };
 type FindingsOut = Meta & {
-  findings: { name: string | null; flag: FindingFlag | null; patients: Drillable; results: GuardedOut }[];
+  findings: {
+    name: string | null;
+    flag: FindingFlag | null;
+    patients: Drillable;
+    results: GuardedOut;
+  }[];
   alerts: {
-    total: GuardedOut; by_severity: Record<AlertSeverity, GuardedOut>;
-    median_ack_minutes: GuardedOut; critical_median_ack_minutes: GuardedOut;
-    dismissed: GuardedOut; dismiss_reasons: { reason: DismissReason; count: GuardedOut }[];
+    total: GuardedOut;
+    by_severity: Record<AlertSeverity, GuardedOut>;
+    median_ack_minutes: GuardedOut;
+    critical_median_ack_minutes: GuardedOut;
+    dismissed: GuardedOut;
+    dismiss_reasons: { reason: DismissReason; count: GuardedOut }[];
   };
 };
 type QualityOut = Meta & {
   by_condition: {
-    condition: ConditionRef; consultations: GuardedOut;
+    condition: ConditionRef;
+    consultations: GuardedOut;
     confidence: Record<ConfidenceLevel, GuardedOut>;
     agreement_rate: GuardedOut; // 0–1 of rated
     rated: GuardedOut;
-    corrections: { total: GuardedOut; approved: GuardedOut; rejected: GuardedOut; waiting: GuardedOut };
+    corrections: {
+      total: GuardedOut;
+      approved: GuardedOut;
+      rejected: GuardedOut;
+      waiting: GuardedOut;
+    };
   }[];
 };
-type ViewOut = { prevalence: PrevalenceOut; affected: AffectedOut; "co-occurring": CoOccurringOut; findings: FindingsOut; quality: QualityOut };
+type ViewOut = {
+  prevalence: PrevalenceOut;
+  affected: AffectedOut;
+  "co-occurring": CoOccurringOut;
+  findings: FindingsOut;
+  quality: QualityOut;
+};
 type PatientRowOut = {
   pid: string; // pseudonymous, stable within the hospital, never the MRN
-  age_band: AgeBand; sex: Sex; setting: Setting | null;
+  age_band: AgeBand;
+  sex: Sex;
+  setting: Setting | null;
   conditions: ConditionRef[];
-  findings: { name: string | null; flag: FindingFlag | null; source_label: string | null }[];
+  findings: {
+    name: string | null;
+    flag: FindingFlag | null;
+    source_label: string | null;
+  }[];
 };
-type PatientsOut = { level: PatientLevel; count: number; patients: PatientRowOut[] }; // patients ≤ 200
+type PatientsOut = {
+  level: PatientLevel;
+  count: number;
+  patients: PatientRowOut[];
+}; // patients ≤ 200
 ```
 
 **`AnalysisClient` (`analysis.ts`, with `getAnalysisClient()` choosing mock or live like `getAdminClient`):**
@@ -450,6 +506,7 @@ type PatientsOut = { level: PatientLevel; count: number; patients: PatientRowOut
   - a series point that isn't a real day.
 
   Patients fail closed on a level other than `"deidentified"`, any key outside `PatientRowOut`, a `pid` outside `^P-[A-Z0-9]{4,12}$`, or more than 200 rows.
+
 - **`labels.ts`:**
   - `VIEW_TITLE: Record<ViewId, string>` and `VIEWS: readonly ViewId[]` in page order;
   - `failedText(view: ViewId): string`, e.g. "Couldn't load who is affected";
@@ -530,6 +587,7 @@ type PatientsOut = { level: PatientLevel; count: number; patients: PatientRowOut
   - `usePatients(q | null)`, which Task 7 uses, with `gcTime: 0`.
 
   All keys sit under `["analysis"]`. Sign-out removes them, as it removes the admin keys.
+
 - **`ViewFrame({ view, state, updatedAt, onRetry, summary, chart, table })`:**
   - the title, the summary line and **Chart** / **Table** buttons (`aria-pressed`);
   - "Updated {time}";
@@ -637,6 +695,7 @@ type PatientsOut = { level: PatientLevel; count: number; patients: PatientRowOut
   - failed: "Couldn't load these patients" with **Try again**. A 422 `too_small` reads "This group is too small to list".
 
   The `level` prop is the only place a later named level plugs in.
+
 - **See patients** appears only where `drill` is non-null and the count is shown. It is disabled offline, with the reason.
 
 - [ ] **Step 1: Write the failing tests**
@@ -705,19 +764,19 @@ The controller then adds the analysis contract to mhai-multiagent's frontend req
 
 - **Spec coverage:**
 
-  | Spec section                                         | Task(s)                                            |
-  | ---------------------------------------------------- | -------------------------------------------------- |
-  | §2 who (hospital admin, Analyst; Analyst audited)    | 1, 2                                               |
-  | §2 platform admin                                    | out (later plan)                                   |
-  | §3 data, Source, Not standardised                    | 3, 4, 5                                            |
-  | §4 filters, the five views, small groups, CSV, table | 4, 5, 6                                            |
-  | §5 de-identified drill-down and its log              | 3, 7                                               |
-  | §5 named drill-down, clearance, named audit          | out (later plan; `level` left open)                |
-  | §6 privacy rules                                     | Global Constraints; 4, 5, 7                        |
-  | §7 accessibility and wording                         | 5, 6, 7                                            |
-  | §8 demo                                              | 3 (no clearance letters: out)                      |
-  | §9 contract                                          | 1 (proxy), 3, then the controller's PR             |
-  | sign-off before live use                             | 1 (the gate), 8 (docs)                             |
+  | Spec section                                         | Task(s)                                |
+  | ---------------------------------------------------- | -------------------------------------- |
+  | §2 who (hospital admin, Analyst; Analyst audited)    | 1, 2                                   |
+  | §2 platform admin                                    | out (later plan)                       |
+  | §3 data, Source, Not standardised                    | 3, 4, 5                                |
+  | §4 filters, the five views, small groups, CSV, table | 4, 5, 6                                |
+  | §5 de-identified drill-down and its log              | 3, 7                                   |
+  | §5 named drill-down, clearance, named audit          | out (later plan; `level` left open)    |
+  | §6 privacy rules                                     | Global Constraints; 4, 5, 7            |
+  | §7 accessibility and wording                         | 5, 6, 7                                |
+  | §8 demo                                              | 3 (no clearance letters: out)          |
+  | §9 contract                                          | 1 (proxy), 3, then the controller's PR |
+  | sign-off before live use                             | 1 (the gate), 8 (docs)                 |
 
 - **Names used across tasks:**
   - `canUseAnalysis`, `analysisOn`, `analysisSignedOff`, `ANALYSIS_KEYS`, `ANALYSIS_HREF`;
