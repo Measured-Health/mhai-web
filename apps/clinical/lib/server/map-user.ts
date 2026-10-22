@@ -1,4 +1,5 @@
 import type { ApiSession, ApiUser } from "../api/auth-contract";
+import { analysisSignedOff } from "./features";
 import type { Device, FirstStep, Role, User } from "../auth/types";
 
 export type { ApiUser, ApiLoginOk, ApiMfaRequired } from "../api/auth-contract";
@@ -9,6 +10,7 @@ const ROLES: readonly Role[] = [
   "admin",
   "auditor",
   "researcher",
+  "analyst",
 ];
 
 /** Known roles only, each once. None known reads as non-clinical, never as a clinician. */
@@ -32,6 +34,10 @@ export function toUser(u: ApiUser): User {
     hospital: u.hospital ?? null,
     mfaEnabled: u.mfa_enabled === true,
     backupCodesLeft: u.recovery_codes_left ?? null,
+    // On only when the API says so and the hospital has signed it off.
+    ...(u.features?.analysis === true && analysisSignedOff()
+      ? { features: { analysis: true } }
+      : {}),
   };
 }
 

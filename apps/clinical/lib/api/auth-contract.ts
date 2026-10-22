@@ -17,6 +17,8 @@ export interface ApiUser {
   must_change_password?: boolean;
   terms_accepted_at?: string | null;
   recovery_codes_left?: number | null;
+  /** Switches the API turned on for this person (assumed). */
+  features?: { analysis?: boolean };
 }
 export interface ApiLoginOk {
   access_token: string;

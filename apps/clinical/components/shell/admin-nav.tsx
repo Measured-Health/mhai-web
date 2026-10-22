@@ -1,10 +1,11 @@
 "use client";
-import { Activity, ChartColumn, Settings, Users } from "lucide-react";
+import { Activity, ChartColumn, ChartPie, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useId } from "react";
 import { staffState } from "@/lib/admin/staff";
 import type { StaffOut } from "@/lib/api/admin-contract";
+import { ANALYSIS_HREF } from "@/lib/analysis-queries";
 import { useStaff } from "@/lib/admin-queries";
 import { useNow } from "@mhai/ui/hooks/use-now";
 import { cn } from "@mhai/ui/cn";
@@ -43,7 +44,14 @@ function staffLine(list: StaffOut[] | undefined, now: number): string | null {
 }
 
 /** The sidebar's "Hospital admin" group (spec §5.6, R3). */
-export function AdminNav({ rail }: { rail: boolean }) {
+export function AdminNav({
+  rail,
+  analysis = false,
+}: {
+  rail: boolean;
+  /** Adds Analysis after Usage (one place for an admin who is also an analyst). */
+  analysis?: boolean;
+}) {
   const path = usePathname();
   // The staff count only on the admin side: a medical director's clinical
   // pages never load the staff list just for a count.
@@ -52,6 +60,22 @@ export function AdminNav({ rail }: { rail: boolean }) {
   const now = useNow(60_000);
   const heading = useId();
   const lineId = useId();
+  const links: readonly {
+    href: string;
+    label: string;
+    sub: string | null;
+    Icon: typeof Users;
+  }[] = analysis
+    ? [
+        ...ADMIN_LINKS,
+        {
+          href: ANALYSIS_HREF,
+          label: "Analysis",
+          sub: "Conditions and trends",
+          Icon: ChartPie,
+        },
+      ]
+    : ADMIN_LINKS;
   return (
     <section aria-labelledby={heading} className="mt-3">
       <h3
@@ -64,7 +88,7 @@ export function AdminNav({ rail }: { rail: boolean }) {
         Hospital admin
       </h3>
       <ul className="flex flex-col gap-0.5">
-        {ADMIN_LINKS.map(({ href, label, sub, Icon }, i) => {
+        {links.map(({ href, label, sub, Icon }, i) => {
           const on = path === href || path.startsWith(`${href}/`);
           const line =
             href === "/admin/staff"

@@ -978,3 +978,83 @@ describe("patient alert and notification settings routes", () => {
     expect(await other.json()).toEqual({ code: "already_decided" });
   });
 });
+
+describe("analysis routes", () => {
+  const as = (roles: Role[], mfaEnabled = true) =>
+    writeSession({
+      token: "tok",
+      expiresAt: Date.now() + 10 * 60_000,
+      user: { ...TEST_USER, roles, mfaEnabled, features: { analysis: true } },
+      steps: [],
+    });
+  const URL = "http://demo.test/api/v1/analysis";
+  beforeEach(() => vi.stubEnv("ANALYSIS_SIGNED_OFF", "true"));
+
+  it("the seven analysis shapes are accepted", async () => {
+    await as(["clinician", "analyst"]);
+    fetchMock.mockImplementation(async () => Response.json({}));
+    const shapes = [
+      ["filters"],
+      ["prevalence"],
+      ["affected"],
+      ["co-occurring"],
+      ["findings"],
+      ["quality"],
+      ["patients"],
+    ];
+    for (const rest of shapes) {
+      const res = await GET(
+        get(`${URL}/${rest[0]}?from=2026-01`),
+        ctx("analysis", ...rest),
+      );
+      expect(res.status).toBe(200);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect((fetchMock.mock.calls[1] as [string])[0]).toBe(
+      "http://api.test/api/v1/analysis/prevalence?from=2026-01",
+    );
+  });
+
+  it("POST, `analysis/x` and `analysis/patients/1` are 404", async () => {
+    await as(["clinician", "analyst"]);
+    expect((await POST(post("{}"), ctx("analysis", "prevalence"))).status).toBe(
+      404,
+    );
+    expect((await GET(get(`${URL}/x`), ctx("analysis", "x"))).status).toBe(404);
+    expect(
+      (await GET(get(`${URL}/patients/1`), ctx("analysis", "patients", "1")))
+        .status,
+    ).toBe(404);
+    expect((await GET(get(URL), ctx("analysis"))).status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("ANALYSIS_SIGNED_OFF unset gives 404 before upstream, even when the session says on (Review Focus 5)", async () => {
+    vi.stubEnv("ANALYSIS_SIGNED_OFF", "");
+    await as(["clinician", "analyst"]);
+    const res = await GET(get(`${URL}/filters`), ctx("analysis", "filters"));
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ code: "not_found" });
+    // Not even a missing session is reported first.
+    jar.values.clear();
+    expect(
+      (await GET(get(`${URL}/filters`), ctx("analysis", "filters"))).status,
+    ).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("a clinician without analyst gets 403", async () => {
+    await as(["clinician"]);
+    const res = await GET(get(`${URL}/filters`), ctx("analysis", "filters"));
+    expect(res.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("an analyst without two-step gets mfa_required", async () => {
+    await as(["clinician", "analyst"], false);
+    const res = await GET(get(`${URL}/filters`), ctx("analysis", "filters"));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ code: "mfa_required" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
