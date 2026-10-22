@@ -38,6 +38,8 @@ import {
   seedChanges,
   type AnalyticsMode,
 } from "./analytics-fixtures";
+import { createMockOps } from "./mock-ops";
+import type { HealthMode } from "./ops-fixtures";
 import {
   EMAIL_MODES,
   NOTIFICATIONS_MAX,
@@ -206,6 +208,7 @@ export function createMockPlatform({
   twoStep,
   analytics = "normal",
   notifications = "normal",
+  health = "normal",
   onCore,
 }: {
   now?: () => number;
@@ -220,6 +223,8 @@ export function createMockPlatform({
   analytics?: AnalyticsMode;
   /** "unavailable": the notifications list and marking seen fail with 503. */
   notifications?: "normal" | "unavailable";
+  /** Which sample health reading to serve (see `HealthMode`). */
+  health?: HealthMode;
   /** For tests: the core the areas are built on, once it exists. */
   onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
@@ -1020,5 +1025,6 @@ export function createMockPlatform({
   // `...createMockHolds(core, holds)`.
   return {
     ...hospitalsPart,
+    ...createMockOps(core, { health }),
   };
 }
