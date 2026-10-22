@@ -151,3 +151,35 @@ test("phone: tap a change, see the detail, Back", async ({ page }) => {
   // Focus returns to the row the person came from.
   await expect(row(page, NGH_CRITICAL)).toBeFocused();
 });
+
+test("the Hospitals tab compares Riverside with the rest", async ({ page }) => {
+  await openAnalytics(page, ADA);
+  await page.getByRole("tab", { name: "Hospitals" }).click();
+  const riverside = page.getByRole("button", {
+    name: "Riverside Children's Hospital",
+    exact: true,
+  });
+  await expect(riverside).toBeVisible();
+  // Small hospitals show "Fewer than 5", never a rate worked out from it.
+  await expect(
+    page.getByRole("row", { name: /Lakeside Community Clinic/ }),
+  ).toContainText("Fewer than 5");
+
+  await riverside.click();
+  const heading = page.getByRole("heading", {
+    level: 2,
+    name: "Riverside Children's Hospital compared with the others",
+  });
+  await expect(heading).toBeVisible();
+  await expect(
+    page.getByText(/ staff · .* questions this period/),
+  ).toBeVisible();
+
+  if (isMobile(page)) {
+    // On a phone the comparison opens as the detail, with Back.
+    await page.getByRole("button", { name: "Back" }).click();
+    await expect(heading).toHaveCount(0);
+    await expect(riverside).toBeVisible();
+    await expect(riverside).toBeFocused();
+  }
+});
