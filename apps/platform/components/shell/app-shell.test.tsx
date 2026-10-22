@@ -22,7 +22,7 @@ const shell = () =>
   );
 
 describe("the platform shell", () => {
-  it("the sidebar shows Platform and the four links in order", () => {
+  it("the sidebar shows Platform and the five links in order", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     expect(within(nav).getByText("Platform")).toBeInTheDocument();
@@ -31,10 +31,25 @@ describe("the platform shell", () => {
       .map((l) => [l.textContent, l.getAttribute("href")]);
     expect(links).toEqual([
       ["Hospitals", "/hospitals"],
+      ["Analytics", "/analytics"],
       ["Team", "/team"],
       ["Activity", "/activity"],
       ["Account", "/account"],
     ]);
+  });
+
+  it("the sidebar shows Analytics between Hospitals and Team", () => {
+    shell();
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    const names = within(nav)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
+    const at = names.indexOf("Analytics");
+    expect(names[at - 1]).toBe("Hospitals");
+    expect(names[at + 1]).toBe("Team");
+    expect(
+      within(nav).getByRole("link", { name: "Analytics" }),
+    ).toHaveAttribute("href", "/analytics");
   });
 
   it("the current page link has aria-current", () => {
