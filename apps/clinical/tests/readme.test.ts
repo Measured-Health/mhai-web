@@ -107,6 +107,13 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(/\*\*Analytics\.\*\*/);
   });
 
+  it("documents the platform notifications and the analytics email setting", () => {
+    expect(readme).toMatch(/\*\*Notifications\.\*\*/);
+    expect(readme).toMatch(/Analytics\s+email/);
+    expect(readme).toMatch(/Critical\s+and\s+weekly\s+digest/);
+    expect(readme).toMatch(/Auditors\s+get\s+no\s+email/);
+  });
+
   it("says the 403 page has no link, and no longer sets its address", () => {
     expect(readme).not.toMatch(/NEXT_PUBLIC_ADMIN_APP_URL/);
     expect(readme).toMatch(

@@ -200,6 +200,16 @@ with zeros, "Not enough data to compare yet" and "No active hospital
 admin". The period picker (last 7, 30 or 90 days) changes the charts, the
 tabs and the CSV. On a phone, tap a change to see it, then **Back**.
 
+**Notifications.** The bell at the top of every page counts the analytics
+changes from **What changed** that you haven't seen. Open it to see the 20
+newest (the change, the hospital and when); choosing one opens **Analytics**
+on that change, and **Mark all seen** clears the count. Seen is per person:
+Ada seeing a change doesn't clear Tunde's bell. Platform admins and auditors
+both have the bell. On **Account**, platform admins choose **Analytics
+email**: **Off** (the default), **Critical only** or **Critical and weekly
+digest**. Auditors get no email, so they don't see the setting. Emails name
+the hospital and the change and never include patient details.
+
 **The auditor** (Amara Eze) sees every hospital, the team and the activity,
 with no buttons to change anything; the server refuses an auditor's changes
 too. On Team, nobody can change their own role or remove themselves: another
