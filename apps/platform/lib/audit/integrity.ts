@@ -2,8 +2,7 @@
 // stale after 26 hours; a failure keeps the banner up until the server
 // clears it. Every state is words, never colour alone.
 import type { VerifyRun } from "@/lib/api/audit-contract";
-import { dateLabel, dayMonthLabel } from "@/lib/format";
-import { num } from "./kinds";
+import { dateLabel, dayMonthLabel, num } from "@/lib/format";
 import type { ReadRun, ReadStatus } from "./read";
 import { utc } from "./words";
 
@@ -14,21 +13,47 @@ export const STALE_MS = 26 * 3_600_000;
 
 type Run = ReadRun | VerifyRun;
 
-/** The proof: a valid reply that names its whole range. */
-const proven = (r: Run) =>
-  r.state === "intact" &&
-  r.entries_checked !== null &&
-  r.entries_checked > 0 &&
-  (r.from_checkpoint !== null || r.from_first === true) &&
-  r.to_seq !== null &&
-  r.to_at !== null &&
-  r.finished_at !== null;
+/** How far ahead of this clock a finish may be (clock skew). */
+export const SKEW_MS = 5 * 60_000;
 
-export function integrityOf(run: Run): Shown {
+/**
+ * The proof: a valid reply that names its whole range, in time order
+ * (start ≤ last entry ≤ finish, and, given `now`, a finish no later than
+ * now plus the skew), with nothing that contradicts it.
+ */
+function proven(r: Run, now?: number): boolean {
+  if (
+    r.state !== "intact" ||
+    r.entries_checked === null ||
+    r.entries_checked <= 0 ||
+    (r.from_checkpoint === null && r.from_first !== true) ||
+    r.to_seq === null ||
+    r.to_at === null ||
+    r.finished_at === null ||
+    r.started_at === null ||
+    r.error_code !== null ||
+    r.first_broken_seq !== null ||
+    r.first_broken_at !== null
+  )
+    return false;
+  const [start, last, end] = [r.started_at, r.to_at, r.finished_at].map(
+    Date.parse,
+  );
+  return (
+    start <= last && last <= end && (now === undefined || end <= now + SKEW_MS)
+  );
+}
+
+/** Pass `now` (the shared clock) wherever it is known: a finish in the future isn't proof. */
+export function integrityOf(run: Run, now?: number): Shown {
   if (run.state === "running") return "checking";
   if (run.state === "broken") return "broken";
-  return proven(run) ? "intact" : "couldnt_check";
+  return proven(run, now) ? "intact" : "couldnt_check";
 }
+
+/** A check is running only when the server says so in a run that reads. */
+export const isRunning = (s: ReadStatus | undefined) =>
+  s?.running?.state === "running";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 /** "06:00 today" or "21 Oct, 06:00", in local time. */
@@ -63,10 +88,10 @@ export function headerLine(
         : "Integrity: Broken",
     };
   }
-  if (s.running) return { tone: "ok", words: "Integrity: Checking…" };
+  if (isRunning(s)) return { tone: "ok", words: "Integrity: Checking…" };
   const r = s.latest;
   if (!r) return { tone: "warn", words: "Integrity: Not checked yet" };
-  if (!proven(r)) {
+  if (!proven(r, now)) {
     const at = endOf(r);
     return {
       tone: "warn",
@@ -100,8 +125,8 @@ function startWords(r: Run): string | null {
 const UNKNOWN = "The check didn't finish, so the log's integrity is unknown.";
 
 /** The state block's sentence (spec §8.1, word for word). */
-export function runSentence(run: Run): string {
-  switch (integrityOf(run)) {
+export function runSentence(run: Run, now?: number): string {
+  switch (integrityOf(run, now)) {
     case "intact":
       return `No changes found. Checked ${num(run.entries_checked!)} entries, from ${startWords(run)} to entry ${num(run.to_seq!)} (${utc(run.to_at!)}).`;
     case "broken": {

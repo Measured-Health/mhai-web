@@ -123,6 +123,17 @@ describe("auditFile", () => {
       ],
     });
     expect(csv).not.toContain("Jane Doe");
+    // Nor a name on a target the kind doesn't name.
+    const staff = auditFile({
+      ...base,
+      rows: [
+        {
+          ...named,
+          target: { kind: "staff", id: "s_1", name: "Jane Doe MRN 1234" },
+        },
+      ],
+    });
+    expect(staff).not.toContain("Jane Doe");
     // Events files never carry the pseudonym either.
     expect(csv).not.toContain("p_ng_7f3a2c");
     expect(lines(csv)[10].split(",")[9]).toBe("A patient");

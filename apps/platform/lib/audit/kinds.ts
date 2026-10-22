@@ -5,11 +5,12 @@
 import type {
   ActorRole,
   AuditEvent,
+  AuditTarget,
   AuditType,
   LetterStatus,
   SearchedKind,
 } from "@/lib/api/audit-contract";
-import { dateLabel } from "@/lib/format";
+import { dateLabel, num } from "@/lib/format";
 
 export const TYPE_WORDS: Record<AuditType, string> = {
   sign_in: "Sign-in",
@@ -106,15 +107,19 @@ export const SEARCHED_WORDS: Record<SearchedKind, string> = {
 
 const CONFIDENCE_WORDS = { high: "High", medium: "Medium", low: "Low" };
 
+export type TargetKind = AuditTarget["kind"];
+
 export type Kind = {
   type: AuditType;
   /** Whether the entry may carry a note. */
   note: boolean;
+  /** The target kinds it may name; none means no target. */
+  targets: readonly TargetKind[];
+  /** Whether its target may carry a name (its words use it). */
+  named: boolean;
   words(e: AuditEvent): string;
 };
 
-const NUMBER = new Intl.NumberFormat("en-GB");
-export const num = (n: number) => NUMBER.format(n);
 const plural = (n: number, one: string, many: string) =>
   `${num(n)} ${n === 1 ? one : many}`;
 
@@ -163,10 +168,12 @@ const join = (...parts: (string | string[])[]) => parts.flat().join(" · ");
 const k = (
   type: AuditType,
   words: string | ((e: AuditEvent) => string),
-  note = false,
+  opts: { note?: boolean; targets?: TargetKind[]; named?: boolean } = {},
 ): Kind => ({
   type,
-  note,
+  note: opts.note ?? false,
+  targets: opts.targets ?? [],
+  named: opts.named ?? false,
   words: typeof words === "string" ? () => words : words,
 });
 
@@ -175,36 +182,45 @@ export const KINDS: Record<string, Kind> = {
   signed_in: k("sign_in", "Signed in"),
   sign_in_refused: k("sign_in", "Sign-in refused"),
   sign_in_locked: k("sign_in", "Sign-in locked after too many tries"),
-  signed_out: k("sign_in", "Signed out"),
+  signed_out: k("sign_in", "Signed out", { targets: ["session"] }),
   // Account.
   password_changed: k("account", "Changed their password"),
   two_step_set_up: k("account", "Set up two-step"),
   backup_codes_made: k("account", "Made new backup codes"),
-  device_signed_out: k("account", "Signed out a device"),
+  device_signed_out: k("account", "Signed out a device", {
+    targets: ["session"],
+  }),
   // Staff and roles.
   staff_invited: k(
     "staff",
     named((t) => `Invited ${t}`, "Invited a staff member"),
+    { targets: ["staff"], named: true },
   ),
   staff_role_changed: k(
     "staff",
     named((t) => `Changed ${t}'s role`, "Changed a staff member's role"),
+    { targets: ["staff"], named: true },
   ),
   staff_deactivated: k(
     "staff",
     named((t) => `Deactivated ${t}`, "Deactivated a staff member"),
+    { targets: ["staff"], named: true },
   ),
   staff_reactivated: k(
     "staff",
     named((t) => `Reactivated ${t}`, "Reactivated a staff member"),
+    { targets: ["staff"], named: true },
   ),
-  own_role_change_refused: k("staff", "Tried to change their own role"),
+  own_role_change_refused: k("staff", "Tried to change their own role", {
+    targets: ["staff", "team_member"],
+  }),
   team_invited: k(
     "staff",
     named(
       (t) => `Invited ${t} to the platform team`,
       "Invited someone to the platform team",
     ),
+    { targets: ["team_member"], named: true },
   ),
   team_role_changed: k(
     "staff",
@@ -212,6 +228,7 @@ export const KINDS: Record<string, Kind> = {
       (t) => `Changed ${t}'s platform role`,
       "Changed a platform team member's role",
     ),
+    { targets: ["team_member"], named: true },
   ),
   team_removed: k(
     "staff",
@@ -219,50 +236,66 @@ export const KINDS: Record<string, Kind> = {
       (t) => `Removed ${t} from the platform team`,
       "Removed someone from the platform team",
     ),
+    { targets: ["team_member"], named: true },
   ),
   // Hospital settings.
-  hospital_added: k("hospital_settings", (e) => `Added ${hName(e)}`),
+  hospital_added: k("hospital_settings", (e) => `Added ${hName(e)}`, {
+    targets: ["hospital"],
+    named: true,
+  }),
   hospital_updated: k(
     "hospital_settings",
     (e) => `Updated ${hName(e)}'s details`,
+    { targets: ["hospital"], named: true },
   ),
   hospital_deactivated: k(
     "hospital_settings",
     (e) => `Deactivated ${hName(e)}`,
-    true,
+    { note: true, targets: ["hospital"], named: true },
   ),
   hospital_reactivated: k(
     "hospital_settings",
     (e) => `Reactivated ${hName(e)}`,
+    { targets: ["hospital"], named: true },
   ),
   removal_requested: k(
     "hospital_settings",
     (e) => `Asked to remove ${hName(e)}`,
+    { targets: ["hospital"], named: true },
   ),
   removal_blocked: k(
     "hospital_settings",
     (e) => `Tried to approve removing ${hName(e)}; a check blocked it`,
+    { targets: ["hospital"], named: true },
   ),
   removal_approved: k(
     "hospital_settings",
     (e) => `Approved removing ${hName(e)}`,
+    { targets: ["hospital"], named: true },
   ),
   removal_cancelled: k(
     "hospital_settings",
     (e) => `Cancelled removing ${hName(e)}`,
+    { targets: ["hospital"], named: true },
   ),
-  hospital_removed: k("hospital_settings", (e) => `Removed ${hName(e)}`),
+  hospital_removed: k("hospital_settings", (e) => `Removed ${hName(e)}`, {
+    targets: ["hospital"],
+    named: true,
+  }),
   sso_updated: k(
     "hospital_settings",
     (e) => `Changed single sign-on for ${hName(e)}`,
+    { targets: ["hospital"], named: true },
   ),
   sso_tested: k(
     "hospital_settings",
     (e) => `Tested single sign-on for ${hName(e)}`,
+    { targets: ["hospital"], named: true },
   ),
   setting_changed: k(
     "hospital_settings",
     named((t) => `Changed ${t}`, "Changed a setting"),
+    { targets: ["setting"], named: true },
   ),
   admin_invited: k(
     "hospital_settings",
@@ -270,10 +303,12 @@ export const KINDS: Record<string, Kind> = {
       (t) => `Invited ${t} as first hospital admin`,
       "Invited the first hospital admin",
     ),
+    { targets: ["staff"], named: true },
   ),
   admin_invite_resent: k(
     "hospital_settings",
     named((t) => `Resent the invite to ${t}`, "Resent the invite"),
+    { targets: ["staff"], named: true },
   ),
   // Consultation: specialty and confidence only.
   question_asked: k("consultation", (e) =>
@@ -296,12 +331,16 @@ export const KINDS: Record<string, Kind> = {
   alert_escalated: k("alerts", "Escalated an alert"),
   // Analysis.
   analysis_viewed: k("analysis", "Opened Analysis"),
-  drilldown_deidentified: k("analysis", (e) =>
-    join("Opened a de-identified patient list", patients(e)),
+  drilldown_deidentified: k(
+    "analysis",
+    (e) => join("Opened a de-identified patient list", patients(e)),
+    { targets: ["patient"] },
   ),
   // Named access.
-  drilldown_named: k("named_access", (e) =>
-    join("Opened a named patient list", patients(e)),
+  drilldown_named: k(
+    "named_access",
+    (e) => join("Opened a named patient list", patients(e)),
+    { targets: ["patient", "clearance"] },
   ),
   letter_uploaded: k(
     "named_access",
@@ -309,14 +348,18 @@ export const KINDS: Record<string, Kind> = {
       (t) => `Uploaded clearance letter ${t}`,
       "Uploaded a clearance letter",
     ),
+    { targets: ["clearance"], named: true },
   ),
-  letter_refused: k("named_access", "A clearance letter file was refused"),
+  letter_refused: k("named_access", "A clearance letter file was refused", {
+    targets: ["clearance"],
+  }),
   letter_verified: k(
     "named_access",
     letter(
       (t) => `Verified clearance letter ${t}`,
       "Verified a clearance letter",
     ),
+    { targets: ["clearance"], named: true },
   ),
   letter_rejected: k(
     "named_access",
@@ -324,6 +367,7 @@ export const KINDS: Record<string, Kind> = {
       (t) => `Rejected clearance letter ${t}`,
       "Rejected a clearance letter",
     ),
+    { targets: ["clearance"], named: true },
   ),
   letter_narrowed: k(
     "named_access",
@@ -331,6 +375,7 @@ export const KINDS: Record<string, Kind> = {
       (t) => `Narrowed clearance letter ${t}`,
       "Narrowed a clearance letter",
     ),
+    { targets: ["clearance"], named: true },
   ),
   letter_revoked: k(
     "named_access",
@@ -338,14 +383,17 @@ export const KINDS: Record<string, Kind> = {
       (t) => `Revoked clearance letter ${t}`,
       "Revoked a clearance letter",
     ),
+    { targets: ["clearance"], named: true },
   ),
   letter_ended: k(
     "named_access",
     letter((t) => `Clearance letter ${t} ended`, "A clearance letter ended"),
+    { targets: ["clearance"], named: true },
   ),
   letter_viewed: k(
     "named_access",
     letter((t) => `Viewed clearance letter ${t}`, "Viewed a clearance letter"),
+    { targets: ["clearance"], named: true },
   ),
   letter_reminder_sent: k(
     "named_access",
@@ -353,17 +401,21 @@ export const KINDS: Record<string, Kind> = {
       (t) => `Sent a reminder about clearance letter ${t}`,
       "Sent a reminder about a clearance letter",
     ),
+    { targets: ["clearance"], named: true },
   ),
-  named_switch_changed: k("named_access", "Changed the named access switch"),
+  named_switch_changed: k("named_access", "Changed the named access switch", {
+    targets: ["setting"],
+  }),
   verify_refused: k(
     "named_access",
     "Tried to verify their own hospital's letter",
+    { targets: ["clearance"] },
   ),
   // Platform.
   change_followed_up: k(
     "platform",
     named((t) => `Marked “${t}” followed up`, "Marked a change followed up"),
-    true,
+    { note: true, targets: ["change"], named: true },
   ),
   change_note_edited: k(
     "platform",
@@ -371,11 +423,12 @@ export const KINDS: Record<string, Kind> = {
       (t) => `Edited the follow-up note on “${t}”`,
       "Edited a follow-up note",
     ),
-    true,
+    { note: true, targets: ["change"], named: true },
   ),
   change_follow_up_undone: k(
     "platform",
     named((t) => `Undid the follow-up on “${t}”`, "Undid a follow-up"),
+    { targets: ["change"], named: true },
   ),
   analytics_email_changed: k("platform", "Changed their analytics email"),
   // Export.
@@ -386,16 +439,17 @@ export const KINDS: Record<string, Kind> = {
         "Exported the audit log",
         e.facts.rows === undefined ? [] : [plural(e.facts.rows, "row", "rows")],
       ),
-    true,
+    { note: true, targets: ["export"] },
   ),
   named_access_exported: k(
     "export",
     "Exported named access for a legal request",
-    true,
+    { note: true, targets: ["export"] },
   ),
   export_downloaded: k(
     "export",
     exportId((t) => `Downloaded export ${t}`, "Downloaded an export"),
+    { targets: ["export"] },
   ),
   export_download_refused: k(
     "export",
@@ -403,8 +457,11 @@ export const KINDS: Record<string, Kind> = {
       (t) => `Tried to download export ${t} again`,
       "Tried to download an export again",
     ),
+    { targets: ["export"] },
   ),
-  activity_exported: k("export", "Exported a hospital's Activity"),
+  activity_exported: k("export", "Exported a hospital's Activity", {
+    targets: ["export", "hospital"],
+  }),
   // Audit.
   audit_viewed: k("audit", "Viewed the audit log"),
   audit_searched: k("audit", (e) =>
@@ -412,25 +469,33 @@ export const KINDS: Record<string, Kind> = {
       ? `Searched the audit log by ${SEARCHED_WORDS[e.facts.searched_kind]}`
       : "Searched the audit log",
   ),
-  audit_event_opened: k("audit", (e) =>
-    e.target?.kind === "event"
-      ? `Opened entry #${e.target.id}`
-      : "Opened an entry",
-  ),
-  audit_patients_viewed: k("audit", "Showed patient ids for an entry"),
-  audit_check_run: k("audit", (e) =>
-    e.actor.kind === "system"
-      ? "Daily integrity check"
-      : "Ran the integrity check",
-  ),
-  audit_check_outcome: k(
+  audit_event_opened: k(
     "audit",
-    "Recorded the outcome of a failed check",
-    true,
+    (e) =>
+      e.target?.kind === "event"
+        ? `Opened entry #${e.target.id}`
+        : "Opened an entry",
+    { targets: ["event"] },
   ),
+  audit_patients_viewed: k("audit", "Showed patient ids for an entry", {
+    targets: ["event"],
+  }),
+  audit_check_run: k(
+    "audit",
+    (e) =>
+      e.actor.kind === "system"
+        ? "Daily integrity check"
+        : "Ran the integrity check",
+    { targets: ["run"] },
+  ),
+  audit_check_outcome: k("audit", "Recorded the outcome of a failed check", {
+    note: true,
+    targets: ["run"],
+  }),
   audit_undisplayable_reported: k(
     "audit",
     "Reported an entry that couldn't be displayed",
+    { targets: ["event"] },
   ),
   // Retention.
   retention_run: k("retention", (e) => {
@@ -445,12 +510,20 @@ export const KINDS: Record<string, Kind> = {
       ? `Re-anchored the log after incident ${e.facts.incident_ref}`
       : "Re-anchored the log",
   ),
-  hold_placed: k("retention", (e) => `Placed a legal hold on ${hName(e)}`),
-  hold_lifted: k("retention", (e) => `Lifted a legal hold on ${hName(e)}`),
+  hold_placed: k("retention", (e) => `Placed a legal hold on ${hName(e)}`, {
+    targets: ["hold", "hospital"],
+    named: true,
+  }),
+  hold_lifted: k("retention", (e) => `Lifted a legal hold on ${hName(e)}`, {
+    targets: ["hold", "hospital"],
+    named: true,
+  }),
   // Security.
   step_up_refused: k("security", "Two-step code refused"),
   mfa_locked: k("security", "Locked after too many wrong codes"),
-  session_revoked: k("security", "Session ended by an admin"),
+  session_revoked: k("security", "Session ended by an admin", {
+    targets: ["session"],
+  }),
 };
 
 /** The kind, only if it is one of ours (never an inherited key). */

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { IntegrityStatus } from "@/lib/api/audit-contract";
 import { checkpoint, intactRun } from "@/tests/audit-event";
 import {
   STALE_MS,
@@ -8,10 +7,12 @@ import {
   errorWords,
   headerLine,
   integrityOf,
+  isRunning,
   runSentence,
 } from "./integrity";
+import type { ReadStatus } from "./read";
 
-const status = (over: Partial<IntegrityStatus> = {}): IntegrityStatus => ({
+const status = (over: Partial<ReadStatus> = {}): ReadStatus => ({
   latest: intactRun(),
   running: null,
   open_failure: null,
@@ -72,6 +73,7 @@ describe("headerLine", () => {
   it("header: exactly 26 h old reads checked, 26 h 1 min reads Not checked since 21 Oct 2026", () => {
     const s = status({
       latest: intactRun({
+        started_at: "2026-10-21T05:59:00Z",
         finished_at: "2026-10-21T06:00:00Z",
         to_at: "2026-10-21T06:00:00Z",
       }),
@@ -87,7 +89,13 @@ describe("headerLine", () => {
 
   it("reads today's check as HH:mm today, and an older one with its date", () => {
     const local = new Date(2026, 9, 22, 6, 0).toISOString();
-    const s = status({ latest: intactRun({ finished_at: local }) });
+    const s = status({
+      latest: intactRun({
+        started_at: local,
+        to_at: local,
+        finished_at: local,
+      }),
+    });
     expect(headerLine(s, new Date(2026, 9, 22, 9, 0).getTime())).toEqual({
       tone: "ok",
       words: "Integrity: Intact · checked 06:00 today",
@@ -134,6 +142,89 @@ describe("headerLine", () => {
     );
     expect(unproven.tone).toBe("warn");
     expect(unproven.words).toMatch(/^Integrity: Couldn't check · /);
+  });
+
+  it("a broken latest with no open_failure reads Broken · failed {date}", () => {
+    expect(headerLine(status({ latest: broken }), finished)).toEqual({
+      tone: "bad",
+      words: "Integrity: Broken · failed 21 Oct 2026",
+    });
+  });
+
+  it("a malformed open_failure reads Broken with no date", () => {
+    const odd = {
+      ...intactRun(),
+      id: null,
+      started_at: null,
+      finished_at: null,
+    };
+    expect(
+      headerLine(
+        status({ open_failure: { ...odd, state: "error" } }),
+        finished,
+      ),
+    ).toEqual({ tone: "bad", words: "Integrity: Broken" });
+  });
+
+  it("a malformed running doesn't read Checking…", () => {
+    const old = intactRun({
+      started_at: "2026-10-19T05:59:00Z",
+      to_at: "2026-10-19T06:00:00Z",
+      finished_at: "2026-10-19T06:00:00Z",
+    });
+    const now = Date.parse("2026-10-22T06:00:00Z");
+    for (const running of [
+      intactRun({ state: "error", error_code: "unexpected_reply" }),
+      intactRun({ state: "intact" }),
+    ]) {
+      const s = status({ latest: old, running });
+      expect(isRunning(s)).toBe(false);
+      expect(headerLine(s, now)).toEqual({
+        tone: "warn",
+        words: "Integrity: Not checked since 19 Oct 2026",
+      });
+    }
+    expect(
+      isRunning(status({ running: intactRun({ state: "running" }) })),
+    ).toBe(true);
+  });
+
+  it("a check finished in the future reads Couldn't check", () => {
+    const future = intactRun({
+      to_at: "2099-01-01T00:00:00Z",
+      finished_at: "2099-01-01T00:00:00Z",
+    });
+    const now = Date.parse("2026-10-22T07:00:00Z");
+    expect(integrityOf(future, now)).toBe("couldnt_check");
+    expect(headerLine(status({ latest: future }), now).words).toMatch(
+      /^Integrity: Couldn't check/,
+    );
+    // Within the 5-minute skew it still reads.
+    const skew = intactRun({
+      to_at: "2026-10-22T06:00:00Z",
+      finished_at: "2026-10-22T06:04:00Z",
+    });
+    expect(integrityOf(skew, Date.parse("2026-10-22T06:00:00Z"))).toBe(
+      "intact",
+    );
+    // Out of order: the last entry after the finish, or before the start.
+    expect(integrityOf(intactRun({ to_at: "2026-10-22T06:01:00Z" }))).toBe(
+      "couldnt_check",
+    );
+    expect(integrityOf(intactRun({ to_at: "2026-10-22T05:00:00Z" }))).toBe(
+      "couldnt_check",
+    );
+  });
+
+  it("anything contradicting the proof reads Couldn't check", () => {
+    for (const over of [
+      { error_code: "timed_out" as const },
+      { first_broken_seq: 5 },
+      { first_broken_at: "2026-10-22T05:00:00Z" },
+    ])
+      expect(integrityOf(intactRun(over)), JSON.stringify(over)).toBe(
+        "couldnt_check",
+      );
   });
 });
 

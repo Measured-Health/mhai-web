@@ -6,12 +6,17 @@
 import { toCsv, type Cell } from "@mhai/ui/csv";
 import type {
   AuditEvent,
-  AuditTarget,
   ExportKind,
   ExportReason,
 } from "@/lib/api/audit-contract";
 import type { Person } from "@/lib/api/contract";
-import { REASON_WORDS, ROLE_WORDS, TYPE_WORDS, viewWords } from "./kinds";
+import {
+  REASON_WORDS,
+  ROLE_WORDS,
+  TYPE_WORDS,
+  kindOf,
+  viewWords,
+} from "./kinds";
 import { readAuditEvent, readNamedFileRow, type Undisplayable } from "./read";
 import {
   ACTOR_KIND_WORDS,
@@ -66,11 +71,12 @@ export type AuditFileIn = {
 
 const FLAG_WORDS = { security: "Security", policy: "Policy" };
 
-/** The target, never a patient's name or id. */
-function targetWords(t: AuditTarget | null): string {
+/** The target, never a patient's id; a name only where the kind uses one. */
+function targetWords(e: AuditEvent): string {
+  const t = e.target;
   if (!t) return "";
   if (t.kind === "patient") return "A patient";
-  return ("name" in t && t.name) || t.id;
+  return (kindOf(e.kind)?.named && "name" in t && t.name) || t.id;
 }
 
 function eventCells(e: AuditEvent): Cell[] {
@@ -84,7 +90,7 @@ function eventCells(e: AuditEvent): Cell[] {
     hospitalWords(e.hospital),
     TYPE_WORDS[e.type],
     eventLine(e),
-    targetWords(e.target),
+    targetWords(e),
     OUTCOME_WORDS[e.outcome],
     e.ip,
     e.device,

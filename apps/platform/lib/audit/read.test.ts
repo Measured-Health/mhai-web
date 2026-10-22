@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
 import { auditEvent, checkpoint, intactRun } from "@/tests/audit-event";
+import { bannerOn } from "./integrity";
 import {
   integrityNotificationOk,
   readAuditEvent,
@@ -211,6 +212,84 @@ describe("readAuditEvent", () => {
     });
     expect(readAuditEvent(null)).toEqual({ ok: false, id: null, seq: null });
   });
+
+  it("a name on a drilldown_named target is undisplayable", () => {
+    const drill = auditEvent({
+      type: "named_access",
+      kind: "drilldown_named",
+      reason: null,
+      target: { kind: "clearance", id: "cl_1" },
+    });
+    expect(bad(drill)).toBe(false);
+    expect(
+      bad({
+        ...drill,
+        target: { kind: "clearance", id: "cl_1", name: "Jane Doe MRN 1234" },
+      }),
+    ).toBe(true);
+    expect(
+      bad({
+        ...drill,
+        target: { kind: "staff", id: "s_1", name: "Jane Doe MRN 1234" },
+      }),
+    ).toBe(true);
+    // A target on a kind that has none.
+    expect(
+      bad(
+        auditEvent({
+          type: "sign_in",
+          kind: "signed_in",
+          reason: null,
+          target: { kind: "staff", id: "s_1", name: "Jane Doe" },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("a staff target on letter_verified is undisplayable", () => {
+    const letter = auditEvent({
+      type: "named_access",
+      kind: "letter_verified",
+      reason: null,
+      target: { kind: "clearance", id: "cl_1", name: "cl_northgate_2026" },
+    });
+    expect(bad(letter)).toBe(false);
+    expect(
+      bad({
+        ...letter,
+        target: { kind: "staff", id: "s_1", name: "Dr N. Eze" },
+      }),
+    ).toBe(true);
+  });
+
+  it("a time without a zone is undisplayable", () => {
+    expect(bad(auditEvent({ at: "2026-10-22T06:00:00" }))).toBe(true);
+    expect(bad(auditEvent({ at: "2026-10-22T06:00" }))).toBe(true);
+    expect(bad(auditEvent({ at: "2026-10-22" }))).toBe(true);
+    expect(bad(auditEvent({ at: "2026-10-22T06:00:00+01:00" }))).toBe(false);
+    expect(bad(auditEvent({ at: "2026-10-22T06:00:00.123Z" }))).toBe(false);
+    expect(bad(auditEvent({ facts: { before: "2021-01-03T00:00:00" } }))).toBe(
+      true,
+    );
+  });
+
+  it("30 Feb is undisplayable", () => {
+    expect(bad(auditEvent({ at: "2026-02-30T00:00:00Z" }))).toBe(true);
+    expect(bad(auditEvent({ at: "2026-02-28T00:00:00Z" }))).toBe(false);
+  });
+
+  it("control and direction characters in a name are undisplayable", () => {
+    const actor = auditEvent().actor;
+    expect(
+      bad(auditEvent({ actor: { ...actor, name: "Ada\u202Enimda" } })),
+    ).toBe(true);
+    expect(bad(auditEvent({ actor: { ...actor, name: "Ada\nBakare" } }))).toBe(
+      true,
+    );
+    // A note may break lines, nothing else.
+    expect(bad(auditEvent({ note: "Line one\nLine two" }))).toBe(false);
+    expect(bad(auditEvent({ note: "Bell\u0007" }))).toBe(true);
+  });
 });
 
 describe("readAuditList", () => {
@@ -267,6 +346,9 @@ describe("the other readers", () => {
     expect(readDetail({ ...d, letter: { ...letter, status: "lost" } }).ok).toBe(
       false,
     );
+    expect(
+      readDetail({ ...d, letter: { ...letter, valid_to: "2026-02-30" } }).ok,
+    ).toBe(false);
   });
 
   it("readNamedAccess keeps the letter on each row", () => {
@@ -336,7 +418,7 @@ describe("the other readers", () => {
     expect(readRun({ ...intactRun(), extra: true }).state).toBe("error");
   });
 
-  it("readStatus keeps a broken run and throws on a bad envelope", () => {
+  it("readStatus keeps a broken run and throws only without the runs", () => {
     const status = {
       latest: intactRun(),
       running: null,
@@ -350,14 +432,42 @@ describe("the other readers", () => {
     };
     const s = readStatus(status);
     expect(s.latest).toEqual(intactRun());
+    expect(s.security_contact).toEqual(status.security_contact);
+    expect(s.oldest_kept_at).toBe("2020-10-22T00:00:00Z");
     // A malformed failure is never dropped.
     expect(s.open_failure).toMatchObject({ id: "run_0", state: "error" });
-    expect(() => readStatus({ ...status, security_contact: null })).toThrow(
-      ApiError,
-    );
-    expect(() => readStatus({ ...status, oldest_kept_at: 3 })).toThrow(
-      ApiError,
-    );
+    const { open_failure, ...noFailureKey } = status;
+    void open_failure;
+    expect(() => readStatus(noFailureKey)).toThrow(ApiError);
+    expect(() => readStatus(null)).toThrow(ApiError);
+  });
+
+  it("a bad security_contact keeps open_failure, and the banner is on", () => {
+    const failure = intactRun({
+      id: "run_0",
+      state: "broken",
+      to_seq: null,
+      to_at: null,
+      first_broken_seq: 9_880_117,
+      first_broken_at: "2026-10-21T11:14:00Z",
+      finished_at: "2026-10-21T12:00:00Z",
+    });
+    for (const security_contact of [
+      null,
+      { name: "Security", email: "ops team" },
+    ]) {
+      const s = readStatus({
+        latest: intactRun(),
+        running: null,
+        open_failure: failure,
+        security_contact,
+        oldest_kept_at: "soon",
+      });
+      expect(s.security_contact).toBeNull();
+      expect(s.oldest_kept_at).toBeNull();
+      expect(s.open_failure).toEqual(failure);
+      expect(bannerOn(s)).toEqual({ on: true, date: "21 Oct 2026" });
+    }
   });
 
   it("integrityNotificationOk", () => {

@@ -11,9 +11,11 @@ describe("the audit kinds", () => {
       expect(AUDIT_TYPES, kind).toContain(k.type);
       expect(kind).toMatch(/^[a-z][a-z_]{0,39}$/);
     }
-    // Every type has at least one kind.
+    // Every type has at least one kind; named kinds list a target.
     const used = new Set(Object.values(KINDS).map((k) => k.type));
     expect([...used].sort()).toEqual([...AUDIT_TYPES].sort());
+    for (const [kind, k] of Object.entries(KINDS))
+      if (k.named) expect(k.targets.length, kind).toBeGreaterThan(0);
   });
 
   it("has the kinds main's Activity already records", () => {
@@ -154,7 +156,7 @@ describe("the audit kinds", () => {
         ...base,
         type: "retention",
         kind: "retention_run",
-        facts: { purged_count: 412_006, before: "2021-01-03T12:00:00" },
+        facts: { purged_count: 412_006, before: "2021-01-03T12:00:00Z" },
       }),
     ).toBe("Retention removed 412,006 entries before 3 Jan 2021");
     expect(

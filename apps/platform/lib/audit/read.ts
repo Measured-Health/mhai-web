@@ -3,6 +3,7 @@
 // level. An entry that doesn't fit becomes an undisplayable row that keeps
 // only its id and position, never its content. A reply whose envelope
 // doesn't fit throws `bad_reply`, and the page shows "Couldn't load".
+// Envelopes are checked field by field; their extra keys are never shown.
 import { ApiError } from "@mhai/api-client/errors";
 import {
   AUDIT_TYPES,
@@ -40,12 +41,39 @@ const isBool = (v: unknown) => typeof v === "boolean";
 const isCount = (v: unknown): v is number =>
   typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 const isPos = (v: unknown): v is number => isCount(v) && v > 0;
-const isTime = (v: unknown): v is string =>
-  typeof v === "string" &&
-  /^\d{4}-\d{2}-\d{2}/.test(v) &&
-  !Number.isNaN(Date.parse(v));
-const text = (min: number, max: number) => (v: unknown) =>
-  typeof v === "string" && v.length >= min && v.length <= max;
+/** A real calendar day: 30 Feb never rolls over to March. */
+function realDay(y: string, m: string, d: string): boolean {
+  const t = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  return (
+    t.getUTCFullYear() === Number(y) &&
+    t.getUTCMonth() === Number(m) - 1 &&
+    t.getUTCDate() === Number(d)
+  );
+}
+const INSTANT =
+  /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/;
+/** An instant with its zone (Z or an offset), never a local time. */
+const isTime = (v: unknown): v is string => {
+  if (typeof v !== "string") return false;
+  const m = INSTANT.exec(v);
+  return !!m && realDay(m[1], m[2], m[3]) && !Number.isNaN(Date.parse(v));
+};
+/** A calendar day, "2026-10-22" (a letter's dates). */
+const isDay = (v: unknown): v is string => {
+  if (typeof v !== "string") return false;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  return !!m && realDay(m[1], m[2], m[3]);
+};
+/** Control and format characters (bidi overrides among them). */
+const HIDDEN = /[\p{Cc}\p{Cf}]/u;
+/** Text of min–max characters; only a note may break lines. */
+const text =
+  (min: number, max: number, lines = false) =>
+  (v: unknown) =>
+    typeof v === "string" &&
+    v.length >= min &&
+    v.length <= max &&
+    !HIDDEN.test(lines ? v.replace(/\n/g, "") : v);
 const oneOf =
   (...xs: readonly unknown[]) =>
   (v: unknown) =>
@@ -128,25 +156,12 @@ const isFacts = some({
   first_broken_seq: isPos,
 });
 
-/** A patient is only ever a pseudonym; only these kinds carry a name. */
-const NAMED_TARGETS = [
-  "staff",
-  "hospital",
-  "setting",
-  "clearance",
-  "team_member",
-  "change",
-  "hold",
-] as const;
-const PLAIN_TARGETS = ["export", "run", "event", "session"] as const;
+/** A patient is only ever a pseudonym; other targets are an id and a name. */
 function isTarget(v: unknown): boolean {
   if (v === null) return true;
   if (!isObj(v)) return false;
   if (v.kind === "patient")
     return exact({ kind: () => true, pseudonym: isId })(v);
-  if (PLAIN_TARGETS.includes(v.kind as never))
-    return exact({ kind: () => true, id: isId })(v);
-  if (!NAMED_TARGETS.includes(v.kind as never)) return false;
   return "name" in v
     ? exact({ kind: () => true, id: isId, name: text(1, NAME_MAX) })(v)
     : exact({ kind: () => true, id: isId })(v);
@@ -176,7 +191,7 @@ const EVENT: Record<string, Check> = {
   ),
   flag: oneOf("security", "policy", null),
   reason: orNull(own(REASON_WORDS)),
-  note: orNull(text(1, EVENT_NOTE_MAX)),
+  note: orNull(text(1, EVENT_NOTE_MAX, true)),
   refs: exact({
     clearance_id: orNull(isId),
     export_id: orNull(isId),
@@ -187,12 +202,22 @@ const EVENT: Record<string, Check> = {
 };
 const isEventShape = exact(EVENT);
 
-/** The rules across fields: the kind's type, and a note only where allowed. */
+/**
+ * The rules across fields: the kind's type; a note only where the kind
+ * allows one; a target only of a kind it lists, named only where its words
+ * use the name.
+ */
 function isEvent(v: unknown): v is AuditEvent {
   if (!isEventShape(v)) return false;
   const e = v as AuditEvent;
   const kind = kindOf(e.kind)!;
-  return kind.type === e.type && (e.note === null || kind.note);
+  const t = e.target;
+  return (
+    kind.type === e.type &&
+    (e.note === null || kind.note) &&
+    (t === null ||
+      (kind.targets.includes(t.kind) && (!("name" in t) || kind.named)))
+  );
 }
 
 export type Undisplayable = {
@@ -258,8 +283,8 @@ export function readAuditList(
 const isLetter = exact({
   id: isId,
   status: own(LETTER_STATUS_WORDS),
-  valid_from: isTime,
-  valid_to: isTime,
+  valid_from: isDay,
+  valid_to: isDay,
   verified_by: orNull(isPerson),
 });
 
@@ -296,7 +321,7 @@ const isExportRecord = exact({
     "security_investigation",
     "other",
   ),
-  note: orNull(text(1, EXPORT_NOTE_MAX)),
+  note: orNull(text(1, EXPORT_NOTE_MAX, true)),
   reference: orNull(text(1, EXPORT_REFERENCE_MAX)),
   filters: isFilters,
   filter_names: exact({
@@ -355,7 +380,11 @@ const isRun = exact({
   first_broken_at: orNull(isTime),
   error_code: oneOf("timed_out", "unreachable", "unexpected_reply", null),
   outcome: orNull(
-    exact({ note: text(1, OUTCOME_NOTE_MAX), by: isPerson, at: isTime }),
+    exact({
+      note: text(1, OUTCOME_NOTE_MAX, true),
+      by: isPerson,
+      at: isTime,
+    }),
   ),
   version: isCount,
 });
@@ -394,29 +423,32 @@ export function readRunList(raw: unknown): {
   };
 }
 
-export type ReadStatus = Omit<
-  IntegrityStatus,
-  "latest" | "running" | "open_failure"
-> & {
+export type ReadStatus = {
   latest: ReadRun | null;
   running: ReadRun | null;
   open_failure: ReadRun | null;
+  /** Null when it doesn't read: the tab says it couldn't load it. */
+  security_contact: IntegrityStatus["security_contact"] | null;
+  /** Null when it doesn't read: the footer leaves the date out. */
+  oldest_kept_at: string | null;
 };
 const isContact = exact({
   name: text(1, NAME_MAX),
   email: (v) =>
-    typeof v === "string" && v.length <= 254 && /^[^\s@<>]+@[^\s@<>]+$/.test(v),
+    typeof v === "string" &&
+    v.length <= 254 &&
+    /^[^\s@<>]+@[^\s@<>.]+\.[^\s@<>]+$/.test(v),
 });
 
-/** A run present but malformed reads as an error run, never as none. */
+/**
+ * The runs come first: a run present but malformed reads as an error run,
+ * never as none, so a failure keeps its banner. Only missing run keys
+ * throw; a bad contact or date reads as null.
+ */
 export function readStatus(raw: unknown): ReadStatus {
   if (
     !isObj(raw) ||
-    !["latest", "running", "open_failure"].every((k) =>
-      Object.hasOwn(raw, k),
-    ) ||
-    !isContact(raw.security_contact) ||
-    !isTime(raw.oldest_kept_at)
+    !["latest", "running", "open_failure"].every((k) => Object.hasOwn(raw, k))
   )
     throw badReply();
   const run = (v: unknown) => (v === null ? null : readRun(v));
@@ -424,9 +456,10 @@ export function readStatus(raw: unknown): ReadStatus {
     latest: run(raw.latest),
     running: run(raw.running),
     open_failure: run(raw.open_failure),
-    security_contact:
-      raw.security_contact as IntegrityStatus["security_contact"],
-    oldest_kept_at: raw.oldest_kept_at,
+    security_contact: isContact(raw.security_contact)
+      ? (raw.security_contact as IntegrityStatus["security_contact"])
+      : null,
+    oldest_kept_at: isTime(raw.oldest_kept_at) ? raw.oldest_kept_at : null,
   };
 }
 

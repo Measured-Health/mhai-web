@@ -9,8 +9,8 @@ import type {
   NamedAccessFilters,
   Outcome,
 } from "@/lib/api/audit-contract";
-import { dateLabel, dayMonthLabel } from "@/lib/format";
-import { REASON_WORDS, ROLE_WORDS, TYPE_WORDS, kindOf, num } from "./kinds";
+import { MONTHS, dateLabel, dayMonthLabel, num } from "@/lib/format";
+import { REASON_WORDS, ROLE_WORDS, TYPE_WORDS, kindOf } from "./kinds";
 
 /** What happened, in plain words. Only for an entry that read. */
 export const eventLine = (e: AuditEvent): string =>
@@ -122,20 +122,6 @@ export function gapLine(
     : `Entries before ${before} are no longer kept.`;
 }
 
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** "22 Oct 2026 06:00 UTC": for the detail and for files. */
