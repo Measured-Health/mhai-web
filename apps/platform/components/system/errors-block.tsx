@@ -3,6 +3,8 @@ import { errorKindLabel } from "@/lib/ops/labels";
 
 /** Recent errors by kind: counts only, no messages. */
 export function ErrorsBlock({ value }: { value: ErrorsValue }) {
+  if (value.length === 0)
+    return <p className="text-[14px] text-ink-2">No errors in this period.</p>;
   return (
     <ul aria-label="Recent errors" className="divide-y divide-line">
       {value.map((e) => (

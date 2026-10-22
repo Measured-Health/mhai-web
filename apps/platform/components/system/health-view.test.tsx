@@ -1,5 +1,6 @@
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ApiError } from "@mhai/api-client/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetPlatformClientForTests,
@@ -166,6 +167,7 @@ describe("the Health tab", () => {
     expect(read).toHaveBeenCalledTimes(2);
     await act(() => vi.advanceTimersByTimeAsync(30_000));
     expect(read).toHaveBeenCalledTimes(3);
+    expect(read).toHaveBeenLastCalledWith({ background: true });
 
     await act(async () => setVisible("hidden"));
     const before = read.mock.calls.length;
@@ -174,6 +176,8 @@ describe("the Health tab", () => {
 
     // Shown again after a long while: the first paint is Couldn't check,
     // then a fresh reading replaces it.
+    // Hidden for 10 minutes: the old reading no longer reads as good.
+    expect(within(overall()).getByText("Couldn't check")).toBeInTheDocument();
     await act(async () => setVisible("visible"));
     await act(() => vi.advanceTimersByTimeAsync(1_000));
     expect(read.mock.calls.length).toBeGreaterThan(before);
@@ -190,6 +194,15 @@ describe("the Health tab", () => {
     await within(overall()).findByText("Working normally");
     await act(() => vi.advanceTimersByTimeAsync(130_000));
     expect(read).toHaveBeenCalledTimes(1);
+    // No new fetch, yet the reading has aged past 2 minutes.
+    expect(
+      await within(overall()).findByText("Couldn't check"),
+    ).toBeInTheDocument();
+    expect(
+      within(overall()).getByText(/^Last good reading /),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Working normally")).toBeNull();
+    expect(screen.queryByText(/Questions waiting/)).toBeNull();
     expect(screen.getByRole("button", { name: "Refresh now" })).toBeDisabled();
     expect(
       screen.getByText("You're offline. This needs a connection."),
@@ -239,6 +252,58 @@ describe("the Health tab", () => {
     await screen.findByRole("list", { name: "Parts of the system" });
     const details = screen.getByText("Versions").closest("details")!;
     expect(details).not.toHaveAttribute("open");
+  });
+
+  it("an unknown overall fails only that line; the blocks show and no last good time", async () => {
+    const real = api.getHealth.bind(api);
+    vi.spyOn(api, "getHealth").mockImplementation(async (o) => ({
+      ...(await real(o)),
+      overall: "great" as never,
+    }));
+    await open();
+    expect(
+      await within(overall()).findByText("Couldn't check"),
+    ).toBeInTheDocument();
+    expect(within(overall()).queryByText(/Last good reading/)).toBeNull();
+    expect(within(overall()).queryByText("No reading yet")).toBeNull();
+    expect(
+      await screen.findByRole("list", { name: "Parts of the system" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Questions waiting: 2 · oldest 3 s"),
+    ).toBeInTheDocument();
+  });
+
+  it("a poll that fails after a good reading shows Couldn't check and the last good time", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const real = api.getHealth.bind(api);
+    let calls = 0;
+    vi.spyOn(api, "getHealth").mockImplementation(async (o) => {
+      if (++calls > 1) throw new ApiError(503, "unavailable");
+      return real(o);
+    });
+    await open();
+    await within(overall()).findByText("Working normally");
+    await act(() => vi.advanceTimersByTimeAsync(31_000));
+    expect(
+      await within(overall()).findByText("Couldn't check"),
+    ).toBeInTheDocument();
+    expect(
+      within(overall()).getByText(/^Last good reading /),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Questions waiting/)).toBeNull();
+  });
+
+  it("the demo switch keeps its choice when the tab is left and reopened", async () => {
+    vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "true");
+    const first = renderWithAuth(<HealthView />);
+    await screen.findByRole("region", { name: "Overall" });
+    await within(overall()).findByText("Working normally");
+    await userEvent.click(screen.getByRole("radio", { name: "Problems" }));
+    first.unmount();
+    renderWithAuth(<HealthView />);
+    await screen.findByRole("region", { name: "Overall" });
+    expect(screen.getByRole("radio", { name: "Problems" })).toBeChecked();
   });
 
   it("a block that fails alone says so and the rest stays", async () => {

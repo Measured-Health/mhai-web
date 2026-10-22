@@ -1,7 +1,7 @@
 "use client";
 import { useIsFetching } from "@tanstack/react-query";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { readHealth, timeLabel, waitLabel, type Block } from "@/lib/ops/health";
 import { healthKey, useHealth, useRefreshHealth } from "@/lib/queries/ops";
 import { Button } from "@mhai/ui/button";
@@ -14,6 +14,16 @@ import { OverallStatus } from "./overall-status";
 import { PartsList } from "./parts-list";
 import { TimingBlock } from "./timing-block";
 import { VersionsBlock } from "./versions-block";
+
+/** Date.now(), refreshed every 15 s, so an old reading ages without a fetch. */
+function useNow(everyMs = 15_000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(id);
+  }, [everyMs]);
+  return now;
+}
 
 function Section<T>({
   title,
@@ -51,20 +61,24 @@ export function HealthView() {
   const refresh = useRefreshHealth();
   const net = useNeedsConnection("health-offline");
   const fetching = useIsFetching({ queryKey: healthKey }) > 0;
-  const now = Date.now();
+  const tick = useNow();
+  // A fetch landing between ticks is never older than the tick.
+  const now = Math.max(tick, q.dataUpdatedAt);
 
   if (q.isPending) return <Loading label="Loading system health" />;
   const state = readHealth(q.data, { failed: q.isError, now });
   const retry = () => void q.refetch();
-  const checked = state.overall !== "couldnt_check";
   const { blocks } = state;
+  // Something can be shown while any block reads. An unknown overall value
+  // fails the overall line alone.
+  const checked = Object.values(blocks).some((b) => b.status === "ok");
 
   return (
     <div className="flex flex-col gap-4">
       <DemoHealthSwitch />
       <section aria-label="Overall" className="card-v3 px-[22px] py-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <OverallStatus state={state} now={now} />
+          <OverallStatus state={state} now={now} unread={!checked} />
           <div className="flex flex-wrap items-center gap-3">
             {checked && state.lastGood && (
               <span className="text-[13px] text-ink-3">

@@ -51,16 +51,19 @@ export function StatusMark({
 export function OverallStatus({
   state,
   now,
+  unread = state.overall === "couldnt_check",
 }: {
   state: HealthState;
   now: number;
+  /** Nothing of the reading can be shown (it is old, missing or failed). */
+  unread?: boolean;
 }) {
   return (
     <div>
       <p className="text-[20px] font-semibold">
         <StatusMark status={state.overall} />
       </p>
-      {state.overall === "couldnt_check" && (
+      {unread && (
         <p className="mt-1 text-[13.5px] text-ink-2">
           {state.lastGood
             ? `Last good reading ${timeLabel(state.lastGood, now)}`

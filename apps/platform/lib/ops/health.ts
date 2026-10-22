@@ -18,6 +18,8 @@ import {
 import type { Person } from "@/lib/api/contract";
 
 export const STALE_MS = 120_000;
+/** A reading dated further ahead than this is as good as none (clock skew). */
+export const SKEW_MS = 300_000;
 
 export type Block<T> = { status: "ok"; value: T } | { status: "failed" };
 
@@ -106,6 +108,11 @@ function readParts(o: Partial<HealthOut>): Block<PartsValue> {
     rows.push({ key: p.key, status: p.status, since: p.since });
   }
   if (
+    new Set(rows.map((r) => r.key)).size !== PART_KEYS.length ||
+    rows.length !== PART_KEYS.length
+  )
+    return FAILED;
+  if (
     !(c.last_run_at === null || isTime(c.last_run_at)) ||
     !(c.ok === null || typeof c.ok === "boolean") ||
     typeof c.paused !== "boolean" ||
@@ -187,7 +194,13 @@ export function readHealth(
     out && isObj(out) && typeof out.updated_at === "string"
       ? out.updated_at
       : null;
-  if (!out || failed || Number.isNaN(updated) || now - updated > STALE_MS)
+  if (
+    !out ||
+    failed ||
+    Number.isNaN(updated) ||
+    now - updated > STALE_MS ||
+    updated - now > SKEW_MS
+  )
     return { overall: "couldnt_check", lastGood, blocks: NONE };
   const o = out as Partial<HealthOut>;
   return {

@@ -79,6 +79,29 @@ describe("readHealth", () => {
       expect(s.blocks[b].status).toBe("ok");
   });
 
+  it("a part missing or repeated fails the parts block alone", () => {
+    const out = fresh();
+    const missing = { ...out, parts: out.parts.slice(1) };
+    const twice = { ...out, parts: [...out.parts.slice(1), out.parts[1]!] };
+    for (const bad of [missing, twice, { ...out, parts: [] }]) {
+      const s = read(bad);
+      expect(s.blocks.parts.status).toBe("failed");
+      expect(s.blocks.queue.status).toBe("ok");
+    }
+  });
+
+  it("a reading dated far ahead of the clock is couldnt_check", () => {
+    expect(read(at(fresh(), -6 * 60_000)).overall).toBe("couldnt_check");
+    expect(read(at(fresh(), -60_000)).overall).toBe("ok");
+  });
+
+  it("an unknown overall fails only the overall line", () => {
+    const bad = { ...fresh(), overall: "great" } as unknown as HealthOut;
+    const s = read(bad);
+    expect(s.overall).toBe("couldnt_check");
+    for (const b of BLOCKS) expect(s.blocks[b].status).toBe("ok");
+  });
+
   it("an unknown error kind fails the errors block alone", () => {
     const out = fresh();
     const bad = {
