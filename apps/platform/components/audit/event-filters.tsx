@@ -58,7 +58,7 @@ function dayOf(ms: number): string {
   return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
 }
 /** A range's first and last local days ([from, to): `to` is excluded). */
-const daysOf = (r: { from: string; to: string }) => ({
+export const daysOf = (r: { from: string; to: string }) => ({
   fromDay: dayOf(Date.parse(r.from)),
   toDay: dayOf(Date.parse(r.to) - 1),
 });
@@ -101,7 +101,7 @@ export function filtersOf(
   return { filters: f };
 }
 
-const PRESETS: [Preset, string][] = [
+export const PRESETS: [Preset, string][] = [
   ["today", "Today"],
   ["7d", "Last 7 days"],
   ["30d", "Last 30 days"],
@@ -109,9 +109,9 @@ const PRESETS: [Preset, string][] = [
   ["custom", "Custom"],
 ];
 
-const control =
+export const control =
   "min-h-11 rounded-xl border border-lilac-2 bg-white px-3 text-[13.5px] focus-visible:outline-2 focus-visible:outline-mint-deep";
-const labelClass = "text-[12px] font-semibold text-ink-2";
+export const labelClass = "text-[12px] font-semibold text-ink-2";
 const SEARCH_INVALID = "Enter an exact id: letters, numbers, - and _ only.";
 export const SEARCH_WHOLE_LOG =
   "Searching the whole log by id. Filters don't apply until you clear the search.";
@@ -268,7 +268,7 @@ export function EventFilters({
  * A custom range's day. It applies on blur or Enter, not on each keystroke,
  * so a year typed digit by digit isn't read (and recorded) at every step.
  */
-function DayInput({
+export function DayInput({
   id,
   label,
   value,

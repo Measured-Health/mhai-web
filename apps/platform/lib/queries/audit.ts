@@ -20,6 +20,8 @@ import type {
   ExportOut,
   ExportRecord,
   IntegrityStatus,
+  NamedAccessFilters,
+  NamedAccessList,
   VerifyRun,
 } from "@/lib/api/audit-contract";
 import { isRunning } from "@/lib/audit/integrity";
@@ -30,6 +32,7 @@ import {
   readAuditList,
   readDetail,
   readExportList,
+  readNamedAccess,
   readRun,
   readRunList,
   readStatus,
@@ -102,6 +105,31 @@ export function cachedEventsCount(
   } catch {
     return null;
   }
+}
+
+type ReadNamed = ReturnType<typeof readNamedAccess>;
+
+/**
+ * The named-access entries for one filter set, newest first. Each page is
+ * read strictly. Pseudonyms are never in this list, so nothing is held back
+ * from the cache; a new filter set is a new key.
+ */
+export function useNamedAccess(f: NamedAccessFilters, enabled = true) {
+  return useInfiniteQuery({
+    queryKey: [...auditKey, "named", f] as const,
+    queryFn: ({ pageParam }) =>
+      getPlatformClient().listNamedAccess(f, pageParam ?? undefined),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last: NamedAccessList) => last.next_cursor,
+    select: (
+      d: InfiniteData<NamedAccessList, string | null>,
+    ): InfiniteData<ReadNamed, string | null> => ({
+      pages: d.pages.map(readNamedAccess),
+      pageParams: d.pageParams,
+    }),
+    refetchOnMount: "always",
+    enabled,
+  });
 }
 
 /**
