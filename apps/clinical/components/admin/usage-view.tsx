@@ -22,7 +22,7 @@ import { adminError } from "@/lib/admin/errors";
 import { useAuth } from "@/lib/auth/auth-context";
 import { RESULT_LABEL } from "@/lib/labels";
 import { Button } from "@mhai/ui/button";
-import { BarList } from "../ui/charts/bar-list";
+import { BarList } from "@mhai/ui/charts/bar-list";
 import { cn } from "@mhai/ui/cn";
 import { Skeleton } from "@mhai/ui/skeleton";
 import { useToast } from "@mhai/ui/toast";

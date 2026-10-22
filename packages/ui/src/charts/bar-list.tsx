@@ -1,5 +1,5 @@
-import type { BarItem } from "@/lib/charts";
-import { FEWER_THAN_5 } from "@/lib/small-groups";
+import type { BarItem } from "./types";
+import { FEWER_THAN_5 } from "../small-groups";
 import { cn } from "@mhai/ui/cn";
 
 /**

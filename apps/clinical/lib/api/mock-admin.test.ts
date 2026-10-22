@@ -17,7 +17,7 @@ import { ApiError } from "./errors";
 import type { GuardedOut, UsageAlertsOut } from "./admin-contract";
 import { PERIODS } from "@/lib/admin/report";
 import { readAlerts, whatChanged } from "@/lib/admin/alert-usage";
-import { SMALL_GROUP_MIN } from "@/lib/small-groups";
+import { SMALL_GROUP_MIN } from "@mhai/ui/small-groups";
 
 const code = async (p: Promise<unknown>) => {
   try {

@@ -7,7 +7,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import type { Column } from "@/lib/charts";
+import type { Column } from "./types";
 import { Button } from "@mhai/ui/button";
 import { cn } from "@mhai/ui/cn";
 

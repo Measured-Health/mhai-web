@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Activity } from "react";
 import { describe, expect, it } from "vitest";
 import { BarList } from "./bar-list";
-import type { Column } from "@/lib/charts";
+import type { Column } from "./types";
 import { ColumnChart } from "./column-chart";
 
 const bars = (list: HTMLElement) =>
