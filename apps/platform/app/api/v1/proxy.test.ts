@@ -141,6 +141,10 @@ const SHAPES: [Method, string][] = [
   ["POST", "platform/notifications/seen"],
   ["GET", "platform/me/analytics-email"],
   ["PUT", "platform/me/analytics-email"],
+  ["GET", "platform/health"],
+  ["GET", "platform/jobs"],
+  ["POST", "platform/jobs/retry"],
+  ["POST", "platform/jobs/cancel"],
   ["GET", "platform/legal-holds"],
   ["POST", "platform/legal-holds"],
   ["GET", "platform/legal-holds/{id}"],
@@ -289,6 +293,14 @@ describe("platform API proxy", () => {
     ["POST", ["platform", "me", "analytics-email"]],
     ["PATCH", ["platform", "me", "analytics-email"]],
     ["GET", ["platform", "me", "tm_ada", "analytics-email"]],
+    ["POST", ["platform", "health"]],
+    ["GET", ["platform", "health", "x"]],
+    ["POST", ["platform", "jobs"]],
+    ["GET", ["platform", "jobs", "retry"]],
+    ["GET", ["platform", "jobs", "j1"]],
+    ["POST", ["platform", "jobs", "j1", "retry"]],
+    ["PUT", ["platform", "jobs", "cancel"]],
+    ["DELETE", ["platform", "jobs", "cancel"]],
     ["POST", ["platform", "legal-holds", "x", "lift", "approve", "extra"]],
     ["DELETE", ["platform", "legal-holds", "x"]],
     ["PUT", ["platform", "legal-holds", "x"]],
@@ -534,6 +546,15 @@ describe("platform API proxy", () => {
       const s = await readSession();
       expect(s!.token).toBe("tok2");
       expect(s!.lastSeenAt).toBe(seenAt);
+    });
+
+    it("GET platform/health with the header leaves lastSeenAt unchanged", async () => {
+      const seenAt = TEN_MIN_AGO();
+      await session({ lastSeenAt: seenAt });
+      fetchMock.mockResolvedValueOnce(Response.json({}));
+      const res = await call("GET", ["platform", "health"], { headers: BG });
+      expect(res.status).toBe(200);
+      expect((await readSession())!.lastSeenAt).toBe(seenAt);
     });
 
     it("a normal GET still extends the session", async () => {

@@ -67,6 +67,14 @@ All notable changes to this project are documented here. The format follows
   for platform admins an **Analytics email** setting on Account: Off,
   Critical only, or Critical and weekly digest. Auditors have the bell and
   get no email. End-to-end tests cover it on desktop and phone.
+- System in the platform admin app, on sample data: a Health tab (Working
+  normally, Slower than usual, Having problems or Couldn't check; the
+  parts, questions waiting, failed jobs, answer times and recent errors, in
+  counts only, refreshed every 30 seconds) with a demo switch between
+  Normal, Slower and Problems, and a Failed jobs tab where platform admins
+  retry (with a warning for old questions) or cancel jobs with a reason and
+  their two-step code, and auditors read. End-to-end tests cover it on
+  desktop and phone.
 - Shared packages `@mhai/ui` (components) and `@mhai/api-client` (API,
   session and two-step helpers), used by both apps.
 

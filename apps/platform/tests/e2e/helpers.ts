@@ -50,7 +50,13 @@ export async function signIn(page: Page, email: string) {
 export async function openNav(
   page: Page,
   name:
-    "Hospitals" | "Analytics" | "Legal holds" | "Team" | "Activity" | "Account",
+    | "Hospitals"
+    | "Analytics"
+    | "Legal holds"
+    | "System"
+    | "Team"
+    | "Activity"
+    | "Account",
 ) {
   if (isMobile(page))
     await page.getByRole("button", { name: "Open menu" }).click();

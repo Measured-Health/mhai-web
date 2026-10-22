@@ -107,6 +107,10 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(/\*\*Analytics\.\*\*/);
   });
 
+  it("documents the platform system demo", () => {
+    expect(readme).toMatch(/\*\*System\s+health\s+and\s+failed\s+jobs\.\*\*/);
+  });
+
   it("documents the platform notifications and the analytics email setting", () => {
     expect(readme).toMatch(/\*\*Notifications\.\*\*/);
     expect(readme).toMatch(/Analytics\s+email/);

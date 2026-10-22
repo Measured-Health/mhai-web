@@ -147,6 +147,27 @@ export function createLivePlatformClient({
     markSeen: (b, o) => ok("/notifications/seen", "POST", b, o),
     getEmailPref: () => ok("/me/analytics-email"),
     setEmailPref: (b, o) => ok("/me/analytics-email", "PUT", b, o),
+    // The health poll is background too: it must not keep a session alive.
+    getHealth: (o) =>
+      ok(
+        "/health",
+        "GET",
+        undefined,
+        undefined,
+        o?.background ? BACKGROUND : undefined,
+      ),
+    listJobs: (q) =>
+      ok(
+        `/jobs${query({
+          status: q.status,
+          type: q.type,
+          hospital: q.hospital,
+          kind: q.kind,
+          cursor: q.cursor,
+        })}`,
+      ),
+    retryJobs: (b, o) => ok("/jobs/retry", "POST", b, o),
+    cancelJobs: (b, o) => ok("/jobs/cancel", "POST", b, o),
     ...holdsLive(ok),
   };
 }

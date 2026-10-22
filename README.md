@@ -226,6 +226,23 @@ then, and it still blocks a removal); Havana's was lifted long ago. Lifting a ho
 admins, each with their own code, and a lift request lapses after 7 days.
 Auditors see every hold, note and history, and change nothing.
 
+**System health and failed jobs.** **System** in the sidebar has two tabs.
+**Health** says in one line whether the service is Working normally, Slower
+than usual, Having problems or Couldn't check, then lists the parts (with
+since when), the questions waiting, the failed jobs, how long answers take
+and recent errors by kind, all in counts and times with no patient, question
+or answer content. It refreshes every 30 seconds while the tab is visible
+and online, and **Refresh now** reads it at once; a reading more than 2
+minutes old shows Couldn't check with the last good time, never old
+figures. In the demo, a **Sample data** switch (Normal, Slower, Problems)
+changes the reading. **Failed jobs** lists the jobs that failed, with filters
+for what, which hospital, why and status. Platform admins choose up to 50
+and **Retry** them (a warning appears when some are questions asked more
+than a day ago) or **Cancel jobs** with a reason, an optional note and their
+own two-step code; a cancelled job reads "Cancelled by" the person. Try
+Northgate General Hospital's old question, or cancel the guideline search.
+On a phone the jobs are cards. Auditors see both tabs and no buttons.
+
 **The auditor** (Amara Eze) sees every hospital, the team and the activity,
 with no buttons to change anything; the server refuses an auditor's changes
 too. On Team, nobody can change their own role or remove themselves: another

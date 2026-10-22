@@ -40,6 +40,8 @@ import {
   seedChanges,
   type AnalyticsMode,
 } from "./analytics-fixtures";
+import { createMockOps } from "./mock-ops";
+import type { HealthMode } from "./ops-fixtures";
 import {
   EMAIL_MODES,
   NOTIFICATIONS_MAX,
@@ -208,6 +210,7 @@ export function createMockPlatform({
   twoStep,
   analytics = "normal",
   notifications = "normal",
+  health = "normal",
   removalStarted,
   onCore,
 }: {
@@ -223,6 +226,8 @@ export function createMockPlatform({
   analytics?: AnalyticsMode;
   /** "unavailable": the notifications list and marking seen fail with 503. */
   notifications?: "normal" | "unavailable";
+  /** Which sample health reading to serve (see `HealthMode`). */
+  health?: HealthMode;
   /**
    * Hospitals whose removal has already started deleting: placing a hold
    * there is refused with 409 `removal_started`.
@@ -388,8 +393,10 @@ export function createMockPlatform({
 
   /** A read: someone must be signed in. */
   async function read<T>(fn: (m: TeamMember) => T): Promise<T> {
-    await wait();
+    // Who is asking is decided when the call is made, as a cookie is, not
+    // after the delay.
     const m = you();
+    await wait();
     return forYou(copy(fn(m)), m);
   }
   /**
@@ -400,8 +407,10 @@ export function createMockPlatform({
     opts: WriteOpts | undefined,
     fn: (m: TeamMember) => Promise<T> | T,
   ): Promise<T> {
-    await wait();
+    // Who is asking is decided when the call is made, as a cookie is, not
+    // after the delay.
     const m = you();
+    await wait();
     if (m.role !== "platform_admin") fail(403, "forbidden");
     const key = opts?.idempotencyKey;
     if (key && done.has(key)) return forYou(copy(done.get(key) as T), m);
@@ -499,8 +508,10 @@ export function createMockPlatform({
     opts: WriteOpts | undefined,
     fn: (m: TeamMember) => T | Promise<T>,
   ): Promise<T> {
-    await wait();
+    // Who is asking is decided when the call is made, as a cookie is, not
+    // after the delay.
     const m = you();
+    await wait();
     const key = opts?.idempotencyKey;
     if (key && done.has(key)) return copy(done.get(key) as T);
     const out = await fn(m);
@@ -1045,6 +1056,7 @@ export function createMockPlatform({
   // Each area adds one spread, built on the same core.
   return {
     ...hospitalsPart,
+    ...createMockOps(core, { health }),
     ...holdsMock(core, { removalStarted }),
   };
 }

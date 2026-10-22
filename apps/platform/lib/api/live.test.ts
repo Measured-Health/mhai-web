@@ -266,6 +266,50 @@ const ROWS: Row[] = [
     { mode: "critical", version: 2 },
   ],
   [
+    "getHealth",
+    (c) => c.getHealth(),
+    "GET",
+    "/api/v1/platform/health",
+    undefined,
+  ],
+  [
+    "listJobs",
+    (c) =>
+      c.listJobs({
+        status: "all",
+        type: "ingest_document",
+        hospital: "h_northgate",
+        kind: "unreadable",
+        cursor: "50",
+      }),
+    "GET",
+    "/api/v1/platform/jobs?status=all&type=ingest_document&hospital=h_northgate&kind=unreadable&cursor=50",
+    undefined,
+  ],
+  [
+    "retryJobs",
+    (c) => c.retryJobs({ ids: ["job_a", "job_b"] }, K),
+    "POST",
+    "/api/v1/platform/jobs/retry",
+    { ids: ["job_a", "job_b"] },
+  ],
+  [
+    "cancelJobs",
+    (c) =>
+      c.cancelJobs(
+        { ids: ["job_a"], reason: "other", note: "Done by hand.", ...CODE },
+        K,
+      ),
+    "POST",
+    "/api/v1/platform/jobs/cancel",
+    {
+      ids: ["job_a"],
+      reason: "other",
+      note: "Done by hand.",
+      mfa_code: "123456",
+    },
+  ],
+  [
     "listHolds",
     (c) =>
       c.listHolds({
@@ -415,6 +459,32 @@ describe("live platform client", () => {
         "pref-1",
         { mode: "critical_and_digest", version: 1 },
       ],
+    ]);
+  });
+
+  it("only getHealth({background: true}) is marked as background", async () => {
+    await client().getHealth();
+    await client().getHealth({ background: false });
+    await client().getHealth({ background: true });
+    await client().listJobs({});
+    await client().retryJobs({ ids: ["job_a"] }, K);
+    await client().cancelJobs(
+      { ids: ["job_a"], reason: "cant_succeed", ...CODE },
+      K,
+    );
+    expect(
+      fetchImpl.mock.calls.map(
+        ([, init]) =>
+          (init?.headers as Record<string, string>)["X-MHAI-Background"],
+      ),
+    ).toEqual([undefined, undefined, "1", undefined, undefined, undefined]);
+    expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
+      "/api/v1/platform/health",
+      "/api/v1/platform/health",
+      "/api/v1/platform/health",
+      "/api/v1/platform/jobs",
+      "/api/v1/platform/jobs/retry",
+      "/api/v1/platform/jobs/cancel",
     ]);
   });
 
