@@ -203,17 +203,20 @@ export function readHealth(
   )
     return { overall: "couldnt_check", lastGood, blocks: NONE };
   const o = out as Partial<HealthOut>;
+  const blocks = {
+    parts: readParts(o),
+    queue: readQueue(o.queue),
+    failedJobs: readFailedJobs(o.failed_jobs),
+    timing: readTimingValue(o.timing),
+    errors: readErrors(o.errors),
+    versions: readVersions(o.versions),
+  };
+  // A reading where nothing could be read is not a good one.
+  const anyOk = Object.values(blocks).some((b) => b.status === "ok");
   return {
     overall: oneOf(PART_STATUSES, o.overall) ? o.overall : "couldnt_check",
-    lastGood,
-    blocks: {
-      parts: readParts(o),
-      queue: readQueue(o.queue),
-      failedJobs: readFailedJobs(o.failed_jobs),
-      timing: readTimingValue(o.timing),
-      errors: readErrors(o.errors),
-      versions: readVersions(o.versions),
-    },
+    lastGood: anyOk ? lastGood : null,
+    blocks,
   };
 }
 

@@ -1,6 +1,11 @@
 "use client";
 import type { CancelReason, Job } from "@/lib/api/ops-contract";
-import { cancelEffects, jobsCount, resultLine } from "@/lib/ops/jobs";
+import {
+  cancelEffects,
+  jobsCount,
+  resultLine,
+  resultTone,
+} from "@/lib/ops/jobs";
 import { useCancelJobs } from "@/lib/queries/ops";
 import { useStepUpCall } from "@/lib/queries/step-up-call";
 import { useToast } from "@mhai/ui/toast";
@@ -50,7 +55,7 @@ export function CancelJobsDialog({
               r.skipped.length,
               "Cancelled",
             ),
-            tone: "ok",
+            tone: resultTone(r.cancelled.length),
             live: "polite",
           });
           onDone?.();

@@ -46,6 +46,21 @@ describe("readHealth", () => {
     for (const b of BLOCKS) expect(s.blocks[b].status).toBe("failed");
   });
 
+  it("a fresh reading where no block can be read has no last good time", () => {
+    const bad = {
+      ...fresh(),
+      parts: "x",
+      queue: "x",
+      failed_jobs: "x",
+      timing: "x",
+      errors: "x",
+      versions: "x",
+    } as unknown as HealthOut;
+    const s = read(bad);
+    for (const b of BLOCKS) expect(s.blocks[b].status).toBe("failed");
+    expect(s.lastGood).toBeNull();
+  });
+
   it("no reading at all is couldnt_check with no last good time", () => {
     const s = read(undefined, true);
     expect(s.overall).toBe("couldnt_check");

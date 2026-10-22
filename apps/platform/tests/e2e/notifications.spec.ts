@@ -78,8 +78,12 @@ test("the bell counts new changes, the list opens, and they're marked seen", asy
 
 test("Ada's seen doesn't clear Tunde's bell", async ({ page }) => {
   await signIn(page, ADA);
+  // The count has loaded before the list opens.
+  await expect(bell(page)).toHaveAccessibleName(UNSEEN);
   await bell(page).click();
+  await expect(list(page)).toBeVisible();
   await page.keyboard.press("Escape");
+  // Seen is saved (the count is gone) before Ada signs out.
   await expect(bell(page)).toHaveAccessibleName("Notifications");
   await signOut(page);
   await signIn(page, TUNDE);
@@ -88,6 +92,7 @@ test("Ada's seen doesn't clear Tunde's bell", async ({ page }) => {
 
 test("an item opens Analytics on that change", async ({ page }) => {
   await signIn(page, ADA);
+  await expect(bell(page)).toHaveAccessibleName(UNSEEN);
   await bell(page).click();
   await list(page)
     .getByRole("button", { name: /Critical alerts acknowledged 2× slower/ })

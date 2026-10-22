@@ -49,17 +49,30 @@ export function cancelEffects(jobs: Job[]): string[] {
 /** "1 job" or "3 jobs". */
 export const jobsCount = (n: number) => `${n} ${n === 1 ? "job" : "jobs"}`;
 
-/** "Retried 3 jobs", plus how many had already moved on. */
+/**
+ * "Retried 3 jobs", plus how many had already moved on. When nothing was
+ * done it says so plainly: "No jobs were retried · 2 were already retried or
+ * finished".
+ */
 export function resultLine(
   done: number,
   skipped: number,
   verb: "Retried" | "Cancelled",
 ): string {
-  const base = `${verb} ${jobsCount(done)}`;
+  const base =
+    done > 0
+      ? `${verb} ${jobsCount(done)}`
+      : `No jobs were ${verb.toLowerCase()}`;
+  const why =
+    verb === "Retried" ? "already retried or finished" : "already moved on";
   return skipped > 0
-    ? `${base} · ${skipped} ${skipped === 1 ? "was" : "were"} already retried or finished`
+    ? `${base} · ${skipped} ${skipped === 1 ? "was" : "were"} ${why}`
     : base;
 }
+
+/** A result that did nothing is information, not a success. */
+export const resultTone = (done: number): "ok" | "info" =>
+  done > 0 ? "ok" : "info";
 
 /** A job whose enum values the app knows; anything else fails the list. */
 export const isKnownJob = (j: Job): boolean =>

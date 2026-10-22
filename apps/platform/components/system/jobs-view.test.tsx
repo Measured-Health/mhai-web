@@ -155,15 +155,44 @@ describe("the failed jobs tab", () => {
       expect(row).toHaveTextContent("Northgate General Hospital");
   });
 
-  it("the Hospital picker says when the hospitals couldn't load", async () => {
-    install({ listHospitals: () => Promise.reject(new Error("down")) });
+  it("the Hospital picker says when the hospitals couldn't load, keeps its name and tries again", async () => {
+    let calls = 0;
+    const real = createMockPlatform({
+      delayMs: 0,
+      me: () => ADA.email,
+      stepUp: createStepUp(),
+    });
+    install({
+      listHospitals: (...a) =>
+        ++calls === 1
+          ? Promise.reject(new Error("down"))
+          : real.listHospitals(...a),
+    });
     renderWithAuth(<JobsView />);
     await screen.findByRole("table");
-    expect(
-      await screen.findByText("Couldn't load hospitals"),
-    ).toBeInTheDocument();
+    const alert = await screen.findByText("Couldn't load hospitals");
+    expect(alert).toBeInTheDocument();
+    // The message is outside the label: the select's name is just Hospital.
+    const select = screen.getByRole("combobox", { name: "Hospital" });
+    expect(alert.closest("label")).toBeNull();
+    expect(select).toHaveAccessibleDescription("Couldn't load hospitals");
     // The jobs themselves still show.
     expect(screen.getAllByRole("row").slice(1)).toHaveLength(8);
+
+    const again = screen.getByRole("button", { name: "Try again" });
+    expect(again).toHaveClass("min-h-11");
+    await userEvent.click(again);
+    await waitFor(() =>
+      expect(screen.queryByText("Couldn't load hospitals")).toBeNull(),
+    );
+    expect(calls).toBe(2);
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(
+      within(screen.getByRole("combobox", { name: "Hospital" })).getByRole(
+        "option",
+        { name: "Northgate General Hospital" },
+      ),
+    ).toBeInTheDocument();
   });
 
   it("on a phone the jobs are cards with 44 px controls", async () => {

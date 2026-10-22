@@ -6,18 +6,24 @@ import { ApiError } from "@mhai/api-client/errors";
 import { useKeyedMutation } from "@mhai/api-client/keyed-mutation";
 import { useStepUpCall } from "./step-up-call";
 
+const auth = vi.hoisted(() => ({ updateUser: vi.fn() }));
 vi.mock("../auth/auth-context", () => ({
-  useAuth: () => ({ user: null, updateUser: () => {} }),
+  useAuth: () => ({
+    user: { backupCodesLeft: 3 },
+    updateUser: auth.updateUser,
+  }),
 }));
 
-function setup(send: (v: { mfa_code: string }) => Promise<string>) {
+type Code = { mfa_code: string } | { backup_code: string };
+
+function setup(send: (v: Code) => Promise<string>) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client: qc }, children);
   const hook = renderHook(
     () => {
       const m = useKeyedMutation(
-        (v: { mfa_code: string }) => send(v),
+        (v: Code) => send(v),
         {},
         {
           gcTime: 0,
@@ -63,5 +69,46 @@ describe("useStepUpCall", () => {
     expect(leaked()).not.toContain("424242");
     act(() => hook.result.current.clear());
     expect(hook.result.current.error).toBeNull();
+  });
+
+  it("a backup code that works counts down the codes left, once", async () => {
+    auth.updateUser.mockClear();
+    const { hook } = setup(async () => "done");
+    let got = "";
+    act(() =>
+      hook.result.current.run(
+        { backup_code: "abcd-efgh" },
+        { onSuccess: (r) => (got = r) },
+      ),
+    );
+    await waitFor(() => expect(got).toBe("done"));
+    expect(auth.updateUser).toHaveBeenCalledTimes(1);
+    expect(auth.updateUser).toHaveBeenCalledWith({ backupCodesLeft: 2 });
+  });
+
+  it("a two-step code that works does not touch the backup codes", async () => {
+    auth.updateUser.mockClear();
+    const { hook } = setup(async () => "done");
+    let got = "";
+    act(() =>
+      hook.result.current.run(
+        { mfa_code: "424242" },
+        { onSuccess: (r) => (got = r) },
+      ),
+    );
+    await waitFor(() => expect(got).toBe("done"));
+    expect(auth.updateUser).not.toHaveBeenCalled();
+  });
+
+  it("a refused backup code does not use one up", async () => {
+    auth.updateUser.mockClear();
+    const { hook } = setup(async () => {
+      throw new ApiError(403, "mfa_invalid");
+    });
+    act(() => hook.result.current.run({ backup_code: "abcd-efgh" }));
+    await waitFor(() =>
+      expect(hook.result.current.error).toBeInstanceOf(ApiError),
+    );
+    expect(auth.updateUser).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   ERROR_KINDS,
   JOBS_MAX,
@@ -63,6 +63,7 @@ export function JobsView() {
   };
 
   const options = useHospitalOptions();
+  const hospitalErrorId = useId();
   const q = useJobs(filter);
   const rows = q.data?.pages.flatMap((p) => p.jobs) ?? [];
   const bad = rows.some((j) => !isKnownJob(j));
@@ -164,32 +165,50 @@ export function JobsView() {
           { value: "", label: "All" },
           ...JOB_TYPES.map((t) => ({ value: t, label: jobTypeLabel[t] })),
         ])}
-        <label className="flex items-center gap-2 text-[13px] text-ink-2">
-          Hospital
-          <select
-            value={hospital ?? ""}
-            disabled={options.isPending}
-            onChange={(e) => set("hospital", e.target.value)}
-            className={control}
-          >
-            <option value="">
-              {options.isPending ? "Loading hospitals…" : "All hospitals"}
-            </option>
-            {unknownHospital && (
-              <option value={hospital}>Unknown hospital</option>
-            )}
-            {names.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.name}
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-[13px] text-ink-2">
+            Hospital
+            <select
+              value={hospital ?? ""}
+              disabled={options.isPending}
+              onChange={(e) => set("hospital", e.target.value)}
+              aria-describedby={options.isError ? hospitalErrorId : undefined}
+              className={control}
+            >
+              <option value="">
+                {options.isPending ? "Loading hospitals…" : "All hospitals"}
               </option>
-            ))}
-          </select>
+              {unknownHospital && (
+                <option value={hospital}>Unknown hospital</option>
+              )}
+              {names.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name}
+                </option>
+              ))}
+            </select>
+          </label>
           {options.isError && (
-            <span role="alert" className="text-[13px] text-bad">
-              Couldn&apos;t load hospitals
-            </span>
+            <>
+              <span
+                id={hospitalErrorId}
+                role="alert"
+                className="text-[13px] text-bad"
+              >
+                Couldn&apos;t load hospitals
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="min-h-11 px-4"
+                disabled={options.isFetching}
+                onClick={() => void options.refetch()}
+              >
+                Try again
+              </Button>
+            </>
           )}
-        </label>
+        </div>
         {field("Why", "why", why ?? "", [
           { value: "", label: "All" },
           ...ERROR_KINDS.map((k) => ({ value: k, label: errorKindLabel[k] })),

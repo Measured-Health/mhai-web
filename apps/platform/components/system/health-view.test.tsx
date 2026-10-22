@@ -209,6 +209,44 @@ describe("the Health tab", () => {
     ).toBeInTheDocument();
   });
 
+  it("stops showing figures just past 2 minutes, with no fetch and offline", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    env.online = false;
+    const first = await api.getHealth();
+    const read = vi
+      .spyOn(api, "getHealth")
+      .mockResolvedValue({ ...first, updated_at: new Date().toISOString() });
+    await open();
+    await within(overall()).findByText("Working normally");
+    await act(() => vi.advanceTimersByTimeAsync(119_000));
+    expect(within(overall()).getByText("Working normally")).toBeInTheDocument();
+    // Past 120 s, before the next 15 s tick would have looked.
+    await act(() => vi.advanceTimersByTimeAsync(1_500));
+    expect(within(overall()).getByText("Couldn't check")).toBeInTheDocument();
+    expect(screen.queryByText("Working normally")).toBeNull();
+    expect(screen.queryByText(/Questions waiting/)).toBeNull();
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("is already Couldn't check the moment the tab is shown again", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const first = await api.getHealth();
+    const read = vi
+      .spyOn(api, "getHealth")
+      .mockResolvedValueOnce({ ...first, updated_at: new Date().toISOString() })
+      .mockImplementation(() => new Promise(() => {}));
+    await open();
+    await within(overall()).findByText("Working normally");
+    await act(async () => setVisible("hidden"));
+    await act(() => vi.advanceTimersByTimeAsync(120_500));
+    await act(async () => setVisible("visible"));
+    // The fresh reading has not come back yet; the old one shows no figures.
+    expect(within(overall()).getByText("Couldn't check")).toBeInTheDocument();
+    expect(screen.queryByText("Working normally")).toBeNull();
+    expect(screen.queryByText(/Questions waiting/)).toBeNull();
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
   it("polls send background; Refresh now doesn't", async () => {
     const read = vi.spyOn(api, "getHealth");
     await open();

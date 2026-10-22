@@ -2,7 +2,12 @@
 import { useRef, useState } from "react";
 import type { Job } from "@/lib/api/ops-contract";
 import { platformError } from "@/lib/errors";
-import { jobsCount, oldQuestions, resultLine } from "@/lib/ops/jobs";
+import {
+  jobsCount,
+  oldQuestions,
+  resultLine,
+  resultTone,
+} from "@/lib/ops/jobs";
 import { useRetryJobs } from "@/lib/queries/ops";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
@@ -37,7 +42,7 @@ export function RetryDialog({
         onSuccess: (r) => {
           toast.show({
             title: resultLine(r.retried.length, r.skipped.length, "Retried"),
-            tone: "ok",
+            tone: resultTone(r.retried.length),
             live: "polite",
           });
           onDone?.();

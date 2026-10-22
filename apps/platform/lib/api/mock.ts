@@ -393,8 +393,10 @@ export function createMockPlatform({
 
   /** A read: someone must be signed in. */
   async function read<T>(fn: (m: TeamMember) => T): Promise<T> {
-    await wait();
+    // Who is asking is decided when the call is made, as a cookie is, not
+    // after the delay.
     const m = you();
+    await wait();
     return forYou(copy(fn(m)), m);
   }
   /**
@@ -405,8 +407,10 @@ export function createMockPlatform({
     opts: WriteOpts | undefined,
     fn: (m: TeamMember) => Promise<T> | T,
   ): Promise<T> {
-    await wait();
+    // Who is asking is decided when the call is made, as a cookie is, not
+    // after the delay.
     const m = you();
+    await wait();
     if (m.role !== "platform_admin") fail(403, "forbidden");
     const key = opts?.idempotencyKey;
     if (key && done.has(key)) return forYou(copy(done.get(key) as T), m);
@@ -504,8 +508,10 @@ export function createMockPlatform({
     opts: WriteOpts | undefined,
     fn: (m: TeamMember) => T | Promise<T>,
   ): Promise<T> {
-    await wait();
+    // Who is asking is decided when the call is made, as a cookie is, not
+    // after the delay.
     const m = you();
+    await wait();
     const key = opts?.idempotencyKey;
     if (key && done.has(key)) return copy(done.get(key) as T);
     const out = await fn(m);

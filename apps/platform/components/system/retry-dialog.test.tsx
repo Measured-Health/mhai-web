@@ -94,6 +94,24 @@ describe("RetryDialog", () => {
     ).toBeInTheDocument();
   });
 
+  it("a retry where every job had already moved on says so, not Retried 0", async () => {
+    const { api, jobs } = await setup(["job_search_1"]);
+    // Someone else retried it first.
+    await api.retryJobs({ ids: ["job_search_1"] }, { idempotencyKey: "y" });
+    const onClose = vi.fn();
+    renderWithAuth(<RetryDialog jobs={jobs} onClose={onClose} />);
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(
+      (
+        await screen.findAllByText(
+          "No jobs were retried · 1 was already retried or finished",
+        )
+      )[0],
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Retried 0/)).toBeNull();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
   it("a partly skipped result says Retried 2 jobs · 1 were already retried or finished and refetches", async () => {
     const { api, jobs } = await setup(["job_search_1", "job_feedback_1"]);
     // One of the three changed meanwhile: it is already done.

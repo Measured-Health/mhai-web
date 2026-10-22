@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Job, JobType } from "@/lib/api/ops-contract";
-import { cancelEffects, oldQuestions, resultLine } from "./jobs";
+import { cancelEffects, oldQuestions, resultLine, resultTone } from "./jobs";
 
 const NOW = Date.parse("2026-10-22T12:00:00Z");
 const H = 3_600_000;
@@ -59,13 +59,27 @@ describe("resultLine", () => {
   });
   it("uses singular for one", () => {
     expect(resultLine(1, 0, "Retried")).toBe("Retried 1 job");
-    expect(resultLine(0, 1, "Cancelled")).toBe(
-      "Cancelled 0 jobs · 1 was already retried or finished",
-    );
   });
   it("adds how many had already moved on", () => {
     expect(resultLine(2, 1, "Cancelled")).toBe(
-      "Cancelled 2 jobs · 1 was already retried or finished",
+      "Cancelled 2 jobs · 1 was already moved on",
     );
+    expect(resultLine(2, 2, "Retried")).toBe(
+      "Retried 2 jobs · 2 were already retried or finished",
+    );
+  });
+  it("says plainly when nothing was done", () => {
+    expect(resultLine(0, 2, "Retried")).toBe(
+      "No jobs were retried · 2 were already retried or finished",
+    );
+    expect(resultLine(0, 1, "Cancelled")).toBe(
+      "No jobs were cancelled · 1 was already moved on",
+    );
+    expect(resultLine(0, 0, "Retried")).toBe("No jobs were retried");
+    expect(resultLine(0, 2, "Retried")).not.toMatch(/^Retried 0/);
+  });
+  it("is a success tone only when something was done", () => {
+    expect(resultTone(1)).toBe("ok");
+    expect(resultTone(0)).toBe("info");
   });
 });
