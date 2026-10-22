@@ -19,9 +19,11 @@ vi.mock("@mhai/ui/csv", async (orig) => ({
   ...(await orig<typeof import("@mhai/ui/csv")>()),
   downloadCsv: vi.fn(),
 }));
+const nav = vi.hoisted(() => ({ search: "" }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/analytics",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
 const TUNDE = "tunde.okafor@measured-health.example";
@@ -38,6 +40,7 @@ function install(analytics: AnalyticsMode = "normal", email = ADA.email) {
   __setPlatformClientForTests(api);
 }
 beforeEach(() => {
+  nav.search = "";
   net.online = true;
   install();
 });
@@ -418,5 +421,32 @@ describe("the Analytics page", () => {
       screen.queryByRole("heading", { level: 2, name: NGH_ACK }),
     ).toBeNull();
     expect(rows()[0]).toHaveFocus();
+  });
+});
+
+describe("opening Analytics on a change", () => {
+  it("?change= selects that change", async () => {
+    nav.search = "change=chg_hav_review_time";
+    await open();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", {
+          level: 2,
+          name: /answers reviewed faster/,
+        }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("That change has cleared.")).toBeNull();
+  });
+
+  it("a cleared change shows 'That change has cleared.' above the list", async () => {
+    nav.search = "change=chg_long_gone";
+    await open();
+    const note = await screen.findByText("That change has cleared.");
+    expect(
+      note.compareDocumentPosition(changes()) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(rows()).toHaveLength(5);
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithAuth } from "@/tests/render";
@@ -66,7 +66,7 @@ describe("the platform shell", () => {
   });
 
   it("the top bar uses the platform header colour", () => {
-    render(<TopBar title="Team" sub="Staff" />);
+    renderWithAuth(<TopBar title="Team" sub="Staff" />, { user: null });
     expect(screen.getByRole("banner")).toHaveClass("bg-bloom", "text-white");
     expect(screen.queryByRole("button", { name: /notif/i })).toBeNull();
   });

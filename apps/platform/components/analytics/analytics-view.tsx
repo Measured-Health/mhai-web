@@ -1,5 +1,6 @@
 "use client";
 import { Download } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import {
   useEffect,
   useId,
@@ -111,6 +112,22 @@ export function AnalyticsView() {
     }
   }, [phoneDetail, desktop]);
 
+  // A bell notification opens the page on its change (?change=). Applied
+  // once per link, when the list is in; a change that has cleared says so.
+  const wanted = useSearchParams().get("change");
+  const [applied, setApplied] = useState<string | null>(null);
+  const listed = state?.changes.status === "ok";
+  const wantedFound = !!wanted && items.some((c) => c.id === wanted);
+  if (!wanted && applied !== null) setApplied(null);
+  if (wanted && listed && applied !== wanted) {
+    setApplied(wanted);
+    if (wantedFound) {
+      setDetail({ kind: "change", id: wanted });
+      if (!desktop) setPhoneDetail(true);
+    }
+  }
+  const cleared = !!wanted && listed && !wantedFound;
+
   const select = (id: string) => {
     setDetail({ kind: "change", id });
     if (!desktop) setPhoneDetail(true);
@@ -181,6 +198,7 @@ export function AnalyticsView() {
               <WhatChanged
                 state={state}
                 failed={q.isError && !q.data}
+                cleared={cleared}
                 onRetry={() => void q.refetch()}
               >
                 {state?.changes.status === "ok" && items.length > 0 && (
@@ -240,11 +258,13 @@ export function AnalyticsView() {
 function WhatChanged({
   state,
   failed,
+  cleared,
   onRetry,
   children,
 }: {
   state: AnalyticsState | null;
   failed: boolean;
+  cleared: boolean;
   onRetry(): void;
   children: ReactNode;
 }) {
@@ -265,6 +285,11 @@ function WhatChanged({
           </p>
         )}
       </div>
+      {cleared && (
+        <p role="status" className="mb-3 text-[13.5px] text-ink-2">
+          That change has cleared.
+        </p>
+      )}
       {failed || c?.status === "failed" ? (
         // Never "Nothing unusual" here: the Critical guard fails closed.
         <CouldntLoad what="what changed" onRetry={onRetry} />

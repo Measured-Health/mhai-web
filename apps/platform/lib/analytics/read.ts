@@ -18,6 +18,7 @@ import {
   type UseRow,
 } from "../api/analytics-contract";
 import type { Person } from "../api/contract";
+import type { Notification } from "../api/notifications-contract";
 import { rankChanges, type RankedChange } from "./changes";
 import { MEASURE_AREA, MEASURE_KIND, type MeasureKind } from "./measures";
 
@@ -347,6 +348,46 @@ function summarySafe(
     const n = Number(t.replace(/,/g, ""));
     return allowed.some((a) => a === n);
   });
+}
+
+/**
+ * A notification's words, checked by the same summary rule. It has no
+ * values to compare with, so a summary that says "fewer than 5" must carry
+ * no percentage and at most one other number, and that one is taken as the
+ * shown side. Anything it can't vouch for fails closed.
+ */
+function notificationSummaryOk(summary: string): boolean {
+  if (!summary.match(FEWER)) return true;
+  const rest = summary.replace(FEWER, "").match(NUMBER) ?? [];
+  const nums = [...new Set(rest.map((t) => Number(t.replace(/,/g, ""))))];
+  if (nums.length === 0) return summarySafe(summary, HIDDEN, HIDDEN, "count");
+  return nums.length === 1
+    ? summarySafe(
+        summary,
+        HIDDEN,
+        { value: nums[0]!, suppressed: false },
+        "count",
+      )
+    : false;
+}
+
+/** A notification reads when its shape does and its words pass the summary rule. */
+export function notificationOk(n: unknown): n is Notification {
+  if (!isObj(n)) return false;
+  return (
+    typeof n.id === "string" &&
+    ID.test(n.id) &&
+    typeof n.change_id === "string" &&
+    ID.test(n.change_id) &&
+    (n.hospital === null || isPerson(n.hospital)) &&
+    typeof n.summary === "string" &&
+    n.summary.trim() !== "" &&
+    typeof n.serious === "boolean" &&
+    DIRECTIONS.has(n.direction as string) &&
+    isTime(n.at) &&
+    typeof n.seen === "boolean" &&
+    notificationSummaryOk(n.summary)
+  );
 }
 
 /**

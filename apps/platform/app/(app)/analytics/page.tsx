@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { AnalyticsView } from "@/components/analytics/analytics-view";
 
 export const metadata: Metadata = { title: "Analytics" };
 
 export default function AnalyticsPage() {
-  return <AnalyticsView />;
+  return (
+    <Suspense>
+      <AnalyticsView />
+    </Suspense>
+  );
 }
