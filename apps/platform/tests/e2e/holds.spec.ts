@@ -21,17 +21,9 @@ const holdsList = (page: Page) =>
     ? page.getByRole("list", { name: "Legal holds" })
     : page.getByRole("table", { name: "Legal holds" });
 
-/**
- * Picks a reason in the place-a-hold form by clicking its chip in the page.
- * The radio is sr-only (the chip is what people tap). On a phone, Playwright's
- * own click (on the chip, or a forced check on the radio) can miss on this
- * tall form: it reports the chip outside the viewport or the top bar in the
- * way, so the chip's click is sent from the page instead.
- */
+/** Picks a reason in the place-a-hold form by tapping its chip. */
 async function chooseReason(form: Locator, reason: string) {
-  await form
-    .getByText(reason, { exact: true })
-    .evaluate((chip) => (chip as HTMLElement).click());
+  await form.getByText(reason, { exact: true }).click();
   await expect(
     form.getByRole("radio", { name: reason, exact: true }),
   ).toBeChecked();
@@ -218,6 +210,8 @@ test("the auditor sees a hold's note and history, and no controls", async ({
 
 test("Activity shows the reference but not the note", async ({ page }) => {
   const note = "Counsel says do not release anything";
+  // The narrowest phone the app supports.
+  if (isMobile(page)) await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page, ADA);
   await openHospital(page, "Havana Hospital");
   await page
@@ -226,6 +220,12 @@ test("Activity shows the reference but not the note", async ({ page }) => {
     .click();
   const form = page.getByRole("dialog", { name: "Place a legal hold" });
   await expect(form.getByText("Havana Hospital")).toBeVisible();
+  // The form fits the screen: no sideways scroll.
+  expect(
+    await page.evaluate(
+      () => document.scrollingElement!.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
   await chooseReason(form, "Complaint");
   await form.getByLabel(/^Reference/).fill("CMP-NOTE-1");
   await form.getByLabel(/^Asked for by/).fill("The complaints office");
