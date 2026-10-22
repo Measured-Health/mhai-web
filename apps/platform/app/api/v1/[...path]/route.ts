@@ -55,15 +55,39 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["POST", "platform/notifications/seen"],
   ["GET", "platform/me/analytics-email"],
   ["PUT", "platform/me/analytics-email"],
+  ["GET", "platform/audit"],
+  ["GET", "platform/audit/people"],
+  ["GET", "platform/audit/hospitals"],
+  ["GET", "platform/audit/{id}"],
+  ["GET", "platform/audit/{id}/patients"],
+  ["POST", "platform/audit/undisplayable"],
+  ["GET", "platform/audit/named-access"],
+  ["GET", "platform/audit/exports"],
+  ["POST", "platform/audit/exports"],
+  ["GET", "platform/audit/exports/{id}/file"],
+  ["POST", "platform/audit/verify"],
+  ["GET", "platform/audit/verify/status"],
+  ["GET", "platform/audit/verify/runs"],
+  ["GET", "platform/audit/verify/runs/{id}"],
+  ["POST", "platform/audit/verify/runs/{id}/outcome"],
 ];
+
+/** The one shape that returns a file, not JSON. */
+const FILE_SHAPE = "GET platform/audit/exports/{id}/file";
+const FILE_TYPES = ["text/csv", "application/zip"];
 
 /**
  * The only writes an auditor may make, as `METHOD shape` rows of the table
- * above: marking notifications seen is their own read state, not an admin
- * action. Every other write needs a platform admin.
+ * above: marking notifications seen is their own read state, and the audit
+ * writes (reporting an entry, exporting, running a check, noting its outcome)
+ * are the auditor's job. None of them is an admin action. Every other write needs a platform admin.
  */
 const AUDITOR_WRITES: ReadonlySet<string> = new Set([
   "POST platform/notifications/seen",
+  "POST platform/audit/undisplayable",
+  "POST platform/audit/exports",
+  "POST platform/audit/verify",
+  "POST platform/audit/verify/runs/{id}/outcome",
 ]);
 
 const PATTERNS = SHAPES.map(([method, shape]) => ({
@@ -108,11 +132,21 @@ async function refresh(s: ServerSession): Promise<ServerSession> {
   return next;
 }
 
-/** The problem body sent back: only the code, plus who blocks a removal. */
+/**
+ * The problem body sent back: only the code, plus who blocks a removal, and
+ * how many entries an export would hold.
+ */
 function problem(status: number, p: Record<string, unknown> | null) {
   const code = typeof p?.code === "string" ? p.code : "error";
   if (status === 409 && code === "blocked" && Array.isArray(p?.blocking))
     return { code, blocking: p.blocking };
+  if (
+    status === 422 &&
+    code === "too_many_rows" &&
+    typeof p?.rows === "number" &&
+    Number.isInteger(p.rows)
+  )
+    return { code, rows: p.rows };
   return { code };
 }
 
@@ -195,10 +229,19 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     > | null;
     return json(res.status, problem(res.status, p));
   }
+  const type = res.headers.get("Content-Type") ?? "application/json";
+  // A file is passed through only as a CSV or a ZIP, never as anything else.
+  if (
+    shape === FILE_SHAPE &&
+    !FILE_TYPES.some((t) => type.toLowerCase().startsWith(t))
+  ) {
+    await res.body?.cancel();
+    return json(502, { code: "bad_gateway" });
+  }
   return new Response(res.body, {
     status: res.status,
     headers: {
-      "Content-Type": res.headers.get("Content-Type") ?? "application/json",
+      "Content-Type": type,
       "Cache-Control": "no-store",
     },
   });

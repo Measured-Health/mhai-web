@@ -12,6 +12,7 @@ vi.mock("next/headers", () => ({ cookies: async () => jar }));
 
 import { ApiError } from "@mhai/api-client/errors";
 import { DELETE, GET, PATCH, POST, PUT } from "@/app/api/v1/[...path]/route";
+import { TooManyRowsError } from "./audit-contract";
 import { BlockedError, type PlatformClient } from "./contract";
 import { createLivePlatformClient } from "./live";
 
@@ -265,6 +266,129 @@ const ROWS: Row[] = [
     "/api/v1/platform/me/analytics-email",
     { mode: "critical", version: 2 },
   ],
+  [
+    "listAudit",
+    (c) =>
+      c.listAudit(
+        {
+          hospital: "h_1",
+          type: ["staff", "export"],
+          flagged: true,
+          from: "2026-10-01T00:00:00.000Z",
+        },
+        "c1",
+      ),
+    "GET",
+    "/api/v1/platform/audit?hospital=h_1&type=staff%2Cexport&flagged=true&from=2026-10-01T00%3A00%3A00.000Z&limit=50&cursor=c1",
+    undefined,
+  ],
+  [
+    "getAuditEvent",
+    (c) => c.getAuditEvent("ev_1"),
+    "GET",
+    "/api/v1/platform/audit/ev_1",
+    undefined,
+  ],
+  [
+    "getAuditPatients",
+    (c) => c.getAuditPatients("ev_1"),
+    "GET",
+    "/api/v1/platform/audit/ev_1/patients",
+    undefined,
+  ],
+  [
+    "searchAuditPeople",
+    (c) => c.searchAuditPeople("ada"),
+    "GET",
+    "/api/v1/platform/audit/people?q=ada",
+    undefined,
+  ],
+  [
+    "listAuditHospitals",
+    (c) => c.listAuditHospitals(),
+    "GET",
+    "/api/v1/platform/audit/hospitals",
+    undefined,
+  ],
+  [
+    "reportUndisplayable",
+    (c) => c.reportUndisplayable(["ev_1"], K),
+    "POST",
+    "/api/v1/platform/audit/undisplayable",
+    { ids: ["ev_1"] },
+  ],
+  [
+    "listNamedAccess",
+    (c) => c.listNamedAccess({ clearance: "cl_1" }, "c2"),
+    "GET",
+    "/api/v1/platform/audit/named-access?clearance=cl_1&cursor=c2",
+    undefined,
+  ],
+  [
+    "createExport",
+    (c) =>
+      c.createExport(
+        { kind: "events", filters: {}, reason: "internal_review", ...CODE },
+        K,
+      ),
+    "POST",
+    "/api/v1/platform/audit/exports",
+    {
+      kind: "events",
+      filters: {},
+      reason: "internal_review",
+      mfa_code: "123456",
+    },
+  ],
+  [
+    "downloadExport",
+    (c) => c.downloadExport("ex_1"),
+    "GET",
+    "/api/v1/platform/audit/exports/ex_1/file",
+    undefined,
+  ],
+  [
+    "listExports",
+    (c) => c.listExports("c3"),
+    "GET",
+    "/api/v1/platform/audit/exports?cursor=c3",
+    undefined,
+  ],
+  [
+    "startCheck",
+    (c) => c.startCheck(K),
+    "POST",
+    "/api/v1/platform/audit/verify",
+    undefined,
+  ],
+  [
+    "getIntegrityStatus",
+    (c) => c.getIntegrityStatus(),
+    "GET",
+    "/api/v1/platform/audit/verify/status",
+    undefined,
+  ],
+  [
+    "listRuns",
+    (c) => c.listRuns(),
+    "GET",
+    "/api/v1/platform/audit/verify/runs",
+    undefined,
+  ],
+  [
+    "getRun",
+    (c) => c.getRun("run_1"),
+    "GET",
+    "/api/v1/platform/audit/verify/runs/run_1",
+    undefined,
+  ],
+  [
+    "addOutcome",
+    (c) => c.addOutcome("run_1", { note: "Looked into it", version: 2 }, K),
+    "POST",
+    "/api/v1/platform/audit/verify/runs/run_1/outcome",
+    { note: "Looked into it", version: 2 },
+  ],
 ];
 
 describe("live platform client", () => {
@@ -390,6 +514,94 @@ describe("live platform client", () => {
       code: "session_expired",
     });
     expect(unauthorized).toHaveBeenCalledTimes(1);
+  });
+
+  describe("the audit log", () => {
+    it("listAudit sends type as a comma list, flagged only when true, and limit=50", async () => {
+      await client().listAudit({ type: ["sign_in", "staff"], flagged: true });
+      await client().listAudit({ flagged: false, type: [] });
+      expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
+        "/api/v1/platform/audit?type=sign_in%2Cstaff&flagged=true&limit=50",
+        "/api/v1/platform/audit?limit=50",
+      ]);
+    });
+
+    it("writes carry an Idempotency-Key", async () => {
+      await client().reportUndisplayable(["ev_1"], { idempotencyKey: "k-1" });
+      await client().startCheck({ idempotencyKey: "k-2" });
+      const keys = fetchImpl.mock.calls.map(
+        ([, init]) =>
+          (init?.headers as Record<string, string>)["Idempotency-Key"],
+      );
+      expect(keys).toEqual(["k-1", "k-2"]);
+    });
+
+    it("the integrity status and a run are background reads, the rest are not", async () => {
+      const c = client();
+      await c.getIntegrityStatus();
+      await c.getRun("run_1");
+      await c.listRuns();
+      await c.listAudit({});
+      expect(
+        fetchImpl.mock.calls.map(
+          ([, init]) =>
+            (init?.headers as Record<string, string>)["X-MHAI-Background"],
+        ),
+      ).toEqual(["1", "1", undefined, undefined]);
+    });
+
+    it("too_many_rows becomes TooManyRowsError with rows", async () => {
+      reply(() =>
+        Response.json({ code: "too_many_rows", rows: 62310 }, { status: 422 }),
+      );
+      const e = await client()
+        .createExport(
+          { kind: "events", filters: {}, reason: "other", ...CODE },
+          K,
+        )
+        .catch((x) => x);
+      expect(e).toBeInstanceOf(TooManyRowsError);
+      expect(e).toMatchObject({
+        status: 422,
+        code: "too_many_rows",
+        rows: 62310,
+      });
+      // Without a whole-number rows it is an ordinary refusal.
+      reply(() => Response.json({ code: "too_many_rows" }, { status: 422 }));
+      const plain = await client()
+        .listAudit({})
+        .catch((x) => x);
+      expect(plain).not.toBeInstanceOf(TooManyRowsError);
+      expect(plain).toMatchObject({ status: 422, code: "too_many_rows" });
+    });
+
+    it("downloadExport returns the blob, and a 410 throws ApiError gone", async () => {
+      reply(
+        () =>
+          new Response("a,b\n", { headers: { "Content-Type": "text/csv" } }),
+      );
+      const blob = await client().downloadExport("ex_1");
+      expect(await blob.text()).toBe("a,b\n");
+      const [url, init] = call();
+      expect(url).toBe("/api/v1/platform/audit/exports/ex_1/file");
+      expect(init).toMatchObject({
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+
+      reply(() => Response.json({ code: "gone" }, { status: 410 }));
+      const e = await client()
+        .downloadExport("ex_1")
+        .catch((x) => x);
+      expect(e).toBeInstanceOf(ApiError);
+      expect(e).toMatchObject({ status: 410, code: "gone" });
+
+      reply(() => new Response(null, { status: 401 }));
+      await expect(client().downloadExport("ex_1")).rejects.toMatchObject({
+        status: 401,
+      });
+      expect(unauthorized).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("against the proxy's shape table", () => {
