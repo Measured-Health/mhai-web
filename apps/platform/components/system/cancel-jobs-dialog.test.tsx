@@ -51,6 +51,14 @@ describe("CancelJobsDialog", () => {
     expect(within(d).queryByText(/records clean-up runs again/)).toBeNull();
   });
 
+  it("the title says job for one", async () => {
+    const { jobs } = await setup(["job_search_1"]);
+    renderWithAuth(<CancelJobsDialog jobs={jobs} onClose={() => {}} />);
+    expect(
+      screen.getByRole("dialog", { name: "Cancel 1 job?" }),
+    ).toBeInTheDocument();
+  });
+
   it("Keep is the safe button", async () => {
     const { jobs, cancel } = await setup(["job_search_1"]);
     const onClose = vi.fn();
@@ -116,7 +124,7 @@ describe("CancelJobsDialog", () => {
       mfa_code: MOCK_CODE,
     });
     expect(
-      (await screen.findAllByText("Cancelled 1 jobs"))[0],
+      (await screen.findAllByText("Cancelled 1 job"))[0],
     ).toBeInTheDocument();
     expect(leaked()).not.toContain(MOCK_CODE);
     expect(leaked()).not.toContain("mfa_code");

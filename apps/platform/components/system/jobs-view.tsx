@@ -152,17 +152,17 @@ export function JobsView() {
           "status",
           status && status !== "failed" ? status : "",
           [
-            { value: "", label: jobStatusLabel("failed") },
+            { value: "", label: jobStatusLabel["failed"] },
             ...JOB_STATUSES.filter((s) => s !== "failed").map((s) => ({
               value: s,
-              label: jobStatusLabel(s),
+              label: jobStatusLabel[s],
             })),
             { value: "all", label: "All" },
           ],
         )}
         {field("What", "what", what ?? "", [
           { value: "", label: "All" },
-          ...JOB_TYPES.map((t) => ({ value: t, label: jobTypeLabel(t) })),
+          ...JOB_TYPES.map((t) => ({ value: t, label: jobTypeLabel[t] })),
         ])}
         <label className="flex items-center gap-2 text-[13px] text-ink-2">
           Hospital
@@ -187,7 +187,7 @@ export function JobsView() {
         </label>
         {field("Why", "why", why ?? "", [
           { value: "", label: "All" },
-          ...ERROR_KINDS.map((k) => ({ value: k, label: errorKindLabel(k) })),
+          ...ERROR_KINDS.map((k) => ({ value: k, label: errorKindLabel[k] })),
         ])}
       </div>
 

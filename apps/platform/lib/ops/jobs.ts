@@ -46,15 +46,18 @@ export function cancelEffects(jobs: Job[]): string[] {
   return EFFECTS.filter(([t]) => has(t)).map(([, line]) => line);
 }
 
+/** "1 job" or "3 jobs". */
+export const jobsCount = (n: number) => `${n} ${n === 1 ? "job" : "jobs"}`;
+
 /** "Retried 3 jobs", plus how many had already moved on. */
 export function resultLine(
   done: number,
   skipped: number,
   verb: "Retried" | "Cancelled",
 ): string {
-  const base = `${verb} ${done} jobs`;
+  const base = `${verb} ${jobsCount(done)}`;
   return skipped > 0
-    ? `${base} · ${skipped} were already retried or finished`
+    ? `${base} · ${skipped} ${skipped === 1 ? "was" : "were"} already retried or finished`
     : base;
 }
 

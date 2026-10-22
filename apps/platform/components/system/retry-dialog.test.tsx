@@ -39,7 +39,7 @@ describe("RetryDialog", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /1 of these questions were asked more than a day ago\. The clinicians may have asked again or no longer need the answer\./,
+        /1 of these questions was asked more than a day ago\. The clinicians may have asked again or no longer need the answer\./,
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Don't retry" })).toHaveFocus();
@@ -50,6 +50,25 @@ describe("RetryDialog", () => {
     renderWithAuth(<RetryDialog jobs={jobs} onClose={() => {}} />);
     expect(screen.queryByText(/more than a day ago/)).toBeNull();
     expect(screen.getByRole("button", { name: "Retry" })).toHaveFocus();
+  });
+
+  it("the title and the warning use singular and plural", async () => {
+    const { jobs } = await setup(["job_question_old"]);
+    const { unmount } = renderWithAuth(
+      <RetryDialog jobs={jobs} onClose={() => {}} />,
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Retry 1 job?" }),
+    ).toBeInTheDocument();
+    unmount();
+    const two = await setup(["job_question_old", "job_question_done"]);
+    renderWithAuth(<RetryDialog jobs={two.jobs} onClose={() => {}} />);
+    expect(
+      screen.getByRole("dialog", { name: "Retry 2 jobs?" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/2 of these questions were asked/),
+    ).toBeInTheDocument();
   });
 
   it("Don't retry sends nothing", async () => {
@@ -71,7 +90,7 @@ describe("RetryDialog", () => {
     expect(retry).toHaveBeenCalledTimes(1);
     expect(retry.mock.calls[0]![0]).toEqual({ ids: ["job_search_1"] });
     expect(
-      (await screen.findAllByText("Retried 1 jobs"))[0],
+      (await screen.findAllByText("Retried 1 job"))[0],
     ).toBeInTheDocument();
   });
 
@@ -98,7 +117,7 @@ describe("RetryDialog", () => {
     expect(
       (
         await screen.findAllByText(
-          "Retried 2 jobs · 1 were already retried or finished",
+          "Retried 2 jobs · 1 was already retried or finished",
         )
       )[0],
     ).toBeInTheDocument();

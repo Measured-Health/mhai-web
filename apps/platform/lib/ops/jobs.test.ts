@@ -57,9 +57,15 @@ describe("resultLine", () => {
   it("says the count", () => {
     expect(resultLine(3, 0, "Retried")).toBe("Retried 3 jobs");
   });
+  it("uses singular for one", () => {
+    expect(resultLine(1, 0, "Retried")).toBe("Retried 1 job");
+    expect(resultLine(0, 1, "Cancelled")).toBe(
+      "Cancelled 0 jobs · 1 was already retried or finished",
+    );
+  });
   it("adds how many had already moved on", () => {
     expect(resultLine(2, 1, "Cancelled")).toBe(
-      "Cancelled 2 jobs · 1 were already retried or finished",
+      "Cancelled 2 jobs · 1 was already retried or finished",
     );
   });
 });

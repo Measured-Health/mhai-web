@@ -1,9 +1,49 @@
-// The words for the operations screens (health and failed jobs). The one
-// place a job type, job status or error kind becomes words; nothing else
-// prints a code.
-import type { ErrorKind, JobStatus, JobType } from "@/lib/api/ops-contract";
+// The one place the operations codes become words (UI design v3 §6). Nothing
+// else prints a part, step, error kind, job type or job status. A value not
+// listed here is never shown raw: the block that holds it fails closed.
+import type {
+  ErrorKind,
+  JobStatus,
+  JobType,
+  PartKey,
+  PartStatus,
+  StepKey,
+} from "@/lib/api/ops-contract";
 
-const JOB_TYPE: Record<JobType, string> = {
+export const partLabel: Record<PartKey, string> = {
+  app: "Sign-in and the app",
+  workers: "Answering questions",
+  evidence: "Checking evidence",
+  documents: "Reading documents",
+  guidelines: "Finding guidelines",
+  clean_up: "Records clean-up",
+};
+
+export const stepLabel: Record<StepKey, string> = {
+  privacy: "Protecting patient privacy",
+  guidelines: "Finding guidelines",
+  answer: "Writing the answer",
+  evidence: "Checking evidence",
+};
+
+export const errorKindLabel: Record<ErrorKind, string> = {
+  timeout: "Took too long",
+  unreachable: "Couldn't reach a service",
+  unreadable: "Unreadable document",
+  invalid: "Request refused as invalid",
+  other: "Other",
+};
+
+export const statusWords: Record<PartStatus, string> = {
+  ok: "Working normally",
+  slow: "Slower than usual",
+  problem: "Having problems",
+};
+export const COULDNT_CHECK = "Couldn't check";
+
+export const TRIAGE_LABEL = "Triage";
+
+export const jobTypeLabel: Record<JobType, string> = {
   run_query: "Answer a question",
   submit_feedback: "Save feedback",
   approve_correction: "Approve a correction",
@@ -13,20 +53,10 @@ const JOB_TYPE: Record<JobType, string> = {
   feedback_buffer_reset: "Reset learning data",
   retention_purge: "Records clean-up",
 };
-const JOB_STATUS: Record<JobStatus, string> = {
+
+export const jobStatusLabel: Record<JobStatus, string> = {
   failed: "Failed",
   retrying: "Retrying",
   retried: "Retried",
   cancelled: "Cancelled",
 };
-const ERROR_KIND: Record<ErrorKind, string> = {
-  timeout: "Took too long",
-  unreachable: "Couldn't reach a service",
-  unreadable: "Unreadable document",
-  invalid: "Request refused as invalid",
-  other: "Other",
-};
-
-export const jobTypeLabel = (t: JobType) => JOB_TYPE[t];
-export const jobStatusLabel = (s: JobStatus) => JOB_STATUS[s];
-export const errorKindLabel = (k: ErrorKind) => ERROR_KIND[k];

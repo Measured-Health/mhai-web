@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import type { Job } from "@/lib/api/ops-contract";
 import { platformError } from "@/lib/errors";
-import { oldQuestions, resultLine } from "@/lib/ops/jobs";
+import { jobsCount, oldQuestions, resultLine } from "@/lib/ops/jobs";
 import { useRetryJobs } from "@/lib/queries/ops";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
@@ -50,13 +50,14 @@ export function RetryDialog({
     <Dialog
       open
       onClose={() => !busy && onClose()}
-      title={`Retry ${jobs.length} jobs?`}
+      title={`Retry ${jobsCount(jobs.length)}?`}
       initialFocus={old > 0 ? keep : go}
     >
       {old > 0 ? (
         <p className="mb-4 text-[14.5px] text-ink-2">
-          {old} of these questions were asked more than a day ago. The
-          clinicians may have asked again or no longer need the answer.
+          {old} of these {old === 1 ? "questions was" : "questions were"} asked
+          more than a day ago. The clinicians may have asked again or no longer
+          need the answer.
         </p>
       ) : (
         <p className="mb-4 text-[14.5px] text-ink-2">

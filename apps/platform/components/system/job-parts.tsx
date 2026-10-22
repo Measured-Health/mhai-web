@@ -26,14 +26,14 @@ export function JobStatusChip({ job }: { job: Job }) {
   return (
     <Chip tone={TONE[s]}>
       <Icon aria-hidden className="size-3.5 shrink-0" />
-      {statusLine(job, jobStatusLabel(s))}
+      {statusLine(job, jobStatusLabel[s])}
     </Chip>
   );
 }
 
-export const whatLabel = (j: Job) => jobTypeLabel(j.type);
+export const whatLabel = (j: Job) => jobTypeLabel[j.type];
 export const hospitalLabel = (j: Job) => j.hospital?.name ?? "Platform";
-export const whyLabel = (j: Job) => errorKindLabel(j.kind);
+export const whyLabel = (j: Job) => errorKindLabel[j.kind];
 export const when = formatWhen;
 
 /** The opaque reference and a button that copies it. */

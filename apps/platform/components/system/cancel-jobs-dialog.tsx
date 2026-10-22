@@ -1,7 +1,7 @@
 "use client";
 import type { CancelReason, Job } from "@/lib/api/ops-contract";
 import { useAuth } from "@/lib/auth/auth-context";
-import { cancelEffects, resultLine } from "@/lib/ops/jobs";
+import { cancelEffects, jobsCount, resultLine } from "@/lib/ops/jobs";
 import { useCancelJobs } from "@/lib/queries/ops";
 import { useStepUpCall } from "@/lib/queries/step-up";
 import { useToast } from "@mhai/ui/toast";
@@ -69,7 +69,7 @@ export function CancelJobsDialog({
   return (
     <StepUpDialog
       open
-      title={`Cancel ${jobs.length} jobs?`}
+      title={`Cancel ${jobsCount(jobs.length)}?`}
       intro={
         <>
           <ul className="list-disc pl-5">
