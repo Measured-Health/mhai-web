@@ -458,6 +458,7 @@ platform endpoints; the contract it assumes is in
 | Analytics | What changed, the tabs and a CSV, in counts only; follow-ups                                                                | platform admin (auditors read) |
 | Team      | Invite, change role, remove (never your own row)                                                                            | platform admin (auditors read) |
 | Activity  | Every platform action, newest first, by hospital                                                                            | both                           |
+| Audit log | Every entry in the log newest first, named access, exports, and the integrity check; reads are recorded                     | both                           |
 | Account   | Password, backup codes, signed-in devices                                                                                   | both                           |
 
 ```text

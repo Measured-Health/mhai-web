@@ -211,6 +211,23 @@ digest**. Auditors get no email, so they don't see the setting. Emails name
 the hospital and the change and never include patient details. (The backend
 sends them; the demo only saves the setting and sends no email.)
 
+**Audit log.** **Audit log** in the sidebar is the record of what people and
+the system did across Measured Health, newest first: filters (hospital,
+person, action type, dates, outcome, flagged only), an exact-id search (a
+patient's pseudonym too) and each entry in full. It shows no patient names,
+questions or answers; a patient appears only as a pseudonymous id, behind
+**Show patient ids**. Reading the log is recorded: each new set of filters,
+a search, an opened entry and shown patient ids make an entry of their own.
+**Named access** groups the named patient lists by clearance letter,
+**Exports** lists the files made, and **Integrity** runs and explains the
+log's tamper check (**Run check now**). **Export CSV** and **Export for a
+legal request** need a reason and the two-step code `123456`; the file shows
+an export id and a checksum, downloads once, and its first line says Demo.
+The sample has a Northgate General clearance letter with three named patient
+lists (search `p_ng_6dc445` to find one), two earlier exports and an Intact
+check. Auditors and platform admins both read; the demo does not mirror the
+session's other platform actions into the log.
+
 **The auditor** (Amara Eze) sees every hospital, the team and the activity,
 with no buttons to change anything; the server refuses an auditor's changes
 too. On Team, nobody can change their own role or remove themselves: another

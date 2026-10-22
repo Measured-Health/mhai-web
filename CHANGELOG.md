@@ -61,6 +61,21 @@ All notable changes to this project are documented here. The format follows
   for platform admins an **Analytics email** setting on Account: Off,
   Critical only, or Critical and weekly digest. Auditors have the bell and
   get no email. End-to-end tests cover it on desktop and phone.
+- The audit log in the platform admin app, on sample data. **Audit log**
+  in the sidebar lists every entry newest first, with filters (hospital,
+  person, action type, dates, outcome, flagged only), an exact-id search
+  (also for a patient's pseudonym, which ignores the other filters) and the
+  entry in full, with **Show patient ids** behind a recorded click. **Named
+  access** groups the named patient lists by hospital and clearance letter.
+  **Exports** lists the files made; **Export CSV** and the legal-request
+  export need a reason and your two-step code, give an export id and a
+  checksum, and can be downloaded once, within 15 minutes, by the person who
+  made them. **Integrity** shows the daily and on-demand check, says
+  Intact only with proof, shows a stale check as not checked, and guides an
+  auditor through a failure. A failed check puts a banner on the home page
+  and an item in the bell. Reading the log is itself recorded. No patient
+  names or clinical text ever show. End-to-end tests cover it on desktop
+  and phone.
 - Shared packages `@mhai/ui` (components) and `@mhai/api-client` (API,
   session and two-step helpers), used by both apps.
 

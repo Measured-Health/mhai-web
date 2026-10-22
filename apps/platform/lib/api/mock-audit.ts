@@ -647,7 +647,7 @@ export function createMockAudit(
       }),
 
     listNamedAccess: (f, cursor) =>
-      core.read(() => {
+      core.read((m) => {
         up();
         const flt = cleanFilters(f, NAMED_KEYS);
         const rows = log
@@ -658,6 +658,7 @@ export function createMockAudit(
             return letter ? [{ ...shown(e), letter }] : [];
           });
         const { page, next } = pageOf(rows, cursor);
+        if (cursor === undefined) noteView(m, flt);
         return { events: page, next_cursor: next };
       }),
 

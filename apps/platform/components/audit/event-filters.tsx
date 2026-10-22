@@ -141,15 +141,18 @@ export function EventFilters({
   const searching = value.q !== "";
   return (
     <div className="flex flex-col gap-3">
-      {searching && (
-        <p
-          id={`${id}-searching`}
-          role="status"
-          className="rounded-xl bg-lilac px-3 py-2 text-[13px] text-bloom"
-        >
-          {SEARCH_WHOLE_LOG}
-        </p>
-      )}
+      {/* Always mounted, so a note that appears is announced. */}
+      <p
+        id={`${id}-searching`}
+        role="status"
+        className={
+          searching
+            ? "rounded-xl bg-lilac px-3 py-2 text-[13px] text-bloom"
+            : undefined
+        }
+      >
+        {searching ? SEARCH_WHOLE_LOG : null}
+      </p>
       <div
         role="group"
         aria-label="Filters"
@@ -441,7 +444,16 @@ function ActionTypes({
     setDraft((d) => (on ? [...d, t] : d.filter((x) => x !== t)));
 
   return (
-    <div ref={box} className="relative">
+    <div
+      ref={box}
+      className="relative"
+      onBlur={(e) => {
+        // Tabbing out applies the ticks, as Escape and a click outside do.
+        const to = e.relatedTarget;
+        if (open && to instanceof Node && !box.current?.contains(to))
+          close(false);
+      }}
+    >
       <button
         ref={button}
         type="button"
