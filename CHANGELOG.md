@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The fonts are now served from the repository (`packages/tokens/fonts`)
+  instead of being fetched from Google during `next build`, so builds work
+  offline and no longer break on Google's font URLs. They look the same.
 - The repository is now npm workspaces: the app is in `apps/clinical` and
   the design tokens are in `packages/tokens`. There is no change to the
   app. If you keep a local `.env.local`, move it into `apps/clinical/`.

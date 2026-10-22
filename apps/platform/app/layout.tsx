@@ -1,20 +1,9 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { Darker_Grotesque, JetBrains_Mono, Outfit } from "next/font/google";
+import { darker, jetbrains, outfit } from "@mhai/tokens/fonts";
 import { PLATFORM_MARKER } from "../../../scripts/platform-marker.mjs";
 import { Providers } from "./providers";
 import "./globals.css";
-
-const darker = Darker_Grotesque({
-  variable: "--font-darker",
-  subsets: ["latin"],
-  weight: ["700", "800", "900"],
-});
-const outfit = Outfit({ variable: "--font-outfit", subsets: ["latin"] });
-const jetbrains = JetBrains_Mono({
-  variable: "--font-jetbrains",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: { template: "%s · MHAI Platform", default: "MHAI Platform" },
