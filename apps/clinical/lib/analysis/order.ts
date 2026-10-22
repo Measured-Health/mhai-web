@@ -5,6 +5,7 @@
 // name. The views, the tables and the CSV all use this order.
 import type { GuardedOut } from "../api/admin-contract";
 import type { ConditionRef, ViewId, ViewOut } from "../api/analysis-contract";
+import { dismissReasonLabel } from "../notifications/alert-view";
 import { shows } from "./guards";
 import {
   NOT_STANDARDISED,
@@ -95,6 +96,17 @@ const ORDER: Orderer = {
   }),
   findings: (d) => ({
     ...d,
+    alerts: {
+      ...d.alerts,
+      dismiss_reasons: orderRows(
+        d.alerts.dismiss_reasons,
+        (r) => r.count,
+        (r) => ({
+          name: dismissReasonLabel(r.reason) ?? r.reason,
+          last: false,
+        }),
+      ),
+    },
     findings: orderRows(
       d.findings,
       (r) => r.patients,

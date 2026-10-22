@@ -31,6 +31,9 @@ import { useOnline } from "@mhai/ui/hooks/use-online";
 import { MenuButton } from "../shell/menu-button";
 import { TopBar } from "../shell/top-bar";
 import { AffectedView } from "./affected-view";
+import { CoOccurringView } from "./co-occurring-view";
+import { FindingsView } from "./findings-view";
+import { QualityView } from "./quality-view";
 import { AnalysisFiltersBar, type OptionsState } from "./analysis-filters";
 import { PrevalenceView } from "./prevalence-view";
 import { UpdatedAt } from "./view-frame";
@@ -38,12 +41,15 @@ import { UpdatedAt } from "./view-frame";
 /** Each view reads its own data with the filters, and fails on its own. */
 export type ViewProps = { filters: AnalysisFilters };
 
-/** The views on the page, in order. Task 6 adds the other three here. */
-const VIEW_BODY: Partial<Record<ViewId, ComponentType<ViewProps>>> = {
+/** The views on the page. */
+const VIEW_BODY: Record<ViewId, ComponentType<ViewProps>> = {
   prevalence: PrevalenceView,
   affected: AffectedView,
+  "co-occurring": CoOccurringView,
+  findings: FindingsView,
+  quality: QualityView,
 };
-const SHOWN = VIEWS.filter((v) => VIEW_BODY[v]);
+const SHOWN = VIEWS;
 
 /** The browser's calendar day, "YYYY-MM-DD". */
 function localDay(ms = Date.now()): string {
@@ -209,7 +215,7 @@ export function AnalysisView({ today: todayProp }: { today?: string } = {}) {
     );
   }
 
-  const Body = VIEW_BODY[view]!;
+  const Body = VIEW_BODY[view];
 
   return (
     <>

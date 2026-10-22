@@ -620,6 +620,9 @@ describe("AnalysisView", () => {
     expect(optionNames(views)).toEqual([
       "Prevalence and trends",
       "Who is affected",
+      "Co-occurring conditions",
+      "Findings and alerts",
+      "MHAI quality",
     ]);
     expect(screen.queryByLabelText("Age band")).toBeNull();
     await loaded();
