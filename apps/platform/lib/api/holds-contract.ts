@@ -134,16 +134,29 @@ export interface HoldsClient {
     body: { reason: LiftReason; note?: string; authority: string } & StepUp,
     opts: WriteOpts,
   ): Promise<LegalHoldDetail>;
-  /** 409 `same_person` for the requester; 409 `expired` once it lapsed. */
+  /**
+   * Approve, cancel and undo send the hold's `version` as the person saw it:
+   * they act only on that request, else 409 `conflict` ("Changed by someone
+   * else"). Approve: 409 `same_person` for the requester; 409 `expired` once
+   * it lapsed.
+   */
   approveLift(
     id: string,
-    body: StepUp,
+    body: { version: number } & StepUp,
     opts: WriteOpts,
   ): Promise<LegalHoldDetail>;
   /** Either platform admin; no step-up. */
-  cancelLift(id: string, opts: WriteOpts): Promise<LegalHoldDetail>;
+  cancelLift(
+    id: string,
+    body: { version: number },
+    opts: WriteOpts,
+  ): Promise<LegalHoldDetail>;
   /** Only before `released_on`; 409 `conflict` after. */
-  undoLift(id: string, body: StepUp, opts: WriteOpts): Promise<LegalHoldDetail>;
+  undoLift(
+    id: string,
+    body: { version: number } & StepUp,
+    opts: WriteOpts,
+  ): Promise<LegalHoldDetail>;
 }
 
 /** A hold as a hospital lists it. */

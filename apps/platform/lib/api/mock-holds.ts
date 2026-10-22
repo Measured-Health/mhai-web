@@ -67,6 +67,11 @@ function day(v: unknown): string {
     ? v
     : invalid();
 }
+/** The hold's version the person saw, which every change sends; else 422. */
+function versionOf(body: unknown): number {
+  const v = (body as { version?: unknown } | null)?.version;
+  return typeof v === "number" ? v : invalid();
+}
 const optDay = (v: unknown) =>
   v === undefined || v === null || v === "" ? null : day(v);
 
@@ -300,15 +305,20 @@ export function holdsMock(
         const { r, h } = find(id);
         if (h.status === "lifted") fail(409, "conflict");
         if (b.version !== h.version) fail(409, "conflict");
+        // Every check before any change: a refusal leaves the hold as it was.
+        if (note === null && h.reason === "other") invalid();
+        const newDate = review_on !== undefined && review_on !== h.review_on;
+        const newNote = note !== undefined && note !== h.note;
+        // Nothing to change: no new version, no history, no Activity.
+        if (!newDate && !newNote) return h;
         const changed: string[] = [];
-        if (review_on !== undefined && review_on !== h.review_on) {
+        if (newDate) {
           h.review_on = review_on;
           changed.push("Review date");
           if (h.status === "review_due" || h.status === "active")
             h.status = openStatus(r, h, now());
         }
-        if (note !== undefined && note !== h.note) {
-          if (h.reason === "other" && note === null) invalid();
+        if (newNote) {
           h.note = note;
           changed.push("Note");
         }
@@ -356,14 +366,18 @@ export function holdsMock(
 
     approveLift: (id, body, opts) =>
       core.write(opts, async (m) => {
+        const version = versionOf(body);
         const { r, h } = find(id);
         const lift = h.lift;
-        if (h.status !== "lift_requested" || !lift)
-          // Lapsed while the approver looked at it: say so, never a quiet no.
-          return fail(
-            409,
-            h.history[0]?.action === "lift_lapsed" ? "expired" : "conflict",
-          );
+        // Lapsed while the approver looked at it: say so, never a quiet no.
+        if (
+          h.status !== "lift_requested" &&
+          h.history[0]?.action === "lift_lapsed"
+        )
+          fail(409, "expired");
+        // Only the request the approver saw: not one made since.
+        if (version !== h.version || h.status !== "lift_requested" || !lift)
+          return fail(409, "conflict");
         // Only the server's record of who asked decides, never a name.
         if (lift.requested_by.id === m.id) fail(409, "same_person");
         await core.checkCode(m, body);
@@ -379,11 +393,12 @@ export function holdsMock(
         return h;
       }),
 
-    cancelLift: (id, opts) =>
+    cancelLift: (id, body, opts) =>
       core.write(opts, (m) => {
+        const version = versionOf(body);
         const { r, h } = find(id);
         const lift = h.lift;
-        if (h.status !== "lift_requested" || !lift)
+        if (version !== h.version || h.status !== "lift_requested" || !lift)
           return fail(409, "conflict");
         h.status = openStatus(r, h, now());
         h.lift = null;
@@ -395,9 +410,11 @@ export function holdsMock(
 
     undoLift: (id, body, opts) =>
       core.write(opts, async (m) => {
+        const version = versionOf(body);
         const { r, h } = find(id);
         const lift = h.lift;
         if (
+          version !== h.version ||
           h.status !== "lifted" ||
           !lift?.released_on ||
           now() >= Date.parse(lift.released_on)

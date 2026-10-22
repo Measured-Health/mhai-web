@@ -339,13 +339,14 @@ export function seedHospitals(now: number): HospitalRecord[] {
             approved_by: null,
             approved_at: null,
             checks: {
-              // Counted from its holds below (hold_hv).
+              // Counted below from its holds.
               legal_holds: 0,
               retention_until: null,
               export_required: true,
               export_done: true,
             },
-            blocking: ["legal_hold"],
+            // Derived below from its holds (hold_hv blocks it).
+            blocking: [],
           },
         },
       ),
@@ -452,6 +453,9 @@ export function seedHospitals(now: number): HospitalRecord[] {
   ].map((r) => {
     // Each hospital its own list: the demo's changes stick per hospital.
     const holds = allHolds.filter((h) => h.hospital.id === r.hospital.id);
+    // The hospital's name comes from its own record, so the two can't drift.
+    for (const h of holds)
+      h.hospital = { id: r.hospital.id, name: r.hospital.name };
     const kept = holds.filter((h) => keepsRecords(h, now));
     const removal = r.hospital.removal;
     return {
@@ -465,6 +469,13 @@ export function seedHospitals(now: number): HospitalRecord[] {
         removal: removal && {
           ...removal,
           checks: { ...removal.checks, legal_holds: kept.length },
+          blocking:
+            kept.length > 0
+              ? [
+                  "legal_hold" as const,
+                  ...removal.blocking.filter((b) => b !== "legal_hold"),
+                ]
+              : removal.blocking,
         },
       },
     };

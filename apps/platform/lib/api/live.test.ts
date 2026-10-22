@@ -333,24 +333,24 @@ const ROWS: Row[] = [
   ],
   [
     "approveLift",
-    (c) => c.approveLift("hold_hv", CODE, K),
+    (c) => c.approveLift("hold_hv", { version: 3, ...CODE }, K),
     "POST",
     "/api/v1/platform/legal-holds/hold_hv/lift/approve",
-    CODE,
+    { version: 3, mfa_code: "123456" },
   ],
   [
     "cancelLift",
-    (c) => c.cancelLift("hold_hv", K),
+    (c) => c.cancelLift("hold_hv", { version: 3 }, K),
     "POST",
     "/api/v1/platform/legal-holds/hold_hv/lift/cancel",
-    undefined,
+    { version: 3 },
   ],
   [
     "undoLift",
-    (c) => c.undoLift("hold_hv", { backup_code: "AAAA-BBBB" }, K),
+    (c) => c.undoLift("hold_hv", { version: 4, backup_code: "AAAA-BBBB" }, K),
     "POST",
     "/api/v1/platform/legal-holds/hold_hv/lift/undo",
-    { backup_code: "AAAA-BBBB" },
+    { version: 4, backup_code: "AAAA-BBBB" },
   ],
 ];
 
@@ -439,7 +439,7 @@ describe("live platform client", () => {
     await client().getChangeSeries("a/b", "30d");
     await client().followUp("a/b", { version: 1 }, K);
     await client().listHolds({});
-    await client().approveLift("a/b", CODE, K);
+    await client().approveLift("a/b", { version: 1, ...CODE }, K);
     expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
       "/api/v1/platform/hospitals",
       "/api/v1/platform/activity",

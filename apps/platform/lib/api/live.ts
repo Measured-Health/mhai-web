@@ -63,7 +63,7 @@ function holdsLive(ok: LiveOk): HoldsClient {
     editHold: (x, b, o) => ok(hold(x), "PATCH", b, o),
     requestLift: (x, b, o) => ok(hold(x, "/lift"), "POST", b, o),
     approveLift: (x, b, o) => ok(hold(x, "/lift/approve"), "POST", b, o),
-    cancelLift: (x, o) => ok(hold(x, "/lift/cancel"), "POST", undefined, o),
+    cancelLift: (x, b, o) => ok(hold(x, "/lift/cancel"), "POST", b, o),
     undoLift: (x, b, o) => ok(hold(x, "/lift/undo"), "POST", b, o),
   };
 }
