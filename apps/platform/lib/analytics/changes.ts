@@ -79,8 +79,14 @@ export const DIRECTION_WORD: Record<Change["direction"], string> = {
   falling: "Falling",
 };
 
+/** What the sign and words need of a change; a notification has them all. */
+export type LineSource = Pick<
+  Change,
+  "direction" | "summary" | "measure" | "previous" | "current"
+>;
+
 /** Better points the way the value moved, or the measure's good way. */
-function betterSign(c: Change): Sign {
+function betterSign(c: LineSource): Sign {
   const p = c.previous.value;
   const n = c.current.value;
   if (
@@ -95,7 +101,7 @@ function betterSign(c: Change): Sign {
 }
 
 /** A sign always with words, never colour alone. */
-export function changeLine(c: Change): { sign: Sign; words: string } {
+export function changeLine(c: LineSource): { sign: Sign; words: string } {
   const sign: Sign =
     c.direction === "worse"
       ? "⚠"

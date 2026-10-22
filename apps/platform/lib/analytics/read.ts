@@ -18,6 +18,7 @@ import {
   type UseRow,
 } from "../api/analytics-contract";
 import type { Person } from "../api/contract";
+import type { Notification } from "../api/notifications-contract";
 import { rankChanges, type RankedChange } from "./changes";
 import { MEASURE_AREA, MEASURE_KIND, type MeasureKind } from "./measures";
 
@@ -350,6 +351,39 @@ function summarySafe(
 }
 
 /**
+ * What a change and a notification share: where, which measure, how it
+ * moved, and both sides read under the same rules, with the summary checked
+ * against what is hidden (summarySafe).
+ */
+function sidesOk(c: Obj): boolean {
+  if (!(c.hospital === null || isPerson(c.hospital))) return false;
+  if (!MEASURE_IDS.has(c.measure as string)) return false;
+  if (!DIRECTIONS.has(c.direction as string)) return false;
+  if (typeof c.serious !== "boolean") return false;
+  if (typeof c.summary !== "string" || c.summary.trim() === "") return false;
+  const kind = MEASURE_KIND[c.measure as Change["measure"]];
+  return (
+    guardedOk(c.previous, kind, true) &&
+    guardedOk(c.current, kind, true) &&
+    summarySafe(c.summary, c.previous as Guarded, c.current as Guarded, kind)
+  );
+}
+
+/** A notification reads under the same rules as a change in What changed. */
+export function notificationOk(n: unknown): n is Notification {
+  return (
+    isObj(n) &&
+    typeof n.id === "string" &&
+    ID.test(n.id) &&
+    typeof n.change_id === "string" &&
+    ID.test(n.change_id) &&
+    isTime(n.at) &&
+    typeof n.seen === "boolean" &&
+    sidesOk(n)
+  );
+}
+
+/**
  * A change reads when its shape does. A side may be hidden (shown
  * "Fewer than 5", ranked unsized) when the summary doesn't give it away;
  * previous may be null: no previous period.
@@ -357,20 +391,10 @@ function summarySafe(
 function changeOk(c: unknown): c is Change {
   if (!isObj(c)) return false;
   if (typeof c.id !== "string" || !ID.test(c.id)) return false;
-  if (!(c.hospital === null || isPerson(c.hospital))) return false;
   if (!CHANGE_AREAS.has(c.area as string)) return false;
-  if (!MEASURE_IDS.has(c.measure as string)) return false;
+  if (!sidesOk(c)) return false;
   if (MEASURE_AREA[c.measure as Change["measure"]] !== c.area) return false;
-  if (!DIRECTIONS.has(c.direction as string)) return false;
-  if (typeof c.serious !== "boolean") return false;
-  if (typeof c.summary !== "string" || c.summary.trim() === "") return false;
-  if (!followUpOk(c.follow_up) || !isCount(c.version)) return false;
-  const kind = MEASURE_KIND[c.measure as Change["measure"]];
-  return (
-    guardedOk(c.previous, kind, true) &&
-    guardedOk(c.current, kind, true) &&
-    summarySafe(c.summary, c.previous as Guarded, c.current as Guarded, kind)
-  );
+  return followUpOk(c.follow_up) && isCount(c.version);
 }
 
 /**

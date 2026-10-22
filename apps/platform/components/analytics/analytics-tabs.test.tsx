@@ -16,6 +16,7 @@ import { AnalyticsView } from "./analytics-view";
 vi.mock("next/navigation", () => ({
   usePathname: () => "/analytics",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 let api: PlatformClient;

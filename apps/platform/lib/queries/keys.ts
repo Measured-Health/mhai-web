@@ -10,6 +10,7 @@ export const queryKeys = {
   team: ["team"] as const,
   activity: ["activity"] as const,
   analytics: ["analytics"] as const,
+  notifications: ["notifications"] as const,
 };
 
 /** The query client's defaults: memory-only cache, no retry on a 4xx. */
