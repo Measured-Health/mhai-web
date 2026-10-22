@@ -9,6 +9,7 @@ export const queryKeys = {
   hospitals: ["hospitals"] as const,
   team: ["team"] as const,
   activity: ["activity"] as const,
+  analytics: ["analytics"] as const,
 };
 
 /** The query client's defaults: memory-only cache, no retry on a 4xx. */
