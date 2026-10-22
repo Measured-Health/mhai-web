@@ -8,6 +8,7 @@ import {
   type WriteOpts,
 } from "./contract";
 import type { HoldsClient } from "./holds-contract";
+import type { SettingsClient } from "./settings-contract";
 
 const { apiRequest } = createApiRequest({
   prefix: "/api/v1",
@@ -65,6 +66,28 @@ function holdsLive(ok: LiveOk): HoldsClient {
     approveLift: (x, b, o) => ok(hold(x, "/lift/approve"), "POST", b, o),
     cancelLift: (x, b, o) => ok(hold(x, "/lift/cancel"), "POST", b, o),
     undoLift: (x, b, o) => ok(hold(x, "/lift/undo"), "POST", b, o),
+  };
+}
+
+/** Platform settings (Plan 8c): rows `platform/settings…` of the shape table. */
+function settingsLive(ok: LiveOk): SettingsClient {
+  const id = encodeURIComponent;
+  const request = (x: string, rest: string) =>
+    `/settings/requests/${id(x)}${rest}`;
+  return {
+    getSettings: () => ok("/settings"),
+    previewRetention: (type, days) =>
+      ok(
+        `/settings/retention/${id(type)}/preview${query({ days: String(days) })}`,
+      ),
+    setRetention: (type, b, o) =>
+      ok(`/settings/retention/${id(type)}`, "PUT", b, o),
+    setCleanUpPaused: (b, o) => ok("/settings/retention-pause", "PUT", b, o),
+    setTriage: (b, o) => ok("/settings/triage", "PUT", b, o),
+    approveRequest: (x, b, o) => ok(request(x, "/approve"), "POST", b, o),
+    cancelRequest: (x, b, o) => ok(request(x, "/cancel"), "POST", b, o),
+    resetFeedbackBuffer: (b, o) =>
+      ok("/settings/feedback-buffer/reset", "POST", b, o),
   };
 }
 
@@ -169,5 +192,6 @@ export function createLivePlatformClient({
     retryJobs: (b, o) => ok("/jobs/retry", "POST", b, o),
     cancelJobs: (b, o) => ok("/jobs/cancel", "POST", b, o),
     ...holdsLive(ok),
+    ...settingsLive(ok),
   };
 }
