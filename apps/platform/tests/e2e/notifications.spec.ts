@@ -64,7 +64,7 @@ test("the bell counts new changes, the list opens, and they're marked seen", asy
   await expect(bell(page)).toHaveAccessibleName(UNSEEN);
   await bell(page).click();
   await expect(list(page)).toBeVisible();
-  const items = list(page).getByRole("list", { name: "New analytics changes" });
+  const items = list(page).getByRole("list", { name: "Notifications" });
   await expect(items.getByRole("listitem").first()).toContainText("New");
   await expect(
     list(page).getByRole("button", { name: "Mark all seen" }),

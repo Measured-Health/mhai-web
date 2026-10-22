@@ -451,7 +451,10 @@ export function createMockPlatform({
   function notificationsFor(m: TeamMember): Notification[] {
     if (notifications === "unavailable") fail(503, "unavailable");
     const seen = seenBy.get(m.id);
-    return changes
+    const integrity = auditPart
+      .notifications()
+      .map((i): Notification => ({ ...i, seen: seen?.has(i.id) ?? false }));
+    const mine = changes
       .map((c): Notification => ({
         id: `ntf_${c.id}`,
         change_id: c.id,
@@ -465,8 +468,10 @@ export function createMockPlatform({
         at: changeFlaggedAt(c.id, now()),
         seen: seen?.has(`ntf_${c.id}`) ?? false,
       }))
-      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
-      .slice(0, NOTIFICATIONS_MAX);
+      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    // Integrity items come first; `unseen` counts the whole list, before the
+    // 20-item slice.
+    return [...integrity, ...mine];
   }
   const unseenOf = (items: Notification[]) =>
     items.filter((i) => !i.seen).length;
@@ -982,8 +987,11 @@ export function createMockPlatform({
 
     listNotifications: () =>
       read((m) => {
-        const items = notificationsFor(m);
-        return { items, unseen: unseenOf(items) };
+        const all = notificationsFor(m);
+        return {
+          items: all.slice(0, NOTIFICATIONS_MAX),
+          unseen: unseenOf(all),
+        };
       }),
 
     markSeen: (body, opts) =>
