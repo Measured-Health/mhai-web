@@ -491,12 +491,107 @@ function quality(f: AnalysisFilters): QualityOut {
   return { ...meta(f, pop), by_condition };
 }
 
-const VIEW_FNS = {
-  prevalence,
-  affected,
-  "co-occurring": coOccurring,
-  findings,
-  quality,
+// --- the order of rows, as the server must send them ---
+
+type RowName = { name: string; tie?: string; last: boolean };
+/**
+ * Shown rows keep their order (largest first); hidden rows go after them by
+ * a fixed name, "Not standardised" and "… not recorded" last, never by
+ * their true size.
+ */
+function hiddenLast<R>(
+  rows: R[],
+  g: (r: R) => GuardedOut,
+  key: (r: R) => RowName,
+): R[] {
+  const by = (a: R, b: R) =>
+    Number(key(a).last) - Number(key(b).last) ||
+    key(a).name.localeCompare(key(b).name, "en-GB") ||
+    (key(a).tie ?? "").localeCompare(key(b).tie ?? "", "en-GB");
+  return [
+    ...rows.filter((r) => !g(r).suppressed),
+    ...rows.filter((r) => g(r).suppressed).sort(by),
+  ];
+}
+const condName = (c: ConditionRef): RowName => ({
+  name: c.name ?? "",
+  tie: `${c.icd10 ?? ""} ${c.id}`,
+  last: c.name === null,
+});
+
+const VIEW_FNS: { [V in ViewId]: (f: AnalysisFilters) => ViewOut[V] } = {
+  prevalence: (f) => {
+    const d = prevalence(f);
+    return {
+      ...d,
+      by_condition: hiddenLast(
+        d.by_condition,
+        (r) => r.cases,
+        (r) => condName(r.condition),
+      ),
+    };
+  },
+  affected: (f) => {
+    const d = affected(f);
+    return {
+      ...d,
+      by_location: hiddenLast(
+        d.by_location,
+        (r) => r.patients,
+        (r) => ({
+          name: r.location?.label ?? "",
+          tie: r.location?.id ?? "",
+          last: r.location === null,
+        }),
+      ),
+      by_specialty: hiddenLast(
+        d.by_specialty,
+        (r) => r.patients,
+        (r) => ({ name: r.specialty ?? "", last: r.specialty === null }),
+      ),
+    };
+  },
+  "co-occurring": (f) => {
+    const d = coOccurring(f);
+    return {
+      ...d,
+      pairs: hiddenLast(
+        d.pairs,
+        (r) => r.patients,
+        (r) => ({
+          name: `${r.a.name ?? ""} + ${r.b.name ?? ""}`,
+          tie: `${r.a.id} ${r.b.id}`,
+          last: r.a.name === null || r.b.name === null,
+        }),
+      ),
+    };
+  },
+  findings: (f) => {
+    const d = findings(f);
+    return {
+      ...d,
+      findings: hiddenLast(
+        d.findings,
+        (r) => r.patients,
+        (r) => ({
+          name: r.name ?? "",
+          tie: r.flag ?? "",
+          last: r.name === null,
+        }),
+      ),
+    };
+  },
+  quality: (f) => {
+    const d = quality(f);
+    return {
+      ...d,
+      by_condition: hiddenLast(
+        d.by_condition,
+        (r) => r.consultations,
+        (r) => condName(r.condition),
+      ),
+    };
+  },
 };
 
 // --- patients behind a shown count ---

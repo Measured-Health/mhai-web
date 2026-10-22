@@ -955,9 +955,11 @@ export function createMockAdmin({
       const self = !!p.roles && (await isYou(s));
       const had = s.roles.includes("analyst");
       const has = !!p.roles?.includes("analyst");
-      const analystChange =
+      const analystChange: "analyst_granted" | "analyst_removed" | null =
         p.roles && had !== has
-          ? ((has ? "analyst_granted" : "analyst_removed") as const)
+          ? has
+            ? "analyst_granted"
+            : "analyst_removed"
           : null;
       const others = p.roles
         ? [...new Set([...s.roles, ...p.roles])].filter(
@@ -980,7 +982,7 @@ export function createMockAdmin({
         await log("security", "self_role_change", {
           target,
           flag: "alert",
-          roles_added: p.roles.filter((r) => !s.roles.includes(r)),
+          roles_added: (p.roles ?? []).filter((r) => !s.roles.includes(r)),
         });
       else if (p.roles && !analystChange)
         await log("admin", "roles_changed", { target });

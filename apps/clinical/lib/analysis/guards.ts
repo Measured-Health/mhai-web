@@ -17,6 +17,9 @@ export const isNum = (v: unknown): v is number =>
   typeof v === "number" && Number.isFinite(v);
 
 export const hidden = (g: GuardedOut) => g.suppressed;
+/** Shaped like a guarded number (a `value` and a `suppressed` flag). */
+export const isGuardedOut = (v: unknown): v is GuardedOut =>
+  isObj(v) && "suppressed" in v && "value" in v;
 /** Shown with a number: neither hidden nor "nothing to measure". */
 export const shows = (g: GuardedOut) => !g.suppressed && g.value !== null;
 

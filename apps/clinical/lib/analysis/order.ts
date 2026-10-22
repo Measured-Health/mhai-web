@@ -1,0 +1,120 @@
+// The order of rows in a list view. Shown rows sort by their value, largest
+// first. Hidden rows come after them in a fixed order (the display name,
+// with "Not standardised" and "… not recorded" last), so their order never
+// gives away their true size. With every row hidden, every row sorts by
+// name. The views, the tables and the CSV all use this order.
+import type { GuardedOut } from "../api/admin-contract";
+import type { ConditionRef, ViewId, ViewOut } from "../api/analysis-contract";
+import { shows } from "./guards";
+import {
+  NOT_STANDARDISED,
+  conditionName,
+  locationText,
+  specialtyText,
+} from "./labels";
+
+/** A row's fixed sort key: its display name, a tie-breaker, and whether it goes last. */
+export type RowKey = { name: string; tie?: string; last: boolean };
+
+const compareText = (a: string, b: string) =>
+  a.localeCompare(b, "en-GB", { sensitivity: "base" }) ||
+  (a < b ? -1 : a > b ? 1 : 0);
+
+const compareKey = (a: RowKey, b: RowKey) =>
+  Number(a.last) - Number(b.last) ||
+  compareText(a.name, b.name) ||
+  compareText(a.tie ?? "", b.tie ?? "");
+
+/** Shown rows by value, largest first; then hidden rows by their fixed key. */
+export function orderRows<R>(
+  rows: readonly R[],
+  value: (r: R) => GuardedOut,
+  key: (r: R) => RowKey,
+): R[] {
+  const shown = rows.filter((r) => shows(value(r)));
+  const rest = rows.filter((r) => !shows(value(r)));
+  return [
+    ...shown
+      .map((r, i) => ({ r, i }))
+      .sort(
+        (a, b) =>
+          value(b.r).value! - value(a.r).value! ||
+          compareKey(key(a.r), key(b.r)) ||
+          a.i - b.i,
+      )
+      .map((x) => x.r),
+    ...[...rest].sort((a, b) => compareKey(key(a), key(b))),
+  ];
+}
+
+const conditionKey = (c: ConditionRef): RowKey => ({
+  name: conditionName(c),
+  tie: `${c.icd10 ?? ""} ${c.id}`,
+  last: c.name === null,
+});
+
+type Orderer = { [V in ViewId]: (d: ViewOut[V]) => ViewOut[V] };
+const ORDER: Orderer = {
+  prevalence: (d) => ({
+    ...d,
+    by_condition: orderRows(
+      d.by_condition,
+      (r) => r.cases,
+      (r) => conditionKey(r.condition),
+    ),
+  }),
+  // Age band, sex and location type keep their fixed order.
+  affected: (d) => ({
+    ...d,
+    by_location: orderRows(
+      d.by_location,
+      (r) => r.patients,
+      (r) => ({
+        name: locationText(r.location),
+        tie: r.location?.id ?? "",
+        last: r.location === null,
+      }),
+    ),
+    by_specialty: orderRows(
+      d.by_specialty,
+      (r) => r.patients,
+      (r) => ({ name: specialtyText(r.specialty), last: r.specialty === null }),
+    ),
+  }),
+  "co-occurring": (d) => ({
+    ...d,
+    pairs: orderRows(
+      d.pairs,
+      (r) => r.patients,
+      (r) => ({
+        name: `${conditionName(r.a)} + ${conditionName(r.b)}`,
+        tie: `${r.a.id} ${r.b.id}`,
+        last: r.a.name === null || r.b.name === null,
+      }),
+    ),
+  }),
+  findings: (d) => ({
+    ...d,
+    findings: orderRows(
+      d.findings,
+      (r) => r.patients,
+      (r) => ({
+        name: r.name ?? NOT_STANDARDISED,
+        tie: r.flag ?? "",
+        last: r.name === null,
+      }),
+    ),
+  }),
+  quality: (d) => ({
+    ...d,
+    by_condition: orderRows(
+      d.by_condition,
+      (r) => r.consultations,
+      (r) => conditionKey(r.condition),
+    ),
+  }),
+};
+
+/** The view with every list in the page's order. */
+export const orderView = <V extends ViewId>(view: V, d: ViewOut[V]) =>
+  (ORDER[view] as (x: ViewOut[V]) => ViewOut[V])(d);

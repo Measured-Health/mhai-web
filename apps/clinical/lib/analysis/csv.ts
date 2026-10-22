@@ -12,6 +12,7 @@ import type {
   ViewOut,
 } from "../api/analysis-contract";
 import { RESULT_LABEL } from "../labels";
+import { orderView } from "./order";
 import {
   SEVERITY,
   dismissReasonLabel,
@@ -106,7 +107,7 @@ const TABLES: { [V in ViewId]: (d: ViewOut[V]) => Row[] } = {
       [
         d.bucket === "week" ? "Week starting" : "Month starting",
         "Cases",
-        "New in this period",
+        d.bucket === "week" ? "New that week" : "New that month",
       ],
       d.series.map((p) => [p.start, num(p.cases), num(p.new)]),
     ),
@@ -244,7 +245,8 @@ export function analysisCsv<V extends ViewId>(
     ...filterRows(ctx.filters, ctx.options),
     ["Note", NOTE],
     [],
-    ...(TABLES[view] as (d: ViewOut[V]) => Row[])(data),
+    // The page's order: hidden rows by name, never by their true size.
+    ...(TABLES[view] as (d: ViewOut[V]) => Row[])(orderView(view, data)),
   ];
   return toCsv(["Analysis", VIEW_TITLE[view]], rows.slice(0, CSV_MAX_ROWS));
 }
