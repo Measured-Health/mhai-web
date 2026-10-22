@@ -62,7 +62,11 @@ export function ConditionSearch({
       }
       const n = matches.length;
       if (n === 0) return;
-      setActive((current + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+      const next = (current + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
+      setActive(next);
+      document
+        .getElementById(optionId(next))
+        ?.scrollIntoView?.({ block: "nearest" });
     } else if (e.key === "Enter") {
       if (open && matches[current]) {
         e.preventDefault();
@@ -112,36 +116,38 @@ export function ConditionSearch({
         onBlur={close}
         className="min-h-11 w-full rounded-xl border border-lilac-2 bg-white pl-9 pr-3 text-[13.5px] focus-visible:outline-2 focus-visible:outline-mint-deep disabled:opacity-40"
       />
+      {expanded && matches.length === 0 && (
+        <p
+          role="status"
+          className="absolute inset-x-0 top-full z-30 mt-1 rounded-xl border border-line bg-white px-3 py-2.5 text-[13px] text-ink-3 shadow-lg"
+        >
+          No condition matches
+        </p>
+      )}
       <ul
         id={listId}
         role="listbox"
         aria-label="Conditions"
-        hidden={!expanded}
+        hidden={!expanded || matches.length === 0}
         className="absolute inset-x-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-xl border border-line bg-white py-1 shadow-lg"
       >
-        {matches.length === 0 ? (
-          <li className="px-3 py-2.5 text-[13px] text-ink-3">
-            No condition matches
+        {matches.map((c, i) => (
+          <li
+            key={c.id}
+            id={optionId(i)}
+            role="option"
+            aria-selected={i === current}
+            // Keep focus in the box, so the pick isn't lost to a blur.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => pick(c)}
+            className={cn(
+              "flex min-h-11 cursor-pointer items-center px-3 text-[13.5px] [overflow-wrap:anywhere]",
+              i === current && "bg-mint-wash",
+            )}
+          >
+            {conditionText(c)}
           </li>
-        ) : (
-          matches.map((c, i) => (
-            <li
-              key={c.id}
-              id={optionId(i)}
-              role="option"
-              aria-selected={i === current}
-              // Keep focus in the box, so the pick isn't lost to a blur.
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => pick(c)}
-              className={cn(
-                "flex min-h-11 cursor-pointer items-center px-3 text-[13.5px] [overflow-wrap:anywhere]",
-                i === current && "bg-mint-wash",
-              )}
-            >
-              {conditionText(c)}
-            </li>
-          ))
-        )}
+        ))}
       </ul>
     </div>
   );

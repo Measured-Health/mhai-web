@@ -8,6 +8,8 @@ import type {
   ViewId,
   ViewOut,
 } from "./api/analysis-contract";
+import { isGuardedOut } from "./analysis/guards";
+import { orderView } from "./analysis/order";
 import {
   readFilterOptions,
   readPatients,
@@ -37,17 +39,9 @@ export const ANALYSIS_KEYS = {
 
 export const ANALYSIS_HREF = "/analysis";
 
-type Obj = Record<string, unknown>;
-const isGuarded = (v: unknown): v is Obj =>
-  typeof v === "object" &&
-  v !== null &&
-  !Array.isArray(v) &&
-  "suppressed" in v &&
-  "value" in v;
-
 function hideEvery(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(hideEvery);
-  if (isGuarded(v))
+  if (isGuardedOut(v))
     return {
       ...v,
       value: null,
@@ -80,7 +74,10 @@ export const useFilterOptions = () =>
     ...READ_RETRY,
   });
 
-/** One view for these filters; its data is the reader's `ViewState`. */
+/**
+ * One view for these filters; its data is the reader's `ViewState`, masked
+ * when few, with its rows in the fixed order (hidden rows by name).
+ */
 export function useAnalysisView<V extends ViewId>(
   view: V,
   filters: AnalysisFilters,
@@ -93,7 +90,7 @@ export function useAnalysisView<V extends ViewId>(
         await getAnalysisClient().getView(view, filters),
       );
       return s.status === "ok"
-        ? { status: "ok", data: hideAllWhenFew<V>(s.data) }
+        ? { status: "ok", data: orderView(view, hideAllWhenFew<V>(s.data)) }
         : s;
     },
     ...READ_RETRY,

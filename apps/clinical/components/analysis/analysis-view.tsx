@@ -8,9 +8,14 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { AnalysisFilters, ViewId } from "@/lib/api/analysis-contract";
-import { useAnalysisView, useFilterOptions } from "@/lib/analysis-queries";
+import {
+  frameState,
+  useAnalysisView,
+  useFilterOptions,
+} from "@/lib/analysis-queries";
 import { analysisCsv, csvFilename } from "@/lib/analysis/csv";
 import {
+  DEFAULT_PERIOD,
   customRangeProblem,
   defaultFilters,
   rangeFor,
@@ -147,7 +152,7 @@ export function AnalysisView({ today: todayProp }: { today?: string } = {}) {
   const [filters, setFilters] = useState<AnalysisFilters>(() =>
     defaultFilters(today),
   );
-  const [period, setPeriod] = useState<PeriodId>("90d");
+  const [period, setPeriod] = useState<PeriodId>(DEFAULT_PERIOD);
   const [draft, setDraft] = useState(() => ({
     from: filters.from,
     to: filters.to,
@@ -169,6 +174,13 @@ export function AnalysisView({ today: todayProp }: { today?: string } = {}) {
   // Shared with the active view's own query (same key): the file is the view on screen.
   const viewQ = useAnalysisView(view, filters);
   const shown = viewQ.data?.status === "ok" ? viewQ.data.data : null;
+  const csvWhyId = useId();
+  // Say why the file can't be made yet, not a silent disabled button.
+  const csvWhy = shown
+    ? null
+    : frameState(viewQ).status === "failed"
+      ? "Nothing to download until the view loads."
+      : "Loading…";
 
   function onPeriod(p: PeriodId) {
     setPeriod(p);
@@ -215,10 +227,20 @@ export function AnalysisView({ today: todayProp }: { today?: string } = {}) {
               {shown && <UpdatedAt iso={shown.updated_at} className="mt-1.5" />}
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Button variant="ghost" disabled={!shown} onClick={download}>
+              <Button
+                variant="ghost"
+                disabled={!shown}
+                aria-describedby={csvWhy ? csvWhyId : undefined}
+                onClick={download}
+              >
                 <Download aria-hidden className="size-4" />
                 Download CSV
               </Button>
+              {csvWhy && (
+                <span id={csvWhyId} className="text-[12px] text-ink-3">
+                  {csvWhy}
+                </span>
+              )}
             </div>
           </div>
           <p className="text-[12.5px] text-ink-3">

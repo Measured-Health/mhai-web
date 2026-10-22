@@ -158,6 +158,9 @@ function FilterFields({
   const restDescribed = reason ? reasonId : undefined;
   const problem =
     period === "custom" ? customRangeProblem(draft.from, draft.to) : null;
+  const datesDescribed =
+    [periodOff && reasonId, problem && problemId].filter(Boolean).join(" ") ||
+    undefined;
 
   return (
     <div className="flex flex-col gap-3">
@@ -192,7 +195,7 @@ function FilterFields({
                 value={draft.from}
                 disabled={periodOff}
                 aria-invalid={problem ? true : undefined}
-                aria-describedby={problem ? problemId : undefined}
+                aria-describedby={datesDescribed}
                 onChange={(e) => onDraft({ ...draft, from: e.target.value })}
                 className={control}
               />
@@ -204,7 +207,7 @@ function FilterFields({
                 value={draft.to}
                 disabled={periodOff}
                 aria-invalid={problem ? true : undefined}
-                aria-describedby={problem ? problemId : undefined}
+                aria-describedby={datesDescribed}
                 onChange={(e) => onDraft({ ...draft, to: e.target.value })}
                 className={control}
               />
@@ -304,14 +307,19 @@ function FilterFields({
           </p>
         )}
         {online && options.status === "failed" && (
-          <Button size="sm" variant="ghost" onClick={onRetryOptions}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="sm:min-h-11"
+            onClick={onRetryOptions}
+          >
             Try again
           </Button>
         )}
         <Button
           size="sm"
           variant="ghost"
-          className="ml-auto"
+          className="ml-auto sm:min-h-11"
           disabled={restOff || activeCount(filters) === 0}
           onClick={onClear}
         >
@@ -329,6 +337,13 @@ function FilterFields({
 export function AnalysisFiltersBar(props: FiltersProps) {
   const desktop = useIsDesktop();
   const [open, setOpen] = useState(false);
+  const noteId = useId();
+  // On a phone, say why the filters are off before the sheet is opened.
+  const note = !props.online
+    ? OFFLINE_FILTERS
+    : props.options.status === "failed"
+      ? FILTERS_FAILED
+      : null;
   if (desktop)
     return (
       <section aria-label="Filters" className="card-v3 px-4 py-4 md:px-5">
@@ -340,12 +355,29 @@ export function AnalysisFiltersBar(props: FiltersProps) {
       <Button
         variant="ghost"
         aria-haspopup="dialog"
+        aria-describedby={note ? noteId : undefined}
         className="w-full"
         onClick={() => setOpen(true)}
       >
         <SlidersHorizontal aria-hidden className="size-4" />
         Filters ({activeCount(props.filters)})
       </Button>
+      {note && (
+        <p
+          id={noteId}
+          className="flex items-center gap-1.5 text-[12.5px] text-ink-2"
+        >
+          {props.online ? (
+            <OctagonAlert
+              aria-hidden
+              className="size-4 shrink-0 text-bad-deep"
+            />
+          ) : (
+            <WifiOff aria-hidden className="size-4 shrink-0" />
+          )}
+          {note}
+        </p>
+      )}
       <Sheet open={open} onClose={() => setOpen(false)} title="Filters">
         <h2 className="mb-3 text-[15px] font-semibold">Filters</h2>
         {open && <FilterFields {...props} stacked />}

@@ -27,6 +27,7 @@ export function ColumnChart({
   headers,
   markLegend,
   level = 3,
+  tableToggle = true,
 }: {
   title: string;
   columns: readonly Column[];
@@ -36,8 +37,11 @@ export function ColumnChart({
   /** What a marked column means, written beside the marker in the legend. */
   markLegend: string;
   level?: 2 | 3 | 4;
+  /** False when the page gives its own table view (Analysis): no "Show as table" here. */
+  tableToggle?: boolean;
 }) {
-  const [asTable, setAsTable] = useState(false);
+  const [table, setAsTable] = useState(false);
+  const asTable = tableToggle && table;
   const [active, setActive] = useState(0);
   const [focused, setFocused] = useState<string | null>(null);
   const refs = useRef<(HTMLLIElement | null)[]>([]);
@@ -80,7 +84,7 @@ export function ColumnChart({
         <H id={titleId} className="flex-1 text-[14px] font-semibold">
           {title}
         </H>
-        {columns.length > 0 && (
+        {columns.length > 0 && tableToggle && (
           <Button
             size="sm"
             variant="ghost"

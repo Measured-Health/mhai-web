@@ -128,7 +128,12 @@ export function ViewFrame({
         >
           <OctagonAlert aria-hidden className="size-5 shrink-0 text-bad-deep" />
           <span className="flex-1">{failedText(view)}</span>
-          <Button size="sm" variant="ghost" onClick={onRetry}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="sm:min-h-11"
+            onClick={onRetry}
+          >
             Try again
           </Button>
         </div>

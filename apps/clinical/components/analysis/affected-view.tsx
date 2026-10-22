@@ -5,6 +5,7 @@ import type {
   Drillable,
 } from "@/lib/api/analysis-contract";
 import { frameState, useAnalysisView } from "@/lib/analysis-queries";
+import { shows } from "@/lib/analysis/guards";
 import {
   AGE_LABEL,
   SEX_LABEL,
@@ -75,8 +76,6 @@ export function affectedGroups(d: AffectedOut): Group[] {
   ];
 }
 
-const shown = (g: Drillable) => !g.suppressed && g.value !== null;
-
 function AffectedCharts({ d }: { d: AffectedOut }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -89,7 +88,7 @@ function AffectedCharts({ d }: { d: AffectedOut }) {
               label: r.label,
               value: r.patients.value,
               text: countText(r.patients),
-              hidden: !shown(r.patients),
+              hidden: !shows(r.patients),
             }))}
           />
         </Panel>

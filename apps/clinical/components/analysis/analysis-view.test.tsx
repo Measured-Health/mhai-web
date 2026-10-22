@@ -68,6 +68,9 @@ const meta = (patients: GuardedOut): Meta => ({
   patients,
 });
 const E11 = { id: "e11", name: "Type 2 diabetes", icd10: "E11" };
+const A15 = { id: "a15", name: "Tuberculosis", icd10: "A15" };
+const J45 = { id: "j45", name: "Asthma", icd10: "J45" };
+const UNMAPPED = { id: "unmapped", name: null, icd10: null };
 
 /** A week hidden between a real 20 and a real 0. */
 const WITH_HIDDEN_WEEK: PrevalenceOut = {
@@ -93,7 +96,13 @@ const FEW: Pick<ViewOut, "prevalence" | "affected"> = {
   prevalence: {
     ...meta(H),
     total: { cases: H, new: H, existing: S(0) },
-    by_condition: [{ condition: E11, cases: D(H), new: H, existing: S(0) }],
+    // Sent by size, as a careless server might: the page sorts them by name.
+    by_condition: [
+      { condition: E11, cases: D(H), new: H, existing: S(0) },
+      { condition: UNMAPPED, cases: D(H), new: H, existing: S(0) },
+      { condition: A15, cases: D(H), new: H, existing: S(0) },
+      { condition: J45, cases: D(H), new: H, existing: S(0) },
+    ],
     series: [
       { start: "2026-07-24", cases: H, new: H },
       { start: "2026-07-31", cases: S(0), new: S(0) },
@@ -277,6 +286,10 @@ describe("AnalysisView", () => {
     expect(
       screen.queryByRole("list", { name: "Cases by condition" }),
     ).toBeNull();
+    // One table toggle: the frame's, not a second one inside the chart.
+    expect(screen.queryByRole("button", { name: "Show as table" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Chart" }));
+    expect(screen.queryByRole("button", { name: "Show as table" })).toBeNull();
   });
 
   it("a hidden week reads Fewer than 5, with no column, beside a real 0", async () => {
@@ -339,6 +352,25 @@ describe("AnalysisView", () => {
     for (const li of listItems(list))
       expect(li).toHaveTextContent(/Fewer than 5$/);
     expect(bars(list)).toHaveLength(0);
+    // All hidden: by name, never by size; Not standardised last.
+    expect(listItems(list).map((li) => li.textContent)).toEqual([
+      "Asthma · J45Fewer than 5",
+      "Tuberculosis · A15Fewer than 5",
+      "Type 2 diabetes · E11Fewer than 5",
+      "Not standardisedFewer than 5",
+    ]);
+    // The prevalence file: no bare number, the zeros masked too, same order.
+    await userEvent.click(screen.getByRole("button", { name: "Download CSV" }));
+    const prevCsv = download.mock.calls[0]![1] as string;
+    const totals = prevCsv.slice(prevCsv.indexOf("Totals"));
+    expect(totals).toContain("Fewer than 5");
+    expect(totals).not.toMatch(/(^|,)\d+(,|\r\n)/m);
+    expect(totals.indexOf("Asthma")).toBeLessThan(
+      totals.indexOf("Tuberculosis"),
+    );
+    expect(totals.indexOf("Type 2 diabetes")).toBeLessThan(
+      totals.indexOf("Not standardised"),
+    );
     const columns = within(viewRegion("Cases over time")).getAllByRole(
       "listitem",
     );
@@ -365,7 +397,7 @@ describe("AnalysisView", () => {
     }
 
     await userEvent.click(screen.getByRole("button", { name: "Download CSV" }));
-    const csv = download.mock.calls[0]![1] as string;
+    const csv = download.mock.calls[1]![1] as string;
     const body = csv.slice(csv.indexOf("By age band"));
     expect(body).toContain("Fewer than 5");
     expect(body).not.toMatch(/,\d+\r\n/);
@@ -559,6 +591,9 @@ describe("AnalysisView", () => {
   it("nothing goes in the URL or storage", async () => {
     const href = window.location.href;
     const title = document.title;
+    const logs = (["log", "info", "warn", "error", "debug"] as const).map((k) =>
+      vi.spyOn(console, k),
+    );
     render();
     await loaded();
     await waitFor(() =>
@@ -571,6 +606,10 @@ describe("AnalysisView", () => {
     expect(window.location.href).toBe(href);
     expect(document.title).toBe(title);
     expect(localStorage.length + sessionStorage.length).toBe(0);
+    // Nor in the logs: no filter value is ever written out.
+    for (const spy of logs)
+      for (const args of spy.mock.calls)
+        expect(JSON.stringify(args)).not.toMatch(/65-79|2025-10-22|"12m"/);
   });
 
   it("at phone width the filters open in a sheet and the views are a select", async () => {

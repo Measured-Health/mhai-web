@@ -542,3 +542,82 @@ describe("secondary suppression", () => {
     checkSet("short", [v.total.new, v.total.existing], v.total.cases);
   });
 });
+
+describe("row order", () => {
+  /** Shown rows, then hidden rows by name with the unnamed last: never by size. */
+  function hiddenByName<R>(
+    rows: R[],
+    g: (r: R) => GuardedOut,
+    name: (r: R) => string | null,
+    where: string,
+  ) {
+    const first = rows.findIndex((r) => g(r).suppressed);
+    if (first < 0) return 0;
+    const hidden = rows.slice(first);
+    expect(
+      hidden.every((r) => g(r).suppressed),
+      `${where}: a shown row after a hidden one`,
+    ).toBe(true);
+    const key = (r: R) => [name(r) === null ? 1 : 0, name(r) ?? ""] as const;
+    for (let i = 1; i < hidden.length; i++) {
+      const [al, an] = key(hidden[i - 1]!);
+      const [bl, bn] = key(hidden[i]!);
+      expect(
+        al < bl || (al === bl && an.localeCompare(bn, "en-GB") <= 0),
+        `${where}: ${an} before ${bn}`,
+      ).toBe(true);
+    }
+    return hidden.length;
+  }
+
+  it("sends hidden rows after the shown ones, by name, for every list", async () => {
+    const m = mock();
+    let seen = 0;
+    const ages: (AgeBand | null)[] = [null, "0-17", "65-79", "80+"];
+    const sexes: (Sex | null)[] = [null, "female", "other", "not_recorded"];
+    for (const age_band of ages)
+      for (const sex of sexes)
+        for (const location of [null, "ward4", "ward7"]) {
+          const f = { ...F, age_band, sex, location };
+          const v = await views(m, f);
+          const at = JSON.stringify({ age_band, sex, location });
+          seen += hiddenByName(
+            v.prevalence.by_condition,
+            (r) => r.cases,
+            (r) => r.condition.name,
+            `prevalence ${at}`,
+          );
+          seen += hiddenByName(
+            v.affected.by_location,
+            (r) => r.patients,
+            (r) => r.location?.label ?? null,
+            `locations ${at}`,
+          );
+          seen += hiddenByName(
+            v.affected.by_specialty,
+            (r) => r.patients,
+            (r) => r.specialty,
+            `specialties ${at}`,
+          );
+          seen += hiddenByName(
+            v["co-occurring"].pairs,
+            (r) => r.patients,
+            (r) => `${r.a.name} + ${r.b.name}`,
+            `pairs ${at}`,
+          );
+          seen += hiddenByName(
+            v.findings.findings,
+            (r) => r.patients,
+            (r) => r.name,
+            `findings ${at}`,
+          );
+          seen += hiddenByName(
+            v.quality.by_condition,
+            (r) => r.consultations,
+            (r) => r.condition.name,
+            `quality ${at}`,
+          );
+        }
+    expect(seen).toBeGreaterThan(20);
+  });
+});

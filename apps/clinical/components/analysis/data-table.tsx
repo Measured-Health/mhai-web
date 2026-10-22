@@ -1,6 +1,7 @@
 "use client";
 import { isValidElement, type ReactNode } from "react";
 import type { GuardedOut } from "@/lib/api/admin-contract";
+import { isGuardedOut } from "@/lib/analysis/guards";
 import { countText } from "@/lib/analysis/labels";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
 import { cn } from "@mhai/ui/cn";
@@ -16,11 +17,7 @@ export type TableColumn = {
 export type TableRow = { key: string; cells: Record<string, TableCell> };
 
 const isGuarded = (c: TableCell): c is GuardedOut =>
-  typeof c === "object" &&
-  c !== null &&
-  !isValidElement(c) &&
-  "suppressed" in c &&
-  "value" in c;
+  !isValidElement(c) && isGuardedOut(c);
 
 /** A hidden count reads "Fewer than 5"; 0 reads "0". */
 const cellText = (c: TableCell): ReactNode => (isGuarded(c) ? countText(c) : c);

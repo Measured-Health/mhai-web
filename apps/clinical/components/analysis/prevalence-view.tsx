@@ -1,11 +1,11 @@
 "use client";
-import type { GuardedOut } from "@/lib/api/admin-contract";
 import type {
   AnalysisFilters,
   PrevalenceOut,
 } from "@/lib/api/analysis-contract";
 import { countLabel } from "@/lib/admin/report";
 import { frameState, useAnalysisView } from "@/lib/analysis-queries";
+import { shows } from "@/lib/analysis/guards";
 import { conditionName, conditionText, countText } from "@/lib/analysis/labels";
 import { viewSummary } from "@/lib/analysis/summary";
 import type { BarItem, Column } from "@mhai/ui/charts/types";
@@ -33,7 +33,6 @@ export function bucketLabel(start: string, bucket: "week" | "month"): string {
 
 const casesText = (n: number) =>
   n === 1 ? "1 case" : `${countLabel(n)} cases`;
-const shown = (g: GuardedOut) => !g.suppressed && g.value !== null;
 
 /** A hidden point draws no column and is left out of the scale. */
 export function seriesColumns(d: PrevalenceOut): Column[] {
@@ -41,7 +40,7 @@ export function seriesColumns(d: PrevalenceOut): Column[] {
     key: p.start,
     label: bucketLabel(p.start, d.bucket),
     value: p.cases.value ?? 0,
-    hidden: !shown(p.cases),
+    hidden: !shows(p.cases),
   }));
 }
 
@@ -51,8 +50,8 @@ function conditionBars(d: PrevalenceOut): BarItem[] {
     label: conditionText(r.condition),
     value: r.cases.value,
     text: countText(r.cases),
-    hidden: !shown(r.cases),
-    note: shown(r.new) ? `${countText(r.new)} new in this period` : undefined,
+    hidden: !shows(r.cases),
+    note: shows(r.new) ? `${countText(r.new)} new in this period` : undefined,
   }));
 }
 
@@ -64,10 +63,11 @@ export function PrevalenceBody({ d }: { d: PrevalenceOut }) {
         <ColumnChart
           title="Cases over time"
           columns={seriesColumns(d)}
-          summary={`Patients with a case, each ${unit}. A ${unit} with fewer than 5 draws no column.`}
+          summary={`Cases each ${unit}. A ${unit} with fewer than 5 draws no column.`}
           valueText={casesText}
           headers={[unit === "week" ? "Week" : "Month", "Cases"]}
           markLegend=""
+          tableToggle={false}
         />
       </div>
       <Panel title="By condition">
@@ -105,7 +105,11 @@ export function PrevalenceTables({ d }: { d: PrevalenceOut }) {
         columns={[
           { key: "start", label: d.bucket === "week" ? "Week" : "Month" },
           { key: "cases", label: "Cases", numeric: true },
-          { key: "new", label: "New in this period", numeric: true },
+          {
+            key: "new",
+            label: d.bucket === "week" ? "New that week" : "New that month",
+            numeric: true,
+          },
         ]}
         rows={d.series.map((p) => ({
           key: p.start,
