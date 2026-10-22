@@ -10,11 +10,9 @@ import {
   valueText,
 } from "@/lib/analytics/measures";
 import { Button } from "@mhai/ui/button";
-import { dateLabel } from "../hospitals/format";
+import { dayMonthLabel } from "@/lib/format";
 
 const shown = (n: number): Guarded => ({ value: n, suppressed: false });
-/** "14 Oct": the period's buckets, never the year. */
-const dayMonth = (iso: string) => dateLabel(iso).replace(/ \d{4}$/, "");
 
 /**
  * One measure for one hospital over the period, as columns, with the
@@ -44,7 +42,7 @@ export function ComparePanel({
     const hidden = isHidden(p.value, kind);
     return {
       key: `${p.start}-${i}`,
-      label: dayMonth(p.start),
+      label: dayMonthLabel(p.start),
       value: hidden ? null : p.value.value,
       text: valueText(p.value, kind),
       median: p.median,
