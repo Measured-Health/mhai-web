@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   ADA,
   AMARA,
@@ -15,14 +15,22 @@ import {
 
 test.afterEach(async ({ page }) => expectNoStorage(page));
 
-// Tests marked "needs Task 4" click through to a hold's own page
-// (/legal-holds/{id}), built in Plan 8 Task 4. They pass once it is merged.
-
 /** The holds as the table (desktop) or the cards (phones). */
 const holdsList = (page: Page) =>
   isMobile(page)
     ? page.getByRole("list", { name: "Legal holds" })
     : page.getByRole("table", { name: "Legal holds" });
+
+/**
+ * Picks a reason in the place-a-hold form. On a phone the form is taller than
+ * the screen and the sticky header covers the radio whichever way Playwright
+ * scrolls it, so the radio itself gets the click event.
+ */
+async function chooseReason(form: Locator, reason: string) {
+  await form
+    .getByRole("radio", { name: reason, exact: true })
+    .dispatchEvent("click");
+}
 
 /** Opens one hold from the list, by its hospital's name. */
 async function openHold(page: Page, hospital: string, reference: string) {
@@ -31,9 +39,6 @@ async function openHold(page: Page, hospital: string, reference: string) {
     page.getByRole("heading", { level: 1, name: reference }),
   ).toBeVisible();
 }
-
-/** The open step-up dialog or sheet, whatever its title. */
-const anyStepUp = (page: Page) => page.getByRole("dialog").last();
 
 test("Legal holds opens on Open holds; Lifted shows the grace period", async ({
   page,
@@ -87,7 +92,7 @@ test("the hospital pages show holds, the Hold tag and View holds", async ({
   await expect(holdsList(page).getByText("CMP-0193")).toHaveCount(0);
 });
 
-test("Ada places a hold on Southpoint from its page, and its removal shows 1 legal hold is active · View holds (needs Task 4)", async ({
+test("Ada places a hold on Southpoint from its page, and its removal shows 1 legal hold is active · View holds", async ({
   page,
 }) => {
   await signIn(page, ADA);
@@ -104,7 +109,7 @@ test("Ada places a hold on Southpoint from its page, and its removal shows 1 leg
     .click();
   const form = page.getByRole("dialog", { name: "Place a legal hold" });
   await expect(form.getByText("Southpoint Hospital")).toBeVisible();
-  await form.getByText("Complaint", { exact: true }).click();
+  await chooseReason(form, "Complaint");
   await form.getByLabel(/^Reference/).fill("CMP-2026-9");
   await form.getByLabel(/^Asked for by/).fill("The complaints office");
   await form.getByRole("button", { name: "Continue" }).click();
@@ -131,7 +136,7 @@ test("Ada places a hold on Southpoint from its page, and its removal shows 1 leg
   ).toBeDisabled();
 });
 
-test("Tunde asked to lift Riverside's hold; Ada approves with her code and sees Lifted · records released on … (needs Task 4)", async ({
+test("Tunde asked to lift Riverside's hold; Ada approves with her code and sees Lifted · records released on …", async ({
   page,
 }) => {
   await signIn(page, ADA);
@@ -141,7 +146,7 @@ test("Tunde asked to lift Riverside's hold; Ada approves with her code and sees 
     page.getByText(/Requested by Tunde Okafor/).first(),
   ).toBeVisible();
   await page.getByRole("button", { name: "Approve lift" }).click();
-  const ask = anyStepUp(page);
+  const ask = stepUp(page, "Approve lifting CMP-0193?");
   await typeCode(page, CODE, ask);
   await ask.getByRole("button", { name: "Approve lift" }).click();
   await expect(ask).toBeHidden();
@@ -150,7 +155,7 @@ test("Tunde asked to lift Riverside's hold; Ada approves with her code and sees 
   ).toBeVisible();
 });
 
-test("Ada undoes Lakeside's lift (needs Task 4)", async ({ page }) => {
+test("Ada undoes Lakeside's lift", async ({ page }) => {
   await signIn(page, ADA);
   await openNav(page, "Legal holds");
   await page.getByLabel("Status").selectOption({ label: "Lifted" });
@@ -159,13 +164,15 @@ test("Ada undoes Lakeside's lift (needs Task 4)", async ({ page }) => {
     page.getByText(/Lifted · records released on/).first(),
   ).toBeVisible();
   await page.getByRole("button", { name: "Undo lift" }).click();
-  const ask = anyStepUp(page);
+  const ask = stepUp(page, "Put the hold back?");
   await typeCode(page, CODE, ask);
-  await ask
-    .getByRole("button", { name: /^(Undo lift|Put the hold back)$/ })
-    .click();
+  await ask.getByRole("button", { name: "Undo lift" }).click();
   await expect(ask).toBeHidden();
-  await expect(page.getByText("Active", { exact: true }).first()).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Details" })
+      .getByText(/^(Active|Review due)/),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Undo lift" })).toHaveCount(0);
 });
 
@@ -189,7 +196,7 @@ test("the auditor sees holds without controls", async ({ page }) => {
   await expect(main.getByRole("button", { name: CONTROLS })).toHaveCount(0);
 });
 
-test("the auditor sees a hold's note and history, and no controls (needs Task 4)", async ({
+test("the auditor sees a hold's note and history, and no controls", async ({
   page,
 }) => {
   await signIn(page, AMARA);
@@ -204,9 +211,7 @@ test("the auditor sees a hold's note and history, and no controls (needs Task 4)
   await expect(main.getByRole("button", { name: CONTROLS })).toHaveCount(0);
 });
 
-test("Activity shows the reference but not the note (needs Task 4)", async ({
-  page,
-}) => {
+test("Activity shows the reference but not the note", async ({ page }) => {
   const note = "Counsel says do not release anything";
   await signIn(page, ADA);
   await openHospital(page, "Havana Hospital");
@@ -215,7 +220,8 @@ test("Activity shows the reference but not the note (needs Task 4)", async ({
     .getByRole("button", { name: "Place a hold" })
     .click();
   const form = page.getByRole("dialog", { name: "Place a legal hold" });
-  await form.getByText("Complaint", { exact: true }).click();
+  await expect(form.getByText("Havana Hospital")).toBeVisible();
+  await chooseReason(form, "Complaint");
   await form.getByLabel(/^Reference/).fill("CMP-NOTE-1");
   await form.getByLabel(/^Asked for by/).fill("The complaints office");
   await form.getByLabel(/^Note/).fill(note);
@@ -233,9 +239,7 @@ test("Activity shows the reference but not the note (needs Task 4)", async ({
   await expect(main.getByText(note)).toHaveCount(0);
 });
 
-test("phone: the list as cards, open a hold, back (needs Task 4)", async ({
-  page,
-}) => {
+test("phone: the list as cards, open a hold, back", async ({ page }) => {
   test.skip(!isMobile(page), "phones only");
   await signIn(page, ADA);
   await openNav(page, "Legal holds");
@@ -249,7 +253,7 @@ test("phone: the list as cards, open a hold, back (needs Task 4)", async ({
   await expect(holdsList(page).getByText("HC/2026/0412")).toBeVisible();
 });
 
-test("a different admin sees the Riverside request as waiting for approval (needs Task 4)", async ({
+test("a different admin sees the Riverside request as waiting for approval", async ({
   page,
 }) => {
   await signIn(page, TUNDE);
