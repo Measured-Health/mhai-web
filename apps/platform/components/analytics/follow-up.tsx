@@ -21,6 +21,7 @@ export const NOTE_TOO_LONG = `A note can be ${NOTE_MAX} characters at most.`;
 /**
  * Who followed the change up, and (for platform admins) marking it,
  * editing the note (its author only) and undoing it (any platform admin).
+ * Whether the signed-in person wrote it comes from the server (`by_you`).
  * Auditors see the line and the note, and no controls. Every write sends
  * the change's version: if someone else got there first it's 409, "Changed
  * by someone else", and the page reloads the list.
@@ -28,12 +29,9 @@ export const NOTE_TOO_LONG = `A note can be ${NOTE_MAX} characters at most.`;
 export function FollowUp({
   change: c,
   canAct,
-  isYou,
 }: {
   change: Change;
   canAct: boolean;
-  /** Whether a follow-up's author is the signed-in person. */
-  isYou(by: { id: string; name: string }): boolean;
 }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -49,7 +47,10 @@ export function FollowUp({
   const failed = (e: Error) => {
     const w = platformError(e);
     // Someone else changed it meanwhile: show them the latest.
-    if (w.stale || w.gone) reloadAnalytics(qc);
+    if (w.stale || w.gone) {
+      reloadAnalytics(qc);
+      setEditing(false);
+    }
     setError(w);
   };
 
@@ -126,7 +127,7 @@ export function FollowUp({
 
       {canAct && f && !editing && (
         <div className="flex flex-wrap gap-2">
-          {isYou(f.by) && (
+          {f.by_you === true && (
             <Button
               size="sm"
               variant="ghost"
@@ -185,7 +186,8 @@ function NoteForm({
   const id = useId();
   const [note, setNote] = useState(initial);
   const [tooLong, setTooLong] = useState(false);
-  const over = note.length > NOTE_MAX;
+  // What is sent: the note without the spaces around it.
+  const over = note.trim().length > NOTE_MAX;
   const send = (e: FormEvent) => {
     e.preventDefault();
     if (over) {

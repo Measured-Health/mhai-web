@@ -31,6 +31,7 @@ function change(id: string, over: Partial<Change> = {}): Change {
 }
 const follow = (at = "2026-10-21T10:00:00Z"): FollowUp => ({
   by: TUNDE,
+  by_you: false,
   at,
   note: null,
   version: 1,

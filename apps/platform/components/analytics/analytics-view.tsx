@@ -9,7 +9,6 @@ import {
   type ReactNode,
 } from "react";
 import { PERIODS, type Period } from "@/lib/api/analytics-contract";
-import type { Person } from "@/lib/api/contract";
 import { analyticsCsv, analyticsCsvName } from "@/lib/analytics/csv";
 import {
   NOTHING_UNUSUAL,
@@ -94,8 +93,6 @@ export function AnalyticsView() {
     returnTo.current = selected?.id ?? null;
     setPhoneDetail(false);
   };
-  const isYou = (by: Person) =>
-    !!user && (by.id === user.id || by.name === user.name);
 
   const download = () => {
     const a = q.data;
@@ -172,7 +169,6 @@ export function AnalyticsView() {
                 period={period}
                 hospitals={state.hospitals}
                 canAct={canAct}
-                isYou={isYou}
                 onBack={desktop ? undefined : back}
                 headingRef={headingRef}
               />
