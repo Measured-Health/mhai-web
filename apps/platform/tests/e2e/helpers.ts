@@ -49,7 +49,8 @@ export async function signIn(page: Page, email: string) {
 /** Opens a sidebar page (from the menu on phones), without a page load. */
 export async function openNav(
   page: Page,
-  name: "Hospitals" | "Analytics" | "Team" | "Activity" | "Account",
+  name:
+    "Hospitals" | "Analytics" | "Legal holds" | "Team" | "Activity" | "Account",
 ) {
   if (isMobile(page))
     await page.getByRole("button", { name: "Open menu" }).click();
