@@ -130,7 +130,7 @@ It runs on sample data, under the small-group rule. In live mode it stays switch
 - **"New"** means first recorded for that patient in the period; "existing" means recorded before it. The server decides; the UI says "New in this period".
 - **The guard code** lives in `apps/clinical/lib/analysis/guards.ts`, modelled on Plan 7c's `read.ts`. Sharing it between the apps is a later clean-up.
 - **The mock suppresses the way the server must**, with secondary suppression in sets that add up. A test checks that the readers accept every reply the mock gives over a grid of filters.
-- **Backend contract:** the controller adds it to mhai-multiagent `docs/specs/2026-10-17-frontend-requirements.md` as the next §14 item, through its own PR.
+- **Backend contract:** the controller adds it to mhai-multiagent `docs/specs/2026-10-17-frontend-requirements.md` as an update to §10 (Analysis, clearances and audit), through its own PR.
 
 ## Review Focus
 
@@ -748,7 +748,7 @@ type PatientsOut = {
 - [ ] **Step 3: Verify.** Run the full suite: `npm test`, `npm run e2e` (both apps), lint, `format:check`, typecheck, build, `check:bundle` and `check:platform-marker`. Compare the counts with Task 1's record.
 - [ ] **Step 4: Commit:** "Test Analysis end to end; document the demo and the sign-off gate".
 
-The controller then adds the analysis contract to mhai-multiagent's frontend requirements as the next §14 item, through its own PR.
+The controller then adds the analysis contract to mhai-multiagent's frontend requirements as an update to §10 (Analysis, clearances and audit), through its own PR.
 
 ---
 
