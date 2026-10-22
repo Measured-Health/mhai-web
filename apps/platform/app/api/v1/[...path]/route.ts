@@ -55,6 +55,10 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["POST", "platform/notifications/seen"],
   ["GET", "platform/me/analytics-email"],
   ["PUT", "platform/me/analytics-email"],
+  ["GET", "platform/health"],
+  ["GET", "platform/jobs"],
+  ["POST", "platform/jobs/retry"],
+  ["POST", "platform/jobs/cancel"],
 ];
 
 /**
