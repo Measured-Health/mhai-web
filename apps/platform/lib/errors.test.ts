@@ -34,6 +34,33 @@ describe("platformError", () => {
       expect(e(409, code)).toMatchObject({ title, stale: false, gone: false });
   });
 
+  it("gives plain words for the legal-hold, request and settings codes", () => {
+    const words: Record<string, string> = {
+      hospital_removed:
+        "This hospital has been removed. There is nothing left to hold.",
+      removal_started:
+        "This hospital's removal has already started. Act outside the app now.",
+      invalid_range: "The end date must be on or after the start date.",
+      expired: "This request lapsed after 7 days. Make a new request.",
+      not_ready: "No longer ready to switch on.",
+      below_minimum: "That's shorter than the minimum allowed.",
+    };
+    for (const [code, title] of Object.entries(words))
+      expect(e(409, code)).toMatchObject({ title, gone: false });
+  });
+
+  it("expired and not_ready are stale; the other new codes are not", () => {
+    expect(e(409, "expired").stale).toBe(true);
+    expect(e(409, "not_ready").stale).toBe(true);
+    for (const code of [
+      "hospital_removed",
+      "removal_started",
+      "invalid_range",
+      "below_minimum",
+    ])
+      expect(e(409, code).stale).toBe(false);
+  });
+
   it("treats a network failure, a 5xx and an unknown error as unreachable", () => {
     const down = "Couldn't reach the service. Try again.";
     expect(platformError(new ApiError(0, "network")).title).toBe(down);

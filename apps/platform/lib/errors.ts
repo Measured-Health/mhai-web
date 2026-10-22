@@ -53,6 +53,24 @@ export function platformError(
       return W("You can't change your own role.");
     case "forbidden":
       return W("Your account can only view this.");
+    case "hospital_removed":
+      return W(
+        "This hospital has been removed. There is nothing left to hold.",
+      );
+    case "removal_started":
+      return W(
+        "This hospital's removal has already started. Act outside the app now.",
+      );
+    case "invalid_range":
+      return W("The end date must be on or after the start date.");
+    case "expired":
+      return W("This request lapsed after 7 days. Make a new request.", "", {
+        stale: true,
+      });
+    case "not_ready":
+      return W("No longer ready to switch on.", "", { stale: true });
+    case "below_minimum":
+      return W("That's shorter than the minimum allowed.");
   }
   if (e.status >= 500) return W(UNREACHABLE);
   return W("Something went wrong. Try again.");
