@@ -19,6 +19,7 @@ import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { Dialog } from "@mhai/ui/dialog";
 import { useToast } from "@mhai/ui/toast";
+import { WAITING } from "../shared/two-person";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { REMOVAL_WARNING } from "./danger-zone";
 import { dateLabel } from "./format";
@@ -28,7 +29,6 @@ import { StepUpDialog, type StepUpInput } from "./step-up-dialog";
 const BLOCKED_NOTE =
   "Removal can't go ahead until the checks above are cleared.";
 const HOLDS_LATER = "Legal holds are managed in a later release.";
-const WAITING = "Waiting for a different platform admin to approve";
 const REMOVED = "Removed. Only the audit trail remains.";
 
 export type CheckLine = { text: string; blocks: boolean };
