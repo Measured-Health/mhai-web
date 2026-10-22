@@ -300,6 +300,12 @@ describe("the Analytics page", () => {
   });
 
   it("offline disables follow-up and CSV with the reason", async () => {
+    // Ada followed Havana up earlier, with a note she could edit online.
+    await api.followUp(
+      "chg_hav_review_time",
+      { note: "Asked what changed.", version: 1 },
+      { idempotencyKey: "ada-hav" },
+    );
     net.online = false;
     await open();
     const reason = "You're offline. This needs a connection.";
@@ -311,6 +317,49 @@ describe("the Analytics page", () => {
     expect(mark).toBeDisabled();
     expect(mark).toHaveAccessibleDescription(reason);
     expect(within(d).getByLabelText("Note (optional)")).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: /Havana Hospital: answers reviewed faster/,
+      }),
+    );
+    const hav = screen.getByRole("region", {
+      name: /Havana Hospital: answers reviewed faster/,
+    });
+    for (const name of ["Undo", "Edit note"]) {
+      const b = within(hav).getByRole("button", { name });
+      expect(b).toBeDisabled();
+      expect(b).toHaveAccessibleDescription(reason);
+    }
+  });
+
+  it("the size line shows while the chart can't load", async () => {
+    vi.spyOn(api, "getChangeSeries").mockRejectedValue(new Error("down"));
+    await open();
+    const d = detail();
+    expect(
+      await within(d).findByText("Couldn't load the chart."),
+    ).toBeInTheDocument();
+    expect(
+      within(d).getByText(
+        /^214 staff · ([\d,]+|Fewer than 5) questions this period$/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("a hospital with no active admin has one Open hospital link", async () => {
+    await open();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Hilltop Cottage Hospital/ }),
+    );
+    const d = screen.getByRole("region", {
+      name: /no clinicians active yet/,
+    });
+    expect(
+      await within(d).findByText("No active hospital admin"),
+    ).toBeInTheDocument();
+    expect(
+      within(d).getAllByRole("link", { name: "Open hospital" }),
+    ).toHaveLength(1);
   });
 
   it("at phone width the list then detail with Back", async () => {

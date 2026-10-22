@@ -21,7 +21,14 @@ export const openHospitalClass =
  * first one invited. With none: say so, where the first-admin invite
  * stands, and the way to the hospital's page (Review Focus 5).
  */
-export function ContactAdmins({ hospital: h }: { hospital: Hospital }) {
+export function ContactAdmins({
+  hospital: h,
+  showLink = true,
+}: {
+  hospital: Hospital;
+  /** Off where the page already links to the hospital nearby. */
+  showLink?: boolean;
+}) {
   const titleId = useId();
   const toast = useToast();
   const copy = async (email: string) => {
@@ -73,9 +80,11 @@ export function ContactAdmins({ hospital: h }: { hospital: Hospital }) {
               First admin {h.first_admin!.name}: {invite}
             </p>
           )}
-          <Link href={`/hospitals/${h.id}`} className={openHospitalClass}>
-            Open hospital
-          </Link>
+          {showLink && (
+            <Link href={`/hospitals/${h.id}`} className={openHospitalClass}>
+              Open hospital
+            </Link>
+          )}
         </div>
       )}
     </section>

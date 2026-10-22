@@ -249,6 +249,30 @@ describe("mock analytics", () => {
     expect(river.follow_up?.by.name).toBe("Tunde Okafor");
   });
 
+  it("by_you is true for the follow-up's author and false for another admin", async () => {
+    const { m, as } = setup();
+    const c = await change(m, (x) => x.serious);
+    const done = await m.followUp(c.id, { version: c.version }, KEY());
+    expect(done.follow_up?.by_you).toBe(true);
+    expect((await change(m, (x) => x.id === c.id)).follow_up?.by_you).toBe(
+      true,
+    );
+    // Tunde's follow-up of Riverside is not Ada's.
+    expect((await change(m, byHospital("h_riverside"))).follow_up?.by_you).toBe(
+      false,
+    );
+    as(TEAM_EMAILS.tunde);
+    expect((await change(m, (x) => x.id === c.id)).follow_up?.by_you).toBe(
+      false,
+    );
+    expect((await change(m, byHospital("h_riverside"))).follow_up?.by_you).toBe(
+      true,
+    );
+    // Undo by another admin replies with no follow-up at all.
+    const undone = await m.undoFollowUp(c.id, { version: done.version }, KEY());
+    expect(undone.follow_up).toBeNull();
+  });
+
   it("a stale version is 409 conflict", async () => {
     const { m } = setup();
     const c = await change(m, (x) => x.serious);

@@ -3,7 +3,6 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useId, type Ref } from "react";
 import type { HospitalSize, Period } from "@/lib/api/analytics-contract";
-import type { Person } from "@/lib/api/contract";
 import { changeLine, type RankedChange } from "@/lib/analytics/changes";
 import { countText, valueText } from "@/lib/analytics/measures";
 import {
@@ -33,7 +32,6 @@ export function ChangeDetail({
   period,
   hospitals,
   canAct,
-  isYou,
   onBack,
   headingRef,
 }: {
@@ -41,7 +39,6 @@ export function ChangeDetail({
   period: Period;
   hospitals: AnalyticsState["hospitals"];
   canAct: boolean;
-  isYou(by: Person): boolean;
   onBack?(): void;
   /** Focus lands here when the detail opens on a phone. */
   headingRef?: Ref<HTMLHeadingElement>;
@@ -96,17 +93,26 @@ export function ChangeDetail({
         )}
       </div>
 
-      {series.isError ? (
-        <CouldntLoad what="the chart" onRetry={() => void series.refetch()} />
-      ) : !series.data ? (
-        <Loading label="Loading the chart" />
-      ) : (
+      {series.data ? (
         <ComparePanel hospital={h} series={series.data} size={sizeText} />
+      ) : (
+        <>
+          {series.isError ? (
+            <CouldntLoad
+              what="the chart"
+              onRetry={() => void series.refetch()}
+            />
+          ) : (
+            <Loading label="Loading the chart" />
+          )}
+          {/* The size shows whatever happens to the chart. */}
+          {sizeText && <p className="text-[13px] text-ink-2">{sizeText}</p>}
+        </>
       )}
 
       {h && <Contact hospitalId={h.id} />}
 
-      <FollowUp key={c.id} change={c} canAct={canAct} isYou={isYou} />
+      <FollowUp key={c.id} change={c} canAct={canAct} />
 
       {h && (
         <Link href={`/hospitals/${h.id}`} className={openHospitalClass}>
@@ -127,5 +133,6 @@ function Contact({ hospitalId }: { hospitalId: string }) {
       />
     );
   if (!q.data) return <Loading label="Loading the hospital admins" />;
-  return <ContactAdmins hospital={q.data} />;
+  // The detail has its own Open hospital link below: just the one.
+  return <ContactAdmins hospital={q.data} showLink={false} />;
 }
