@@ -38,10 +38,12 @@ const NAMES = [
   "Westfield Clinic",
   "Harbour View Hospital",
   "Southpoint Hospital",
+  "Lakeside Community Clinic",
+  "Hilltop Cottage Hospital",
 ];
 
 describe("the hospitals list", () => {
-  it("lists the seven sample hospitals with status words and icons", async () => {
+  it("lists the nine sample hospitals with status words and icons", async () => {
     renderWithAuth(<HospitalsView />);
     const table = await screen.findByRole("table");
     for (const h of [
@@ -56,7 +58,7 @@ describe("the hospitals list", () => {
         within(table).getByRole("columnheader", { name: h }),
       ).toBeInTheDocument();
     const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows).toHaveLength(7);
+    expect(rows).toHaveLength(9);
     for (const n of NAMES)
       expect(within(table).getByRole("link", { name: n })).toBeInTheDocument();
     const north = within(table).getByRole("row", { name: /Northgate/ });
@@ -178,7 +180,7 @@ describe("the hospitals list", () => {
     renderWithAuth(<HospitalsView />);
     const list = await screen.findByRole("list", { name: "Hospitals" });
     expect(screen.queryByRole("table")).toBeNull();
-    expect(within(list).getAllByRole("listitem")).toHaveLength(7);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(9);
     expect(
       within(list).getByRole("link", { name: /^Northgate General Hospital/ }),
     ).toBeInTheDocument();

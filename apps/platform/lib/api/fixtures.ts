@@ -394,6 +394,51 @@ export function seedHospitals(now: number): HospitalRecord[] {
       export_required: true,
       export_done: true,
     },
+    {
+      // A small clinic: its analytics counts are 1–4, so they are hidden.
+      hospital: base(
+        "h_lakeside",
+        "Lakeside Community Clinic",
+        "LCC",
+        "lakeside-clinic.example",
+        {
+          staff_count: 23,
+          created_at: iso(now - 180 * D),
+          last_activity_at: iso(now - 3 * D),
+          first_admin: accepted(
+            "inv_lakeside1",
+            "Halima Yusuf",
+            "halima.yusuf@lakeside-clinic.example",
+            180 * D,
+          ),
+        },
+      ),
+      admins: [admin("Halima Yusuf", "halima.yusuf@lakeside-clinic.example")],
+      sso: NO_SSO,
+      ...clear,
+    },
+    {
+      // Active for 9 days, nobody asking yet: zeros, no previous period.
+      hospital: base(
+        "h_hilltop",
+        "Hilltop Cottage Hospital",
+        "HCH",
+        "hilltop.example",
+        {
+          staff_count: 12,
+          created_at: iso(now - 10 * D),
+          first_admin: accepted(
+            "inv_hilltop1",
+            "Kunle Bello",
+            "kunle.bello@hilltop.example",
+            10 * D,
+          ),
+        },
+      ),
+      admins: [admin("Kunle Bello", "kunle.bello@hilltop.example")],
+      sso: NO_SSO,
+      ...clear,
+    },
   ].map((r) => ({
     ...r,
     hospital: {

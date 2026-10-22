@@ -46,7 +46,7 @@ const NEW: HospitalIn = {
 };
 
 describe("mock platform API", () => {
-  it("lists all seven sample hospitals and filters by status and by name or short code", async () => {
+  it("lists all nine sample hospitals and filters by status and by name or short code", async () => {
     const { m } = setup();
     const all = await m.listHospitals({});
     expect(all.hospitals.map((h) => h.name)).toEqual([
@@ -57,6 +57,8 @@ describe("mock platform API", () => {
       "Westfield Clinic",
       "Harbour View Hospital",
       "Southpoint Hospital",
+      "Lakeside Community Clinic",
+      "Hilltop Cottage Hospital",
     ]);
     expect(all.next_cursor).toBeNull();
     for (const h of all.hospitals) expect(h.id).toMatch(/^h_[A-Za-z0-9_-]+$/);
@@ -71,6 +73,8 @@ describe("mock platform API", () => {
       "h_havana",
       "h_northgate",
       "h_riverside",
+      "h_lakeside",
+      "h_hilltop",
     ]);
 
     expect(
@@ -165,7 +169,7 @@ describe("mock platform API", () => {
     expect(h.first_admin!.invite_id).toMatch(/^inv_[A-Za-z0-9_-]+$/);
     // A retry with the same key does not add it twice.
     expect((await m.addHospital(NEW, key)).id).toBe(h.id);
-    expect((await m.listHospitals({})).hospitals).toHaveLength(8);
+    expect((await m.listHospitals({})).hospitals).toHaveLength(10);
   });
 
   it("invites expire after 7 days", async () => {
@@ -472,7 +476,7 @@ describe("mock platform API", () => {
 
   it("an auditor's write is forbidden", async () => {
     const { m, as } = setup(TEAM_EMAILS.amara);
-    expect((await m.listHospitals({})).hospitals).toHaveLength(7);
+    expect((await m.listHospitals({})).hospitals).toHaveLength(9);
     expect((await m.listTeam()).members.find((x) => x.is_you)?.id).toBe(
       "tm_amara",
     );

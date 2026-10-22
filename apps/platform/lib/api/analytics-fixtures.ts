@@ -16,10 +16,10 @@ import type {
 import type { Person } from "./contract";
 
 /**
- * "normal": the demo. "guard": Northgate's serious change is gone while
- * Harbour View has unhandled Critical alerts past target (hidden as fewer
- * than 5), which the app must refuse to show as "Nothing unusual".
- * "unavailable": every area fails.
+ * "normal": the demo. "guard": Northgate's serious change is gone while its
+ * unhandled Critical alerts past target (hidden as fewer than 5) stay, which
+ * the app must refuse to show as "Nothing unusual". "unavailable": every
+ * area fails. Only active hospitals appear.
  */
 export type AnalyticsMode = "normal" | "guard" | "unavailable";
 
@@ -35,10 +35,8 @@ const person = (id: string, name: string): Person => ({ id, name });
 const HAVANA = person("h_havana", "Havana Hospital");
 const NORTHGATE = person("h_northgate", "Northgate General Hospital");
 const RIVERSIDE = person("h_riverside", "Riverside Children's Hospital");
-const EASTBROOK = person("h_eastbrook", "Eastbrook Medical Centre");
-const WESTFIELD = person("h_westfield", "Westfield Clinic");
-const HARBOUR = person("h_harbour", "Harbour View Hospital");
-const SOUTHPOINT = person("h_southpoint", "Southpoint Hospital");
+const LAKESIDE = person("h_lakeside", "Lakeside Community Clinic");
+const HILLTOP = person("h_hilltop", "Hilltop Cottage Hospital");
 const TUNDE = person("tm_tunde", "Tunde Okafor");
 /** The series of a change across all hospitals. */
 const ALL_HOSPITALS = person("all", "All hospitals");
@@ -72,7 +70,7 @@ type Profile = {
   /** The last 7 days, where they differ. */
   current: Partial<Daily>;
   /** Unhandled Critical alerts past target, now. */
-  overdue: Record<"normal" | "guard", number>;
+  overdue: number;
   /** Seed for the day-to-day wobble. */
   seed: number;
 };
@@ -118,7 +116,7 @@ const PROFILES: Profile[] = [
     },
     // Reviews got faster; Low potassium alerts rose here too.
     current: { review_hours: 14, urgent: 11 },
-    overdue: { normal: 0, guard: 0 },
+    overdue: 0,
     seed: 1,
   },
   {
@@ -148,7 +146,8 @@ const PROFILES: Profile[] = [
       needs_review: 0.21,
       urgent: 11,
     },
-    overdue: { normal: 0, guard: 0 },
+    // 3 past target (hidden as fewer than 5): the serious change covers it.
+    overdue: 3,
     seed: 2,
   },
   {
@@ -173,59 +172,13 @@ const PROFILES: Profile[] = [
     },
     // Questions down 41% (140 → 83 a week).
     current: { questions: 83 / 7, urgent: 5 },
-    overdue: { normal: 0, guard: 0 },
+    overdue: 0,
     seed: 3,
   },
   {
-    // Set-up incomplete since 9 days ago: nobody active yet, so zeros and
-    // no previous period.
-    hospital: EASTBROOK,
-    staff: 0,
-    clinicians: [0, 0, 0, 0],
-    previous: NONE,
-    current: {},
-    overdue: { normal: 0, guard: 0 },
-    seed: 4,
-  },
-  {
-    // Deactivated: zeros, which show as 0.
-    hospital: WESTFIELD,
-    staff: 41,
-    clinicians: [0, 0, 0, 0],
-    previous: NONE,
-    current: {},
-    overdue: { normal: 0, guard: 0 },
-    seed: 5,
-  },
-  {
-    hospital: HARBOUR,
-    staff: 133,
-    clinicians: [3, 9, 12, 15],
-    previous: {
-      questions: 6,
-      critical: 0.4,
-      urgent: 1.2,
-      info: 2.5,
-      unhandled: 0.15,
-      ack_minutes: 25,
-      critical_ack_minutes: 14,
-      critical_within: 0.8,
-      needs_review: 0.15,
-      high: 0.6,
-      medium: 0.28,
-      reviewed: 0.1,
-      agreement: 0.85,
-      review_hours: 34,
-    },
-    current: {},
-    // 3 overdue: hidden as fewer than 5, with no serious change for it.
-    overdue: { normal: 0, guard: 3 },
-    seed: 6,
-  },
-  {
     // A small hospital: its counts are 1–4, so they are hidden.
-    hospital: SOUTHPOINT,
-    staff: 58,
+    hospital: LAKESIDE,
+    staff: 23,
     clinicians: [1, 1, 2, 3],
     previous: {
       questions: 0.12,
@@ -244,8 +197,19 @@ const PROFILES: Profile[] = [
       review_hours: 40,
     },
     current: {},
-    overdue: { normal: 0, guard: 0 },
+    overdue: 0,
     seed: 7,
+  },
+  {
+    // Active since 9 days ago, nobody asking yet: zeros, which show as 0,
+    // and no previous period.
+    hospital: HILLTOP,
+    staff: 12,
+    clinicians: [0, 0, 0, 0],
+    previous: NONE,
+    current: {},
+    overdue: 0,
+    seed: 8,
   },
 ];
 
@@ -327,8 +291,8 @@ export function seedChanges(now: number, mode: AnalyticsMode): Change[] {
       version: 1,
     },
     {
-      id: "chg_emc_clinicians",
-      hospital: EASTBROOK,
+      id: "chg_hch_clinicians",
+      hospital: HILLTOP,
       area: "use",
       measure: "active_clinicians",
       direction: "worse",
@@ -337,7 +301,7 @@ export function seedChanges(now: number, mode: AnalyticsMode): Change[] {
       previous: g(null),
       current: g(0),
       summary:
-        "Eastbrook Medical Centre: no clinicians active yet, 9 days after it was added",
+        "Hilltop Cottage Hospital: no clinicians active yet, 9 days after it started",
       follow_up: null,
       version: 1,
     },
@@ -721,7 +685,7 @@ export function buildAnalytics(
     };
   }
   const raws = PROFILES.map((p) =>
-    sum(p, 0, days, p.clinicians[CLIN[period]], p.overdue[mode]),
+    sum(p, 0, days, p.clinicians[CLIN[period]], p.overdue),
   );
   const rows = <R>(make: (x: Raw) => Body<R>) =>
     raws.map((x, i) => ({ hospital: PROFILES[i]!.hospital, ...make(x) }) as R);

@@ -186,14 +186,14 @@ describe("mock analytics", () => {
     const use = ok(a.use);
     const row = (id: string) => use.rows.find((r) => r.hospital.id === id)!;
     // The small hospital: 1–4 are hidden, and so is any rate over them.
-    const small = row("h_southpoint");
+    const small = row("h_lakeside");
     expect(small.questions).toEqual({ value: null, suppressed: true });
     expect(small.questions_per_clinician).toEqual({
       value: null,
       suppressed: true,
     });
     // The hospital with zeros shows them.
-    const zero = row("h_westfield");
+    const zero = row("h_hilltop");
     expect(zero.questions).toEqual({ value: 0, suppressed: false });
     expect(zero.active_clinicians).toEqual({ value: 0, suppressed: false });
     expect(zero.questions_per_clinician.suppressed).toBe(false);
@@ -384,15 +384,16 @@ describe("mock analytics", () => {
     expect(north.events[0]!.action).toBe("change_follow_up_undone");
   });
 
-  it("Eastbrook has no admins and no previous period", async () => {
+  it("Eastbrook has no admins; Hilltop has no previous period", async () => {
     const { m } = setup();
     const h = await m.getHospital("h_eastbrook");
     expect(h.status).toBe("setup_incomplete");
     expect(h.admins).toEqual([]);
     expect(h.first_admin?.status).toBe("expired");
-    const east = await change(m, byHospital("h_eastbrook"));
-    expect(east.previous).toEqual({ value: null, suppressed: false });
-    expect(east.current.suppressed).toBe(false);
+    // A hospital new this month (active, R4): nothing earlier to compare.
+    const hill = await change(m, byHospital("h_hilltop"));
+    expect(hill.previous).toEqual({ value: null, suppressed: false });
+    expect(hill.current.suppressed).toBe(false);
     // Active hospitals list their active admins.
     const havana = await m.getHospital("h_havana");
     expect(havana).toMatchObject({
@@ -454,7 +455,7 @@ describe("mock analytics", () => {
     );
     expect(h.hospital.id).toBe("h_riverside");
     expect(h.points.every((pt) => typeof pt.median === "number")).toBe(true);
-    const small = await m.getHospitalSeries("h_southpoint", "questions", "7d");
+    const small = await m.getHospitalSeries("h_lakeside", "questions", "7d");
     for (const pt of small.points)
       if (pt.value.value !== null) expect(pt.value.value).toBe(0);
     expect(await failure(m.getChangeSeries("chg_nope", "30d"))).toEqual([
@@ -475,19 +476,50 @@ describe("mock analytics", () => {
     ]);
   });
 
-  it("the 'guard' option drops Northgate's serious change and keeps Harbour View overdue", async () => {
-    const { m } = setup("guard");
-    const a = await m.getAnalytics("30d");
-    expect(items(a).some((c) => c.serious)).toBe(false);
-    const harbour = ok(a.alerts).rows.find(
-      (r) => r.hospital.id === "h_harbour",
-    )!;
-    expect(harbour.critical_overdue).toEqual({ value: null, suppressed: true });
+  it("the 'guard' option drops Northgate's serious change and keeps its overdue", async () => {
+    const overdue = (a: AnalyticsOut) =>
+      ok(a.alerts).rows.find((r) => r.hospital.id === "h_northgate")!
+        .critical_overdue;
+    const guard = await setup("guard").m.getAnalytics("30d");
+    expect(items(guard).some((c) => c.serious)).toBe(false);
+    expect(overdue(guard)).toEqual({ value: null, suppressed: true });
+    // Normal: the same overdue, covered by Northgate's serious change.
     const normal = await setup().m.getAnalytics("30d");
-    const calm = ok(normal.alerts).rows.find(
-      (r) => r.hospital.id === "h_harbour",
-    )!;
-    expect(calm.critical_overdue).toEqual({ value: 0, suppressed: false });
+    expect(overdue(normal)).toEqual({ value: null, suppressed: true });
+    expect(
+      items(normal).some((c) => c.serious && c.hospital?.id === "h_northgate"),
+    ).toBe(true);
+  });
+
+  it("analytics cover active hospitals only", async () => {
+    const { m } = setup();
+    const active = (await m.listHospitals({ status: "active" })).hospitals.map(
+      (h) => h.id,
+    );
+    expect(active).toEqual([
+      "h_havana",
+      "h_northgate",
+      "h_riverside",
+      "h_lakeside",
+      "h_hilltop",
+    ]);
+    for (const mode of ["normal", "guard"] as const)
+      for (const p of PERIODS) {
+        const a = await setup(mode).m.getAnalytics(p);
+        for (const area of [a.use, a.alerts, a.quality, a.hospitals])
+          expect(ok(area).rows.map((r) => r.hospital.id)).toEqual(active);
+        for (const c of items(a))
+          if (c.hospital) expect(active).toContain(c.hospital.id);
+      }
+    for (const id of [
+      "h_eastbrook",
+      "h_westfield",
+      "h_harbour",
+      "h_southpoint",
+    ])
+      expect(
+        await failure(m.getHospitalSeries(id, "questions", "30d")),
+      ).toEqual([404, "not_found"]);
   });
 
   it("the 'unavailable' option makes every area unavailable", async () => {
