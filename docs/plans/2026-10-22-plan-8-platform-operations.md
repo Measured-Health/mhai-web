@@ -151,7 +151,7 @@
 - **The bell is left out of Plan 8.** That covers a request waiting for you, a review date reached and health problems. 7d's notification shape is analytics-only, so they wait for a follow-up.
 - **The optional extras** (pause clean-up and the health banner) are Task 13, built last. They can be dropped without touching anything else.
 - **`useTabVisible`** is imported from `lib/queries/notifications.ts` (7d), not moved.
-- **The backend contract.** Spec §9 goes to mhai-multiagent `docs/specs/2026-10-17-frontend-requirements.md` as §14.9, filed by the controller with 8a, covering all of §9 (numbering across plans: 6 is §14.8, 8 is §14.9, 9 is §14.10, 11 is §14.11, 12 is §14.12).
+- **The backend contract.** Spec §9 goes to mhai-multiagent `docs/specs/2026-10-17-frontend-requirements.md` as §14.8, filed by the controller with 8a, covering all of §9 (numbering across plans: 6 updates §10, 8 is §14.8, 9 is §14.9, 11 is §14.10, 12 is §14.10).
 
 ## Review Focus
 
@@ -1403,6 +1403,6 @@ Build it if wanted. Leaving it out changes nothing else.
 ## Across plans (controller, 22 Oct 2026)
 
 - **Platform sidebar order** once every plan has merged: Hospitals · Usage · Analysis · Clearances · Legal holds · System · Settings · Team · Activity · Audit log · Account. Whichever plan merges second fixes `nav.ts` to match.
-- **Backend requirements numbering:** Plan 6 is §14.8, Plan 8 is §14.9, Plan 9 is §14.10, Plan 11 is §14.11, and Plan 12 is §14.12.
+- **Backend requirements numbering:** Plan 6 updates §10 (Analysis), Plan 8 is §14.8, Plan 9 is §14.9, Plan 11 is §14.10 (plus its hospital side in §10), and Plan 12 is §14.10.
 - **Audit kinds:** Plans 8 and 11 add their event kinds to Plan 9's `lib/audit/kinds.ts` if Plan 9 has merged first; otherwise Plan 9 adds theirs.
 - **Binary pass-through:** Plans 9 and 11 share one helper in `route.ts`. Whichever lands second reuses it.
