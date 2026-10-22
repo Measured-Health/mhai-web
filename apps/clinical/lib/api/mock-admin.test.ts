@@ -125,6 +125,22 @@ describe("the sample hospital", () => {
     expect(other).toMatchObject({ kind: "roles_changed", flag: null });
   });
 
+  it("giving yourself Analyst logs the flagged self change and the Analyst kind", async () => {
+    const a = mockAdminAs(DEMO_EMAILS.hospitalAdmin);
+    const me = await row(a, "s-nwosu");
+    await a.updateStaff("s-nwosu", {
+      version: me.version,
+      roles: ["clinician", "analyst", "hospital_admin"],
+    });
+    const { events } = await a.listActivity({});
+    expect(events.slice(0, 2)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "self_role_change", flag: "alert" }),
+        expect.objectContaining({ kind: "analyst_granted" }),
+      ]),
+    );
+  });
+
   it("analyst without clinician is 422", async () => {
     const a = director();
     const okafor = await row(a, "s-okafor");

@@ -286,6 +286,19 @@ describe("StaffPanel", () => {
     );
   });
 
+  it("unticking Clinician on Clinician + Analyst alone needs a role", async () => {
+    const panel = await openWithAnalysis("s-kemi");
+    await userEvent.click(
+      await within(panel).findByRole("checkbox", { name: "Clinician" }),
+    );
+    expect(
+      within(panel).getByText("Choose at least one role."),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "Save changes" }),
+    ).toBeDisabled();
+  });
+
   it("granting Analyst saves and logs 'gave Kemi Adeyemi Analyst access'", async () => {
     const update = vi.spyOn(holder.client, "updateStaff");
     const panel = await openWithAnalysis("s-okafor");

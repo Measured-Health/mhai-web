@@ -39,14 +39,17 @@ const same = (a: string[], b: string[]) =>
 const toggle = <T extends string>(xs: T[], x: T): T[] =>
   xs.includes(x) ? xs.filter((y) => y !== x) : [...xs, x];
 
-/** Only what changed, with the row's version (R7); null when nothing did. */
-export function patchFor(row: StaffOut, d: AccessDraft): StaffPatchIn | null {
-  const p: StaffPatchIn = { version: row.version };
-  // Analyst needs Clinician: without it the role is dropped, not sent.
-  const roles = ROLES.filter(
+/** Analyst needs Clinician: without it the role is dropped, not sent. */
+const effectiveRoles = (d: AccessDraft): StaffRole[] =>
+  ROLES.filter(
     (r) =>
       d.roles.includes(r) && (r !== "analyst" || d.roles.includes("clinician")),
   );
+
+/** Only what changed, with the row's version (R7); null when nothing did. */
+export function patchFor(row: StaffOut, d: AccessDraft): StaffPatchIn | null {
+  const p: StaffPatchIn = { version: row.version };
+  const roles = effectiveRoles(d);
   if (!same(roles, row.roles)) p.roles = roles;
   if (d.specialty !== row.specialty) p.specialty = d.specialty;
   const canReview = d.canReview && d.roles.includes("clinician");
@@ -57,7 +60,7 @@ export function patchFor(row: StaffOut, d: AccessDraft): StaffPatchIn | null {
 }
 
 function problemOf(d: AccessDraft): string | null {
-  if (!d.roles.length) return "Choose at least one role.";
+  if (!effectiveRoles(d).length) return "Choose at least one role.";
   if (d.canReview && d.roles.includes("clinician") && !d.reviewIn.length)
     return "Choose at least one specialty they can review in.";
   return null;
