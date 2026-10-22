@@ -34,7 +34,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("admin queries", () => {
   it("lists the staff", async () => {
     const { result } = renderHook(() => useStaff(), { wrapper });
-    await waitFor(() => expect(result.current.data).toHaveLength(13));
+    await waitFor(() => expect(result.current.data).toHaveLength(14));
   });
 
   it("sends one idempotency key per invite, reused on its retry", async () => {
@@ -67,7 +67,7 @@ describe("admin queries", () => {
       () => ({ staff: useStaff(), remove: useRemoveStaff() }),
       { wrapper },
     );
-    await waitFor(() => expect(result.current.staff.data).toHaveLength(13));
+    await waitFor(() => expect(result.current.staff.data).toHaveLength(14));
     act(() =>
       result.current.remove.mutate({
         id: "s-eze",
@@ -88,7 +88,7 @@ describe("admin queries", () => {
       () => ({ staff: useStaff(), update: useUpdateStaff() }),
       { wrapper },
     );
-    await waitFor(() => expect(result.current.staff.data).toHaveLength(13));
+    await waitFor(() => expect(result.current.staff.data).toHaveLength(14));
     update.mockRejectedValueOnce(new ApiError(404, "not_found"));
     list.mockResolvedValueOnce(
       (await mockAdminAs(DEMO_EMAILS.director).listStaff()).filter(
@@ -210,7 +210,7 @@ describe("admin queries", () => {
       () => ({ staff: useStaff(), remove: useRemoveStaff() }),
       { wrapper },
     );
-    await waitFor(() => expect(result.current.staff.data).toHaveLength(13));
+    await waitFor(() => expect(result.current.staff.data).toHaveLength(14));
     act(() =>
       result.current.remove.mutate({
         id: "s-eze",

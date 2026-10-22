@@ -62,6 +62,12 @@ export function describeEvent(e: ActivityEventOut): string {
       return "Accepted invite and finished first sign-in";
     case "roles_changed":
       return `Changed ${t}'s roles`;
+    case "analyst_granted":
+      return `${actorName(e)} gave ${t} Analyst access`;
+    case "analyst_removed":
+      return `${actorName(e)} removed Analyst access from ${t}`;
+    case "analysis_patients_viewed":
+      return `${actorName(e)} opened ${e.count ?? "several"} de-identified patients in Analysis`;
     case "specialty_changed":
       return e.specialty
         ? `Changed ${t}'s specialty to ${e.specialty}`
