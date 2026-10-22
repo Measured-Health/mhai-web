@@ -431,6 +431,44 @@ export const KINDS: Record<string, Kind> = {
     { targets: ["change"], named: true },
   ),
   analytics_email_changed: k("platform", "Changed their analytics email"),
+  // Failed jobs and platform settings (Plan 8).
+  jobs_retried: k("platform", "Retried failed jobs"),
+  jobs_cancelled: k("platform", "Cancelled failed jobs"),
+  retention_changed: k(
+    "platform",
+    named(
+      (t) => `Changed records retention: ${t}`,
+      "Changed records retention",
+    ),
+    { targets: ["setting"], named: true },
+  ),
+  setting_change_requested: k(
+    "platform",
+    named((t) => `Asked for a change: ${t}`, "Asked for a change to a setting"),
+    { targets: ["setting"], named: true },
+  ),
+  setting_change_approved: k(
+    "platform",
+    named((t) => `Approved a change: ${t}`, "Approved a change to a setting"),
+    { targets: ["setting"], named: true },
+  ),
+  setting_change_cancelled: k(
+    "platform",
+    named(
+      (t) => `Cancelled a change request: ${t}`,
+      "Cancelled a change request",
+    ),
+    { targets: ["setting"], named: true },
+  ),
+  setting_change_lapsed: k(
+    "platform",
+    named((t) => `A change request lapsed: ${t}`, "A change request lapsed"),
+    { targets: ["setting"], named: true },
+  ),
+  clean_up_paused: k("platform", "Paused the records clean-up"),
+  clean_up_resumed: k("platform", "Resumed the records clean-up"),
+  triage_switched_off: k("platform", "Switched triage off"),
+  feedback_buffer_cleared: k("platform", "Cleared unapproved learning data"),
   // Export.
   audit_exported: k(
     "export",
@@ -518,6 +556,36 @@ export const KINDS: Record<string, Kind> = {
     targets: ["hold", "hospital"],
     named: true,
   }),
+  hold_edited: k(
+    "retention",
+    (e) => `Changed the review date or note on a legal hold on ${hName(e)}`,
+    { targets: ["hold", "hospital"], named: true },
+  ),
+  hold_lift_requested: k(
+    "retention",
+    (e) => `Asked to lift a legal hold on ${hName(e)}`,
+    { targets: ["hold", "hospital"], named: true },
+  ),
+  hold_lift_cancelled: k(
+    "retention",
+    (e) => `Cancelled the request to lift a legal hold on ${hName(e)}`,
+    { targets: ["hold", "hospital"], named: true },
+  ),
+  hold_lift_lapsed: k(
+    "retention",
+    (e) => `The request to lift a legal hold on ${hName(e)} lapsed`,
+    { targets: ["hold", "hospital"], named: true },
+  ),
+  hold_lift_undone: k(
+    "retention",
+    (e) => `Undid the lift of a legal hold on ${hName(e)}`,
+    { targets: ["hold", "hospital"], named: true },
+  ),
+  hold_released: k(
+    "retention",
+    (e) => `Released the records under a legal hold on ${hName(e)}`,
+    { targets: ["hold", "hospital"], named: true },
+  ),
   // Security.
   step_up_refused: k("security", "Two-step code refused"),
   mfa_locked: k("security", "Locked after too many wrong codes"),

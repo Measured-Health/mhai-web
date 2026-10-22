@@ -193,3 +193,43 @@ describe("the audit kinds", () => {
     );
   });
 });
+
+describe("Plan 8's Activity actions", () => {
+  it("holds sit under retention; jobs and settings under platform", () => {
+    for (const kind of [
+      "hold_placed",
+      "hold_edited",
+      "hold_lift_requested",
+      "hold_lift_cancelled",
+      "hold_lift_lapsed",
+      "hold_lifted",
+      "hold_lift_undone",
+      "hold_released",
+    ]) {
+      expect(KINDS[kind].type, kind).toBe("retention");
+      expect(KINDS[kind].targets, kind).toEqual(["hold", "hospital"]);
+    }
+    for (const kind of [
+      "jobs_retried",
+      "jobs_cancelled",
+      "retention_changed",
+      "setting_change_requested",
+      "setting_change_approved",
+      "setting_change_cancelled",
+      "setting_change_lapsed",
+      "clean_up_paused",
+      "clean_up_resumed",
+      "triage_switched_off",
+      "feedback_buffer_cleared",
+    ])
+      expect(KINDS[kind].type, kind).toBe("platform");
+    expect(KINDS.setting_change_requested.targets).toEqual(["setting"]);
+    expect(KINDS.jobs_retried.targets).toEqual([]);
+  });
+
+  it("no hold kind accepts a note", () => {
+    const holds = Object.keys(KINDS).filter((k) => k.startsWith("hold_"));
+    expect(holds).toHaveLength(8);
+    for (const kind of holds) expect(KINDS[kind].note, kind).toBe(false);
+  });
+});

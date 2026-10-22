@@ -1,4 +1,4 @@
-import { unimplementedAudit } from "./mock-audit-stub";
+import { createMockAudit, type AuditMockOptions } from "./mock-audit";
 import { ApiError } from "@mhai/api-client/errors";
 import {
   BlockedError,
@@ -207,6 +207,7 @@ export function createMockPlatform({
   twoStep,
   analytics = "normal",
   notifications = "normal",
+  audit,
   onCore,
 }: {
   now?: () => number;
@@ -221,6 +222,8 @@ export function createMockPlatform({
   analytics?: AnalyticsMode;
   /** "unavailable": the notifications list and marking seen fail with 503. */
   notifications?: "normal" | "unavailable";
+  /** The sample audit log's state and faults (see `AuditMockOptions`). */
+  audit?: AuditMockOptions;
   /** For tests: the core the areas are built on, once it exists. */
   onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
@@ -505,6 +508,7 @@ export function createMockPlatform({
     shared: {},
   };
   onCore?.(core);
+  const auditPart = createMockAudit(core, audit);
 
   const hospitalsPart = {
     listHospitals: (q) =>
@@ -1021,6 +1025,6 @@ export function createMockPlatform({
   // `...createMockHolds(core, holds)`.
   return {
     ...hospitalsPart,
-    ...unimplementedAudit(),
+    ...auditPart,
   };
 }
