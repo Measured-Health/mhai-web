@@ -9,6 +9,7 @@ import type {
   Period,
   SeriesOut,
 } from "./analytics-contract";
+import type { EmailPref, NotificationsOut } from "./notifications-contract";
 
 export type HospitalStatus =
   | "active"
@@ -151,7 +152,29 @@ export type ActivityAction =
   | "team_removed"
   | "change_followed_up"
   | "change_note_edited"
-  | "change_follow_up_undone";
+  | "change_follow_up_undone"
+  // Legal holds (Plan 8a); the target is the hold's reference, never its note.
+  | "hold_placed"
+  | "hold_edited"
+  | "hold_lift_requested"
+  | "hold_lift_cancelled"
+  | "hold_lift_lapsed"
+  | "hold_lifted"
+  | "hold_lift_undone"
+  | "hold_released"
+  // Failed jobs (Plan 8b); the target is a count, e.g. "3 failed jobs".
+  | "jobs_retried"
+  | "jobs_cancelled"
+  // Platform settings (Plan 8c); the target says the change.
+  | "retention_changed"
+  | "setting_change_requested"
+  | "setting_change_approved"
+  | "setting_change_cancelled"
+  | "setting_change_lapsed"
+  | "clean_up_paused"
+  | "clean_up_resumed"
+  | "triage_switched_off"
+  | "feedback_buffer_cleared";
 export type ActivityEvent = {
   id: string;
   at: string;
@@ -160,6 +183,27 @@ export type ActivityEvent = {
   hospital: Person | null;
   target: string | null;
   detail: string | null;
+};
+
+/** The changes that need a second platform admin's approval. */
+export type TwoPersonKind = "hold_lift" | "retention_shorten" | "triage_on";
+/**
+ * A change one platform admin asked for and a different one must approve,
+ * with step-up, within 7 days. Either may cancel it, with no step-up.
+ */
+export type TwoPersonRequest = {
+  id: string;
+  kind: TwoPersonKind;
+  requested_by: Person;
+  requested_at: string;
+  reason: string;
+  /**
+   * Whether the signed-in person asked for it: the only thing that decides
+   * who may approve (never a name comparison).
+   */
+  requested_by_you: boolean;
+  /** It lapses then: an approval after it is 409 `expired`. */
+  expires_at: string;
 };
 
 /** Every write sends one; the same key on a retry. */
@@ -180,6 +224,10 @@ export class BlockedError extends ApiError {
   }
 }
 
+/**
+ * Each area (legal holds, operations, settings, the audit log) keeps its
+ * client in its own contract file and adds its name to `extends` here.
+ */
 export interface PlatformClient {
   listHospitals(
     q: HospitalQuery,
@@ -255,4 +303,18 @@ export interface PlatformClient {
     body: { version: number },
     opts: WriteOpts,
   ): Promise<Change>;
+  /** The signed-in person's notifications, newest first, at most 20. */
+  listNotifications(): Promise<NotificationsOut>;
+  /**
+   * Marks the given ones seen for the signed-in person, or all of them when
+   * no ids are given. Auditors may too: it is their own read state.
+   */
+  markSeen(
+    body: { ids?: string[] },
+    opts: WriteOpts,
+  ): Promise<{ unseen: number }>;
+  /** Platform admins only; an auditor gets 403. */
+  getEmailPref(): Promise<EmailPref>;
+  /** 409 `conflict` on a stale version; an auditor gets 403. */
+  setEmailPref(body: EmailPref, opts: WriteOpts): Promise<EmailPref>;
 }

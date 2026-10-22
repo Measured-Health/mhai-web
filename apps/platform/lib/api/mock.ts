@@ -33,10 +33,18 @@ import {
 import {
   buildAnalytics,
   buildSeries,
+  changeFlaggedAt,
   isAnalyticsHospital,
   seedChanges,
   type AnalyticsMode,
 } from "./analytics-fixtures";
+import {
+  EMAIL_MODES,
+  NOTIFICATIONS_MAX,
+  type EmailMode,
+  type EmailPref,
+  type Notification,
+} from "./notifications-contract";
 
 const PAGE = 50;
 /** An approved removal becomes final this long after approval (demo time). */
@@ -133,6 +141,60 @@ export function setMockSignedIn(email: string | null) {
 }
 
 /**
+ * What each area's mock (legal holds, operations, settings, the audit log)
+ * is built on: the demo's clock, its people, its hospitals and its record
+ * of activity, shared with the hospitals part. Built once per mock.
+ */
+export type MockCore = {
+  now(): number;
+  /** A fresh opaque id: `${prefix}_m{n}`. */
+  newId(prefix: string): string;
+  /** The demo's network delay. */
+  wait(): Promise<void>;
+  /** The signed-in team member: 401 when nobody, 403 when not on the team. */
+  you(): TeamMember;
+  /** A read: someone must be signed in. The reply is a per-caller copy. */
+  read<T>(fn: (m: TeamMember) => T): Promise<T>;
+  /**
+   * A write: platform admins only (403 otherwise); the same Idempotency-Key
+   * gets the same reply without doing it again.
+   */
+  write<T>(
+    opts: WriteOpts | undefined,
+    fn: (m: TeamMember) => T | Promise<T>,
+  ): Promise<T>;
+  /**
+   * A write to the signed-in person's own state, which an auditor may make
+   * too; the same key replays. Not logged.
+   */
+  own<T>(
+    opts: WriteOpts | undefined,
+    fn: (m: TeamMember) => T | Promise<T>,
+  ): Promise<T>;
+  /** Adds a line to Activity, newest first. */
+  log(
+    actor: Person,
+    action: ActivityAction,
+    extra?: {
+      hospital?: Person | null;
+      target?: string | null;
+      detail?: string | null;
+    },
+  ): void;
+  /** The person's own two-step or backup code in `body`, else refused. */
+  checkCode(m: TeamMember, body: unknown): Promise<void>;
+  /** The hospital's record, brought up to date; 404 when there is none. */
+  findHospital(id: string): HospitalRecord;
+  /** Every hospital's record, as stored (changes stick). */
+  hospitals(): HospitalRecord[];
+  /**
+   * State one area keeps for another to read (e.g. whether the clean-up is
+   * paused), by a key the areas agree on. Memory only.
+   */
+  shared: Record<string, unknown>;
+};
+
+/**
  * The demo's platform API: memory only (a reload resets it), never stored.
  * It refuses what the proxy and the backend refuse, with the same codes.
  */
@@ -143,6 +205,8 @@ export function createMockPlatform({
   stepUp,
   twoStep,
   analytics = "normal",
+  notifications = "normal",
+  onCore,
 }: {
   now?: () => number;
   /** The signed-in email, or null. */
@@ -154,6 +218,10 @@ export function createMockPlatform({
   twoStep?: (email: string) => boolean;
   /** Which sample analytics to serve (see `AnalyticsMode`). */
   analytics?: AnalyticsMode;
+  /** "unavailable": the notifications list and marking seen fail with 503. */
+  notifications?: "normal" | "unavailable";
+  /** For tests: the core the areas are built on, once it exists. */
+  onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
   const codes = stepUp ?? getDemoStepUp();
   let hospitals = seedHospitals(now());
@@ -163,7 +231,12 @@ export function createMockPlatform({
   const changes = seedChanges(now(), analytics);
   /** Replies to writes already done, by Idempotency-Key. */
   const done = new Map<string, unknown>();
+  /** Notification ids each person has seen, by team member id. */
+  const seenBy = new Map<string, Set<string>>();
+  /** Each platform admin's analytics email preference, by team member id. */
+  const emailPrefs = new Map<string, EmailPref>();
   let nextId = 1;
+  const newId = (prefix: string) => `${prefix}_m${nextId++}`;
 
   const wait = () =>
     delayMs > 0
@@ -201,7 +274,7 @@ export function createMockPlatform({
   ) {
     activity = [
       {
-        id: `ev_m${nextId++}`,
+        id: newId("ev"),
         at: iso(now()),
         actor,
         action,
@@ -265,12 +338,21 @@ export function createMockPlatform({
   }
 
   /**
-   * A reply as the signed-in member sees it: a hospital's removal says
-   * whether they asked for it (like TeamMember.is_you). `v` is a copy.
+   * A reply as the signed-in member sees it: every request in it (a
+   * hospital's removal, a two-person request, wherever it sits) says whether
+   * they asked for it, like TeamMember.is_you. `v` is a copy.
    */
   function forYou<T>(v: T, m: TeamMember): T {
-    const r = (v as { removal?: RemovalRequest | null } | null)?.removal;
-    if (r) r.requested_by_you = r.requested_by.id === m.id;
+    const walk = (x: unknown): void => {
+      if (Array.isArray(x)) return x.forEach(walk);
+      if (x === null || typeof x !== "object") return;
+      const o = x as Partial<Pick<RemovalRequest, "requested_by">> &
+        Record<string, unknown>;
+      if ("requested_by_you" in o && o.requested_by)
+        o.requested_by_you = o.requested_by.id === m.id;
+      Object.values(o).forEach(walk);
+    };
+    walk(v);
     // A change (a follow-up reply) or the analytics (its What changed list).
     const mine = (c: { follow_up?: FollowUp | null } | null | undefined) => {
       if (c?.follow_up) c.follow_up.by_you = c.follow_up.by.id === m.id;
@@ -320,7 +402,7 @@ export function createMockPlatform({
       (r) => r.hospital.short_code === code && r.hospital.id !== except,
     );
   const newInvite = (name: string, mail: string) => ({
-    invite_id: `inv_m${nextId++}`,
+    invite_id: newId("inv"),
     name,
     email: mail,
     status: "pending" as const,
@@ -361,7 +443,69 @@ export function createMockPlatform({
     if (analytics === "unavailable") fail(503, "unavailable");
   };
 
-  return {
+  /** One per current change, newest first, as `m` has seen them. */
+  function notificationsFor(m: TeamMember): Notification[] {
+    if (notifications === "unavailable") fail(503, "unavailable");
+    const seen = seenBy.get(m.id);
+    return changes
+      .map((c): Notification => ({
+        id: `ntf_${c.id}`,
+        change_id: c.id,
+        hospital: c.hospital,
+        summary: c.summary,
+        serious: c.serious,
+        direction: c.direction,
+        measure: c.measure,
+        previous: c.previous,
+        current: c.current,
+        at: changeFlaggedAt(c.id, now()),
+        seen: seen?.has(`ntf_${c.id}`) ?? false,
+      }))
+      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+      .slice(0, NOTIFICATIONS_MAX);
+  }
+  const unseenOf = (items: Notification[]) =>
+    items.filter((i) => !i.seen).length;
+  /**
+   * A write to the signed-in person's own state, which an auditor may make
+   * too; the same Idempotency-Key gets the same reply. Not logged: it is no
+   * admin action.
+   */
+  async function own<T>(
+    opts: WriteOpts | undefined,
+    fn: (m: TeamMember) => T | Promise<T>,
+  ): Promise<T> {
+    await wait();
+    const m = you();
+    const key = opts?.idempotencyKey;
+    if (key && done.has(key)) return copy(done.get(key) as T);
+    const out = await fn(m);
+    if (key) done.set(key, copy(out));
+    return copy(out);
+  }
+  /** The email preference is for platform admins only. */
+  const prefOf = (m: TeamMember): EmailPref => {
+    if (m.role !== "platform_admin") fail(403, "forbidden");
+    return emailPrefs.get(m.id) ?? { mode: "off", version: 1 };
+  };
+
+  const core: MockCore = {
+    now,
+    newId,
+    wait,
+    you,
+    read,
+    write,
+    own,
+    log,
+    checkCode,
+    findHospital: find,
+    hospitals: () => hospitals,
+    shared: {},
+  };
+  onCore?.(core);
+
+  const hospitalsPart = {
     listHospitals: (q) =>
       read(() => {
         hospitals.forEach(settle);
@@ -703,7 +847,7 @@ export function createMockPlatform({
         if (!ROLES.includes(role)) invalid();
         if (team.some((t) => t.email === mail)) fail(409, "duplicate");
         const t: TeamMember = {
-          id: `tm_m${nextId++}`,
+          id: newId("tm"),
           name,
           email: mail,
           role,
@@ -830,5 +974,51 @@ export function createMockPlatform({
         });
         return copy(c);
       }),
+
+    listNotifications: () =>
+      read((m) => {
+        const items = notificationsFor(m);
+        return { items, unseen: unseenOf(items) };
+      }),
+
+    markSeen: (body, opts) =>
+      own(opts, (m) => {
+        const raw = (body as { ids?: unknown } | null)?.ids;
+        if (
+          raw !== undefined &&
+          (!Array.isArray(raw) || raw.some((x) => typeof x !== "string"))
+        )
+          invalid();
+        const ids = raw as string[] | undefined;
+        const items = notificationsFor(m);
+        const seen = seenBy.get(m.id) ?? new Set<string>();
+        // No ids: all of them. Ids that aren't in the list are ignored.
+        for (const i of items) if (!ids || ids.includes(i.id)) seen.add(i.id);
+        seenBy.set(m.id, seen);
+        return { unseen: unseenOf(notificationsFor(m)) };
+      }),
+
+    getEmailPref: () => read((m) => prefOf(m)),
+
+    setEmailPref: (body, opts) =>
+      write(opts, (m) => {
+        const b = (body ?? {}) as { mode?: unknown; version?: unknown };
+        if (!EMAIL_MODES.includes(b.mode as EmailMode)) invalid();
+        if (typeof b.version !== "number") invalid();
+        const cur = prefOf(m);
+        if (b.version !== cur.version) fail(409, "conflict");
+        const next: EmailPref = {
+          mode: b.mode as EmailMode,
+          version: cur.version + 1,
+        };
+        emailPrefs.set(m.id, next);
+        return next;
+      }),
+  } satisfies Partial<PlatformClient>;
+
+  // Each area adds one spread, built on the same core, e.g.
+  // `...createMockHolds(core, holds)`.
+  return {
+    ...hospitalsPart,
   };
 }

@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The fonts are now served from the repository (`packages/tokens/fonts`)
+  instead of being fetched from Google during `next build`, so builds work
+  offline and no longer break on Google's font URLs. They look the same.
 - The repository is now npm workspaces: the app is in `apps/clinical` and
   the design tokens are in `packages/tokens`. There is no change to the
   app. If you keep a local `.env.local`, move it into `apps/clinical/`.
@@ -53,6 +56,11 @@ All notable changes to this project are documented here. The format follows
   counts of 1 to 4 shown as "Fewer than 5". Havana Hospital and two small
   sample hospitals join the sample data. End-to-end tests cover it on
   desktop and phone.
+- Notifications in the platform admin app, on sample data: a bell that
+  counts the analytics changes you haven't seen (seen is per person), and
+  for platform admins an **Analytics email** setting on Account: Off,
+  Critical only, or Critical and weekly digest. Auditors have the bell and
+  get no email. End-to-end tests cover it on desktop and phone.
 - Shared packages `@mhai/ui` (components) and `@mhai/api-client` (API,
   session and two-step helpers), used by both apps.
 

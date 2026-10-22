@@ -137,11 +137,22 @@ const SHAPES: [Method, string][] = [
   ["GET", "platform/analytics/hospitals/{id}/series"],
   ["PUT", "platform/analytics/changes/{id}/follow-up"],
   ["DELETE", "platform/analytics/changes/{id}/follow-up"],
+  ["GET", "platform/notifications"],
+  ["POST", "platform/notifications/seen"],
+  ["GET", "platform/me/analytics-email"],
+  ["PUT", "platform/me/analytics-email"],
+];
+/** The one write an auditor may make: their own read state. */
+const AUDITOR_WRITES: [Method, string][] = [
+  ["POST", "platform/notifications/seen"],
 ];
 let n = 0;
 const concrete = (shape: string) =>
   shape.split("/").map((p) => (p === "{id}" ? `id_${++n}-X` : p));
-const WRITES = SHAPES.filter(([m]) => m !== "GET");
+const WRITES = SHAPES.filter(
+  ([m, shape]) =>
+    m !== "GET" && !AUDITOR_WRITES.some(([am, as]) => am === m && as === shape),
+);
 const READS = SHAPES.filter(([m]) => m === "GET");
 
 describe("platform API proxy", () => {
@@ -176,6 +187,45 @@ describe("platform API proxy", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     },
   );
+
+  it("proxy: an auditor may POST seen but not PUT the preference", async () => {
+    await session({ roles: ["auditor"] });
+    fetchMock.mockResolvedValueOnce(Response.json({ unseen: 0 }));
+    const seen = await call("POST", ["platform", "notifications", "seen"], {
+      body: '{"ids":["ntf_1"]}',
+      headers: { "idempotency-key": "k-seen-1" },
+    });
+    expect(seen.status).toBe(200);
+    expect(await seen.json()).toEqual({ unseen: 0 });
+    expect(calls()).toHaveLength(1);
+    const [url, init] = calls()[0];
+    expect(url).toBe("http://api.test/api/v1/platform/notifications/seen");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe('{"ids":["ntf_1"]}');
+    expect(headersOf(calls()[0]).get("Idempotency-Key")).toBe("k-seen-1");
+
+    fetchMock.mockClear();
+    const put = await call("PUT", ["platform", "me", "analytics-email"], {
+      body: '{"mode":"critical","version":1}',
+    });
+    expect(put.status).toBe(403);
+    expect(await put.json()).toEqual({ code: "forbidden" });
+    // The exception is exactly one path: nearby writes stay refused.
+    for (const [method, path] of [
+      ["PUT", ["platform", "notifications", "seen"]],
+      ["POST", ["platform", "notifications"]],
+      ["POST", ["platform", "me", "analytics-email"]],
+    ] as [Method, string[]][]) {
+      const res = await call(method, path);
+      expect([403, 404]).toContain(res.status);
+    }
+    // ...and the seen exception still needs this app's origin.
+    const cross = await call("POST", ["platform", "notifications", "seen"], {
+      origin: "http://evil.test",
+    });
+    expect(cross.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 
   it.each(READS)(
     "an auditor can read every GET shape: %s %s",
@@ -222,6 +272,15 @@ describe("platform API proxy", () => {
     ["GET", ["platform", "analytics", "hospitals", "h1"]],
     ["GET", ["platform", "analytics", "hospitals", "..", "series"]],
     ["DELETE", ["platform", "analytics", "hospitals", "h1", "series"]],
+    ["GET", ["platform", "notifications", "seen"]],
+    ["POST", ["platform", "notifications"]],
+    ["PUT", ["platform", "notifications", "seen"]],
+    ["GET", ["platform", "notifications", "n1"]],
+    ["POST", ["platform", "notifications", "n1", "seen"]],
+    ["GET", ["platform", "me"]],
+    ["POST", ["platform", "me", "analytics-email"]],
+    ["PATCH", ["platform", "me", "analytics-email"]],
+    ["GET", ["platform", "me", "tm_ada", "analytics-email"]],
   ] as [Method, string[]][])(
     "unknown shapes are 404: %s %j",
     async (method, path) => {
@@ -420,6 +479,68 @@ describe("platform API proxy", () => {
     await call("GET", ["platform", "team"]);
     const s = await readSession();
     expect(Date.now() - s!.lastSeenAt).toBeLessThan(5_000);
+  });
+
+  describe("a background GET (X-MHAI-Background: 1)", () => {
+    const BG = { "x-mhai-background": "1" };
+    const TEN_MIN_AGO = () => Date.now() - 10 * 60_000;
+
+    it("doesn't extend the session, is still checked and is not forwarded", async () => {
+      const seenAt = TEN_MIN_AGO();
+      await session({ lastSeenAt: seenAt });
+      fetchMock.mockResolvedValueOnce(Response.json({ items: [], unseen: 0 }));
+      const res = await call("GET", ["platform", "notifications"], {
+        headers: BG,
+      });
+      expect(res.status).toBe(200);
+      expect((await readSession())!.lastSeenAt).toBe(seenAt);
+      expect(headersOf(calls()[0]!).has("x-mhai-background")).toBe(false);
+    });
+
+    it("is still refused for an idle session, even with polls in between", async () => {
+      await session({ lastSeenAt: Date.now() - IDLE_LIMIT_MS - 1000 });
+      fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+      const res = await call("GET", ["platform", "notifications"], {
+        headers: BG,
+      });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ code: "session_expired" });
+    });
+
+    it("still refreshes a token that is near its end, without touching the idle clock", async () => {
+      const seenAt = TEN_MIN_AGO();
+      await session({ expiresInMs: 2 * 60_000, lastSeenAt: seenAt });
+      fetchMock
+        .mockResolvedValueOnce(
+          Response.json({ access_token: "tok2", expires_in: 900 }),
+        )
+        .mockResolvedValueOnce(Response.json({}));
+      await call("GET", ["platform", "notifications"], { headers: BG });
+      const s = await readSession();
+      expect(s!.token).toBe("tok2");
+      expect(s!.lastSeenAt).toBe(seenAt);
+    });
+
+    it("a normal GET still extends the session", async () => {
+      await session({ lastSeenAt: TEN_MIN_AGO() });
+      fetchMock.mockResolvedValueOnce(Response.json({}));
+      await call("GET", ["platform", "notifications"]);
+      expect(Date.now() - (await readSession())!.lastSeenAt).toBeLessThan(
+        5_000,
+      );
+    });
+
+    it("a POST with the header is treated as a normal write and extends it", async () => {
+      await session({ lastSeenAt: TEN_MIN_AGO() });
+      fetchMock.mockResolvedValueOnce(Response.json({ unseen: 0 }));
+      const res = await call("POST", ["platform", "notifications", "seen"], {
+        headers: BG,
+      });
+      expect(res.status).toBe(200);
+      expect(Date.now() - (await readSession())!.lastSeenAt).toBeLessThan(
+        5_000,
+      );
+    });
   });
 
   it("refreshes a token with under 5 minutes left, with the audience header", async () => {
