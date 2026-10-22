@@ -40,15 +40,17 @@ export function ContactAdmins({
     }
   };
   const invite = h.first_admin ? INVITE[h.first_admin.status] : null;
+  // A backend that hasn't sent the list yet reads as none.
+  const admins = h.admins ?? [];
 
   return (
     <section aria-labelledby={titleId}>
       <h3 id={titleId} className="mb-2 text-[14px] font-semibold">
         Hospital admin
       </h3>
-      {h.admins.length > 0 ? (
+      {admins.length > 0 ? (
         <ul className="flex flex-col gap-2">
-          {h.admins.map((a) => (
+          {admins.map((a) => (
             <li
               key={a.email}
               className="flex flex-wrap items-center gap-x-3 gap-y-1"

@@ -199,27 +199,60 @@ Add to the backend requirements (mhai-multiagent `docs/specs/2026-10-17-frontend
 §14, as §14.7). It follows the §14 conventions: the `X-MHAI-Audience: platform` header, two-step
 required, auditors refused writes, `Idempotency-Key` on writes, opaque ids, and errors as `{code}`.
 
+A guarded value is `{value, suppressed}` as in Plan 5b: a hidden one is `{value: null,
+suppressed: true}`, and `{value: null, suppressed: false}` means nothing to show.
+
 - `GET /platform/analytics?period=7d|30d|90d` → `{period, from, to, changes, use, alerts,
 quality, hospitals}`, where each area is either its data with its own `updated_at`, or
   `{unavailable: true}`:
-  - `changes`: ranked, computed on the fixed window (last 7 days vs the 4 weeks before, whatever `period` is), each with:
+  - `changes`: `{updated_at, window: {from, to}, items}`, ranked, computed on the fixed window
+    (last 7 days vs the 4 weeks before, whatever `period` is; `window` says which days), each
+    item with:
     - `id`, `hospital` (`{id, name}` or null for all hospitals), `area` (`use`, `alerts`,
       `quality`), `measure`, `direction` (`worse`, `better`, `rising`, `falling`);
     - `serious` (boolean, Critical-type), `previous`, `current` (guarded values), `summary`
       (plain words);
-    - `follow_up` (`{by, at, note}` or null);
-  - `use`, `alerts`, `quality`: per-hospital measures plus the all-hospitals median, each value
-    `{value, suppressed}` as in Plan 5b; the alert block includes `critical_overdue` per hospital;
-  - `hospitals`: one row each, with `size` (staff, active clinicians, questions) and the headline
-    measures.
-- `GET /platform/analytics/changes/{id}/series?period` → that measure over the period for the
-  hospital, plus the median of the others.
+    - `follow_up`: `{by, at, note, by_you, version}` or null. `by_you` is set by the server for
+      the caller (the app offers Edit note only when it is true); `version` moves on with each
+      note edit;
+    - `version`: moves on with every follow-up write, and is sent back on the next one;
+  - `use`, `alerts`, `quality`: `{updated_at, rows, median, trend}`. `rows` has one per active
+    hospital, `median` is the all-hospitals median under the same rules, and `trend` is
+    `[{start, value}]` across all hospitals with `value` guarded. Each value is guarded. Alert
+    rows also carry `critical_target_minutes` (a plain number) and `critical_overdue`. Quality
+    rows carry `reviews` (the answers a reviewer looked at, which `agreement_rate` is over);
+  - `hospitals`: one row each, with `size` (staff, active clinicians, questions).
+- `GET /platform/analytics/changes/{id}/series?period` → `{measure, hospital, points: [{start,
+value, median}]}`: that measure over the period for the hospital. `value` is guarded. `median`
+  is the median of the other active hospitals for that point, a plain number, or null when there
+  is none (a change across all hospitals, or no other hospital has data). The app checks that
+  `measure` is the one it asked for, and fails the chart closed on anything else.
 - `GET /platform/analytics/hospitals/{id}/series?measure&period` → the same, for any hospital and
   one of the four comparison measures (§4 Hospitals tab).
-- `PUT /platform/analytics/changes/{id}/follow-up {note?}` and `DELETE …/follow-up`, for platform
-  admins (audited).
+- `PUT /platform/analytics/changes/{id}/follow-up {note?, version}` marks a change followed up, or
+  edits the note, and `DELETE …/follow-up {version}` undoes it. Both are for platform admins
+  (audited) and return the change. A `version` that isn't the change's current one returns 409
+  `conflict`, and so does undoing a change nobody followed up. Only the author edits the note:
+  anyone else gets 403 (they undo first).
 - `GET /platform/hospitals/{id}` gains `admins: [{name, email}]`, the active hospital admins
   (the existing `first_admin` stays for the invite status).
+
+**Server duties.** The app checks what it can and fails an area closed rather than show a leak,
+but some rules only the server can keep:
+
+- **Summary wording when a side is hidden.** When a change's `previous` or `current` is hidden,
+  its `summary` says "fewer than 5", has no "%", and has no digits other than the shown side's
+  number. The app checks this crudely: any other digit fails What changed closed, so a hospital or
+  measure name with a digit in it fails too. Word such summaries without it.
+- **Every count of 1–4 is hidden by the server.** The app fails an area that sends one unhidden.
+- **Shares and rates.** The server hides a share or rate whose numerator, or whose complement
+  (total minus numerator), is 1–4. That includes subsets: total minus unhandled, Critical minus
+  Critical overdue, answers minus reviews. The app's own backstop (total × share) is weaker
+  because shares come rounded to 2 places, and it can't check series shares at all, as a series
+  has no denominators.
+- **Series medians.** A median of a count measure between 0 and 5 (1–4, or 4.5) is sent hidden,
+  as null. The app also hides any count median between 0 and 5 that does arrive: it draws no
+  mark, leaves it out of the chart's scale, and writes "Fewer than 5".
 - The CSV is built in the app from the same data (as in Plan 5b): every area for the chosen
   period plus the changes list, whatever tab is open, under the same small-group rules; an
   unavailable area writes "Couldn't load". No export endpoint.
@@ -281,3 +314,23 @@ quality, hospitals}`, where each area is either its data with its own `updated_a
   - the 500-character note;
   - one straight-away email per hospital per measure per day;
   - the digest at Monday 08:00 Lagos time.
+
+## 11. Changes during Plan 7c
+
+Made while building, and folded into §7 above:
+
+- `FollowUp` gains `by_you` (set by the server per caller) and `version`; `Change` gains
+  `version`.
+- `PUT …/follow-up` takes `{note?, version}` and `DELETE …/follow-up` takes `{version}`; a stale
+  version returns 409 `conflict`, and only the author edits the note (403 otherwise).
+- `changes` carries `window: {from, to}`.
+- Alert rows carry `critical_target_minutes`; quality rows carry `reviews`, so `agreement_rate`
+  can be checked.
+- Trend points are `{start, value}` with a guarded `value`.
+- The series shape is `{measure, hospital, points: [{start, value, median}]}`, with `median` the
+  median of the other hospitals, null when there is none; the app reads it for the measure it
+  asked for and fails the chart closed otherwise.
+- `GET /platform/hospitals/{id}` lists `admins`.
+- The server duties above: the summary wording when a side is hidden, hiding every count 1–4,
+  hiding shares and rates whose numerator or complement is 1–4, and sending a count median of
+  1–4 hidden.

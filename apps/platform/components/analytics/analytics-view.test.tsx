@@ -346,6 +346,36 @@ describe("the Analytics page", () => {
     ).toBeInTheDocument();
   });
 
+  it("a malformed chart reply shows Couldn't load the chart, not a crash", async () => {
+    vi.spyOn(api, "getChangeSeries").mockResolvedValue(
+      {} as Awaited<ReturnType<PlatformClient["getChangeSeries"]>>,
+    );
+    await open();
+    const d = detail();
+    expect(
+      await within(d).findByText("Couldn't load the chart."),
+    ).toBeInTheDocument();
+    expect(within(d).getByRole("button", { name: "Try again" })).toBeVisible();
+    expect(
+      within(d).getByText(
+        /^214 staff · ([\d,]+|Fewer than 5) questions this period$/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("a chart of another measure than the change's fails closed", async () => {
+    const s = await api.getChangeSeries("chg_ngh_critical_ack", "30d");
+    vi.spyOn(api, "getChangeSeries").mockResolvedValue({
+      ...s,
+      measure: "questions_per_clinician",
+    });
+    await open();
+    expect(
+      await within(detail()).findByText("Couldn't load the chart."),
+    ).toBeInTheDocument();
+    expect(detail().querySelector("[data-median]")).toBeNull();
+  });
+
   it("a hospital with no active admin has one Open hospital link", async () => {
     await open();
     await userEvent.click(

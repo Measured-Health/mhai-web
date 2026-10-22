@@ -399,6 +399,25 @@ describe("the analytics tabs", () => {
     }
   });
 
+  it("a malformed hospital chart reply shows Couldn't load the chart", async () => {
+    vi.spyOn(api, "getHospitalSeries").mockResolvedValue({
+      measure: "questions_per_clinician",
+      hospital: { id: "h_riverside", name: "Riverside Children's Hospital" },
+    } as unknown as Awaited<ReturnType<PlatformClient["getHospitalSeries"]>>);
+    await open();
+    await go("Hospitals");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Riverside Children's Hospital" }),
+    );
+    expect(
+      await screen.findByText("Couldn't load the chart."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+    expect(
+      screen.getByText(/ staff · ([\d,]+|Fewer than 5) questions this period$/),
+    ).toBeInTheDocument();
+  });
+
   it("at phone width Back from a hospital returns focus to its row", async () => {
     vi.stubGlobal("matchMedia", (q: string) => ({
       matches: false,

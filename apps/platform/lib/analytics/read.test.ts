@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type {
-  AlertsRow,
-  AnalyticsOut,
-  Guarded,
-  Period,
+import {
+  MEASURES,
+  type AlertsRow,
+  type AnalyticsOut,
+  type Guarded,
+  type Period,
 } from "../api/analytics-contract";
 import {
   buildAnalytics,
+  buildSeries,
   seedChanges,
   type AnalyticsMode,
 } from "../api/analytics-fixtures";
@@ -18,6 +20,7 @@ import {
   NOT_ENOUGH_TO_COMPARE,
   failedText,
   readAnalytics,
+  readSeries,
   type AnalyticsState,
 } from "./read";
 
@@ -622,5 +625,131 @@ describe("readAnalytics: what changed", () => {
       }),
     );
     expect(s.changes.status).toBe("failed");
+  });
+});
+
+describe("readSeries", () => {
+  const H = { id: "h_lakeside", name: "Lakeside Community Clinic" };
+  const pt = (value: Guarded, median: number | null = 10) => ({
+    start: "2026-10-01T00:00:00.000Z",
+    value,
+    median,
+  });
+  const shown = (value: number | null): Guarded => ({
+    value,
+    suppressed: false,
+  });
+  const reply = (measure: string, points: unknown) => ({
+    measure,
+    hospital: H,
+    points,
+  });
+
+  it("reads a good reply, keeping what it says", () => {
+    const s = readSeries(
+      reply("questions", [pt(shown(12), 20), pt(shown(0), null)]),
+      "questions",
+    );
+    expect(s).toEqual({
+      status: "ok",
+      measure: "questions",
+      hospital: H,
+      points: [
+        { start: pt(shown(0)).start, value: shown(12), median: shown(20) },
+        { start: pt(shown(0)).start, value: shown(0), median: null },
+      ],
+    });
+  });
+
+  it("hides a count median between 0 and 5, but not 0 or 5", () => {
+    const s = readSeries(
+      reply("alerts_total", [
+        pt(shown(9), 3),
+        pt(shown(9), 4.5),
+        pt(shown(9), 0.5),
+        pt(shown(9), 0),
+        pt(shown(9), 5),
+      ]),
+      "alerts_total",
+    );
+    if (s.status !== "ok") throw new Error("failed");
+    expect(s.points.map((p) => p.median)).toEqual([
+      { value: null, suppressed: true },
+      { value: null, suppressed: true },
+      { value: null, suppressed: true },
+      shown(0),
+      shown(5),
+    ]);
+  });
+
+  it("keeps a small median of a rate or share", () => {
+    const s = readSeries(
+      reply("questions_per_clinician", [pt(shown(2.5), 3)]),
+      "questions_per_clinician",
+    );
+    if (s.status !== "ok") throw new Error("failed");
+    expect(s.points[0]!.median).toEqual(shown(3));
+  });
+
+  it("fails on an unhidden count of 1-4", () => {
+    for (const n of [1, 3, 4])
+      expect(
+        readSeries(reply("questions", [pt(shown(n))]), "questions"),
+      ).toEqual({ status: "failed" });
+  });
+
+  it("fails on a count that is not a whole number or is missing", () => {
+    for (const v of [shown(12.5), shown(null), shown(-6)])
+      expect(readSeries(reply("questions", [pt(v)]), "questions").status).toBe(
+        "failed",
+      );
+  });
+
+  it("drops the number of a hidden value", () => {
+    const s = readSeries(
+      reply("questions", [pt({ value: 3, suppressed: true })]),
+      "questions",
+    );
+    if (s.status !== "ok") throw new Error("failed");
+    expect(s.points[0]!.value).toEqual({ value: null, suppressed: true });
+  });
+
+  it("fails when the measure is not the one asked for", () => {
+    // A count of 3 read as a rate would show.
+    expect(
+      readSeries(reply("questions_per_clinician", [pt(shown(3))]), "questions")
+        .status,
+    ).toBe("failed");
+    expect(
+      readSeries(reply("questions", [pt(shown(3))]), "questions_per_clinician")
+        .status,
+    ).toBe("failed");
+  });
+
+  it("fails on a malformed reply", () => {
+    const bad: unknown[] = [
+      null,
+      "nope",
+      { measure: "questions", hospital: H },
+      reply("questions", null),
+      reply("questions", {}),
+      { measure: "questions", hospital: { id: "a b", name: "X" }, points: [] },
+      reply("questions", [null]),
+      reply("questions", [{ ...pt(shown(9)), start: "yesterday" }]),
+      reply("questions", [{ ...pt(shown(9)), value: 9 }]),
+      reply("questions", [pt(shown(9), -1)]),
+      reply("questions", [pt(shown(9), Number.NaN)]),
+      reply("questions", [{ ...pt(shown(9)), median: "10" }]),
+      reply("questions", [{ start: pt(shown(9)).start, value: shown(9) }]),
+    ];
+    for (const b of bad)
+      expect(readSeries(b, "questions")).toEqual({ status: "failed" });
+  });
+
+  it("reads every series the mock sends", () => {
+    for (const id of [null, "h_lakeside", "h_havana", "h_hilltop"])
+      for (const m of MEASURES)
+        for (const p of ["7d", "30d", "90d"] as const)
+          expect(readSeries(buildSeries(id, m, p, NOW), m).status).toBe("ok");
   });
 });

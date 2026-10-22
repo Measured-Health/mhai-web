@@ -814,8 +814,7 @@ export function buildSeries(
       med = median(others.map((p) => pick(measure, at(p, b))));
       if (med !== null) {
         med = Math.round(med * 100) / 100;
-        if (COUNT_MEASURES.includes(measure) && small(Math.round(med)))
-          med = null;
+        if (COUNT_MEASURES.includes(measure) && med > 0 && med < 5) med = null;
       }
     } else {
       // All hospitals together: one total, no median to compare with.

@@ -13,6 +13,7 @@ import {
   type Change,
   type Guarded,
   type HospitalSize,
+  type MeasureId,
   type QualityRow,
   type UseRow,
 } from "../api/analytics-contract";
@@ -431,5 +432,62 @@ export function readAnalytics(a: AnalyticsOut): AnalyticsState {
     hospitals: hospitalsOk(x.hospitals)
       ? { status: "ok", ...scrub(x.hospitals) }
       : FAILED,
+  };
+}
+
+// ---- One measure over the period (the compare chart) ---------------------------
+
+/**
+ * A point of the compare chart. `median` is null when there is none (All
+ * hospitals, or no other hospital had data) and hidden when it would be a
+ * count of 1–4.
+ */
+export type SeriesPoint = {
+  start: string;
+  value: Guarded;
+  median: Guarded | null;
+};
+export type SeriesState =
+  | {
+      status: "ok";
+      measure: MeasureId;
+      hospital: Person;
+      points: SeriesPoint[];
+    }
+  | Failed;
+
+/**
+ * Reads a compare-chart reply for the measure the app asked for. It fails
+ * closed on a wrong shape, a different measure, or a count sent unhidden
+ * between 0 and 5. A count median between 0 and 5 is hidden: no mark, not
+ * in the scale, "Fewer than 5" in words.
+ */
+export function readSeries(s: unknown, measure: MeasureId): SeriesState {
+  if (!isObj(s) || s.measure !== measure || !isPerson(s.hospital))
+    return FAILED;
+  if (!Array.isArray(s.points)) return FAILED;
+  const kind = MEASURE_KIND[measure];
+  const points: SeriesPoint[] = [];
+  for (const p of s.points as unknown[]) {
+    if (!isObj(p) || !isTime(p.start)) return FAILED;
+    if (!guardedOk(p.value, kind, kind !== "count")) return FAILED;
+    const m = p.median;
+    if (m !== null && (!isNum(m) || m < 0)) return FAILED;
+    points.push({
+      start: p.start,
+      value: scrub(p.value as Guarded),
+      median:
+        m === null
+          ? null
+          : kind === "count" && m > 0 && m < SMALL_GROUP_MIN
+            ? HIDDEN
+            : { value: m, suppressed: false },
+    });
+  }
+  return {
+    status: "ok",
+    measure,
+    hospital: { id: s.hospital.id, name: s.hospital.name },
+    points,
   };
 }

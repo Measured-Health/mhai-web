@@ -1,7 +1,7 @@
 "use client";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useId, useState, type Ref, type RefObject } from "react";
+import { useId, useMemo, useState, type Ref, type RefObject } from "react";
 import type { Guarded, MeasureId, Period } from "@/lib/api/analytics-contract";
 import type { Person } from "@/lib/api/contract";
 import type { RankedChange } from "@/lib/analytics/changes";
@@ -13,7 +13,7 @@ import {
   valueText,
   type MeasureKind,
 } from "@/lib/analytics/measures";
-import type { AnalyticsState } from "@/lib/analytics/read";
+import { readSeries, type AnalyticsState } from "@/lib/analytics/read";
 import { useHospitalSeries } from "@/lib/queries/analytics";
 import { inputClass } from "@mhai/ui/auth/password-fields";
 import { Button } from "@mhai/ui/button";
@@ -269,6 +269,10 @@ export function HospitalDetail({
 }) {
   const titleId = useId();
   const series = useHospitalSeries(hospital.id, measure, period);
+  const chart = useMemo(
+    () => (series.data === undefined ? null : readSeries(series.data, measure)),
+    [series.data, measure],
+  );
   const size =
     hospitals.status === "ok"
       ? hospitals.rows.find((r) => r.hospital.id === hospital.id)?.size
@@ -314,16 +318,26 @@ export function HospitalDetail({
           ))}
         </select>
       </label>
-      {series.isError ? (
-        <CouldntLoad what="the chart" onRetry={() => void series.refetch()} />
-      ) : !series.data ? (
-        <Loading label="Loading the chart" />
-      ) : (
+      {chart?.status === "ok" ? (
         <ComparePanel
           hospital={hospital}
-          series={series.data}
+          measure={measure}
+          points={chart.points}
           size={size ? sizeLine(size) : null}
         />
+      ) : (
+        <>
+          {chart?.status === "failed" || series.isError ? (
+            <CouldntLoad
+              what="the chart"
+              onRetry={() => void series.refetch()}
+            />
+          ) : (
+            <Loading label="Loading the chart" />
+          )}
+          {/* The size shows whatever happens to the chart. */}
+          {size && <p className="text-[13px] text-ink-2">{sizeLine(size)}</p>}
+        </>
       )}
       <Link href={`/hospitals/${hospital.id}`} className={openHospitalClass}>
         Open hospital

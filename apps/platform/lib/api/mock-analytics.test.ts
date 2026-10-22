@@ -491,6 +491,17 @@ describe("mock analytics", () => {
     const small = await m.getHospitalSeries("h_lakeside", "questions", "7d");
     for (const pt of small.points)
       if (pt.value.value !== null) expect(pt.value.value).toBe(0);
+    // A count median between 0 and 5 (4.5 too) is sent hidden.
+    for (const id of ["h_lakeside", "h_hilltop", "h_havana", "h_riverside"])
+      for (const measure of [
+        "questions",
+        "active_clinicians",
+        "alerts_total",
+        "unhandled_alerts",
+      ] as const)
+        for (const pt of (await m.getHospitalSeries(id, measure, "30d")).points)
+          if (pt.median !== null)
+            expect(pt.median === 0 || pt.median >= 5).toBe(true);
     expect(await failure(m.getChangeSeries("chg_nope", "30d"))).toEqual([
       404,
       "not_found",

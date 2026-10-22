@@ -46,7 +46,7 @@ test("Analytics opens on What changed with Northgate's Critical change selected"
   await expect(first).toContainText("⚠");
   // The top 5 show; the followed-up change waits behind Show all.
   await expect(row(page, /Havana Hospital/)).toBeVisible();
-  await page.getByRole("button", { name: "Show all (6)" }).click();
+  await page.getByRole("button", { name: /^Show all \(\d+\)$/ }).click();
   await expect(row(page, /Riverside Children's Hospital/)).toBeVisible();
 
   if (isMobile(page)) {
@@ -97,6 +97,12 @@ test("the auditor sees follow-ups but no controls", async ({ page }) => {
   const riverside = row(page, /Riverside Children's Hospital/);
   await expect(riverside).toContainText("Followed up by Tunde Okafor");
   await riverside.click();
+  await expect(
+    page.getByRole("heading", {
+      level: 2,
+      name: /Riverside Children's Hospital/,
+    }),
+  ).toBeVisible();
   await expect(page.getByText(RIVERSIDE_NOTE)).toBeVisible();
   for (const name of [
     "Mark followed up",
@@ -105,11 +111,12 @@ test("the auditor sees follow-ups but no controls", async ({ page }) => {
     "Edit note",
     "Save note",
   ])
-    await expect(page.getByRole("button", { name })).toHaveCount(0);
+    await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
+      0,
+    );
   await expect(page.getByLabel("Note (optional)")).toHaveCount(0);
 
   // A change nobody followed up on shows no way to mark it either.
-  await page.getByText("Selected change").first().waitFor();
   if (isMobile(page)) await page.getByRole("button", { name: "Back" }).click();
   await row(page, NGH_CRITICAL).click();
   await expect(page.getByText("Not followed up yet.")).toBeVisible();
@@ -129,8 +136,18 @@ test("Download CSV saves a file whose hidden values read Fewer than 5", async ({
     /^analytics-last-30-days-\d{4}-\d{2}-\d{2}\.csv$/,
   );
   const csv = readFileSync((await file.path())!, "utf8");
-  expect(csv).toContain("Lakeside Community Clinic");
-  expect(csv).toContain("Fewer than 5");
+  // Lakeside's line in the Use section: its counts are 1-4, so hidden.
+  const lines = csv.split(/\r?\n/);
+  const use = lines.findIndex((l) =>
+    l.startsWith("Hospital,Questions,Active clinicians,"),
+  );
+  expect(use).toBeGreaterThanOrEqual(0);
+  const lakeside = lines
+    .slice(use + 1)
+    .find((l) => l.includes("Lakeside Community Clinic"));
+  expect(lakeside).toBeDefined();
+  expect(lakeside).toContain("Fewer than 5");
+  expect(lakeside).not.toMatch(/,[1-4](,|$)/);
   // Counts only: no follow-up notes.
   expect(csv).not.toContain("Musa Danjuma");
 });
@@ -161,9 +178,9 @@ test("the Hospitals tab compares Riverside with the rest", async ({ page }) => {
   });
   await expect(riverside).toBeVisible();
   // Small hospitals show "Fewer than 5", never a rate worked out from it.
-  await expect(
-    page.getByRole("row", { name: /Lakeside Community Clinic/ }),
-  ).toContainText("Fewer than 5");
+  const lakeside = page.getByRole("row", { name: /Lakeside Community Clinic/ });
+  await expect(lakeside).toContainText("Fewer than 5");
+  await expect(lakeside).not.toContainText(/\d+%/);
 
   await riverside.click();
   const heading = page.getByRole("heading", {

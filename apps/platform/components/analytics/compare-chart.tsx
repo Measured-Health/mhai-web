@@ -1,7 +1,7 @@
 "use client";
 import { ChartColumn, Table2 } from "lucide-react";
 import { useId, useState } from "react";
-import type { Guarded, SeriesOut } from "@/lib/api/analytics-contract";
+import type { MeasureId } from "@/lib/api/analytics-contract";
 import type { Person } from "@/lib/api/contract";
 import {
   isHidden,
@@ -9,47 +9,49 @@ import {
   MEASURE_KIND,
   valueText,
 } from "@/lib/analytics/measures";
+import type { SeriesPoint } from "@/lib/analytics/read";
 import { Button } from "@mhai/ui/button";
 import { dayMonthLabel } from "@/lib/format";
-
-const shown = (n: number): Guarded => ({ value: n, suppressed: false });
 
 /**
  * One measure for one hospital over the period, as columns, with the
  * median of the other hospitals as a dashed mark on each column: rates
  * and medians only, never totals across hospitals of different sizes.
- * A hidden value reads "Fewer than 5" and draws no column. Below it, the
- * hospital's size for context.
+ * A hidden value or median reads "Fewer than 5" and draws nothing, and
+ * is not part of the scale. Below it, the hospital's size for context.
+ * The points come from `readSeries`, for the measure the app asked for.
  */
 export function ComparePanel({
   hospital,
-  series,
+  measure,
+  points: raw,
   size,
 }: {
   /** Null for a change across all hospitals (no median to compare with). */
   hospital: Person | null;
-  series: SeriesOut;
+  measure: MeasureId;
+  points: SeriesPoint[];
   /** "214 staff · 1,180 questions this period"; null when not known. */
   size: string | null;
 }) {
   const [asTable, setAsTable] = useState(false);
   const titleId = useId();
   const summaryId = useId();
-  const kind = MEASURE_KIND[series.measure];
+  const kind = MEASURE_KIND[measure];
   const name = hospital?.name ?? "All hospitals";
-  const title = `${measureLabel(series.measure)}: ${name}`;
-  const points = series.points.map((p, i) => {
-    const hidden = isHidden(p.value, kind);
+  const title = `${measureLabel(measure)}: ${name}`;
+  const points = raw.map((p, i) => {
+    const m = p.median;
     return {
       key: `${p.start}-${i}`,
       label: dayMonthLabel(p.start),
-      value: hidden ? null : p.value.value,
+      value: isHidden(p.value, kind) ? null : p.value.value,
       text: valueText(p.value, kind),
-      median: p.median,
-      medianText: p.median === null ? null : valueText(shown(p.median), kind),
+      median: m === null || isHidden(m, kind) ? null : m.value,
+      medianText: m === null ? null : valueText(m, kind),
     };
   });
-  const hasMedian = points.some((p) => p.median !== null);
+  const hasMedian = points.some((p) => p.medianText !== null);
   const top = Math.max(
     Number.EPSILON,
     ...points.map((p) => p.value ?? 0),

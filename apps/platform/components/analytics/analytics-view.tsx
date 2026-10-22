@@ -132,10 +132,7 @@ export function AnalyticsView() {
   const download = () => {
     const a = q.data;
     if (!a || q.isPlaceholderData) return;
-    downloadCsv(
-      analyticsCsvName(a.period, Date.now()),
-      analyticsCsv(a, a.period),
-    );
+    downloadCsv(analyticsCsvName(period, Date.now()), analyticsCsv(a, period));
   };
 
   const showList = desktop || !phoneDetail;

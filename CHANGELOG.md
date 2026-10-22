@@ -50,8 +50,9 @@ All notable changes to this project are documented here. The format follows
   to contact, and follow-ups with a note that platform admins add and
   undo and auditors read. Tabs and a CSV cover use, alert safety, answer
   quality and hospitals for the chosen period, in counts only, with
-  counts of 1 to 4 shown as "Fewer than 5". Havana Hospital joins the
-  sample hospitals. End-to-end tests cover it on desktop and phone.
+  counts of 1 to 4 shown as "Fewer than 5". Havana Hospital and two small
+  sample hospitals join the sample data. End-to-end tests cover it on
+  desktop and phone.
 - Shared packages `@mhai/ui` (components) and `@mhai/api-client` (API,
   session and two-step helpers), used by both apps.
 

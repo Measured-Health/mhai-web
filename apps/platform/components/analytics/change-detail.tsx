@@ -1,12 +1,13 @@
 "use client";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useId, type Ref } from "react";
+import { useId, useMemo, type Ref } from "react";
 import type { HospitalSize, Period } from "@/lib/api/analytics-contract";
 import { changeLine, type RankedChange } from "@/lib/analytics/changes";
 import { countText, valueText } from "@/lib/analytics/measures";
 import {
   NOT_ENOUGH_TO_COMPARE,
+  readSeries,
   type AnalyticsState,
 } from "@/lib/analytics/read";
 import { useChangeSeries } from "@/lib/queries/analytics";
@@ -46,6 +47,11 @@ export function ChangeDetail({
   const titleId = useId();
   const line = changeLine(c);
   const series = useChangeSeries(c.id, period);
+  const chart = useMemo(
+    () =>
+      series.data === undefined ? null : readSeries(series.data, c.measure),
+    [series.data, c.measure],
+  );
   const h = c.hospital;
   const size =
     h && hospitals.status === "ok"
@@ -93,11 +99,16 @@ export function ChangeDetail({
         )}
       </div>
 
-      {series.data ? (
-        <ComparePanel hospital={h} series={series.data} size={sizeText} />
+      {chart?.status === "ok" ? (
+        <ComparePanel
+          hospital={h}
+          measure={c.measure}
+          points={chart.points}
+          size={sizeText}
+        />
       ) : (
         <>
-          {series.isError ? (
+          {chart?.status === "failed" || series.isError ? (
             <CouldntLoad
               what="the chart"
               onRetry={() => void series.refetch()}

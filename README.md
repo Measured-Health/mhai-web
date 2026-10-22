@@ -155,13 +155,16 @@ codes work too):
   demo repeats these steps at each sign-in.
 
 Any other email is a hospital account and is turned away with "This account
-can't use the platform admin app." The seven sample hospitals:
+can't use the platform admin app." The nine sample hospitals:
 
 - **Havana Hospital**: active, the clinical demo's hospital (admins Grace
   Nwosu and Dr. Ngozi Obi);
 - **Northgate General Hospital**: active, with single sign-on on and tested;
 - **Riverside Children's Hospital**: active; try editing, deactivating and
   reactivating it;
+- **Lakeside Community Clinic**: active, a small clinic whose counts are 1
+  to 4;
+- **Hilltop Cottage Hospital**: active, new, with no active hospital admin;
 - **Eastbrook Medical Centre**: set-up incomplete, its first admin's invite
   still pending (Resend);
 - **Westfield Clinic**: deactivated, with its records retention period over,
