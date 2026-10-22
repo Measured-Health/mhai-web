@@ -103,9 +103,11 @@ export function ExportDialog({
   const toast = useToast();
   const { user, updateUser } = useAuth();
   const [stage, setStage] = useState<Stage>({ at: "form" });
+  // A download on its way: closing now would lose a file already used up.
+  const [downloading, setDownloading] = useState(false);
 
   const close = () => {
-    if (create.busy) return;
+    if (create.busy || downloading) return;
     create.clear();
     setStage({ at: "form" });
     onClose();
@@ -138,7 +140,12 @@ export function ExportDialog({
         }
         onClose={close}
       >
-        <ExportReady out={stage.out} kind={kind} onClose={close} />
+        <ExportReady
+          out={stage.out}
+          kind={kind}
+          onClose={close}
+          onBusy={setDownloading}
+        />
       </Step>
     );
 

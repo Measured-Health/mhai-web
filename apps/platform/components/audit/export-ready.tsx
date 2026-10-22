@@ -1,6 +1,7 @@
 "use client";
 import { CheckCircle2, Download, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ApiError } from "@mhai/api-client/errors";
 import type { ExportKind, ExportOut } from "@/lib/api/audit-contract";
 import { ID } from "@/lib/audit/read";
 import { platformError } from "@/lib/errors";
@@ -15,16 +16,31 @@ import { CopyButton } from "./copy-button";
 /** The download's own refusal (410): scoped here, never a global code. */
 export const GONE_WORDS =
   "This file was already downloaded or has expired. Make a new export.";
+/** A 403 here means someone else made it (only its maker may download). */
+export const NOT_YOURS_WORDS =
+  "Only the person who made this export can download it.";
 
-const SAFE_NAME = /^[A-Za-z0-9._-]{1,120}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+const EXT: Record<ExportKind, string> = { events: "csv", named_access: "zip" };
+/** A letter or digit first, then safe characters, then the kind's extension. */
+const SAFE_NAME: Record<ExportKind, RegExp> = {
+  events: /^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.csv$/,
+  named_access: /^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.zip$/,
+};
 
-/** The server's file name when it is safe, else one made from the id. */
+/**
+ * The server's file name when it is safe and ends in the kind's extension
+ * (a zip is never named .csv); else one made from the id.
+ */
 export function safeName(name: string, id: string, kind: ExportKind): string {
-  return typeof name === "string" && SAFE_NAME.test(name)
+  return typeof name === "string" && SAFE_NAME[kind].test(name)
     ? name
-    : `audit-${id}.${kind === "named_access" ? "zip" : "csv"}`;
+    : `audit-${id}.${EXT[kind]}`;
 }
+
+/** Before the server answered, or a server fault: the file may still be there. */
+const mayRetry = (e: unknown) =>
+  !(e instanceof ApiError) || e.status === 0 || e.status >= 500;
 
 /** No file without an export id: the reply is checked before it shows. */
 export function exportOutOk(o: unknown): o is ExportOut {
@@ -58,19 +74,26 @@ const hhmm = (iso: string) => {
 
 /**
  * The export's ready step: its id, rows, checksum and deadline, and the one
- * download. This is the only place the file can be fetched; the button is
- * spent after one click, whatever the answer.
+ * download. This is the only place the file can be fetched. The button is
+ * spent after one click, unless the server never answered or failed (then
+ * it may be tried again; a used or expired file answers 410). While the
+ * file is on its way, the step can't be closed: it would be lost.
  */
 export function ExportReady({
   out,
   kind,
   onClose,
+  onBusy,
 }: {
   out: ExportOut;
   kind: ExportKind;
   onClose(): void;
+  /** Told when a download starts and ends. */
+  onBusy?: (busy: boolean) => void;
 }) {
   const download = useDownloadExport();
+  const pending = download.isPending;
+  useEffect(() => onBusy?.(pending), [pending, onBusy]);
   const net = useNeedsConnection("export-download-offline");
   const [clicked, setClicked] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -86,11 +109,17 @@ export function ExportReady({
         download.reset();
         setSaved(true);
       },
+      onError: (e) => {
+        if (mayRetry(e)) setClicked(false);
+      },
     });
   }
 
   const words = download.error
-    ? platformError(download.error, { gone: GONE_WORDS })
+    ? platformError(download.error, {
+        gone: GONE_WORDS,
+        forbidden: NOT_YOURS_WORDS,
+      })
     : null;
 
   return (
@@ -133,7 +162,7 @@ export function ExportReady({
       )}
       <OfflineNote id="export-download-offline" />
       <div className="flex flex-wrap justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>
+        <Button variant="ghost" disabled={pending} onClick={onClose}>
           Close
         </Button>
         {ok && (

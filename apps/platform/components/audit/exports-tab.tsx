@@ -57,6 +57,11 @@ function Reason({ r }: { r: ExportRecord }) {
   return (
     <>
       <span className="block">{REASON_WORDS[r.reason]}</span>
+      {r.reason === "other" && r.note && (
+        <span className="block whitespace-pre-wrap text-ink-2 [overflow-wrap:anywhere]">
+          {r.note}
+        </span>
+      )}
       {r.reference && (
         <span className="block text-ink-2 [overflow-wrap:anywhere]">
           Reference {r.reference}

@@ -272,4 +272,22 @@ describe("StepUpDialog", () => {
       mfa_code: "123456",
     });
   });
+  it("an initialReason that isn't on offer starts with none chosen", async () => {
+    const onConfirm = vi.fn();
+    renderWithAuth(
+      <StepUpDialog
+        {...base}
+        reasons={[{ code: "legal_request", label: "Legal request" }]}
+        initialReason="made_up"
+        onConfirm={onConfirm}
+      />,
+    );
+    const d = screen.getByRole("dialog", { name: "Approve removal?" });
+    expect(within(d).getByLabelText("Legal request")).not.toBeChecked();
+    await userEvent.click(within(d).getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard("123456");
+    await userEvent.click(within(d).getByRole("button", { name: "Approve" }));
+    expect(within(d).getByText("Choose a reason.")).toBeInTheDocument();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
 });

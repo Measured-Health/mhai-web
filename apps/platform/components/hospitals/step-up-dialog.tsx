@@ -148,7 +148,10 @@ function StepUpForm({
   const id = useId();
   const c = useCodeOrBackup();
   const net = useNeedsConnection(`${id}-offline`);
-  const [reason, setReason] = useState(initialReason);
+  // Only a reason on offer may start chosen.
+  const [reason, setReason] = useState(() =>
+    reasons?.some((r) => r.code === initialReason) ? initialReason : "",
+  );
   const [note, setNote] = useState("");
   const [extraText, setExtraText] = useState("");
   const [missing, setMissing] = useState<Missing>({});

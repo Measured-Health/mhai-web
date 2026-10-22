@@ -17,11 +17,13 @@ import { TEAM_EMAILS } from "@/lib/api/fixtures";
 import { createMockPlatform } from "@/lib/api/mock";
 import type { AuditMockOptions } from "@/lib/api/mock-audit";
 import { MOCK_CODE, createStepUp } from "@/lib/api/step-up";
+import { openAuditAt } from "@/lib/audit/nav";
 import { __resetReportedForTests } from "@/lib/queries/audit";
+import { ApiError } from "@mhai/api-client/errors";
 import { AMARA, renderWithAuth } from "@/tests/render";
 import { OFFLINE_NOTE } from "../states/offline-strip";
 import { AuditView } from "./audit-view";
-import { ExportReady, safeName } from "./export-ready";
+import { ExportReady, NOT_YOURS_WORDS, safeName } from "./export-ready";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/audit",
@@ -35,13 +37,23 @@ const GONE =
 function setup(audit?: AuditMockOptions, email: string = TEAM_EMAILS.ada) {
   const m = createMockPlatform({
     delayMs: 0,
-    me: () => email,
+    me: () => signedIn.email ?? email,
     stepUp: createStepUp(),
     audit,
   });
   __setPlatformClientForTests(m as PlatformClient);
   return m;
 }
+
+/** Switches who the mock thinks is signed in (null: the setup's own). */
+const signedIn: { email: string | null } = { email: null };
+
+const EXPORT_BODY = {
+  kind: "events" as const,
+  filters: {},
+  reason: "legal_request" as const,
+  mfa_code: MOCK_CODE,
+};
 
 /** What the browser was handed to save: its name and its bytes. */
 function catchDownloads() {
@@ -69,7 +81,10 @@ function catchDownloads() {
 const text = async (b: Blob) =>
   new TextDecoder().decode(new Uint8Array(await b.arrayBuffer()));
 
-beforeEach(() => __resetReportedForTests());
+beforeEach(() => {
+  __resetReportedForTests();
+  signedIn.email = null;
+});
 afterEach(() => {
   __resetPlatformClientForTests();
   vi.restoreAllMocks();
@@ -393,6 +408,15 @@ describe("safeName", () => {
     expect(safeName("x".repeat(121), "exp_3", "events")).toBe(
       "audit-exp_3.csv",
     );
+    // The extension follows the kind: a zip is never named .csv.
+    expect(safeName("x.csv", "exp_4", "named_access")).toBe("audit-exp_4.zip");
+    expect(safeName("x.zip", "exp_5", "events")).toBe("audit-exp_5.csv");
+    expect(safeName("report.html", "exp_6", "events")).toBe("audit-exp_6.csv");
+    expect(safeName("..", "exp_7", "events")).toBe("audit-exp_7.csv");
+    expect(safeName(".csv", "exp_8", "events")).toBe("audit-exp_8.csv");
+    expect(safeName("-x.csv", "exp_9", "events")).toBe("audit-exp_9.csv");
+    const zip = "audit-named-access-exp_1-20261022-0600Z.zip";
+    expect(safeName(zip, "exp_1", "named_access")).toBe(zip);
   });
 });
 
@@ -414,5 +438,126 @@ describe("ExportReady", () => {
     );
     expect(screen.queryByRole("button", { name: "Download file" })).toBeNull();
     expect(saved).toHaveLength(0);
+  });
+});
+
+describe("fix round 1", () => {
+  it("a download that never reached the server (or a server fault) may be tried again", async () => {
+    const saved = catchDownloads();
+    const m = setup();
+    const out = await m.createExport(EXPORT_BODY, { idempotencyKey: "k1" });
+    const real = m.downloadExport.bind(m);
+    vi.spyOn(m, "downloadExport")
+      .mockRejectedValueOnce(new ApiError(0, "network"))
+      .mockRejectedValueOnce(new ApiError(503, "unavailable"))
+      .mockImplementation(real);
+    renderWithAuth(<ExportReady out={out} kind="events" onClose={() => {}} />);
+    const btn = screen.getByRole("button", { name: "Download file" });
+    await userEvent.click(btn);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't reach the service. Try again.",
+    );
+    expect(btn).toBeEnabled();
+    await userEvent.click(btn);
+    await waitFor(() => expect(btn).toBeEnabled());
+    await userEvent.click(btn);
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(btn).toBeDisabled();
+  });
+
+  it("a download refused because someone else made it says so, and stays spent", async () => {
+    const m = setup();
+    const out = await m.createExport(EXPORT_BODY, { idempotencyKey: "k1" });
+    signedIn.email = TEAM_EMAILS.tunde;
+    renderWithAuth(<ExportReady out={out} kind="events" onClose={() => {}} />);
+    const btn = screen.getByRole("button", { name: "Download file" });
+    await userEvent.click(btn);
+    expect(await screen.findByRole("alert")).toHaveTextContent(NOT_YOURS_WORDS);
+    expect(btn).toBeDisabled();
+  });
+
+  it("while the file is on its way, the ready step can't be closed", async () => {
+    const saved = catchDownloads();
+    const m = setup();
+    let release!: () => void;
+    const real = m.downloadExport.bind(m);
+    vi.spyOn(m, "downloadExport").mockImplementation(
+      (id) =>
+        new Promise<Blob>((res, rej) => {
+          release = () => void real(id).then(res, rej);
+        }),
+    );
+    renderWithAuth(<AuditView />);
+    const ready = await makeExport();
+    await userEvent.click(
+      within(ready).getByRole("button", { name: "Download file" }),
+    );
+    const close = within(ready).getByRole("button", { name: "Close" });
+    expect(close).toBeDisabled();
+    await userEvent.keyboard("{Escape}");
+    expect(ready).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /is ready$/ })).toBe(ready);
+    act(() => release());
+    await waitFor(() => expect(saved).toHaveLength(1));
+    await waitFor(() => expect(close).toBeEnabled());
+    await userEvent.click(close);
+    expect(screen.queryByRole("dialog", { name: /is ready$/ })).toBeNull();
+  });
+
+  it("no list is read off the Events tab: opened on Exports, the audit list is never fetched", async () => {
+    const m = setup();
+    const list = vi.spyOn(m, "listAudit");
+    openAuditAt("exports");
+    renderWithAuth(<AuditView />);
+    await screen.findByRole("table", { name: "Audit exports" });
+    await userEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    const d = screen.getByRole("dialog", { name: "Export the audit log" });
+    // No count is known, so none is claimed.
+    expect(d).not.toHaveTextContent("will be exported");
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("the Exports tab shows the note of an Other export", async () => {
+    const m = setup();
+    await m.createExport(
+      { ...EXPORT_BODY, reason: "other", note: "Board review of access" },
+      { idempotencyKey: "k1" },
+    );
+    openAuditAt("exports");
+    renderWithAuth(<AuditView />);
+    const table = await screen.findByRole("table", { name: "Audit exports" });
+    const row = within(table).getAllByRole("row")[1]!;
+    expect(row).toHaveTextContent("Other");
+    expect(row).toHaveTextContent("Board review of access");
+  });
+
+  it("Integrity's export around the break opens Export with Security investigation and whole days", async () => {
+    const m = setup({ integrity: "broken" });
+    const create = vi.spyOn(m, "createExport");
+    openAuditAt("integrity");
+    renderWithAuth(<AuditView />);
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Export the entries around the break",
+      }),
+    );
+    const d = screen.getByRole("dialog", { name: "Export the audit log" });
+    expect(within(d).getByLabelText("Security investigation")).toBeChecked();
+    await typeCode(d);
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Make export" }),
+    );
+    await screen.findByRole("dialog", { name: /is ready$/ });
+    const body = create.mock.calls[0]![0];
+    expect(body.reason).toBe("security_investigation");
+    const { from, to } = body.filters as { from: string; to: string };
+    // Local midnights: [the day before the break, tomorrow).
+    for (const t of [from, to]) {
+      const x = new Date(t);
+      expect([x.getHours(), x.getMinutes(), x.getSeconds()]).toEqual([0, 0, 0]);
+    }
+    expect(Date.parse(to)).toBeGreaterThan(Date.now());
+    expect(Date.parse(to) - Date.now()).toBeLessThanOrEqual(25 * 3_600_000);
+    expect(Date.parse(from)).toBeLessThan(Date.parse(to));
   });
 });
