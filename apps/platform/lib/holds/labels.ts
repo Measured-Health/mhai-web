@@ -2,6 +2,8 @@
 import {
   HOLD_REASONS,
   HOLD_STATUSES,
+  LIFT_REASONS,
+  type HoldEvent,
   type HoldReason,
   type HoldStatus,
   type HoldStatusFilter,
@@ -28,6 +30,17 @@ const HOLD_STATUS: Record<HoldStatus, string> = {
   lift_requested: "Lift requested",
   lifted: "Lifted",
 };
+/** A hold's history: what each event did, in the actor's voice. */
+const EVENT: Record<HoldEvent["action"], string> = {
+  placed: "Placed the hold",
+  edited: "Changed the review date or note",
+  lift_requested: "Asked to lift the hold",
+  lift_cancelled: "Cancelled the lift request",
+  lift_lapsed: "The lift request lapsed",
+  lifted: "Approved the lift",
+  lift_undone: "Undid the lift",
+  released: "Records released",
+};
 const FILTER: Record<HoldStatusFilter, string> = {
   open: "Open",
   ...HOLD_STATUS,
@@ -44,6 +57,10 @@ export const holdReasonLabel = (r: HoldReason) => word(HOLD_REASON, r);
 export const liftReasonLabel = (r: LiftReason) => word(LIFT_REASON, r);
 export const holdStatusLabel = (s: HoldStatus) => word(HOLD_STATUS, s);
 export const holdFilterLabel = (s: HoldStatusFilter) => word(FILTER, s);
+export const holdEventLabel = (a: HoldEvent["action"]) => word(EVENT, a);
+/** Whether this app has words for a history event. */
+export const holdEventIsKnown = (e: HoldEvent) =>
+  Object.hasOwn(EVENT, e.action);
 
 /** The filter's choices, in the order they are offered. */
 export const HOLD_FILTERS: readonly HoldStatusFilter[] = [
@@ -55,9 +72,11 @@ export const HOLD_FILTERS: readonly HoldStatusFilter[] = [
   "all",
 ];
 
-/** Whether every code on a hold is one this app has words for. */
+/** Whether every code on a hold (and its lift) is one this app has words for. */
 export const holdIsKnown = (h: LegalHold) =>
-  HOLD_REASONS.includes(h.reason) && HOLD_STATUSES.includes(h.status);
+  HOLD_REASONS.includes(h.reason) &&
+  HOLD_STATUSES.includes(h.status) &&
+  (!h.lift || LIFT_REASONS.includes(h.lift.reason));
 
 export const HOLD_HINT =
   "Don't include patient names, hospital numbers or dates of birth.";

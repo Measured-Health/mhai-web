@@ -22,16 +22,20 @@ const LOOK: Record<
   lifted: { tone: "muted", Icon: LockOpen },
 };
 
-/** A hold's status as an icon and words: never colour alone. */
-export function HoldStatus({ hold }: { hold: LegalHold }) {
+/**
+ * A hold's status as an icon and words: never colour alone. `text`
+ * replaces the words (e.g. a hold's page says who placed it).
+ */
+export function HoldStatus({ hold, text }: { hold: LegalHold; text?: string }) {
   const { tone, Icon } = LOOK[hold.status];
   const [now] = useState(() => Date.now());
   return (
     <Chip tone={tone} className="text-left">
       <Icon aria-hidden className="size-3.5 shrink-0" />
-      {hold.status === "lifted"
-        ? liftedLine(hold, now)
-        : holdStatusLabel(hold.status)}
+      {text ??
+        (hold.status === "lifted"
+          ? liftedLine(hold, now)
+          : holdStatusLabel(hold.status))}
     </Chip>
   );
 }
