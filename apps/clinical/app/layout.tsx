@@ -1,19 +1,8 @@
 import type { Metadata } from "next";
-import { Darker_Grotesque, JetBrains_Mono, Outfit } from "next/font/google";
+import { darker, jetbrains, outfit } from "@mhai/tokens/fonts";
 import "./globals.css";
 import { DemoRibbon } from "@/components/states/demo-ribbon";
 import { Providers } from "./providers";
-
-const darker = Darker_Grotesque({
-  variable: "--font-darker",
-  subsets: ["latin"],
-  weight: ["700", "800", "900"],
-});
-const outfit = Outfit({ variable: "--font-outfit", subsets: ["latin"] });
-const jetbrains = JetBrains_Mono({
-  variable: "--font-jetbrains",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "MHAI · Measured Health",

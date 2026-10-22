@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: repositoryRoot,
   // Shared workspace packages ship TypeScript source.
-  transpilePackages: ["@mhai/api-client", "@mhai/ui"],
+  transpilePackages: ["@mhai/api-client", "@mhai/tokens", "@mhai/ui"],
   turbopack: {
     root: repositoryRoot,
     rules: {
