@@ -131,6 +131,23 @@ says which one it came from. Every name and MRN is synthetic, and like the
 rest of the demo it is all in memory only: the sample alerts and pop-up
 settings start afresh at each sign-in.
 
+**Analysis.** Sign in as the analyst sample (Dr. Kemi Adeyemi,
+`analyst.adeyemi@havanahospital.org`, a clinician with the Analyst role), or
+as the hospital admin or the medical director, and open **Analysis**. It
+shows how conditions and findings are spread across the hospital, in five
+views: Prevalence and trends, Who is affected, Co-occurring conditions,
+Findings and alerts, and MHAI quality. Filter by period, condition, age band,
+sex, ward or clinic, location type, specialty and (when there is more than
+one) source. Every chart has a **Table** view, and **Download CSV** saves the
+view on screen. **See patients** opens a de-identified list (a pseudonymous
+ID, age band, sex, location type, findings and conditions; never a name or
+record number) for any count of 5 or more; each opening is recorded in
+**Activity**. The numbers come from a made-up sample cohort of about 600
+patients. As everywhere, any group of fewer than 5 shows "Fewer than 5" (on
+screen, in tables and in the CSV), and a figure that would give one away is
+hidden too. A hospital admin gives the Analyst role to a clinician in Staff.
+Like the rest of the demo, nothing is kept in browser storage.
+
 ### Platform admin app
 
 **Platform admin app.** Measured Health's own staff use it to add and run
@@ -295,6 +312,18 @@ sign-off before live use, and it has not been given:
   don't pop up but are counted on the bell.
 
 Until it is given, alerts run on sample data only; see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Analysis
+
+Analysis shows hospital-wide counts of conditions, findings, alerts and
+corrections, and a de-identified patient list behind each count of 5 or more.
+It needs clinical, privacy and legal sign-off before live use, and it has not
+been given. It stays off in live mode until `ANALYSIS_SIGNED_OFF=true` is set
+on the server and the backend switches it on for the hospital; with either
+missing there is no page, no sidebar entry, no Analyst box and no API route
+(the proxy answers 404). Until then it runs on sample data only. Named
+drill-down and clearance letters are a later plan; see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Tests

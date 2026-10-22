@@ -114,16 +114,55 @@ named drill-down can be shown; plus one pending and one expired clearance.
 
 ## 9. Backend this design needs (assumed contract)
 
-Add to spec §10 of the UI design:
+Plan 6 builds the sample-data half. The types are in
+`apps/clinical/lib/api/analysis-contract.ts` and the demo behaviour in
+`apps/clinical/lib/api/mock-analysis.ts`; where this section and the code
+differ, the code is right. Add to spec §10 of the UI design:
 
-- `GET /analysis/{view}?filters…` — aggregates with small groups already suppressed
-  server-side (never sent raw).
-- `GET /analysis/patients?filters…&level=deidentified|named` — named only with a verified,
-  unexpired clearance for the caller; every call audited.
+- `GET /analysis/filters` — the choices for the filters: conditions (a null `name` is
+  "Not standardised"), locations (with their location type), specialties, and the hospital's
+  sources (own `label` only).
+- `GET /analysis/{view}?from&to&condition&age_band&sex&location&setting&specialty&source`,
+  with `view` one of `prevalence`, `affected`, `co-occurring`, `findings`, `quality`.
+  Aggregates with the small-group rule already applied server-side (never sent raw). A
+  count of 1 to 4 is `{ value: null, suppressed: true }`; 0 is shown. An unknown view is 404
+  `not_found`. A range that is not real days, runs backwards or is over 24 months is 422
+  `invalid_range`. The hospital comes from the session, never from the request.
+- The server's rule goes beyond hiding each count:
+  - **Sets that add up are hidden as sets.** A breakdown and its total, new plus existing,
+    severities, the confidence mix, correction outcomes, dismissed against total alerts and
+    rated against consultations: if exactly one member is hidden, or the hidden members add up
+    to 1 to 4 between them, the next-smallest shown member is hidden too, until nothing hidden
+    can be worked out. The same applies to each point of a series (cases, with new and
+    existing as members): a hidden point is `suppressed`, never drawn as 0.
+  - **A hidden total hides what it contains.** A median, share or rate over a hidden count is
+    hidden. A share of a shown count is hidden if its numerator or its complement is 1 to 4.
+    Shares and rates are sent at full precision, so a client can check that none gives away a
+    small number; the client fails the whole view if one does.
+  - **Rows never reveal rank.** Shown rows come in order of value, then the hidden rows in a
+    fixed order that does not depend on their size (by name; "Not standardised" and
+    unknowns last). When the patient count is hidden, every number in the view is hidden,
+    zeros included, and no row has a `drill`.
+  - A `drill` key is set only on a shown count of 5 or more; it is opaque (`[A-Za-z0-9_-]+`).
+- `GET /analysis/patients?drill&level=deidentified&…filters` — the de-identified patients
+  behind one drillable count: at most 200 rows (`count` is the full number), each with only a
+  pseudonymous ID, age band, sex, location type, conditions and findings (never a name, MRN,
+  date of birth or address). 422 `too_small` for a `drill` that is not a shown count of 5 or
+  more under those filters; 422 `level_not_supported` for any level but `deidentified`. Every
+  successful call is audited, and appears in the hospital's activity as
+  `analysis_patients_viewed` (type security, unflagged, with the number of rows opened).
+- The same calls are refused with 404 `not_found` until the hospital's analysis feature is on,
+  and with 403 `mfa_required` without two-step. `features.analysis` on the signed-in user says
+  whether the page may show.
+- Role: `analyst`, grantable by hospital admins, only with `clinician`. Granting and
+  removing are audited as `analyst_granted` and `analyst_removed`.
+
+Later plans (not built yet; the `level` field is left open for them):
+
+- `level=named`, only with a verified, unexpired clearance for the caller; every call audited.
 - Clearances: `POST /hospital/clearances` (multipart: the letter, covered people, end date),
   `GET /hospital/clearances`, `POST /hospital/clearances/{id}/revoke`; platform admin:
   verify / reject.
 - Audit: `GET /audit/named-access?…` and export with letters (platform admin, auditor).
-- Role: `analyst`, grantable by hospital admins, combinable with `clinician`.
 - Retention of letters and audit records under the existing retention rules; letters kept for
   at least as long as the audit records that cite them.

@@ -121,4 +121,25 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(/Plan\s+6\s+Analysis/);
     expect(readme).not.toMatch(/\blab\b/i);
   });
+
+  it("documents the analysis demo", () => {
+    expect(readme).toMatch(/\*\*Analysis\.\*\*/);
+    expect(readme).toContain("analyst.adeyemi@havanahospital.org");
+  });
+
+  it("says Analysis needs sign-off and stays off in live mode", () => {
+    expect(readme).toMatch(
+      /clinical,\s+privacy\s+and\s+legal\s+sign-off\s+before\s+live\s+use/,
+    );
+    expect(readme).toMatch(/ANALYSIS_SIGNED_OFF=true/);
+    const section = readme.slice(readme.indexOf("### Analysis"));
+    expect(section).toMatch(/ANALYSIS_SIGNED_OFF=true/);
+    const contributing = readFileSync(
+      path.join(repositoryRoot, "CONTRIBUTING.md"),
+      "utf8",
+    );
+    expect(contributing).toMatch(
+      /Clinical,\s+privacy\s+and\s+legal\s+sign-off\s+is\s+required\s+before\s+live\s+use/,
+    );
+  });
 });

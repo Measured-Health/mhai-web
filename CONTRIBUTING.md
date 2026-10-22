@@ -90,6 +90,14 @@ Every PR must pass:
   counted on the bell. It hasn't been given yet, so alerts run on sample
   data only. Any change to how alerts handle patient identifiers needs
   `clinical-review` and that sign-off.
+- **Analysis shows hospital-wide counts and de-identified patient rows**
+  (Plan 6). Clinical, privacy and legal sign-off is required before live
+  use, and it hasn't been given, so Analysis runs on sample data only and
+  stays off in live mode until `ANALYSIS_SIGNED_OFF=true` is set. Every
+  count is read under the small-group rule ("Fewer than 5"); never put its
+  filters, counts or patient rows in storage, the URL, the title or logs,
+  and never export or print the patient list. Any change to what Analysis
+  shows or who can open it needs `clinical-review` and that sign-off.
 - **Alerts are EMR-agnostic** ([ADR 0003](docs/adr/0003-many-emr-systems.md)):
   no vendor or product names anywhere, the record link comes from the API
   (`emr_link`), and only the hospital's own `source_label` is shown.
