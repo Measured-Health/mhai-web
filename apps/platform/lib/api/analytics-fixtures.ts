@@ -310,6 +310,22 @@ export function seedChanges(now: number, mode: AnalyticsMode): Change[] {
   return mode === "guard" ? all.filter((c) => !c.serious) : all;
 }
 
+/**
+ * When each change was first flagged, in minutes before now: Northgate's
+ * serious change is the newest. Riverside's came before Tunde's follow-up.
+ */
+const FLAGGED_MIN_AGO: Record<string, number> = {
+  chg_ngh_critical_ack: 25,
+  chg_all_low_potassium: 5 * 60,
+  chg_ngh_needs_review: 20 * 60,
+  chg_rch_questions: 2 * 24 * 60,
+  chg_hav_review_time: 3 * 24 * 60,
+  chg_hch_clinicians: 4 * 24 * 60,
+};
+/** When a change was first flagged (a change not listed: a week ago). */
+export const changeFlaggedAt = (id: string, now: number): string =>
+  iso(now - (FLAGGED_MIN_AGO[id] ?? WINDOW_DAYS * 24 * 60) * MIN);
+
 // ---- The small-group rule -------------------------------------------------
 
 const HIDDEN: Guarded = { value: null, suppressed: true };

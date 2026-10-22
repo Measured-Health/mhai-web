@@ -1,11 +1,13 @@
 "use client";
 import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
+import { isPlatformAdmin } from "@/lib/auth/types";
 import { useAuth } from "@/lib/auth/auth-context";
 import { Button } from "@mhai/ui/button";
 import { roleLabel, Avatar } from "../shell/account-menu";
 import { TopBar } from "../shell/top-bar";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
+import { AnalyticsEmailSection } from "./analytics-email-section";
 import { BackupCodesDialog } from "./backup-codes-dialog";
 import { ChangePasswordDialog } from "./change-password-dialog";
 import { DevicesSection } from "./devices-section";
@@ -93,6 +95,8 @@ export function AccountView() {
               </Button>
             </div>
           </section>
+
+          {isPlatformAdmin(user) && <AnalyticsEmailSection />}
 
           <OfflineNote />
           <DevicesSection />

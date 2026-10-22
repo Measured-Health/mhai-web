@@ -1,6 +1,11 @@
-import { render, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  __resetPlatformClientForTests,
+  __setPlatformClientForTests,
+} from "@/lib/api/client";
+import { createMockPlatform } from "@/lib/api/mock";
 import { renderWithAuth } from "@/tests/render";
 import { AppShell } from "./app-shell";
 import { TopBar } from "./top-bar";
@@ -66,9 +71,18 @@ describe("the platform shell", () => {
   });
 
   it("the top bar uses the platform header colour", () => {
-    render(<TopBar title="Team" sub="Staff" />);
+    renderWithAuth(<TopBar title="Team" sub="Staff" />, { user: null });
     expect(screen.getByRole("banner")).toHaveClass("bg-bloom", "text-white");
     expect(screen.queryByRole("button", { name: /notif/i })).toBeNull();
+  });
+
+  it("a signed-in user sees the bell in the top bar", async () => {
+    __setPlatformClientForTests(createMockPlatform({ delayMs: 0 }));
+    renderWithAuth(<TopBar title="Team" />);
+    expect(
+      await screen.findByRole("button", { name: /^Notifications/ }),
+    ).toBeInTheDocument();
+    __resetPlatformClientForTests();
   });
 
   it("on a phone the menu button opens the drawer and Escape closes it", async () => {

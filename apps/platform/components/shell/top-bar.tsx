@@ -1,6 +1,7 @@
 "use client";
 import { Menu } from "lucide-react";
 import type { ReactNode } from "react";
+import { NotificationBell } from "../notifications/bell";
 import { useShell } from "./shell-context";
 
 /** The page header on the platform colour; the menu button shows below xl. */
@@ -28,9 +29,10 @@ export function TopBar({
         <h1 className="truncate text-base font-semibold">{title}</h1>
         {sub && <p className="font-mono text-xs text-white/75">{sub}</p>}
       </div>
-      {actions && (
-        <div className="ml-auto flex items-center gap-2">{actions}</div>
-      )}
+      <div className="ml-auto flex items-center gap-2">
+        {actions}
+        <NotificationBell />
+      </div>
     </header>
   );
 }

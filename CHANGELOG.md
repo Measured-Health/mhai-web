@@ -53,6 +53,11 @@ All notable changes to this project are documented here. The format follows
   counts of 1 to 4 shown as "Fewer than 5". Havana Hospital and two small
   sample hospitals join the sample data. End-to-end tests cover it on
   desktop and phone.
+- Notifications in the platform admin app, on sample data: a bell that
+  counts the analytics changes you haven't seen (seen is per person), and
+  for platform admins an **Analytics email** setting on Account: Off,
+  Critical only, or Critical and weekly digest. Auditors have the bell and
+  get no email. End-to-end tests cover it on desktop and phone.
 - Shared packages `@mhai/ui` (components) and `@mhai/api-client` (API,
   session and two-step helpers), used by both apps.
 

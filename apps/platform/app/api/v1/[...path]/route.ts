@@ -51,10 +51,24 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["GET", "platform/analytics/hospitals/{id}/series"],
   ["PUT", "platform/analytics/changes/{id}/follow-up"],
   ["DELETE", "platform/analytics/changes/{id}/follow-up"],
+  ["GET", "platform/notifications"],
+  ["POST", "platform/notifications/seen"],
+  ["GET", "platform/me/analytics-email"],
+  ["PUT", "platform/me/analytics-email"],
 ];
+
+/**
+ * The only writes an auditor may make, as `METHOD shape` rows of the table
+ * above: marking notifications seen is their own read state, not an admin
+ * action. Every other write needs a platform admin.
+ */
+const AUDITOR_WRITES: ReadonlySet<string> = new Set([
+  "POST platform/notifications/seen",
+]);
 
 const PATTERNS = SHAPES.map(([method, shape]) => ({
   method,
+  shape,
   parts: shape.split("/"),
 }));
 
@@ -70,8 +84,9 @@ for (const { parts } of PATTERNS)
     RESERVED.set(before, (RESERVED.get(before) ?? new Set()).add(part));
   });
 
-function shapeAllowed(method: string, path: string[]): boolean {
-  return PATTERNS.some(
+/** The listed shape this call matches, as `METHOD shape`, or null. */
+function shapeOf(method: string, path: string[]): string | null {
+  const match = PATTERNS.find(
     (p) =>
       p.method === method &&
       p.parts.length === path.length &&
@@ -82,6 +97,7 @@ function shapeAllowed(method: string, path: string[]): boolean {
         return ID.test(seg) && !taken?.has(seg);
       }),
   );
+  return match ? `${match.method} ${match.shape}` : null;
 }
 
 async function refresh(s: ServerSession): Promise<ServerSession> {
@@ -108,7 +124,8 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   const { path } = await ctx.params;
   const method = req.method;
   // 1. Only the listed shapes (method and path).
-  if (!shapeAllowed(method, path)) return json(404, { code: "not_found" });
+  const shape = shapeOf(method, path);
+  if (shape === null) return json(404, { code: "not_found" });
   // 2. Writes must come from this app's pages.
   if (method !== "GET" && !sameOrigin(req)) return forbidden();
   // 3. A live session, else it's over (an idle token only revokes itself).
@@ -124,10 +141,20 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   // 6. A platform role.
   const roles = s.user.roles;
   if (!Array.isArray(roles) || roles.length === 0) return forbidden();
-  // 7. Auditors only read.
-  if (method !== "GET" && !roles.includes("platform_admin")) return forbidden();
+  // 7. Auditors only read, except their own read state (AUDITOR_WRITES).
+  if (
+    method !== "GET" &&
+    !roles.includes("platform_admin") &&
+    !(roles.includes("auditor") && AUDITOR_WRITES.has(shape))
+  )
+    return forbidden();
 
-  s = await touchSession(s);
+  // A background GET (a poll, not the person) is read and checked like any
+  // other, but leaves the idle clock alone. Writes ignore the header. It is
+  // never forwarded: only the headers listed below go upstream.
+  const background =
+    method === "GET" && req.headers.get("x-mhai-background") === "1";
+  if (!background) s = await touchSession(s);
   if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
 
   const body = method === "GET" ? undefined : await req.text();
