@@ -114,6 +114,13 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(/Auditors\s+get\s+no\s+email/);
   });
 
+  it("documents the legal holds demo", () => {
+    expect(readme).toMatch(/\*\*Legal holds\.\*\*/);
+    expect(readme).toMatch(
+      /lifting\s+a\s+hold\s+needs\s+two\s+platform\s+admins/i,
+    );
+  });
+
   it("says the 403 page has no link, and no longer sets its address", () => {
     expect(readme).not.toMatch(/NEXT_PUBLIC_ADMIN_APP_URL/);
     expect(readme).toMatch(

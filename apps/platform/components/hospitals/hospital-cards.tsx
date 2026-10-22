@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { HospitalSummary } from "@/lib/api/contract";
 import { activityLabel, dateLabel } from "./format";
+import { HoldTag } from "./hold-tag";
 import { StatusChip } from "./status-chip";
 
 /** The hospitals as cards, on phones. */
@@ -19,7 +20,10 @@ export function HospitalCards({ rows }: { rows: HospitalSummary[] }) {
                 {h.short_code}
               </small>
             </Link>
-            <StatusChip status={h.status} />
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+              {h.legal_holds_active > 0 && <HoldTag />}
+              <StatusChip status={h.status} />
+            </div>
           </div>
           <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-[12.5px]">
             <div>

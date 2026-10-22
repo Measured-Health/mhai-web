@@ -31,6 +31,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Legal holds in the platform admin app, on sample data: a Legal holds page
+  with filters, a hold on a hospital's records (all of them or a date range)
+  that blocks its removal, a Hold tag on the hospitals list, a Legal holds
+  section on each hospital's page, and a View holds link in the removal
+  panel. Lifting a hold needs two platform admins. Auditors read it all.
+  End-to-end tests cover it on desktop and phone.
 - Analysis, on sample data: for hospital admins and clinicians with the new
   Analyst role (given in Staff), five views of conditions, who is affected,
   co-occurring conditions, findings and alerts, and MHAI quality, with

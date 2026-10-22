@@ -477,14 +477,15 @@ admins and auditors. It runs on sample data until the backend has the
 platform endpoints; the contract it assumes is in
 [the platform admin spec, §13](docs/specs/2026-10-17-platform-admin-design.md).
 
-| Page      | What it does                                                                                                                | Who                            |
-| --------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| Hospitals | List, search, add a hospital and invite its first admin                                                                     | platform admin (auditors read) |
-| Hospital  | Details, deactivate and reactivate, single sign-on, two-person removal with retention and legal-hold checks, recent actions | platform admin (auditors read) |
-| Analytics | What changed, the tabs and a CSV, in counts only; follow-ups                                                                | platform admin (auditors read) |
-| Team      | Invite, change role, remove (never your own row)                                                                            | platform admin (auditors read) |
-| Activity  | Every platform action, newest first, by hospital                                                                            | both                           |
-| Account   | Password, backup codes, signed-in devices                                                                                   | both                           |
+| Page        | What it does                                                                                                                           | Who                            |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Hospitals   | List, search, add a hospital and invite its first admin                                                                                | platform admin (auditors read) |
+| Hospital    | Details, deactivate and reactivate, single sign-on, two-person removal with retention and legal-hold checks, recent actions            | platform admin (auditors read) |
+| Analytics   | What changed, the tabs and a CSV, in counts only; follow-ups                                                                           | platform admin (auditors read) |
+| Legal holds | The holds list and filters, place a hold, a hold's page with edit and two-person lift and undo; also a section on each hospital's page | platform admin (auditors read) |
+| Team        | Invite, change role, remove (never your own row)                                                                                       | platform admin (auditors read) |
+| Activity    | Every platform action, newest first, by hospital                                                                                       | both                           |
+| Account     | Password, backup codes, signed-in devices                                                                                              | both                           |
 
 ```text
 browser ──> platforms.<domain> (IP allow list)
