@@ -57,11 +57,11 @@ export const checkpoint = (
   ...overrides,
 });
 
-/** An intact run with every piece of proof. */
+/** An intact run with every piece of proof; its range was fixed at the start. */
 export const intactRun = (overrides: Partial<VerifyRun> = {}): VerifyRun => ({
   id: "run_1",
-  started_at: "2026-10-22T05:59:00Z",
-  finished_at: "2026-10-22T06:00:00Z",
+  started_at: "2026-10-22T06:00:00Z",
+  finished_at: "2026-10-22T06:01:00Z",
   by: null,
   state: "intact",
   entries_checked: 1_204_331,

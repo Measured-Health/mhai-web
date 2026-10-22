@@ -273,6 +273,12 @@ describe("readAuditEvent", () => {
     );
   });
 
+  it("hour 24 is undisplayable", () => {
+    expect(bad(auditEvent({ at: "2026-10-22T24:00:00Z" }))).toBe(true);
+    expect(bad(auditEvent({ at: "2026-10-22T23:59:59Z" }))).toBe(false);
+    expect(bad(auditEvent({ at: "2026-10-22T12:60:00Z" }))).toBe(true);
+  });
+
   it("30 Feb is undisplayable", () => {
     expect(bad(auditEvent({ at: "2026-02-30T00:00:00Z" }))).toBe(true);
     expect(bad(auditEvent({ at: "2026-02-28T00:00:00Z" }))).toBe(false);
@@ -401,7 +407,7 @@ describe("the other readers", () => {
     const odd = readRun({ ...intactRun(), entries_checked: "lots" });
     expect(odd).toMatchObject({
       id: "run_1",
-      started_at: "2026-10-22T05:59:00Z",
+      started_at: "2026-10-22T06:00:00Z",
       state: "error",
       error_code: "unexpected_reply",
       entries_checked: null,

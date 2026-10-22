@@ -17,11 +17,12 @@ type Run = ReadRun | VerifyRun;
 export const SKEW_MS = 5 * 60_000;
 
 /**
- * The proof: a valid reply that names its whole range, in time order
- * (start ≤ last entry ≤ finish, and, given `now`, a finish no later than
- * now plus the skew), with nothing that contradicts it.
+ * The proof: a valid reply that names its whole range, with the last entry
+ * no later than the finish and the finish no later than now plus the skew,
+ * and nothing that contradicts it. The range may be fixed when the run
+ * starts, so the last entry may come before the start.
  */
-function proven(r: Run, now?: number): boolean {
+function proven(r: Run, now: number): boolean {
   if (
     r.state !== "intact" ||
     r.entries_checked === null ||
@@ -30,22 +31,18 @@ function proven(r: Run, now?: number): boolean {
     r.to_seq === null ||
     r.to_at === null ||
     r.finished_at === null ||
-    r.started_at === null ||
     r.error_code !== null ||
     r.first_broken_seq !== null ||
     r.first_broken_at !== null
   )
     return false;
-  const [start, last, end] = [r.started_at, r.to_at, r.finished_at].map(
-    Date.parse,
-  );
-  return (
-    start <= last && last <= end && (now === undefined || end <= now + SKEW_MS)
-  );
+  const last = Date.parse(r.to_at);
+  const end = Date.parse(r.finished_at);
+  return last <= end && end <= now + SKEW_MS;
 }
 
-/** Pass `now` (the shared clock) wherever it is known: a finish in the future isn't proof. */
-export function integrityOf(run: Run, now?: number): Shown {
+/** `now` is the shared clock (`useNow`): a finish in the future isn't proof. */
+export function integrityOf(run: Run, now: number): Shown {
   if (run.state === "running") return "checking";
   if (run.state === "broken") return "broken";
   return proven(run, now) ? "intact" : "couldnt_check";
@@ -125,7 +122,7 @@ function startWords(r: Run): string | null {
 const UNKNOWN = "The check didn't finish, so the log's integrity is unknown.";
 
 /** The state block's sentence (spec §8.1, word for word). */
-export function runSentence(run: Run, now?: number): string {
+export function runSentence(run: Run, now: number): string {
   switch (integrityOf(run, now)) {
     case "intact":
       return `No changes found. Checked ${num(run.entries_checked!)} entries, from ${startWords(run)} to entry ${num(run.to_seq!)} (${utc(run.to_at!)}).`;

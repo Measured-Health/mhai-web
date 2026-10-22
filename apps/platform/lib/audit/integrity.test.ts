@@ -12,6 +12,9 @@ import {
 } from "./integrity";
 import type { ReadStatus } from "./read";
 
+/** A clock after every fixture run has finished. */
+const NOW = Date.parse("2026-10-22T07:00:00Z");
+
 const status = (over: Partial<ReadStatus> = {}): ReadStatus => ({
   latest: intactRun(),
   running: null,
@@ -33,7 +36,7 @@ const broken = intactRun({
 
 describe("integrityOf", () => {
   it("intact needs entries_checked > 0, a start, to_seq, to_at and finished_at", () => {
-    expect(integrityOf(intactRun())).toBe("intact");
+    expect(integrityOf(intactRun(), NOW)).toBe("intact");
   });
 
   it("each missing piece gives couldnt_check", () => {
@@ -45,24 +48,24 @@ describe("integrityOf", () => {
       { to_at: null },
       { finished_at: null },
     ])
-      expect(integrityOf(intactRun(over)), JSON.stringify(over)).toBe(
+      expect(integrityOf(intactRun(over), NOW), JSON.stringify(over)).toBe(
         "couldnt_check",
       );
     expect(
-      integrityOf(intactRun({ state: "error", error_code: "timed_out" })),
+      integrityOf(intactRun({ state: "error", error_code: "timed_out" }), NOW),
     ).toBe("couldnt_check");
   });
 
   it("from_first counts as a start", () => {
     expect(
-      integrityOf(intactRun({ from_checkpoint: null, from_first: true })),
+      integrityOf(intactRun({ from_checkpoint: null, from_first: true }), NOW),
     ).toBe("intact");
   });
 
   it("reads broken and checking", () => {
-    expect(integrityOf(broken)).toBe("broken");
+    expect(integrityOf(broken, NOW)).toBe("broken");
     expect(
-      integrityOf(intactRun({ state: "running", finished_at: null })),
+      integrityOf(intactRun({ state: "running", finished_at: null }), NOW),
     ).toBe("checking");
   });
 });
@@ -207,13 +210,20 @@ describe("headerLine", () => {
     expect(integrityOf(skew, Date.parse("2026-10-22T06:00:00Z"))).toBe(
       "intact",
     );
-    // Out of order: the last entry after the finish, or before the start.
-    expect(integrityOf(intactRun({ to_at: "2026-10-22T06:01:00Z" }))).toBe(
+    // Out of order: the last entry after the finish.
+    expect(integrityOf(intactRun({ to_at: "2026-10-22T06:02:00Z" }), NOW)).toBe(
       "couldnt_check",
     );
-    expect(integrityOf(intactRun({ to_at: "2026-10-22T05:00:00Z" }))).toBe(
-      "couldnt_check",
-    );
+  });
+
+  it("a range fixed at run start, with to_at before started_at, reads Intact", () => {
+    const run = intactRun({
+      started_at: "2026-10-22T06:00:30Z",
+      to_at: "2026-10-22T06:00:00Z",
+      finished_at: "2026-10-22T06:05:00Z",
+    });
+    expect(integrityOf(run, NOW)).toBe("intact");
+    expect(headerLine(status({ latest: run }), NOW).tone).toBe("ok");
   });
 
   it("anything contradicting the proof reads Couldn't check", () => {
@@ -222,7 +232,7 @@ describe("headerLine", () => {
       { first_broken_seq: 5 },
       { first_broken_at: "2026-10-22T05:00:00Z" },
     ])
-      expect(integrityOf(intactRun(over)), JSON.stringify(over)).toBe(
+      expect(integrityOf(intactRun(over), NOW), JSON.stringify(over)).toBe(
         "couldnt_check",
       );
   });
@@ -230,30 +240,30 @@ describe("headerLine", () => {
 
 describe("the run's words", () => {
   it("runSentence gives spec §8.1's Intact and Broken sentences word for word, using 1,204,331 / 4 Jan 2027 / 9,881,204 / 22 Oct 2026 06:00 UTC and 9,880,117 / 21 Oct 2026 23:14 UTC", () => {
-    expect(runSentence(intactRun())).toBe(
+    expect(runSentence(intactRun(), NOW)).toBe(
       "No changes found. Checked 1,204,331 entries, from the checkpoint of 4 Jan 2027 to entry 9,881,204 (22 Oct 2026 06:00 UTC).",
     );
-    expect(runSentence(broken)).toBe(
+    expect(runSentence(broken, NOW)).toBe(
       "The log has been altered or damaged. The first entry that doesn't match is 9,880,117 (21 Oct 2026 23:14 UTC). Entries from there on can't be trusted until this is investigated.",
     );
     expect(
-      runSentence(intactRun({ from_checkpoint: null, from_first: true })),
+      runSentence(intactRun({ from_checkpoint: null, from_first: true }), NOW),
     ).toBe(
       "No changes found. Checked 1,204,331 entries, from the first entry to entry 9,881,204 (22 Oct 2026 06:00 UTC).",
     );
   });
 
   it("a check without proof says why it couldn't", () => {
-    expect(runSentence(intactRun({ finished_at: null }))).toBe(
+    expect(runSentence(intactRun({ finished_at: null }), NOW)).toBe(
       "The check didn't finish, so the log's integrity is unknown. The reply wasn't what was expected.",
     );
     expect(
-      runSentence(intactRun({ state: "error", error_code: "timed_out" })),
+      runSentence(intactRun({ state: "error", error_code: "timed_out" }), NOW),
     ).toBe(
       "The check didn't finish, so the log's integrity is unknown. It timed out.",
     );
     expect(
-      runSentence(intactRun({ state: "running", entries_checked: 5000 })),
+      runSentence(intactRun({ state: "running", entries_checked: 5000 }), NOW),
     ).toBe(
       "Checking… 5,000 entries checked so far, from the checkpoint of 4 Jan 2027.",
     );
@@ -278,7 +288,7 @@ describe("the run's words", () => {
     expect(coverageLine(run)).toContain(
       "checked from the re-anchor of 4 Jan 2027 after incident INC-0042",
     );
-    expect(runSentence(run)).toBe(
+    expect(runSentence(run, NOW)).toBe(
       "No changes found. Checked 1,204,331 entries, from the re-anchor of 4 Jan 2027 to entry 9,881,204 (22 Oct 2026 06:00 UTC).",
     );
   });

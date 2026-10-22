@@ -51,7 +51,7 @@ function realDay(y: string, m: string, d: string): boolean {
   );
 }
 const INSTANT =
-  /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/;
+  /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/;
 /** An instant with its zone (Z or an offset), never a local time. */
 const isTime = (v: unknown): v is string => {
   if (typeof v !== "string") return false;
