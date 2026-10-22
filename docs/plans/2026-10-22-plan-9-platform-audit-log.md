@@ -267,23 +267,23 @@ export interface AuditClient {
 
 **Proxy shapes** (append to `SHAPES`):
 
-| Method | Path                                         | Auditor may write |
-| ------ | -------------------------------------------- | ----------------- |
-| GET    | `platform/audit`                             |                   |
-| GET    | `platform/audit/people`                      |                   |
-| GET    | `platform/audit/hospitals`                   |                   |
-| GET    | `platform/audit/{id}`                        |                   |
-| GET    | `platform/audit/{id}/patients`               |                   |
-| POST   | `platform/audit/undisplayable`               | yes               |
-| GET    | `platform/audit/named-access`                |                   |
-| GET    | `platform/audit/exports`                     |                   |
-| POST   | `platform/audit/exports`                     | yes               |
-| GET    | `platform/audit/exports/{id}/file`           |                   |
-| POST   | `platform/audit/verify`                      | yes               |
-| GET    | `platform/audit/verify/status`               |                   |
-| GET    | `platform/audit/verify/runs`                 |                   |
-| GET    | `platform/audit/verify/runs/{id}`            |                   |
-| POST   | `platform/audit/verify/runs/{id}/outcome`    | yes               |
+| Method | Path                                      | Auditor may write |
+| ------ | ----------------------------------------- | ----------------- |
+| GET    | `platform/audit`                          |                   |
+| GET    | `platform/audit/people`                   |                   |
+| GET    | `platform/audit/hospitals`                |                   |
+| GET    | `platform/audit/{id}`                     |                   |
+| GET    | `platform/audit/{id}/patients`            |                   |
+| POST   | `platform/audit/undisplayable`            | yes               |
+| GET    | `platform/audit/named-access`             |                   |
+| GET    | `platform/audit/exports`                  |                   |
+| POST   | `platform/audit/exports`                  | yes               |
+| GET    | `platform/audit/exports/{id}/file`        |                   |
+| POST   | `platform/audit/verify`                   | yes               |
+| GET    | `platform/audit/verify/status`            |                   |
+| GET    | `platform/audit/verify/runs`              |                   |
+| GET    | `platform/audit/verify/runs/{id}`         |                   |
+| POST   | `platform/audit/verify/runs/{id}/outcome` | yes               |
 
 - The words `people`, `hospitals`, `undisplayable`, `named-access`, `exports` and `verify` are reserved by the existing `RESERVED` rule, so none of them is ever read as an `{id}`.
 - `problem()`: a 422 with `code: "too_many_rows"` and an integer `rows` forwards `{code, rows}`.
@@ -335,22 +335,22 @@ export interface AuditClient {
 
   The kinds:
 
-  | Type              | Kind → words (`{t}` target name, `{h}` hospital, `{n}` count). `*` allows a note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-  | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-  | sign_in           | `signed_in` Signed in · `sign_in_refused` Sign-in refused · `sign_in_locked` Sign-in locked after too many tries · `signed_out` Signed out                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-  | account           | `password_changed` Changed their password · `two_step_set_up` Set up two-step · `backup_codes_made` Made new backup codes · `device_signed_out` Signed out a device                                                                                                                                                                                                                                                                                                                                                                                                             |
-  | staff             | `staff_invited` Invited {t} · `staff_role_changed` Changed {t}'s role · `staff_deactivated` Deactivated {t} · `staff_reactivated` Reactivated {t} · `own_role_change_refused` Tried to change their own role · `team_invited` Invited {t} to the platform team · `team_role_changed` Changed {t}'s platform role · `team_removed` Removed {t} from the platform team                                                                                                                                                                                                          |
-  | hospital_settings | `hospital_added` Added {h} · `hospital_updated` Updated {h}'s details · `hospital_deactivated`\* Deactivated {h} · `hospital_reactivated` Reactivated {h} · `removal_requested` Asked to remove {h} · `removal_approved` Approved removing {h} · `removal_cancelled` Cancelled removing {h} · `hospital_removed` Removed {h} · `sso_updated` Changed single sign-on for {h} · `sso_tested` Tested single sign-on for {h} · `setting_changed` Changed {t}                                                                                                                              |
-  | consultation      | `question_asked` Asked a question · {specialty} · {confidence} confidence · `answer_sent_for_review` Answer sent for review · {specialty}                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-  | review            | `review_submitted` Submitted a review · `review_reassigned` Reassigned a review                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-  | alerts            | `alert_acknowledged` Acknowledged an alert · `alert_escalated` Escalated an alert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-  | analysis          | `analysis_viewed` Opened Analysis · `drilldown_deidentified` Opened a de-identified patient list · {n} patients                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+  | Type              | Kind → words (`{t}` target name, `{h}` hospital, `{n}` count). `*` allows a note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+  | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | sign_in           | `signed_in` Signed in · `sign_in_refused` Sign-in refused · `sign_in_locked` Sign-in locked after too many tries · `signed_out` Signed out                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+  | account           | `password_changed` Changed their password · `two_step_set_up` Set up two-step · `backup_codes_made` Made new backup codes · `device_signed_out` Signed out a device                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+  | staff             | `staff_invited` Invited {t} · `staff_role_changed` Changed {t}'s role · `staff_deactivated` Deactivated {t} · `staff_reactivated` Reactivated {t} · `own_role_change_refused` Tried to change their own role · `team_invited` Invited {t} to the platform team · `team_role_changed` Changed {t}'s platform role · `team_removed` Removed {t} from the platform team                                                                                                                                                                                                                                                                                              |
+  | hospital_settings | `hospital_added` Added {h} · `hospital_updated` Updated {h}'s details · `hospital_deactivated`\* Deactivated {h} · `hospital_reactivated` Reactivated {h} · `removal_requested` Asked to remove {h} · `removal_approved` Approved removing {h} · `removal_cancelled` Cancelled removing {h} · `hospital_removed` Removed {h} · `sso_updated` Changed single sign-on for {h} · `sso_tested` Tested single sign-on for {h} · `setting_changed` Changed {t}                                                                                                                                                                                                          |
+  | consultation      | `question_asked` Asked a question · {specialty} · {confidence} confidence · `answer_sent_for_review` Answer sent for review · {specialty}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+  | review            | `review_submitted` Submitted a review · `review_reassigned` Reassigned a review                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+  | alerts            | `alert_acknowledged` Acknowledged an alert · `alert_escalated` Escalated an alert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+  | analysis          | `analysis_viewed` Opened Analysis · `drilldown_deidentified` Opened a de-identified patient list · {n} patients                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
   | named_access      | `drilldown_named` Opened a named patient list · {n} patients · `letter_uploaded` Uploaded clearance letter {t} · `letter_refused` A clearance letter file was refused · `letter_verified` Verified clearance letter {t} · `letter_rejected` Rejected clearance letter {t} · `letter_narrowed` Narrowed clearance letter {t} · `letter_revoked` Revoked clearance letter {t} · `letter_ended` Clearance letter {t} ended · `letter_viewed` Viewed clearance letter {t} · `letter_reminder_sent` Sent a reminder about clearance letter {t} · `named_switch_changed` Changed the named access switch · `verify_refused` Tried to verify their own hospital's letter |
-  | platform          | `change_followed_up`\* Marked “{t}” followed up · `change_follow_up_undone` Undid the follow-up on “{t}” · `analytics_email_changed` Changed their analytics email                                                                                                                                                                                                                                                                                                                                                                                                             |
-  | export            | `audit_exported`\* Exported the audit log · {rows} rows · `named_access_exported`\* Exported named access for a legal request · `export_downloaded` Downloaded export {export_id} · `export_download_refused` Tried to download export {export_id} again · `activity_exported` Exported a hospital's Activity                                                                                                                                                                                                                                                                  |
-  | audit             | `audit_viewed` Viewed the audit log · `audit_searched` Searched the audit log by {searched_kind words} · `audit_event_opened` Opened entry #{target seq or id} · `audit_patients_viewed` Showed patient ids for an entry · `audit_check_run` Ran the integrity check (a `system` actor: "Daily integrity check") · `audit_check_outcome`\* Recorded the outcome of a failed check · `audit_undisplayable_reported` Reported an entry that couldn't be displayed                                                                                                               |
-  | retention         | `retention_run` Retention removed {purged_count} entries before {before} · `retention_checkpoint` Wrote a retention checkpoint · `re_anchor` Re-anchored the log after incident {incident_ref} · `hold_placed` Placed a legal hold on {h} · `hold_lifted` Lifted a legal hold on {h}                                                                                                                                                                                                                                                                                          |
-  | security          | `step_up_refused` Two-step code refused · `mfa_locked` Locked after too many wrong codes · `session_revoked` Session ended by an admin                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+  | platform          | `change_followed_up`\* Marked “{t}” followed up · `change_follow_up_undone` Undid the follow-up on “{t}” · `analytics_email_changed` Changed their analytics email                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+  | export            | `audit_exported`\* Exported the audit log · {rows} rows · `named_access_exported`\* Exported named access for a legal request · `export_downloaded` Downloaded export {export_id} · `export_download_refused` Tried to download export {export_id} again · `activity_exported` Exported a hospital's Activity                                                                                                                                                                                                                                                                                                                                                     |
+  | audit             | `audit_viewed` Viewed the audit log · `audit_searched` Searched the audit log by {searched_kind words} · `audit_event_opened` Opened entry #{target seq or id} · `audit_patients_viewed` Showed patient ids for an entry · `audit_check_run` Ran the integrity check (a `system` actor: "Daily integrity check") · `audit_check_outcome`\* Recorded the outcome of a failed check · `audit_undisplayable_reported` Reported an entry that couldn't be displayed                                                                                                                                                                                                   |
+  | retention         | `retention_run` Retention removed {purged_count} entries before {before} · `retention_checkpoint` Wrote a retention checkpoint · `re_anchor` Re-anchored the log after incident {incident_ref} · `hold_placed` Placed a legal hold on {h} · `hold_lifted` Lifted a legal hold on {h}                                                                                                                                                                                                                                                                                                                                                                              |
+  | security          | `step_up_refused` Two-step code refused · `mfa_locked` Locked after too many wrong codes · `session_revoked` Session ended by an admin                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
   The reasons are the closed list:
   - deactivation: `contract_ended`, `security_concern`, `hospital_request`, `other`;
@@ -482,9 +482,9 @@ export interface AuditClient {
   ```ts
   type AuditMockOptions = {
     integrity?: "intact" | "broken" | "error" | "unproven" | "stale";
-    bad?: boolean;          // two malformed sample events
-    matchCount?: number;    // overrides total, total_capped and the export row count
-    unavailable?: boolean;  // every audit read → 503
+    bad?: boolean; // two malformed sample events
+    matchCount?: number; // overrides total, total_capped and the export row count
+    unavailable?: boolean; // every audit read → 503
   };
   ```
 
@@ -881,6 +881,7 @@ Fingerprints are deterministic 64-hex values from a small synchronous FNV-based 
   - "phone: cards, then the detail as a page with Back".
 
   Broken, Couldn't check and stale are proved in the component tests only (spec §12: there is no on-screen switch).
+
 - [ ] **Step 2: Docs.**
   - The README platform section gains "**Audit log.**": what it shows, that reads are recorded, the sample, and the code `123456` for exports.
   - Pin it with `"documents the platform audit log demo"` matching `/\*\*Audit log\.\*\*/`.
@@ -914,6 +915,7 @@ Every edit here is additive (new rows, a spread, an optional prop). Merge order 
   - the file-type pass-through for one shape.
 
   Plan 11's letter page images also need a binary pass-through (`Content-Disposition: inline`), so agree one helper for "binary shapes" with Plan 11.
+
 - `apps/platform/lib/api/contract.ts`: `extends AuditClient`. Plans 8 and 11 add methods and types (Plan 11's letter statuses should equal `LetterStatus` here; re-export one from the other).
 - `apps/platform/lib/api/mock.ts`: one option, one spread, and the notification merge (Task 4). Plans 8 and 11 add options and methods.
 - `apps/platform/lib/api/live.ts` and `live.test.ts`: one spread.
@@ -930,25 +932,25 @@ Every edit here is additive (new rows, a spread, an optional prop). Merge order 
 
 - **Spec coverage:**
 
-  | Spec section                                | Task(s)                                          |
-  | ------------------------------------------- | ------------------------------------------------ |
-  | §2 goals                                    | 5, 6, 7, 8, 9                                    |
-  | §3 roles, reads recorded, sidebar           | 1 (proxy), 3 (mock records), 5 (nav)             |
-  | §4 event fields, action types               | 1, 2 (kinds, reader, words), 6                   |
-  | §5 no patient data, fail closed             | 2, 5, 6, 3 (file)                                |
-  | §6.1 Events, filters, search, gaps, states  | 5, 6                                             |
-  | §6.2 Named access                           | 9                                                |
-  | §6.3 Exports tab                            | 8                                                |
-  | §6.4 / §8 Integrity, banner, bell, steps    | 2, 3, 4, 7                                       |
-  | §6 footer                                   | 5                                                |
-  | §7 export rules, size, legal-request export | 2 (file), 3, 8, 9                                |
-  | §9 retention shown                          | 2 (gapLine, coverageLine), 3, 5, 7               |
-  | §10 hospital Activity                       | backend duty (Rulings); no app change            |
-  | §11 accessibility                           | 5–9 (tables, live regions, labelled panels)      |
-  | §12 demo                                    | 3, 10                                            |
-  | §13 contract                                | 1, then the controller's PR for §14.9           |
-  | §14 delivery, 9b cut                        | this plan, Parallel work                         |
-  | §15 tests                                   | 2–10                                             |
+  | Spec section                                | Task(s)                                     |
+  | ------------------------------------------- | ------------------------------------------- |
+  | §2 goals                                    | 5, 6, 7, 8, 9                               |
+  | §3 roles, reads recorded, sidebar           | 1 (proxy), 3 (mock records), 5 (nav)        |
+  | §4 event fields, action types               | 1, 2 (kinds, reader, words), 6              |
+  | §5 no patient data, fail closed             | 2, 5, 6, 3 (file)                           |
+  | §6.1 Events, filters, search, gaps, states  | 5, 6                                        |
+  | §6.2 Named access                           | 9                                           |
+  | §6.3 Exports tab                            | 8                                           |
+  | §6.4 / §8 Integrity, banner, bell, steps    | 2, 3, 4, 7                                  |
+  | §6 footer                                   | 5                                           |
+  | §7 export rules, size, legal-request export | 2 (file), 3, 8, 9                           |
+  | §9 retention shown                          | 2 (gapLine, coverageLine), 3, 5, 7          |
+  | §10 hospital Activity                       | backend duty (Rulings); no app change       |
+  | §11 accessibility                           | 5–9 (tables, live regions, labelled panels) |
+  | §12 demo                                    | 3, 10                                       |
+  | §13 contract                                | 1, then the controller's PR for §14.9       |
+  | §14 delivery, 9b cut                        | this plan, Parallel work                    |
+  | §15 tests                                   | 2–10                                        |
 
 - **Names used across tasks:**
   - types: `AuditEvent`, `AuditDetail`, `AuditFilters`, `NamedAccessFilters`, `AuditList`, `AuditPerson`, `AuditHospital`, `Letter`, `Checkpoint`, `VerifyRun`, `IntegrityStatus`, `ExportIn`, `ExportOut`, `ExportRecord`, `TooManyRowsError`, `AuditClient`, `AuditRow`, `AuditTab`;
