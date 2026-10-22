@@ -203,6 +203,23 @@ describe("viewSummary", () => {
     }
   });
 
+  it("never calls a pair of 0 the most common", () => {
+    const s = viewSummary(
+      "co-occurring",
+      pairs(S(300), [
+        { a: E11, b: I10, a_patients: S(100), patients: D(H), share_of_a: H },
+        {
+          a: I10,
+          b: E11,
+          a_patients: S(100),
+          patients: D(S(0)),
+          share_of_a: S(0),
+        },
+      ]),
+    );
+    expect(s).not.toMatch(/most common/);
+  });
+
   it("all hidden gives 'Fewer than 5 patients match these filters'", () => {
     const all: [ViewId, ViewOut[ViewId]][] = [
       [

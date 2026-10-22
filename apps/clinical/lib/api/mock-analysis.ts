@@ -228,7 +228,10 @@ function prevalence(f: AnalysisFilters): PrevalenceOut {
       );
       if (first >= start) n++;
     }
-    return { start, cases: guard(c), new: guard(n) };
+    // New and the rest (existing that week, not sent) add up to cases:
+    // guarded as one set, so a shown point can't give away 1 to 4.
+    const [fresh] = guardSet([n, c - n], c);
+    return { start, cases: guard(c), new: fresh };
   });
   return {
     ...m,

@@ -312,6 +312,17 @@ function walk(x: unknown, path: string, key = "") {
 
 function checkSeriesDays(v: ViewOut["prevalence"], label: string) {
   for (const s of v.series) {
+    // New is part of cases; the rest (existing that week) is a hidden member.
+    const id = `${label} week ${s.start}`;
+    if (s.cases.suppressed)
+      expect((s.new.value ?? 0) > 0, `${id}: new under hidden cases`).toBe(
+        false,
+      );
+    else if (!s.new.suppressed) {
+      const rest = (s.cases.value ?? 0) - (s.new.value ?? 0);
+      expect(rest, `${id}: new over cases`).toBeGreaterThanOrEqual(0);
+      expect(small(rest), `${id}: existing ${rest} is derivable`).toBe(false);
+    }
     expect(s.start, label).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(new Date(`${s.start}T00:00:00Z`).toISOString().slice(0, 10)).toBe(
       s.start,

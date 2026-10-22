@@ -50,7 +50,7 @@ const SUMMARY: { [V in ViewId]: (d: ViewOut[V]) => string } = {
     if (k === 0) return "No conditions found together.";
     const head = plural(k, "pair of conditions", "pairs of conditions");
     const best = top(d.pairs, (r) => r.patients);
-    if (!best)
+    if (!best || best.patients.value === 0)
       return `${head} found together, each with ${FEWER_THAN_5.toLowerCase()} patients.`;
     return `${head} found together; the most common shown is ${conditionName(best.a)} + ${conditionName(best.b)} (${countText(best.patients)} patients).`;
   },

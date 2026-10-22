@@ -17,6 +17,8 @@ describe("guardedOk", () => {
   it("a count of 12.5 fails; a median of 12.5 minutes reads", () => {
     expect(guardedOk(S(12.5), "count")).toBe(false);
     expect(guardedOk(S(12.5), "minutes", true)).toBe(true);
+    expect(guardedOk(S(12.3), "minutes", true)).toBe(false);
+    expect(guardedOk(S(37 / 3), "minutes", true)).toBe(false);
     expect(guardedOk(S(-1), "minutes", true)).toBe(false);
   });
 
@@ -115,6 +117,15 @@ describe("numeratorLeaks", () => {
       }
   });
 
+  it("a share no whole numerator rounds to falls back to floor and ceiling", () => {
+    // 4 of 6 rounded to one place: 0.7 of 6 is 4.2.
+    expect(numeratorLeaks(S(6), S(0.7))).toBe(true);
+    // 3.6: 3 or 4.
+    expect(numeratorLeaks(S(6), S(0.6))).toBe(true);
+    // 50 of 100 is fine either way.
+    expect(numeratorLeaks(S(100), S(0.5))).toBe(false);
+  });
+
   it("hidden or nothing never leaks", () => {
     expect(numeratorLeaks(H, S(0.5))).toBe(false);
     expect(numeratorLeaks(S(100), H)).toBe(false);
@@ -128,9 +139,11 @@ describe("scrub", () => {
       a: { value: 3, suppressed: true, drill: "x" },
       b: [{ value: 7, suppressed: false, drill: "age-1" }],
       c: "kept",
+      d: { value: 0, suppressed: false, drill: "x" },
     });
     expect(out).toEqual({
       a: { value: null, suppressed: true, drill: null },
+      d: { value: 0, suppressed: false, drill: null },
       b: [{ value: 7, suppressed: false, drill: "age-1" }],
       c: "kept",
     });

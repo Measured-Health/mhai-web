@@ -39,7 +39,8 @@ export function guardedOk(v: unknown, kind: GuardKind, loose = false): boolean {
   if (!isNum(n) || n < 0) return false;
   if (kind === "count") return Number.isInteger(n) && !isSmallCount(n);
   if (kind === "share") return n <= 1;
-  return true;
+  // A median of whole minutes is whole or a half.
+  return Number.isInteger(n * 2);
 }
 
 /**
@@ -80,6 +81,8 @@ function places(x: number): number {
  * A share of a shown count gives its numerator away (`total × share`) when
  * every whole number the rounded share could stand for is 1–4, or leaves
  * 1–4 outside it. A share that can't tell 4 from 5 gives nothing away.
+ * A share no whole numerator rounds to falls back to the floor and ceiling
+ * of `total × share`.
  */
 export function numeratorLeaks(total: GuardedOut, share: GuardedOut): boolean {
   if (!shows(total) || !shows(share)) return false;
@@ -89,7 +92,15 @@ export function numeratorLeaks(total: GuardedOut, share: GuardedOut): boolean {
   const eps = 1e-9;
   const lo = Math.max(0, Math.ceil((s - half) * t - eps));
   const hi = Math.min(t, Math.floor((s + half) * t + eps));
-  if (lo > hi) return false;
+  if (lo > hi) {
+    // No whole numerator rounds to this share: it was rounded more coarsely
+    // than it says. Fail when the nearest numerators, either side, are 1–4
+    // or leave 1–4.
+    const x = s * t;
+    return [Math.floor(x + eps), Math.ceil(x - eps)]
+      .map((n) => Math.min(t, Math.max(0, n)))
+      .some((n) => isSmallCount(n) || isSmallCount(t - n));
+  }
   let numerator = true;
   let complement = true;
   for (let n = lo; n <= hi; n++) {
@@ -99,9 +110,16 @@ export function numeratorLeaks(total: GuardedOut, share: GuardedOut): boolean {
   return numerator || complement;
 }
 
+const drillable = (v: Obj) =>
+  !v.suppressed &&
+  isNum(v.value) &&
+  v.value >= SMALL_GROUP_MIN &&
+  typeof v.drill === "string" &&
+  /^[A-Za-z0-9_-]+$/.test(v.drill);
+
 /**
  * Every hidden value as `{ value: null, suppressed: true }`, deep. A
- * Drillable keeps its `drill` only while shown.
+ * Drillable keeps its `drill` only while shown, 5 or more and opaque.
  */
 export function scrub<T>(v: T): T {
   if (Array.isArray(v)) return v.map(scrub) as T;
@@ -109,7 +127,7 @@ export function scrub<T>(v: T): T {
   if (typeof v.suppressed === "boolean" && "value" in v) {
     const g = v.suppressed ? HIDDEN : { value: v.value, suppressed: false };
     return (
-      "drill" in v ? { ...g, drill: v.suppressed ? null : v.drill } : g
+      "drill" in v ? { ...g, drill: drillable(v) ? v.drill : null } : g
     ) as T;
   }
   return Object.fromEntries(

@@ -331,6 +331,96 @@ describe("readView", () => {
     );
   });
 
+  it("a repeated group fails, so two hidden rows can't be added up", () => {
+    // Male = 26 − 20 − ... = 3, counted twice as "Fewer than 5".
+    expect(
+      ok(
+        "affected",
+        affected({
+          patients: S(26),
+          by_age: [{ band: "40-64", patients: D(S(26), "a") }],
+          by_sex: [
+            { sex: "female", patients: D(S(20), "f") },
+            { sex: "male", patients: D(H) },
+            { sex: "male", patients: D(H) },
+            { sex: "other", patients: D(S(0)) },
+            { sex: "not_recorded", patients: D(S(0)) },
+          ],
+          by_setting: [{ setting: "admitted", patients: D(S(26), "s") }],
+          by_location: [{ location: null, patients: D(S(26), "l") }],
+          by_specialty: [{ specialty: null, patients: D(S(26), "c") }],
+        }),
+      ),
+    ).toBe("failed");
+    const twoNulls = affected({
+      by_setting: [
+        { setting: "admitted", patients: D(S(205), "s") },
+        { setting: null, patients: D(H) },
+        { setting: null, patients: D(H) },
+      ],
+    });
+    expect(ok("affected", twoNulls)).toBe("failed");
+    const twoLocations = affected();
+    twoLocations.by_location = [
+      twoLocations.by_location[0],
+      { ...twoLocations.by_location[0], patients: D(S(15), "x") },
+    ];
+    expect(ok("affected", twoLocations)).toBe("failed");
+    expect(
+      ok(
+        "findings",
+        findings({
+          dismiss_reasons: [
+            { reason: "not_relevant", count: S(0) },
+            { reason: "not_relevant", count: S(10) },
+          ],
+        }),
+      ),
+    ).toBe("failed");
+    const week = prevalence();
+    week.series[2].start = week.series[0].start;
+    expect(ok("prevalence", week)).toBe("failed");
+    const cond = prevalence();
+    cond.by_condition.push({ ...cond.by_condition[0], cases: D(S(60)) });
+    expect(ok("prevalence", cond)).toBe("failed");
+    const pair = coOccurring();
+    pair.pairs.push({ ...pair.pairs[0], a: I10, b: E11 });
+    expect(ok("co-occurring", pair)).toBe("failed");
+    const finding = findings();
+    finding.findings.push({ ...finding.findings[0], patients: D(S(6)) });
+    expect(ok("findings", finding)).toBe("failed");
+    const q = quality();
+    q.by_condition.push(q.by_condition[0]);
+    expect(ok("quality", q)).toBe("failed");
+    expect(
+      readFilterOptions({
+        ...FILTER_OPTIONS,
+        sources: [FILTER_OPTIONS.sources[0], FILTER_OPTIONS.sources[0]],
+      }).status,
+    ).toBe("failed");
+  });
+
+  it("a week with cases − new = 3 fails prevalence", () => {
+    const v = prevalence();
+    v.series[0] = { start: "2026-07-24", cases: S(10), new: S(7) };
+    expect(ok("prevalence", v)).toBe("failed");
+    const over = prevalence();
+    over.series[0] = { start: "2026-07-24", cases: S(10), new: S(12) };
+    expect(ok("prevalence", over)).toBe("failed");
+    const under = prevalence();
+    under.series[0] = { start: "2026-07-24", cases: H, new: S(7) };
+    expect(ok("prevalence", under)).toBe("failed");
+    const fine = prevalence();
+    fine.series[0] = { start: "2026-07-24", cases: S(12), new: H };
+    expect(ok("prevalence", fine)).toBe("ok");
+  });
+
+  it("a median that isn't whole or a half fails", () => {
+    expect(ok("findings", findings({ median_ack_minutes: S(12.3) }))).toBe(
+      "failed",
+    );
+  });
+
   it("hidden members that add up to 1–4 fail", () => {
     const v = affected({
       by_age: [

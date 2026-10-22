@@ -91,9 +91,21 @@ const locationOk = (l: unknown) =>
   isStr(l.label) &&
   l.label.trim() !== "" &&
   (l.setting === null || oneOf(SETTINGS, l.setting));
-/** Every row passes `ok`. */
-const rows = (v: unknown, ok: (r: Obj) => boolean): v is Obj[] =>
-  isArr(v) && v.every((r) => isObj(r) && ok(r));
+/**
+ * Every row passes `ok` and, given `key`, no key repeats (two rows for
+ * one group would let a viewer add a hidden group up twice).
+ */
+const rows = (
+  v: unknown,
+  ok: (r: Obj) => boolean,
+  key?: (r: Obj) => unknown,
+): v is Obj[] =>
+  isArr(v) &&
+  v.every((r) => isObj(r) && ok(r)) &&
+  (!key ||
+    new Set((v as Obj[]).map((r) => JSON.stringify(key(r) ?? null))).size ===
+      v.length);
+const conditionKey = (c: unknown) => (c as Obj).id;
 
 // ---- The views -------------------------------------------------------------------
 
@@ -117,6 +129,20 @@ function newExistingOk(cases: unknown, fresh: unknown, existing: unknown) {
   );
 }
 
+/**
+ * A series point: new is part of cases, and the rest (existing, not sent)
+ * is the set's hidden member. Shown together they must leave 0 or 5+;
+ * under hidden cases, new is hidden or 0.
+ */
+function newOfCasesOk(cases: G, fresh: G): boolean {
+  if (hidden(cases)) return !(shows(fresh) && fresh.value! > 0);
+  if (shows(cases) && shows(fresh)) {
+    const rest = cases.value! - fresh.value!;
+    return rest >= 0 && !isSmallCount(rest);
+  }
+  return true;
+}
+
 function prevalenceOk(v: Obj): boolean {
   const t = v.total;
   if (
@@ -131,6 +157,7 @@ function prevalenceOk(v: Obj): boolean {
       conditionOk(r.condition) &&
       drillOk(r.cases) &&
       newExistingOk(r.cases, r.new, r.existing),
+    (r) => conditionKey(r.condition),
   );
   const series = rows(
     v.series,
@@ -139,7 +166,9 @@ function prevalenceOk(v: Obj): boolean {
       p.start >= (v.from as string) &&
       p.start <= (v.to as string) &&
       count(p.cases) &&
-      count(p.new),
+      count(p.new) &&
+      newOfCasesOk(p.cases as G, p.new as G),
+    (p) => p.start,
   );
   return byCondition && series;
 }
@@ -149,9 +178,10 @@ function partitionOk(
   v: unknown,
   patients: G,
   keyOk: (r: Obj) => boolean,
+  key: (r: Obj) => unknown,
 ): boolean {
   return (
-    rows(v, (r) => keyOk(r) && drillOk(r.patients)) &&
+    rows(v, (r) => keyOk(r) && drillOk(r.patients), key) &&
     !setGivesAway(
       patients,
       (v as Obj[]).map((r) => r.patients as G),
@@ -162,19 +192,36 @@ function partitionOk(
 function affectedOk(v: Obj): boolean {
   const p = v.patients as G;
   return (
-    partitionOk(v.by_age, p, (r) => oneOf(AGE_BANDS, r.band)) &&
-    partitionOk(v.by_sex, p, (r) => oneOf(SEXES, r.sex)) &&
+    partitionOk(
+      v.by_age,
+      p,
+      (r) => oneOf(AGE_BANDS, r.band),
+      (r) => r.band,
+    ) &&
+    partitionOk(
+      v.by_sex,
+      p,
+      (r) => oneOf(SEXES, r.sex),
+      (r) => r.sex,
+    ) &&
     partitionOk(
       v.by_setting,
       p,
       (r) => r.setting === null || oneOf(SETTINGS, r.setting),
+      (r) => r.setting,
     ) &&
     partitionOk(
       v.by_location,
       p,
       (r) => r.location === null || locationOk(r.location),
+      (r) => (r.location as Obj | null)?.id ?? null,
     ) &&
-    partitionOk(v.by_specialty, p, (r) => strOrNull(r.specialty))
+    partitionOk(
+      v.by_specialty,
+      p,
+      (r) => strOrNull(r.specialty),
+      (r) => r.specialty,
+    )
   );
 }
 
@@ -200,7 +247,10 @@ function pairOk(r: Obj): boolean {
   return !numeratorLeaks(a, sh);
 }
 
-const coOccurringOk = (v: Obj) => rows(v.pairs, pairOk);
+/** A pair is the same whichever way round. */
+const pairKey = (r: Obj) =>
+  [conditionKey(r.a), conditionKey(r.b)].map(String).sort();
+const coOccurringOk = (v: Obj) => rows(v.pairs, pairOk, pairKey);
 
 function findingsOk(v: Obj): boolean {
   const list = rows(
@@ -210,6 +260,7 @@ function findingsOk(v: Obj): boolean {
       (r.flag === null || oneOf(FLAGS, r.flag)) &&
       drillOk(r.patients) &&
       count(r.results),
+    (r) => [r.name, r.flag],
   );
   const a = v.alerts;
   if (!list || !isObj(a) || !isObj(a.by_severity)) return false;
@@ -220,7 +271,11 @@ function findingsOk(v: Obj): boolean {
     !minutes(a.median_ack_minutes) ||
     !minutes(a.critical_median_ack_minutes) ||
     !count(a.dismissed) ||
-    !rows(a.dismiss_reasons, (r) => oneOf(REASONS, r.reason) && count(r.count))
+    !rows(
+      a.dismiss_reasons,
+      (r) => oneOf(REASONS, r.reason) && count(r.count),
+      (r) => r.reason,
+    )
   )
     return false;
   const total = a.total as G;
@@ -282,7 +337,8 @@ function qualityRowOk(r: Obj): boolean {
   return !numeratorLeaks(rated, rate);
 }
 
-const qualityOk = (v: Obj) => rows(v.by_condition, qualityRowOk);
+const qualityOk = (v: Obj) =>
+  rows(v.by_condition, qualityRowOk, (r) => conditionKey(r.condition));
 
 const VIEW_OK: Record<ViewId, (v: Obj) => boolean> = {
   prevalence: prevalenceOk,
@@ -308,11 +364,16 @@ export function readFilterOptions(raw: unknown): ViewState<FilterOptionsOut> {
   if (!isObj(raw) || !isTime(raw.updated_at)) return FAILED;
   const { conditions, locations, specialties, sources } = raw;
   if (
-    !rows(conditions, conditionOk) ||
-    !rows(locations, locationOk) ||
+    !rows(conditions, conditionOk, (c) => c.id) ||
+    !rows(locations, locationOk, (l) => l.id) ||
     !isArr(specialties) ||
     !specialties.every((s) => isStr(s) && s.trim() !== "") ||
-    !rows(sources, (s) => isId(s.id) && isStr(s.label) && s.label.trim() !== "")
+    new Set(specialties).size !== specialties.length ||
+    !rows(
+      sources,
+      (s) => isId(s.id) && isStr(s.label) && s.label.trim() !== "",
+      (s) => s.id,
+    )
   )
     return FAILED;
   return {
