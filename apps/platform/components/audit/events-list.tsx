@@ -103,6 +103,7 @@ function Opener({
   return (
     <button
       type="button"
+      data-row-id={id}
       onClick={() => onOpen(id)}
       className={`${className ?? ""} min-h-11 text-left underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-mint-deep`}
     >
