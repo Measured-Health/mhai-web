@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { csvCell, downloadCsv, toCsv } from "./csv";
+import { csvCell, downloadBlob, downloadCsv, toCsv } from "./csv";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -39,6 +39,37 @@ describe("CSV (R10)", () => {
       expect(document.querySelector("a[download]")).toBeNull();
       await vi.waitFor(() => expect(revoke).toHaveBeenCalledWith("blob:demo"));
       expect(localStorage.length + sessionStorage.length).toBe(0);
+    } finally {
+      [URL.createObjectURL, URL.revokeObjectURL] = original;
+    }
+  });
+
+  it("downloadCsv still downloads; downloadBlob names the file", async () => {
+    const blobs: Blob[] = [];
+    const names: string[] = [];
+    const original = [URL.createObjectURL, URL.revokeObjectURL] as const;
+    URL.createObjectURL = vi.fn((b: Blob) => {
+      blobs.push(b);
+      return `blob:${blobs.length}`;
+    });
+    URL.revokeObjectURL = vi.fn();
+    try {
+      vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
+        function (this: HTMLAnchorElement) {
+          names.push(this.download);
+        },
+      );
+      downloadCsv("a.csv", "x\r\n");
+      const zip = new Blob(["PK"], { type: "application/zip" });
+      downloadBlob("audit-named-access-exp_1.zip", zip);
+      expect(names).toEqual(["a.csv", "audit-named-access-exp_1.zip"]);
+      expect(blobs[0].type).toBe("text/csv;charset=utf-8");
+      // The blob is handed over as given, its type kept.
+      expect(blobs[1]).toBe(zip);
+      expect(document.querySelector("a[download]")).toBeNull();
+      await vi.waitFor(() =>
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:2"),
+      );
     } finally {
       [URL.createObjectURL, URL.revokeObjectURL] = original;
     }

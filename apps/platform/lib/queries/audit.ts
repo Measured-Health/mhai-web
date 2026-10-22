@@ -1,10 +1,13 @@
 "use client";
 import {
   useInfiniteQuery,
+  useMutation,
   useQuery,
+  useQueryClient,
   type InfiniteData,
 } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useKeyedMutation } from "@mhai/api-client/keyed-mutation";
 import { useOnline } from "@mhai/ui/hooks/use-online";
 import { getPlatformClient } from "@/lib/api/client";
 import type {
@@ -12,6 +15,9 @@ import type {
   AuditHospital,
   AuditList,
   AuditPerson,
+  ExportIn,
+  ExportOut,
+  ExportRecord,
   IntegrityStatus,
 } from "@/lib/api/audit-contract";
 import { isRunning } from "@/lib/audit/integrity";
@@ -20,6 +26,7 @@ import {
   ID,
   readAuditList,
   readDetail,
+  readExportList,
   readStatus,
   type AuditRow,
   type ReadStatus,
@@ -203,4 +210,93 @@ export function useReportUndisplayable(rows: AuditRow[]) {
         })
         .catch(() => {});
   }, [rows]);
+}
+
+const exportsKey = [...auditKey, "exports"] as const;
+
+/**
+ * Makes an export. The body carries the person's two-step code, so after
+ * every answer, right or wrong, the mutation is reset and the cache lets
+ * the call go at once (gcTime 0 as well): the code is never kept. The
+ * refusal is kept here instead, for the StepUpDialog to show.
+ */
+export function useCreateExport() {
+  const qc = useQueryClient();
+  const m = useKeyedMutation(
+    (body: ExportIn, key) =>
+      getPlatformClient().createExport(body, { idempotencyKey: key }),
+    {
+      onSuccess: () => {
+        void qc.invalidateQueries({ queryKey: exportsKey });
+        void qc.invalidateQueries({ queryKey: [...auditKey, "events"] });
+      },
+    },
+    { gcTime: 0 },
+  );
+  const [error, setError] = useState<unknown>(null);
+  return {
+    busy: m.isPending,
+    /** The last refusal to show; null when none. */
+    error,
+    /** Forgets the refusal and the call (when the dialog closes). */
+    clear() {
+      setError(null);
+      m.reset();
+    },
+    /**
+     * Sends it. `onError` returns true when it handled the refusal itself
+     * (it is then not kept as `error`).
+     */
+    run(
+      body: ExportIn,
+      on: {
+        onSuccess?(out: ExportOut): void;
+        onError?(e: Error): boolean | void;
+      } = {},
+    ) {
+      setError(null);
+      m.mutate(body, {
+        onSuccess: (out) => {
+          m.reset();
+          on.onSuccess?.(out);
+        },
+        onError: (e) => {
+          m.reset();
+          if (!on.onError?.(e)) setError(e);
+        },
+      });
+    },
+  };
+}
+
+/** Fetches an export's file: once, by its maker, within 15 minutes. */
+export function useDownloadExport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getPlatformClient().downloadExport(id),
+    retry: false,
+    gcTime: 0,
+    onSettled: () => void qc.invalidateQueries({ queryKey: exportsKey }),
+  });
+}
+
+type ExportPage = { exports: ExportRecord[]; next_cursor: string | null };
+type ReadExports = ReturnType<typeof readExportList>;
+
+/** The exports made, newest first; each record read strictly. */
+export function useExports() {
+  return useInfiniteQuery({
+    queryKey: exportsKey,
+    queryFn: ({ pageParam }) =>
+      getPlatformClient().listExports(pageParam ?? undefined),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last: ExportPage) => last.next_cursor,
+    select: (
+      d: InfiniteData<ExportPage, string | null>,
+    ): InfiniteData<ReadExports, string | null> => ({
+      pages: d.pages.map(readExportList),
+      pageParams: d.pageParams,
+    }),
+    refetchOnMount: "always",
+  });
 }

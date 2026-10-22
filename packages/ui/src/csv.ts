@@ -21,9 +21,12 @@ export const toCsv = (header: string[], rows: Cell[][]) =>
 
 /** Hands the file to the browser's download. Nothing is stored (R10). */
 export function downloadCsv(filename: string, csv: string): void {
-  const url = URL.createObjectURL(
-    new Blob([csv], { type: "text/csv;charset=utf-8" }),
-  );
+  downloadBlob(filename, new Blob([csv], { type: "text/csv;charset=utf-8" }));
+}
+
+/** Hands a file already in memory to the browser's download, as given. */
+export function downloadBlob(filename: string, blob: Blob): void {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;

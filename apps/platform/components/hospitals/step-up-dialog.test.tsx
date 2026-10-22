@@ -202,4 +202,74 @@ describe("StepUpDialog", () => {
     renderWithAuth(<StepUpDialog {...base} onConfirm={() => {}} />);
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
+  it("noteMax and reference are passed through; the existing dialogs are unchanged", async () => {
+    const onConfirm = vi.fn();
+    const reasons = [
+      { code: "legal_request", label: "Legal request" },
+      { code: "other", label: "Other" },
+    ];
+    const { unmount } = renderWithAuth(
+      <StepUpDialog
+        {...base}
+        reasons={reasons}
+        noteFor="other"
+        noteMax={200}
+        extra={{ label: "Reference (optional)", max: 60, required: false }}
+        onConfirm={onConfirm}
+      />,
+    );
+    let d = screen.getByRole("dialog", { name: "Approve removal?" });
+    expect(within(d).getByLabelText(/^Note/)).toHaveAttribute(
+      "maxLength",
+      "200",
+    );
+    const ref = within(d).getByLabelText("Reference (optional)");
+    expect(ref).toHaveAttribute("maxLength", "60");
+    await userEvent.click(within(d).getByLabelText("Legal request"));
+    await userEvent.type(ref, "  CASE-17 ");
+    await userEvent.click(within(d).getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard("123456");
+    await userEvent.click(within(d).getByRole("button", { name: "Approve" }));
+    expect(onConfirm).toHaveBeenCalledWith({
+      reason: "legal_request",
+      extra: "CASE-17",
+      mfa_code: "123456",
+    });
+    unmount();
+    // Without them: no extra field, and the note keeps its 500.
+    renderWithAuth(
+      <StepUpDialog {...base} reasons={reasons} onConfirm={() => {}} />,
+    );
+    d = screen.getByRole("dialog", { name: "Approve removal?" });
+    expect(within(d).getByLabelText(/^Note/)).toHaveAttribute(
+      "maxLength",
+      "500",
+    );
+    expect(within(d).queryByLabelText(/Reference/)).not.toBeInTheDocument();
+    expect(within(d).getByLabelText("Legal request")).not.toBeChecked();
+  });
+
+  it("initialReason starts with that reason chosen, and it can be changed", async () => {
+    const onConfirm = vi.fn();
+    renderWithAuth(
+      <StepUpDialog
+        {...base}
+        reasons={[
+          { code: "legal_request", label: "Legal request" },
+          { code: "security_investigation", label: "Security investigation" },
+        ]}
+        initialReason="security_investigation"
+        onConfirm={onConfirm}
+      />,
+    );
+    const d = screen.getByRole("dialog", { name: "Approve removal?" });
+    expect(within(d).getByLabelText("Security investigation")).toBeChecked();
+    await userEvent.click(within(d).getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard("123456");
+    await userEvent.click(within(d).getByRole("button", { name: "Approve" }));
+    expect(onConfirm).toHaveBeenLastCalledWith({
+      reason: "security_investigation",
+      mfa_code: "123456",
+    });
+  });
 });

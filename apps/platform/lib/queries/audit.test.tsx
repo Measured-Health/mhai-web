@@ -1,15 +1,25 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetPlatformClientForTests,
   __setPlatformClientForTests,
 } from "@/lib/api/client";
+import {
+  TooManyRowsError,
+  type ExportIn,
+  type ExportOut,
+} from "@/lib/api/audit-contract";
 import type { PlatformClient } from "@/lib/api/contract";
+import { ApiError } from "@mhai/api-client/errors";
 import type { AuditRow } from "@/lib/audit/read";
 import { auditEvent } from "@/tests/audit-event";
-import { __resetReportedForTests, useReportUndisplayable } from "./audit";
+import {
+  __resetReportedForTests,
+  useCreateExport,
+  useReportUndisplayable,
+} from "./audit";
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <QueryClientProvider client={new QueryClient()}>
@@ -62,5 +72,86 @@ describe("useReportUndisplayable", () => {
     report.mockRejectedValue(new Error("down"));
     renderHook(() => useReportUndisplayable(bad(2)), { wrapper });
     await waitFor(() => expect(report).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("useCreateExport", () => {
+  const BODY: ExportIn = {
+    kind: "events",
+    filters: {},
+    reason: "legal_request",
+    mfa_code: "424242",
+  };
+  const OUT: ExportOut = {
+    export_id: "exp_1",
+    rows: 3,
+    capped: false,
+    checksum: "a".repeat(64),
+    expires_at: "2026-10-22T10:00:00.000Z",
+    file_name: "audit-events-exp_1-20261022-0945Z.csv",
+  };
+
+  function setup(answer: () => Promise<ExportOut>) {
+    const createExport = vi.fn(answer);
+    __setPlatformClientForTests({ createExport } as unknown as PlatformClient);
+    const qc = new QueryClient();
+    const hook = renderHook(() => useCreateExport(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+      ),
+    });
+    const leaked = () =>
+      JSON.stringify(
+        qc
+          .getMutationCache()
+          .getAll()
+          .map((m) => m.state.variables),
+      );
+    return { hook, leaked, createExport };
+  }
+
+  it("forgets the code after a success and hands the reply on, with a key", async () => {
+    const { hook, leaked, createExport } = setup(async () => OUT);
+    let got: ExportOut | null = null;
+    act(() => hook.result.current.run(BODY, { onSuccess: (r) => (got = r) }));
+    await waitFor(() => expect(got).toEqual(OUT));
+    expect(createExport).toHaveBeenCalledWith(BODY, {
+      idempotencyKey: expect.any(String),
+    });
+    expect(hook.result.current.busy).toBe(false);
+    expect(hook.result.current.error).toBeNull();
+    expect(leaked()).not.toContain("424242");
+  });
+
+  it("forgets the code after a refusal and keeps the refusal to show", async () => {
+    const { hook, leaked } = setup(async () => {
+      throw new ApiError(403, "mfa_invalid");
+    });
+    act(() => hook.result.current.run(BODY));
+    await waitFor(() =>
+      expect(hook.result.current.error).toBeInstanceOf(ApiError),
+    );
+    expect(leaked()).not.toContain("424242");
+    act(() => hook.result.current.clear());
+    expect(hook.result.current.error).toBeNull();
+  });
+
+  it("a refusal the caller handles is not kept, and the code is forgotten", async () => {
+    const { hook, leaked } = setup(async () => {
+      throw new TooManyRowsError(62_310);
+    });
+    let rows = 0;
+    act(() =>
+      hook.result.current.run(BODY, {
+        onError: (e) => {
+          if (!(e instanceof TooManyRowsError)) return false;
+          rows = e.rows;
+          return true;
+        },
+      }),
+    );
+    await waitFor(() => expect(rows).toBe(62_310));
+    expect(hook.result.current.error).toBeNull();
+    expect(leaked()).not.toContain("424242");
   });
 });

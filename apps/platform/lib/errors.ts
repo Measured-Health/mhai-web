@@ -71,6 +71,8 @@ export function platformError(
       return W("No longer ready to switch on.", "", { stale: true });
     case "below_minimum":
       return W("That's shorter than the minimum allowed.");
+    case "too_many_rows":
+      return W("Too many entries to export.");
   }
   if (e.status >= 500) return W(UNREACHABLE);
   return W("Something went wrong. Try again.");

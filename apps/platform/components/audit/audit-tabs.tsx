@@ -6,6 +6,7 @@ import { cn } from "@mhai/ui/cn";
 /** The tabs in order. Each later tab adds its entry here. */
 export const TABS: readonly { key: AuditTab; label: string }[] = [
   { key: "events", label: "Events" },
+  { key: "exports", label: "Exports" },
 ];
 
 /** The tab to show: one that exists, else Events. */
