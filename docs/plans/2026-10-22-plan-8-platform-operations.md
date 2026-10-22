@@ -41,6 +41,7 @@
   - every settings change, including the learning-data reset.
 
   Step-up is **not** needed for: retrying failed jobs, editing a hold's review date or note, and cancelling a two-person request. A wrong code shows "That code didn't work. Try again."; a locked one shows "Too many wrong codes. Try again in 15 minutes."
+
 - **Two people:**
   - **Which changes:** lifting a hold, shortening a retention period and switching triage on.
   - **How:** a request, then a **different** platform admin's approval, each with step-up. The server's `requested_by_you` decides who may approve, never a name comparison.
@@ -161,6 +162,7 @@
    - Removal started: refused with "This hospital's removal has already started. Act outside the app now."
 
    Task 2 tests the mock; Tasks 3 and 5 test the screens.
+
 2. **The requester approving their own request after signing out and back in, in the same tab, under a name that matches someone else's.** Only `requested_by_you` decides; a forced approve gets `same_person` and its words. Tasks 2, 4 and 11 test it.
 3. **A request that lapses while the approver's dialog is open.** The result is 409 `expired`, then "This request lapsed after 7 days. Make a new request." and a reload, never a silent success. Tasks 2, 4 and 11 test it.
 4. **The Health tab left open in a hidden tab for 20 minutes, then shown again.** The first paint reads Couldn't check (stale) until a fresh reading arrives; no poll ran while it was hidden; the session idles out as normal. Tasks 6 and 7 test it.
@@ -196,15 +198,15 @@ apps/platform/tests/e2e/{holds,system,settings}.spec.ts, helpers.ts (openNav nam
 
 **Files shared with other in-flight plans.** The controller sequences these merges:
 
-| File                                                     | Also changed by                                                       | Kind of clash                                                                      |
-| -------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `components/shell/nav.ts`                                | Plan 9 (Audit log after Activity), Plan 11 (Clearances after Analytics), Plan 12 (Analysis) | **Order:** Plan 11 also wants the slot after Analytics; the controller picks the final order |
-| `app/api/v1/[...path]/route.ts` SHAPES                   | 7d, 9, 11, 12                                                         | appended rows; `RESERVED` is derived, so check no new word collides with an `{id}` |
-| `lib/api/contract.ts` (`ActivityAction`, `PlatformClient`, `Hospital*`) | 7d, 9, 11, 12                                          | union and interface lines                                                          |
-| `lib/api/mock.ts`, `lib/api/fixtures.ts`                 | 7d, 9, 11, 12                                                         | Task 1's seam keeps Plan 8 to a few lines                                          |
-| `lib/activity-labels.ts`, `lib/errors.ts`                | 9, 11                                                                 | switch cases                                                                       |
-| `tests/e2e/helpers.ts` (`openNav` names)                 | 9, 11, 12                                                             | the union                                                                          |
-| `README.md`, `CHANGELOG.md`, `ARCHITECTURE.md` §5, `apps/clinical/tests/readme.test.ts` | every plan                               | sections and pins                                                                  |
+| File                                                                                    | Also changed by                                                                             | Kind of clash                                                                                |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `components/shell/nav.ts`                                                               | Plan 9 (Audit log after Activity), Plan 11 (Clearances after Analytics), Plan 12 (Analysis) | **Order:** Plan 11 also wants the slot after Analytics; the controller picks the final order |
+| `app/api/v1/[...path]/route.ts` SHAPES                                                  | 7d, 9, 11, 12                                                                               | appended rows; `RESERVED` is derived, so check no new word collides with an `{id}`           |
+| `lib/api/contract.ts` (`ActivityAction`, `PlatformClient`, `Hospital*`)                 | 7d, 9, 11, 12                                                                               | union and interface lines                                                                    |
+| `lib/api/mock.ts`, `lib/api/fixtures.ts`                                                | 7d, 9, 11, 12                                                                               | Task 1's seam keeps Plan 8 to a few lines                                                    |
+| `lib/activity-labels.ts`, `lib/errors.ts`                                               | 9, 11                                                                                       | switch cases                                                                                 |
+| `tests/e2e/helpers.ts` (`openNav` names)                                                | 9, 11, 12                                                                                   | the union                                                                                    |
+| `README.md`, `CHANGELOG.md`, `ARCHITECTURE.md` §5, `apps/clinical/tests/readme.test.ts` | every plan                                                                                  | sections and pins                                                                            |
 
 ---
 
@@ -250,38 +252,38 @@ apps/platform/tests/e2e/{holds,system,settings}.spec.ts, helpers.ts (openNav nam
   - `createMockPlatform` builds the core once and returns `{ ...hospitalsPart, ...extensions.map(f => f(core)) }`. In this task the extensions list is empty.
 - **`errors.ts`** words, by code:
 
-  | Code               | Words                                                                  |
-  | ------------------ | ---------------------------------------------------------------------- |
-  | `hospital_removed` | "This hospital has been removed. There is nothing left to hold."       |
+  | Code               | Words                                                                   |
+  | ------------------ | ----------------------------------------------------------------------- |
+  | `hospital_removed` | "This hospital has been removed. There is nothing left to hold."        |
   | `removal_started`  | "This hospital's removal has already started. Act outside the app now." |
-  | `invalid_range`    | "The end date must be on or after the start date."                     |
+  | `invalid_range`    | "The end date must be on or after the start date."                      |
   | `expired`          | "This request lapsed after 7 days. Make a new request." (`stale: true`) |
-  | `not_ready`        | "No longer ready to switch on." (`stale: true`)                        |
-  | `below_minimum`    | "That's shorter than the minimum allowed."                             |
+  | `not_ready`        | "No longer ready to switch on." (`stale: true`)                         |
+  | `below_minimum`    | "That's shorter than the minimum allowed."                              |
 
 - **`activity-labels.ts`:** `t` is the event's `target`.
 
-  | Action                     | Words                                                     |
-  | -------------------------- | --------------------------------------------------------- |
-  | `hold_placed`              | `placed legal hold ${t}`                                  |
-  | `hold_edited`              | `changed the review date or note on legal hold ${t}`      |
-  | `hold_lift_requested`      | `asked to lift legal hold ${t}`                           |
-  | `hold_lift_cancelled`      | `cancelled the request to lift legal hold ${t}`           |
-  | `hold_lift_lapsed`         | `asked to lift legal hold ${t}; the request lapsed`       |
-  | `hold_lifted`              | `approved lifting legal hold ${t}`                        |
-  | `hold_lift_undone`         | `undid the lift of legal hold ${t}`                       |
-  | `hold_released`            | `released the records under legal hold ${t}`              |
-  | `jobs_retried`             | `retried ${t}` (t: "3 failed jobs")                       |
-  | `jobs_cancelled`           | `cancelled ${t}`                                          |
-  | `retention_changed`        | `changed records retention: ${t}` (t: "Documents to 7 years") |
+  | Action                     | Words                                                               |
+  | -------------------------- | ------------------------------------------------------------------- |
+  | `hold_placed`              | `placed legal hold ${t}`                                            |
+  | `hold_edited`              | `changed the review date or note on legal hold ${t}`                |
+  | `hold_lift_requested`      | `asked to lift legal hold ${t}`                                     |
+  | `hold_lift_cancelled`      | `cancelled the request to lift legal hold ${t}`                     |
+  | `hold_lift_lapsed`         | `asked to lift legal hold ${t}; the request lapsed`                 |
+  | `hold_lifted`              | `approved lifting legal hold ${t}`                                  |
+  | `hold_lift_undone`         | `undid the lift of legal hold ${t}`                                 |
+  | `hold_released`            | `released the records under legal hold ${t}`                        |
+  | `jobs_retried`             | `retried ${t}` (t: "3 failed jobs")                                 |
+  | `jobs_cancelled`           | `cancelled ${t}`                                                    |
+  | `retention_changed`        | `changed records retention: ${t}` (t: "Documents to 7 years")       |
   | `setting_change_requested` | `asked for a change: ${t}` (t: "Documents to 3 years", "Triage on") |
-  | `setting_change_approved`  | `approved a change: ${t}`                                 |
-  | `setting_change_cancelled` | `cancelled a change request: ${t}`                        |
-  | `setting_change_lapsed`    | `asked for a change that lapsed: ${t}`                    |
-  | `clean_up_paused`          | "paused the records clean-up"                             |
-  | `clean_up_resumed`         | "resumed the records clean-up"                            |
-  | `triage_switched_off`      | "switched triage off"                                     |
-  | `feedback_buffer_cleared`  | `cleared ${t} of unapproved learning data`                |
+  | `setting_change_approved`  | `approved a change: ${t}`                                           |
+  | `setting_change_cancelled` | `cancelled a change request: ${t}`                                  |
+  | `setting_change_lapsed`    | `asked for a change that lapsed: ${t}`                              |
+  | `clean_up_paused`          | "paused the records clean-up"                                       |
+  | `clean_up_resumed`         | "resumed the records clean-up"                                      |
+  | `triage_switched_off`      | "switched triage off"                                               |
+  | `feedback_buffer_cleared`  | `cleared ${t} of unapproved learning data`                          |
 
   Each has a target-less fallback. The `detail` field is shown as today.
 
@@ -340,11 +342,7 @@ apps/platform/tests/e2e/{holds,system,settings}.spec.ts, helpers.ts (openNav nam
 
 ```ts
 type HoldReason =
-  | "court_case"
-  | "regulator"
-  | "complaint"
-  | "investigation"
-  | "other";
+  "court_case" | "regulator" | "complaint" | "investigation" | "other";
 type HoldStatus = "active" | "review_due" | "lift_requested" | "lifted";
 type HoldStatusFilter = "open" | HoldStatus | "all";
 type LiftReason = "case_closed" | "withdrawn" | "mistake" | "other";
@@ -411,12 +409,26 @@ type PlaceHoldIn = {
   review_on: string;
 } & StepUp;
 interface HoldsClient {
-  listHolds(q: HoldQuery): Promise<{ holds: LegalHold[]; next_cursor: string | null }>;
+  listHolds(
+    q: HoldQuery,
+  ): Promise<{ holds: LegalHold[]; next_cursor: string | null }>;
   getHold(id: string): Promise<LegalHoldDetail>;
   placeHold(body: PlaceHoldIn, opts: WriteOpts): Promise<LegalHoldDetail>;
-  editHold(id: string, body: { review_on?: string; note?: string | null; version: number }, opts: WriteOpts): Promise<LegalHoldDetail>;
-  requestLift(id: string, body: { reason: LiftReason; note?: string; authority: string } & StepUp, opts: WriteOpts): Promise<LegalHoldDetail>;
-  approveLift(id: string, body: StepUp, opts: WriteOpts): Promise<LegalHoldDetail>;
+  editHold(
+    id: string,
+    body: { review_on?: string; note?: string | null; version: number },
+    opts: WriteOpts,
+  ): Promise<LegalHoldDetail>;
+  requestLift(
+    id: string,
+    body: { reason: LiftReason; note?: string; authority: string } & StepUp,
+    opts: WriteOpts,
+  ): Promise<LegalHoldDetail>;
+  approveLift(
+    id: string,
+    body: StepUp,
+    opts: WriteOpts,
+  ): Promise<LegalHoldDetail>;
   cancelLift(id: string, opts: WriteOpts): Promise<LegalHoldDetail>;
   undoLift(id: string, body: StepUp, opts: WriteOpts): Promise<LegalHoldDetail>;
 }
@@ -429,16 +441,16 @@ export const REVIEW_MONTHS = 6;
 
 **Proxy shapes and live paths:**
 
-| Method | Path                                         |
-| ------ | -------------------------------------------- |
-| GET    | `platform/legal-holds`                       |
-| POST   | `platform/legal-holds`                       |
-| GET    | `platform/legal-holds/{id}`                  |
-| PATCH  | `platform/legal-holds/{id}`                  |
-| POST   | `platform/legal-holds/{id}/lift`             |
-| POST   | `platform/legal-holds/{id}/lift/approve`     |
-| POST   | `platform/legal-holds/{id}/lift/cancel`      |
-| POST   | `platform/legal-holds/{id}/lift/undo`        |
+| Method | Path                                     |
+| ------ | ---------------------------------------- |
+| GET    | `platform/legal-holds`                   |
+| POST   | `platform/legal-holds`                   |
+| GET    | `platform/legal-holds/{id}`              |
+| PATCH  | `platform/legal-holds/{id}`              |
+| POST   | `platform/legal-holds/{id}/lift`         |
+| POST   | `platform/legal-holds/{id}/lift/approve` |
+| POST   | `platform/legal-holds/{id}/lift/cancel`  |
+| POST   | `platform/legal-holds/{id}/lift/undo`    |
 
 **Mock rules:**
 
@@ -475,13 +487,13 @@ export const REVIEW_MONTHS = 6;
 
 **Fixtures** (`holds-fixtures.ts`; the people are Ada and Tunde):
 
-| id        | Hospital      | Scope                    | Reason        | Reference       | State                                                                                                                   |
-| --------- | ------------- | ------------------------ | ------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `hold_hv` | Harbour View  | All records              | court_case    | `HC/2026/0412`  | active; placed by Ada 40 days ago. It blocks the existing Removal pending request                                        |
-| `hold_ng` | Northgate     | 1 Jan 2025 – 30 Jun 2025 | regulator     | `REG-INSP-2291` | review_due (review_on yesterday)                                                                                         |
-| `hold_rc` | Riverside     | All records              | complaint     | `CMP-0193`      | lift_requested by Tunde 2 days ago; authority "Counsel's letter 14 Oct 2026, ref ABC-123"; `records_due` 1240            |
-| `hold_wf` | Westfield     | from 1 Mar 2024, until lifted | investigation | `INV-77`   | lifted 3 days ago (requested by Tunde, approved by Ada); `released_on` in 4 days                                         |
-| `hold_hh` | Havana        | All records              | other         | `BRD-2026-03`   | lifted 40 days ago and released; note "Board request pending legal review"                                               |
+| id        | Hospital     | Scope                         | Reason        | Reference       | State                                                                                                         |
+| --------- | ------------ | ----------------------------- | ------------- | --------------- | ------------------------------------------------------------------------------------------------------------- |
+| `hold_hv` | Harbour View | All records                   | court_case    | `HC/2026/0412`  | active; placed by Ada 40 days ago. It blocks the existing Removal pending request                             |
+| `hold_ng` | Northgate    | 1 Jan 2025 – 30 Jun 2025      | regulator     | `REG-INSP-2291` | review_due (review_on yesterday)                                                                              |
+| `hold_rc` | Riverside    | All records                   | complaint     | `CMP-0193`      | lift_requested by Tunde 2 days ago; authority "Counsel's letter 14 Oct 2026, ref ABC-123"; `records_due` 1240 |
+| `hold_wf` | Westfield    | from 1 Mar 2024, until lifted | investigation | `INV-77`        | lifted 3 days ago (requested by Tunde, approved by Ada); `released_on` in 4 days                              |
+| `hold_hh` | Havana       | All records                   | other         | `BRD-2026-03`   | lifted 40 days ago and released; note "Board request pending legal review"                                    |
 
 Southpoint (Removal pending, nothing blocking) keeps no hold, so the demo and e2e can place one there.
 
@@ -555,6 +567,7 @@ Southpoint (Removal pending, nothing blocking) keeps no hold, so the demo and e2
     - **Reference**, **Asked for by**, **Note** and **Review date**.
 
     `HOLD_HINT` sits under each free-text field. **Continue** validates.
+
   - **The confirm step** is `StepUpDialog`:
     - title "Place a legal hold on {hospital}?";
     - intro: the scope line and "Records it covers are kept until the hold is lifted.";
@@ -707,6 +720,7 @@ Southpoint (Removal pending, nothing blocking) keeps no hold, so the demo and e2
   - "phone: the list as cards, open a hold, back".
 
   In `removal.spec.ts`, the legal-hold test now asserts the View holds link.
+
 - [ ] **Step 4: Write the docs.**
   - The README platform section gains "**Legal holds.**": what a hold does, the sample holds, and the two-person lift. Pin it with `"documents the legal holds demo"`, matching `/\*\*Legal holds\.\*\*/`.
   - ARCHITECTURE §5: the sidebar line.
@@ -791,8 +805,14 @@ type CancelReason = "no_longer_needed" | "cant_succeed" | "other";
 interface OpsClient {
   getHealth(opts?: { background?: boolean }): Promise<HealthOut>;
   listJobs(q: JobQuery): Promise<{ jobs: Job[]; next_cursor: string | null }>;
-  retryJobs(body: { ids: string[] }, opts: WriteOpts): Promise<{ retried: string[]; skipped: string[] }>;
-  cancelJobs(body: { ids: string[]; reason: CancelReason; note?: string } & StepUp, opts: WriteOpts): Promise<{ cancelled: string[]; skipped: string[] }>;
+  retryJobs(
+    body: { ids: string[] },
+    opts: WriteOpts,
+  ): Promise<{ retried: string[]; skipped: string[] }>;
+  cancelJobs(
+    body: { ids: string[]; reason: CancelReason; note?: string } & StepUp,
+    opts: WriteOpts,
+  ): Promise<{ cancelled: string[]; skipped: string[] }>;
 }
 export const JOBS_MAX = 50;
 export const OLD_QUESTION_MS = 24 * 60 * 60_000;
@@ -1062,7 +1082,12 @@ type RetentionItem = {
 type NotReadyReason = "missing_report" | "missing_files" | "checksum_mismatch";
 type SettingsRequest = TwoPersonRequest &
   (
-    | { kind: "retention_shorten"; type: RetentionType; from: number; to: number }
+    | {
+        kind: "retention_shorten";
+        type: RetentionType;
+        from: number;
+        to: number;
+      }
     | { kind: "triage_on"; from: false; to: true; clinical_signoff: string }
   );
 type SettingsOut = {
@@ -1083,7 +1108,12 @@ type SettingsOut = {
   };
   feedback_buffer: {
     waiting: number;
-    last_reset: { by: Person; at: string; reason: string; cleared: number } | null;
+    last_reset: {
+      by: Person;
+      at: string;
+      reason: string;
+      cleared: number;
+    } | null;
     running: { job_id: string; started_at: string } | null;
     failed_job_id: string | null;
   };
@@ -1091,28 +1121,53 @@ type SettingsOut = {
 };
 interface SettingsClient {
   getSettings(): Promise<SettingsOut>;
-  previewRetention(type: RetentionType, days: number): Promise<{ would_delete: number }>;
-  setRetention(type: RetentionType, body: { days: number; reason: string; version: number } & StepUp, opts: WriteOpts): Promise<SettingsOut>;
-  setCleanUpPaused(body: { paused: boolean; reason: string } & StepUp, opts: WriteOpts): Promise<SettingsOut>;
-  setTriage(body: { enabled: boolean; reason: string; clinical_signoff?: string; version: number } & StepUp, opts: WriteOpts): Promise<SettingsOut>;
-  approveRequest(id: string, body: StepUp, opts: WriteOpts): Promise<SettingsOut>;
+  previewRetention(
+    type: RetentionType,
+    days: number,
+  ): Promise<{ would_delete: number }>;
+  setRetention(
+    type: RetentionType,
+    body: { days: number; reason: string; version: number } & StepUp,
+    opts: WriteOpts,
+  ): Promise<SettingsOut>;
+  setCleanUpPaused(
+    body: { paused: boolean; reason: string } & StepUp,
+    opts: WriteOpts,
+  ): Promise<SettingsOut>;
+  setTriage(
+    body: {
+      enabled: boolean;
+      reason: string;
+      clinical_signoff?: string;
+      version: number;
+    } & StepUp,
+    opts: WriteOpts,
+  ): Promise<SettingsOut>;
+  approveRequest(
+    id: string,
+    body: StepUp,
+    opts: WriteOpts,
+  ): Promise<SettingsOut>;
   cancelRequest(id: string, opts: WriteOpts): Promise<SettingsOut>;
-  resetFeedbackBuffer(body: { reason: string } & StepUp, opts: WriteOpts): Promise<{ job_id: string }>;
+  resetFeedbackBuffer(
+    body: { reason: string } & StepUp,
+    opts: WriteOpts,
+  ): Promise<{ job_id: string }>;
 }
 ```
 
 **Proxy shapes and live paths:**
 
-| Method | Path                                              |
-| ------ | ------------------------------------------------- |
-| GET    | `platform/settings`                               |
-| GET    | `platform/settings/retention/{id}/preview`        |
-| PUT    | `platform/settings/retention/{id}`                |
-| PUT    | `platform/settings/retention-pause`               |
-| PUT    | `platform/settings/triage`                        |
-| POST   | `platform/settings/requests/{id}/approve`         |
-| POST   | `platform/settings/requests/{id}/cancel`          |
-| POST   | `platform/settings/feedback-buffer/reset`         |
+| Method | Path                                       |
+| ------ | ------------------------------------------ |
+| GET    | `platform/settings`                        |
+| GET    | `platform/settings/retention/{id}/preview` |
+| PUT    | `platform/settings/retention/{id}`         |
+| PUT    | `platform/settings/retention-pause`        |
+| PUT    | `platform/settings/triage`                 |
+| POST   | `platform/settings/requests/{id}/approve`  |
+| POST   | `platform/settings/requests/{id}/cancel`   |
+| POST   | `platform/settings/feedback-buffer/reset`  |
 
 **Mock rules:**
 
@@ -1124,9 +1179,9 @@ interface SettingsClient {
   | `documents`           | 2190   | 365            |
   | `pending_corrections` | 365    | 30             |
   | `audit_log`           | 2190   | 2190           |
-
   - Triage is off. `opts.triage` is `"ready" | "not_ready"`, default `"ready"`; with `not_ready` the reason is `missing_report`.
   - The feedback buffer has `waiting` 37, and its last reset was by Tunde 60 days ago, "Test run data from a training session", 112 cleared.
+
 - **Preview:** `would_delete = 0` when `days ≥ current`; otherwise `round((current − days) / 365 × 4100)`.
 - **`setRetention`:** step-up and `version` (else 409 `conflict`).
   - Below the minimum gives 422 `below_minimum`.
@@ -1206,6 +1261,7 @@ interface SettingsClient {
   4. the learning data section (Task 12).
 
   Each section has its own Couldn't load.
+
 - **`PendingRequests`:**
   - each request: `requestLabel` and `TwoPersonActions`;
   - retention Approve first fetches a **fresh** preview, then opens `StepUpDialog`, with `previewLine` as the intro and the confirm label **Approve change**;
@@ -1369,30 +1425,31 @@ Build it if wanted. Leaving it out changes nothing else.
   - README, CHANGELOG and ARCHITECTURE.
 
   Task 13's health banner needs 8b merged first.
+
 - **The backend contract.** With 8a's PR, the controller files spec §9 (as updated by Task 1) in mhai-multiagent `docs/specs/2026-10-17-frontend-requirements.md` as the next free §14 item, through its own PR.
 
 ## Self-review notes
 
 - **Spec coverage:**
 
-  | Spec section                                    | Task(s)                                  |
-  | ----------------------------------------------- | ---------------------------------------- |
-  | §3 roles, step-up, two people, sidebar          | 1, 3, 7, 11 (nav), every task's tests    |
-  | §4.1–4.4 holds, place, edit                     | 2, 3, 4                                  |
-  | §4.5 lift, grace, undo                          | 2, 4                                     |
-  | §4.6 removal, hospital page, Hold tag           | 2, 5                                     |
-  | §4.7 audit                                      | 1 (labels), 2, 5 (e2e)                   |
-  | §5 health and its rules                         | 6, 7, 13 (banner)                        |
-  | §6 failed jobs                                  | 6, 8                                     |
-  | §7.1 retention, preview, pause                  | 10, 11, 13                               |
-  | §7.2 triage                                     | 10, 12                                   |
-  | §7.3 learning-data reset                        | 10, 12                                   |
-  | §7.4 pending changes                            | 1 (`TwoPersonActions`), 11               |
-  | §8 plain words, counts, states, accessibility   | Global Constraints; every UI task        |
-  | §8 bell                                         | not in Plan 8 (Rulings)                  |
-  | §9 contract                                     | 1 (spec additions), 2, 6, 10, then the controller's §14 PR |
-  | §10 delivery                                    | 8a: Tasks 2–5; 8b: 6–9; 8c: 10–14        |
-  | §11 tests                                       | 2–14                                     |
+  | Spec section                                  | Task(s)                                                    |
+  | --------------------------------------------- | ---------------------------------------------------------- |
+  | §3 roles, step-up, two people, sidebar        | 1, 3, 7, 11 (nav), every task's tests                      |
+  | §4.1–4.4 holds, place, edit                   | 2, 3, 4                                                    |
+  | §4.5 lift, grace, undo                        | 2, 4                                                       |
+  | §4.6 removal, hospital page, Hold tag         | 2, 5                                                       |
+  | §4.7 audit                                    | 1 (labels), 2, 5 (e2e)                                     |
+  | §5 health and its rules                       | 6, 7, 13 (banner)                                          |
+  | §6 failed jobs                                | 6, 8                                                       |
+  | §7.1 retention, preview, pause                | 10, 11, 13                                                 |
+  | §7.2 triage                                   | 10, 12                                                     |
+  | §7.3 learning-data reset                      | 10, 12                                                     |
+  | §7.4 pending changes                          | 1 (`TwoPersonActions`), 11                                 |
+  | §8 plain words, counts, states, accessibility | Global Constraints; every UI task                          |
+  | §8 bell                                       | not in Plan 8 (Rulings)                                    |
+  | §9 contract                                   | 1 (spec additions), 2, 6, 10, then the controller's §14 PR |
+  | §10 delivery                                  | 8a: Tasks 2–5; 8b: 6–9; 8c: 10–14                          |
+  | §11 tests                                     | 2–14                                                       |
 
 - **Names used across tasks:**
   - contract and mock: `TwoPersonRequest`, `MockCore`, `HoldsClient`, `OpsClient`, `SettingsClient`, `LegalHold`, `LegalHoldDetail`, `HoldShort`, `keepsRecords`, `HealthOut`, `Job`, `JOBS_MAX`, `OLD_QUESTION_MS`, `SettingsOut`, `SettingsRequest`, `setDemoHealth`;
