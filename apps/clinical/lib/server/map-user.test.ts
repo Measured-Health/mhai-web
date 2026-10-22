@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { stepsFor, toDevice, toUser } from "./map-user";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { analysisOn } from "../auth/types";
+import { stepsFor, toDevice, toUser, type ApiUser } from "./map-user";
 
 describe("toUser", () => {
   it("maps what the API sends and nulls what it doesn't", () => {
@@ -47,6 +48,34 @@ describe("toUser", () => {
         roles: ["clinician", "clinician"],
       }).roles,
     ).toEqual(["clinician"]);
+  });
+});
+
+describe("toUser analysis switch", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  const base = { username: "u", role: "clinician" };
+  it("analysis is on only when the API says so and it is signed off", () => {
+    const on = { ...base, features: { analysis: true } };
+    expect(toUser(on).features).toBeUndefined();
+    vi.stubEnv("ANALYSIS_SIGNED_OFF", "true");
+    expect(toUser(on).features).toEqual({ analysis: true });
+    expect(toUser(base).features).toBeUndefined();
+    expect(
+      toUser({ ...base, features: { analysis: false } }).features,
+    ).toBeUndefined();
+  });
+  it("an unknown features value reads off", () => {
+    vi.stubEnv("ANALYSIS_SIGNED_OFF", "true");
+    for (const features of ["yes", 1, null, [], { analysis: "true" }])
+      expect(
+        analysisOn(toUser({ ...base, features } as unknown as ApiUser)),
+      ).toBe(false);
+  });
+  it("analyst is a known role", () => {
+    expect(toUser({ ...base, roles: ["clinician", "analyst"] }).roles).toEqual([
+      "clinician",
+      "analyst",
+    ]);
   });
 });
 

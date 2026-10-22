@@ -128,4 +128,34 @@ describe("AuthGate", () => {
     expect(screen.getByText("clinical screen")).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
   });
+  it("/analysis sends a clinician without analyst home", async () => {
+    Clinical.mockClear();
+    renderWithAuth(gated("analysis"), {
+      ...as("clinician"),
+      features: { analysis: true },
+    });
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+    expect(Clinical).not.toHaveBeenCalled();
+  });
+  it("lets an analyst into /analysis", () => {
+    renderWithAuth(gated("analysis"), {
+      ...as("clinician", "analyst"),
+      features: { analysis: true },
+    });
+    expect(screen.getByText("clinical screen")).toBeInTheDocument();
+  });
+  it("the feature off sends everyone home (Review Focus 5)", async () => {
+    for (const [roles, home] of [
+      [["clinician", "analyst"], "/"],
+      [["clinician", "hospital_admin"], "/"],
+      [["hospital_admin"], "/admin/staff"],
+    ] as [Role[], string][]) {
+      Clinical.mockClear();
+      replace.mockClear();
+      const { unmount } = renderWithAuth(gated("analysis"), as(...roles));
+      await waitFor(() => expect(replace).toHaveBeenCalledWith(home));
+      expect(Clinical).not.toHaveBeenCalled();
+      unmount();
+    }
+  });
 });

@@ -1,6 +1,7 @@
 import { handledFields } from "@/lib/api/alert-handled";
 import { canUse } from "@/lib/auth/types";
 import { apiBase } from "@/lib/server/api";
+import { analysisSignedOff } from "@/lib/server/features";
 import { forbidden, json, sameOrigin } from "@/lib/server/http";
 import { refreshOnce } from "@/lib/server/refresh";
 import {
@@ -18,6 +19,7 @@ const ALLOWED = new Set([
   "hospital",
   "alerts",
   "me",
+  "analysis",
 ]);
 // Anything else (HEAD, PUT, OPTIONS...) never reaches a read or write branch.
 const METHODS = new Set(["GET", "POST", "PATCH", "DELETE"]);
@@ -67,6 +69,20 @@ function hospitalShape(method: string, path: string[]): boolean {
   return false;
 }
 
+const ANALYSIS_VIEWS = new Set([
+  "filters",
+  "prevalence",
+  "affected",
+  "co-occurring",
+  "findings",
+  "quality",
+  "patients",
+]);
+
+/** Analysis reads only: the seven views the analysis client uses (Plan 6). */
+const analysisShape = (method: string, path: string[]) =>
+  method === "GET" && path.length === 2 && ANALYSIS_VIEWS.has(path[1] ?? "");
+
 const ALERT_ACTIONS = new Set(["acknowledge", "dismiss"]);
 
 /**
@@ -98,6 +114,7 @@ function alertShape(method: string, path: string[]): boolean {
 function shapeAllowed(method: string, path: string[]): boolean {
   if (!METHODS.has(method)) return false;
   if (path[0] === "hospital") return hospitalShape(method, path);
+  if (path[0] === "analysis") return analysisShape(method, path);
   if (path[0] === "alerts" || path[0] === "me") return alertShape(method, path);
   // Clinical calls only read and post (Plans 1–3).
   if (method !== "GET" && method !== "POST") return false;
@@ -134,6 +151,9 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     !shapeAllowed(req.method, path)
   )
     return json(404, { code: "not_found" });
+  // Off in live mode until signed off: nothing is checked or forwarded.
+  if (path[0] === "analysis" && !analysisSignedOff())
+    return json(404, { code: "not_found" });
   if (req.method !== "GET" && !sameOrigin(req)) return forbidden();
 
   let s = await readSession();
@@ -145,10 +165,15 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   // Everything outside `hospital` is clinical, including `alerts` and `me`
   // (Plan 5a). NOTE: that makes every future `me/*` route clinician-only too;
   // a `me` route meant for hospital admins needs its own area rule here.
-  const area = path[0] === "hospital" ? "admin" : "clinical";
+  const area =
+    path[0] === "hospital"
+      ? "admin"
+      : path[0] === "analysis"
+        ? "analysis"
+        : "clinical";
   if (!canUse(s.user, area) || s.steps.length > 0) return forbidden();
-  // Every hospital admin must have two-step on (amendment 3).
-  if (area === "admin" && s.user.mfaEnabled !== true)
+  // Every hospital admin, and anyone using Analysis, must have two-step on (amendment 3).
+  if (area !== "clinical" && s.user.mfaEnabled !== true)
     return json(403, { code: "mfa_required" });
   if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
 
