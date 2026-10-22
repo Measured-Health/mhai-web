@@ -1,5 +1,5 @@
 "use client";
-import { useId, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { AuditPerson } from "@/lib/api/audit-contract";
 import { ROLE_WORDS } from "@/lib/audit/kinds";
 import { useAuditPeople } from "@/lib/queries/audit";
@@ -33,6 +33,16 @@ export function PersonPicker({
   const term = text.trim();
   const list = term.length >= 2 ? (people.data ?? []) : [];
   const expanded = open && term.length >= 2;
+  // Choosing swaps the input for the chosen person, and Clear swaps back:
+  // focus follows to Clear, then back to the input.
+  const input = useRef<HTMLInputElement>(null);
+  const clearButton = useRef<HTMLButtonElement>(null);
+  const focusNext = useRef<"clear" | "input" | null>(null);
+  useEffect(() => {
+    if (focusNext.current === "clear") clearButton.current?.focus();
+    else if (focusNext.current === "input") input.current?.focus();
+    focusNext.current = null;
+  }, [value]);
 
   if (value)
     return (
@@ -49,11 +59,13 @@ export function PersonPicker({
             {personLine(value)}
           </span>
           <Button
+            ref={clearButton}
             variant="ghost"
             size="sm"
             aria-label="Clear person"
             onClick={() => {
               setText("");
+              focusNext.current = "input";
               onChange(null);
             }}
           >
@@ -66,6 +78,7 @@ export function PersonPicker({
   function choose(p: AuditPerson) {
     setOpen(false);
     setActive(-1);
+    focusNext.current = "clear";
     onChange(p);
   }
 
@@ -90,7 +103,7 @@ export function PersonPicker({
     term.length < 2
       ? null
       : people.isError
-        ? "Couldn't search people. Try again."
+        ? "Couldn't search people. Check your connection and type again."
         : people.data === undefined
           ? "Searching…"
           : list.length === 0
@@ -106,6 +119,7 @@ export function PersonPicker({
         Person
       </label>
       <input
+        ref={input}
         id={`${id}-i`}
         type="text"
         role="combobox"
@@ -154,11 +168,10 @@ export function PersonPicker({
           </li>
         ))}
       </ul>
-      {expanded && status && (
-        <p role="status" className="text-[12.5px] text-ink-3">
-          {status}
-        </p>
-      )}
+      {/* Always mounted, so a change of words is announced. */}
+      <p role="status" className="text-[12.5px] text-ink-3 empty:hidden">
+        {expanded ? status : null}
+      </p>
     </div>
   );
 }

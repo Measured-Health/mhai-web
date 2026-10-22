@@ -56,6 +56,8 @@ export function useAuditEvents(f: AuditFilters, enabled = true) {
     getNextPageParam: (last) => last.next_cursor,
     select: readPages,
     refetchOnMount: "always",
+    // A search may be for a patient's pseudonym: not kept once off screen.
+    ...(f.q ? { gcTime: 0 } : {}),
     enabled,
   });
 }

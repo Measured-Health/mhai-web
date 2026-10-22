@@ -25,6 +25,7 @@ import { __resetReportedForTests } from "@/lib/queries/audit";
 import { renderWithAuth } from "@/tests/render";
 import { OFFLINE_NOTE } from "../states/offline-strip";
 import { AuditView } from "./audit-view";
+import { SEARCH_WHOLE_LOG } from "./event-filters";
 
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -70,10 +71,27 @@ const select = (name: string) => screen.getByRole("combobox", { name });
 const pick = (name: string, option: string) =>
   userEvent.setup().selectOptions(select(name), option);
 
+/** Types a day into a date input, then leaves it (dates apply on blur). */
+function day(label: string, value: string) {
+  const input = screen.getByLabelText(label);
+  fireEvent.change(input, { target: { value } });
+  fireEvent.blur(input);
+}
+
 async function customRange(from: string, to: string) {
   await pick("Dates", "Custom");
-  fireEvent.change(screen.getByLabelText("From"), { target: { value: from } });
-  fireEvent.change(screen.getByLabelText("To"), { target: { value: to } });
+  day("From", from);
+  day("To", to);
+}
+
+/** A `listAudit` spy over the mock's own. */
+function spyList() {
+  let listAudit!: ReturnType<typeof vi.fn<PlatformClient["listAudit"]>>;
+  const m = setup(undefined, (c) => {
+    listAudit = vi.fn(c.listAudit);
+    return { listAudit };
+  });
+  return { m, listAudit };
 }
 
 describe("the Audit log page", () => {
@@ -214,13 +232,17 @@ describe("the Audit log page", () => {
     const u = userEvent.setup();
     renderWithAuth(<AuditView />);
     await screen.findByRole("table", { name: "Audit log events" });
-    const button = screen.getByRole("button", { name: "Action type (0)" });
+    const button = screen.getByRole("button", { name: "Action type (all)" });
     await u.click(button);
     expect(button).toHaveAttribute("aria-expanded", "true");
     await u.click(screen.getByRole("checkbox", { name: "Audit" }));
+    await u.keyboard("{Escape}");
     expect(
       screen.getByRole("button", { name: "Action type (1)" }),
-    ).toBeInTheDocument();
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.getByRole("button", { name: "Action type (1)" }),
+    ).toHaveFocus();
     await waitFor(() => {
       const r = rows();
       expect(r.length).toBeGreaterThan(0);
@@ -234,10 +256,55 @@ describe("the Audit log page", () => {
         ),
       ).toBe(true);
     });
-    await u.keyboard("{Escape}");
+  });
+
+  it("ticking 5 action types makes 1 read, when the popover closes", async () => {
+    const { listAudit } = spyList();
+    const u = userEvent.setup();
+    renderWithAuth(<AuditView />);
+    await screen.findByRole("table", { name: "Audit log events" });
+    const before = listAudit.mock.calls.length;
+    await u.click(screen.getByRole("button", { name: "Action type (all)" }));
+    for (const name of ["Sign-in", "Account", "Audit", "Export", "Security"])
+      await u.click(screen.getByRole("checkbox", { name }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(listAudit).toHaveBeenCalledTimes(before);
+    await u.click(screen.getByRole("button", { name: "Done" }));
     expect(
-      screen.getByRole("button", { name: "Action type (1)" }),
-    ).toHaveAttribute("aria-expanded", "false");
+      screen.getByRole("button", { name: "Action type (5)" }),
+    ).toHaveFocus();
+    await screen.findByRole("table", { name: "Audit log events" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(listAudit).toHaveBeenCalledTimes(before + 1);
+    expect(listAudit.mock.lastCall![0].type).toEqual([
+      "sign_in",
+      "account",
+      "export",
+      "audit",
+      "security",
+    ]);
+  });
+
+  it("typing a custom date makes 1 read, when the field is left", async () => {
+    const { listAudit } = spyList();
+    renderWithAuth(<AuditView />);
+    await screen.findByRole("table", { name: "Audit log events" });
+    await pick("Dates", "Custom");
+    await screen.findByRole("table", { name: "Audit log events" });
+    const before = listAudit.mock.calls.length;
+    const from = screen.getByLabelText("From");
+    // A year typed digit by digit: each step is a real day.
+    for (const v of ["0002-09-01", "0020-09-01", "0202-09-01", "2026-09-01"])
+      fireEvent.change(from, { target: { value: v } });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(listAudit).toHaveBeenCalledTimes(before);
+    fireEvent.keyDown(from, { key: "Enter" });
+    await screen.findByRole("table", { name: "Audit log events" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(listAudit).toHaveBeenCalledTimes(before + 1);
+    expect(listAudit.mock.lastCall![0].from).toBe(
+      new Date(2026, 8, 1).toISOString(),
+    );
   });
 
   it("Refused and Flagged only find the locked sign-in", async () => {
@@ -300,12 +367,8 @@ describe("the Audit log page", () => {
     await screen.findByRole("table", { name: "Audit log events" });
     const before = listAudit.mock.calls.length;
     // To first: the prefilled From is already after it.
-    fireEvent.change(screen.getByLabelText("To"), {
-      target: { value: "2026-03-10" },
-    });
-    fireEvent.change(screen.getByLabelText("From"), {
-      target: { value: "2026-03-20" },
-    });
+    day("To", "2026-03-10");
+    day("From", "2026-03-20");
     expect(await screen.findByText(FROM_AFTER_TO)).toBeInTheDocument();
     expect(screen.getByLabelText("From")).toHaveAccessibleDescription(
       FROM_AFTER_TO,
@@ -335,14 +398,28 @@ describe("the Audit log page", () => {
   });
 
   it("Load more appends 50", async () => {
-    setup();
+    const { m, listAudit } = spyList();
     const u = userEvent.setup();
     renderWithAuth(<AuditView />);
     await screen.findByRole("table", { name: "Audit log events" });
     await pick("Dates", "Last 12 months");
     await waitFor(() => expect(rows()).toHaveLength(50));
+    const [filters, cursor] = listAudit.mock.lastCall!;
+    expect(cursor).toBeUndefined();
     await u.click(screen.getByRole("button", { name: "Load more" }));
     await waitFor(() => expect(rows()).toHaveLength(100));
+    // Load more sends the same filters and a cursor, so it isn't a new read.
+    const [again, next] = listAudit.mock.lastCall!;
+    expect(again).toEqual(filters);
+    expect(next).toEqual(expect.any(String));
+    const views = async () =>
+      (await m.listAudit({ type: ["audit"] })).events.filter(
+        (e) => e.kind === "audit_viewed",
+      ).length;
+    await views(); // the first call is itself a new set
+    const n = await views();
+    await m.listAudit(filters, next);
+    expect(await views()).toBe(n);
   });
 
   it("with matchCount 20,000 the count reads More than 10,000 events", async () => {
@@ -459,10 +536,15 @@ describe("the Audit log page", () => {
   it("the URL stays /audit after filtering and searching, and storage stays empty", async () => {
     localStorage.clear();
     sessionStorage.clear();
+    const pushState = vi.spyOn(history, "pushState");
+    const replaceState = vi.spyOn(history, "replaceState");
     setup();
     const u = userEvent.setup();
     renderWithAuth(<AuditView />);
     await screen.findByRole("table", { name: "Audit log events" });
+    await u.click(screen.getByRole("button", { name: "Action type (all)" }));
+    await u.click(screen.getByRole("checkbox", { name: "Platform" }));
+    await u.click(screen.getByRole("button", { name: "Done" }));
     await pick("Hospital", "Platform only");
     await pick("Outcome", "Succeeded");
     await u.type(
@@ -470,9 +552,85 @@ describe("the Audit log page", () => {
       "req_abc{Enter}",
     );
     await screen.findByText("Nothing matches these filters");
+    expect(window.location.search).toBe("");
+    expect(window.location.hash).toBe("");
+    expect(document.title).not.toContain("req_abc");
+    expect(pushState).not.toHaveBeenCalled();
+    expect(replaceState).not.toHaveBeenCalled();
     expect(nav.push).not.toHaveBeenCalled();
     expect(nav.replace).not.toHaveBeenCalled();
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
+  });
+  it("an id search covers the whole log: an old pseudonym is found, and the filters wait", async () => {
+    const seed = seedAudit(Date.now());
+    const named = seed.events.filter((e) => e.kind === "drilldown_named");
+    const oldest = named[named.length - 1]!;
+    expect(Date.now() - Date.parse(oldest.at)).toBeGreaterThan(30 * 86_400_000);
+    const p = seed.pseudonyms[oldest.id]![0]!;
+    const { listAudit } = spyList();
+    const u = userEvent.setup();
+    renderWithAuth(<AuditView />);
+    await screen.findByRole("table", { name: "Audit log events" });
+    await pick("Outcome", "Refused");
+    await u.type(
+      screen.getByRole("searchbox", { name: "Search by exact id" }),
+      `${p}{Enter}`,
+    );
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    expect(listAudit).toHaveBeenLastCalledWith({ q: p }, undefined);
+    expect(cell(rows()[0]!, "action")).toMatch(/^Opened a named patient list/);
+    expect(screen.getByText(SEARCH_WHOLE_LOG)).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: "Filters" }),
+    ).toHaveAccessibleDescription(SEARCH_WHOLE_LOG);
+    // The filters are kept, and apply again once the search is cleared.
+    expect(select("Outcome")).toHaveValue("refused");
+    await u.click(screen.getByRole("button", { name: "Clear search" }));
+    await waitFor(() =>
+      expect(listAudit.mock.lastCall![0]).toEqual(
+        expect.objectContaining({ outcome: "refused" }),
+      ),
+    );
+    expect(screen.queryByText(SEARCH_WHOLE_LOG)).toBeNull();
+  });
+
+  it("the person picker moves focus to Clear on choosing, and back to the input on Clear", async () => {
+    setup();
+    const u = userEvent.setup();
+    renderWithAuth(<AuditView />);
+    await screen.findByRole("table", { name: "Audit log events" });
+    await u.type(screen.getByRole("combobox", { name: "Person" }), "Ada");
+    await screen.findByRole("option", { name: /^Ada Bakare · / });
+    await u.keyboard("{ArrowDown}{Enter}");
+    expect(screen.getByRole("button", { name: "Clear person" })).toHaveFocus();
+    await u.keyboard("{Enter}");
+    expect(screen.getByRole("combobox", { name: "Person" })).toHaveFocus();
+  });
+
+  it("the header says Couldn't check when the status can't be read, never Intact", async () => {
+    for (const getIntegrityStatus of [
+      async () => {
+        throw new Error("down");
+      },
+      // A malformed reply: the run keys are missing.
+      async () => ({ oldest_kept_at: "2020-10-22T00:00:00Z" }),
+    ]) {
+      setup(
+        undefined,
+        () =>
+          ({
+            getIntegrityStatus,
+          }) as unknown as Partial<PlatformClient>,
+      );
+      const { unmount } = renderWithAuth(<AuditView />);
+      expect(
+        await screen.findByRole("button", {
+          name: "Integrity: Couldn't check",
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Intact/)).toBeNull();
+      unmount();
+    }
   });
 });

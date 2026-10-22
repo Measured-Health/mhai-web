@@ -1,6 +1,13 @@
 "use client";
 import { ChevronDown } from "lucide-react";
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   AUDIT_TYPES,
   type AuditFilters,
@@ -71,11 +78,15 @@ export function initialEvents(now: number): EventsState {
   };
 }
 
-/** The filters to send, or why the dates can't be used. */
+/**
+ * The filters to send, or why the dates can't be used. An exact id search
+ * covers the whole log kept: it is sent alone, and the filters wait.
+ */
 export function filtersOf(
   s: EventsState,
   now: number,
 ): { filters: AuditFilters } | { error: string } {
+  if (s.q) return { filters: { q: s.q } };
   const range =
     s.preset === "custom" ? checkCustomRange(s.fromDay, s.toDay, now) : s.range;
   if ("error" in range) return { error: range.error };
@@ -87,7 +98,6 @@ export function filtersOf(
   if (s.flagged) f.flagged = true;
   f.from = range.from;
   f.to = range.to;
-  if (s.q) f.q = s.q;
   return { filters: f };
 }
 
@@ -103,6 +113,8 @@ const control =
   "min-h-11 rounded-xl border border-lilac-2 bg-white px-3 text-[13.5px] focus-visible:outline-2 focus-visible:outline-mint-deep";
 const labelClass = "text-[12px] font-semibold text-ink-2";
 const SEARCH_INVALID = "Enter an exact id: letters, numbers, - and _ only.";
+export const SEARCH_WHOLE_LOG =
+  "Searching the whole log by id. Filters don't apply until you clear the search.";
 
 export function EventFilters({
   value,
@@ -126,9 +138,27 @@ export function EventFilters({
     } else set({ preset: p, range: rangeOf(p, Date.now()) });
   }
 
+  const searching = value.q !== "";
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-end gap-3">
+      {searching && (
+        <p
+          id={`${id}-searching`}
+          role="status"
+          className="rounded-xl bg-lilac px-3 py-2 text-[13px] text-bloom"
+        >
+          {SEARCH_WHOLE_LOG}
+        </p>
+      )}
+      <div
+        role="group"
+        aria-label="Filters"
+        aria-describedby={searching ? `${id}-searching` : undefined}
+        className={cn(
+          "flex flex-wrap items-end gap-3",
+          searching && "opacity-60",
+        )}
+      >
         <div className="flex flex-col gap-1">
           <label htmlFor={`${id}-h`} className={labelClass}>
             Hospital
@@ -176,34 +206,20 @@ export function EventFilters({
 
         {value.preset === "custom" && (
           <>
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`${id}-from`} className={labelClass}>
-                From
-              </label>
-              <input
-                id={`${id}-from`}
-                type="date"
-                value={value.fromDay}
-                onChange={(e) => set({ fromDay: e.target.value })}
-                aria-invalid={rangeError ? true : undefined}
-                aria-describedby={rangeError ? `${id}-range` : undefined}
-                className={control}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`${id}-to`} className={labelClass}>
-                To
-              </label>
-              <input
-                id={`${id}-to`}
-                type="date"
-                value={value.toDay}
-                onChange={(e) => set({ toDay: e.target.value })}
-                aria-invalid={rangeError ? true : undefined}
-                aria-describedby={rangeError ? `${id}-range` : undefined}
-                className={control}
-              />
-            </div>
+            <DayInput
+              id={`${id}-from`}
+              label="From"
+              value={value.fromDay}
+              onApply={(fromDay) => set({ fromDay })}
+              errorId={rangeError ? `${id}-range` : undefined}
+            />
+            <DayInput
+              id={`${id}-to`}
+              label="To"
+              value={value.toDay}
+              onApply={(toDay) => set({ toDay })}
+              errorId={rangeError ? `${id}-range` : undefined}
+            />
           </>
         )}
 
@@ -244,6 +260,53 @@ export function EventFilters({
       )}
 
       <SearchBox value={value.q} onApply={(q) => set({ q })} />
+    </div>
+  );
+}
+
+/**
+ * A custom range's day. It applies on blur or Enter, not on each keystroke,
+ * so a year typed digit by digit isn't read (and recorded) at every step.
+ */
+function DayInput({
+  id,
+  label,
+  value,
+  onApply,
+  errorId,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onApply(day: string): void;
+  errorId: string | undefined;
+}) {
+  // Null while not being edited: the applied value shows.
+  const [draft, setDraft] = useState<string | null>(null);
+  const apply = () => {
+    if (draft !== null && draft !== value) onApply(draft);
+    setDraft(null);
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className={labelClass}>
+        {label}
+      </label>
+      <input
+        id={id}
+        type="date"
+        value={draft ?? value}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={apply}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          apply();
+        }}
+        aria-invalid={errorId ? true : undefined}
+        aria-describedby={errorId}
+        className={control}
+      />
     </div>
   );
 }
@@ -309,6 +372,7 @@ function SearchBox({
             size="sm"
             aria-label="Clear search"
             onClick={clear}
+            {...net.props}
           >
             Clear
           </Button>
@@ -324,7 +388,10 @@ function SearchBox({
   );
 }
 
-/** "Action type ({n})": checkboxes in a popover, more than one allowed. */
+/**
+ * "Action type ({n})": checkboxes in a popover, more than one allowed. The
+ * ticks apply when the popover closes, so choosing five types is one read.
+ */
 function ActionTypes({
   value,
   onChange,
@@ -334,18 +401,33 @@ function ActionTypes({
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<AuditType[]>(value);
   const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
+
+  function show() {
+    setDraft(value);
+    setOpen(true);
+  }
+  function close(refocus: boolean) {
+    setOpen(false);
+    const same =
+      draft.length === value.length && draft.every((t) => value.includes(t));
+    if (!same) onChange(AUDIT_TYPES.filter((t) => draft.includes(t)));
+    if (refocus) button.current?.focus();
+  }
+  // The listeners below always see the latest draft.
+  const closeFromListener = useEffectEvent((refocus: boolean) =>
+    close(refocus),
+  );
 
   useEffect(() => {
     if (!open) return;
     const outside = (e: PointerEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false);
+      if (!box.current?.contains(e.target as Node)) closeFromListener(false);
     };
     const esc = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      setOpen(false);
-      button.current?.focus();
+      if (e.key === "Escape") closeFromListener(true);
     };
     document.addEventListener("pointerdown", outside);
     document.addEventListener("keydown", esc);
@@ -356,7 +438,7 @@ function ActionTypes({
   }, [open]);
 
   const toggle = (t: AuditType, on: boolean) =>
-    onChange(on ? [...value, t] : value.filter((x) => x !== t));
+    setDraft((d) => (on ? [...d, t] : d.filter((x) => x !== t)));
 
   return (
     <div ref={box} className="relative">
@@ -365,10 +447,10 @@ function ActionTypes({
         type="button"
         aria-expanded={open}
         aria-controls={`${id}-pop`}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (open ? close(false) : show())}
         className={cn(control, "inline-flex items-center gap-2 font-semibold")}
       >
-        Action type ({value.length})
+        Action type ({value.length || "all"})
         <ChevronDown aria-hidden className="size-4" />
       </button>
       <div
@@ -388,7 +470,7 @@ function ActionTypes({
               >
                 <input
                   type="checkbox"
-                  checked={value.includes(t)}
+                  checked={draft.includes(t)}
                   onChange={(e) => toggle(t, e.target.checked)}
                   className="size-4 accent-mint-deep"
                 />
@@ -397,16 +479,16 @@ function ActionTypes({
             ))}
           </div>
         </fieldset>
-        {value.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mt-2"
-            onClick={() => onChange([])}
-          >
-            Show all types
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => close(true)}>
+            Done
           </Button>
-        )}
+          {draft.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => setDraft([])}>
+              Show all types
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
