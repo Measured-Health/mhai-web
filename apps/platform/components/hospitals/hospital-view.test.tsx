@@ -510,3 +510,35 @@ describe("the hospital page", () => {
       expect(el.textContent).not.toContain(DEACTIVATE);
   });
 });
+
+describe("a hold status this app doesn't know", () => {
+  it("fails only the legal holds block; the rest of the page stays up", async () => {
+    const real = api;
+    let calls = 0;
+    __setPlatformClientForTests({
+      ...real,
+      getHospital: async (id) => {
+        calls += 1;
+        const h = await real.getHospital(id);
+        return {
+          ...h,
+          legal_holds: h.legal_holds.map((x) => ({
+            ...x,
+            status: "mystery" as never,
+          })),
+        };
+      },
+    });
+    renderWithAuth(<HospitalView id="h_harbour" />);
+    const holds = await screen.findByRole("region", { name: "Legal holds" });
+    expect(within(holds).getByText("Couldn't load legal holds.")).toBeVisible();
+    expect(holds).not.toHaveTextContent("mystery");
+    expect(region("Removal")).toBeInTheDocument();
+    expect(region("Details")).toBeInTheDocument();
+    const before = calls;
+    await userEvent.click(
+      within(holds).getByRole("button", { name: "Try again" }),
+    );
+    await waitFor(() => expect(calls).toBeGreaterThan(before));
+  });
+});

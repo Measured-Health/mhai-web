@@ -1,5 +1,6 @@
 "use client";
 import { CheckCircle2, OctagonAlert } from "lucide-react";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import {
   BlockedError,
@@ -28,10 +29,14 @@ import { StepUpDialog, type StepUpInput } from "./step-up-dialog";
 
 const BLOCKED_NOTE =
   "Removal can't go ahead until the checks above are cleared.";
-const HOLDS_LATER = "Legal holds are managed in a later release.";
 const REMOVED = "Removed. Only the audit trail remains.";
 
-export type CheckLine = { text: string; blocks: boolean };
+export type CheckLine = {
+  text: string;
+  blocks: boolean;
+  /** Where the holds are listed, when this line counts them. */
+  holdsHref?: string;
+};
 
 /**
  * The backend's removal checks in plain words. `blocking` is the server's
@@ -40,6 +45,7 @@ export type CheckLine = { text: string; blocks: boolean };
 export function checkLines(
   c: RemovalRequest["checks"],
   blocking: readonly RemovalBlock[],
+  hospitalId?: string,
 ): CheckLine[] {
   const lines: CheckLine[] = [];
   const n = c.legal_holds;
@@ -47,6 +53,9 @@ export function checkLines(
     lines.push({
       text: n === 1 ? "1 legal hold is active" : `${n} legal holds are active`,
       blocks: true,
+      holdsHref: hospitalId
+        ? `/legal-holds?hospital=${encodeURIComponent(hospitalId)}&status=all`
+        : undefined,
     });
   else if (blocking.includes("legal_hold"))
     lines.push({ text: "A legal hold is active", blocks: true });
@@ -79,6 +88,17 @@ function Checks({ lines, id }: { lines: CheckLine[]; id?: string }) {
             <CheckCircle2 aria-hidden className="size-4 shrink-0 text-ok" />
           )}
           {l.text}
+          {l.holdsHref && (
+            <>
+              {" · "}
+              <Link
+                href={l.holdsHref}
+                className="inline-flex min-h-11 items-center font-semibold text-mint-deep underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-mint-deep sm:min-h-0"
+              >
+                View holds
+              </Link>
+            </>
+          )}
         </li>
       ))}
     </ul>
@@ -178,15 +198,12 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
     });
   };
 
-  const holds = r.blocking.includes("legal_hold");
   const approveOff = net.offline
     ? net.props
     : blocked
       ? {
           disabled: true,
-          "aria-describedby": holds
-            ? "removal-blocked removal-holds-later"
-            : "removal-blocked",
+          "aria-describedby": "removal-blocked",
         }
       : {};
 
@@ -206,11 +223,10 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
         <p className="mt-3 text-[14px] font-semibold">{REMOVED}</p>
       ) : (
         <div className="mt-3">
-          <Checks lines={checkLines(r.checks, r.blocking)} />
+          <Checks lines={checkLines(r.checks, r.blocking, h.id)} />
           {requested && blocked && (
             <div className="mt-2 text-[13px] text-ink-3">
               <p id="removal-blocked">{BLOCKED_NOTE}</p>
-              {holds && <p id="removal-holds-later">{HOLDS_LATER}</p>}
             </div>
           )}
         </div>
