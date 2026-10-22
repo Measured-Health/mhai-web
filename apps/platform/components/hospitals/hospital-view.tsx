@@ -57,7 +57,10 @@ export function HospitalView({ id }: { id: string }) {
                 onGone={() => void refetch()}
               />
               <RemovalPanel hospital={h} />
-              <HospitalHoldsSection hospital={h} />
+              <HospitalHoldsSection
+                hospital={h}
+                onRetry={() => void refetch()}
+              />
               <DetailsSection
                 hospital={h}
                 canEdit={canAct && h.status !== "removed"}

@@ -34,7 +34,12 @@ const section = () => screen.getByRole("region", { name: "Legal holds" });
 
 describe("the hospital's legal holds", () => {
   it("Harbour View lists HC/2026/0412 as Active, linked", async () => {
-    renderWithAuth(<HospitalHoldsSection hospital={await get("h_harbour")} />);
+    renderWithAuth(
+      <HospitalHoldsSection
+        hospital={await get("h_harbour")}
+        onRetry={() => {}}
+      />,
+    );
     const link = within(section()).getByRole("link", {
       name: /HC\/2026\/0412/,
     });
@@ -45,13 +50,21 @@ describe("the hospital's legal holds", () => {
 
   it("a hospital with none reads No legal holds", async () => {
     renderWithAuth(
-      <HospitalHoldsSection hospital={await get("h_westfield")} />,
+      <HospitalHoldsSection
+        hospital={await get("h_westfield")}
+        onRetry={() => {}}
+      />,
     );
     expect(within(section()).getByText("No legal holds")).toBeInTheDocument();
   });
 
   it("Place a hold opens with the hospital filled in and goes to the new hold", async () => {
-    renderWithAuth(<HospitalHoldsSection hospital={await get("h_havana")} />);
+    renderWithAuth(
+      <HospitalHoldsSection
+        hospital={await get("h_havana")}
+        onRetry={() => {}}
+      />,
+    );
     await userEvent.click(
       within(section()).getByRole("button", { name: "Place a hold" }),
     );
@@ -75,19 +88,48 @@ describe("the hospital's legal holds", () => {
 
   it("a removed hospital offers no Place a hold", async () => {
     const h: Hospital = { ...(await get("h_havana")), status: "removed" };
-    renderWithAuth(<HospitalHoldsSection hospital={h} />);
+    renderWithAuth(<HospitalHoldsSection hospital={h} onRetry={() => {}} />);
     expect(
       within(section()).queryByRole("button", { name: "Place a hold" }),
     ).toBeNull();
   });
 
   it("an auditor sees the holds and no button", async () => {
-    renderWithAuth(<HospitalHoldsSection hospital={await get("h_harbour")} />, {
-      user: AMARA,
-    });
+    renderWithAuth(
+      <HospitalHoldsSection
+        hospital={await get("h_harbour")}
+        onRetry={() => {}}
+      />,
+      {
+        user: AMARA,
+      },
+    );
     expect(
       within(section()).getByRole("link", { name: /HC\/2026\/0412/ }),
     ).toBeInTheDocument();
     expect(within(section()).queryByRole("button")).toBeNull();
+  });
+
+  it("an unknown status says Couldn't load legal holds and retries", async () => {
+    const h = await get("h_harbour");
+    const retry = vi.fn();
+    renderWithAuth(
+      <HospitalHoldsSection
+        hospital={{
+          ...h,
+          legal_holds: [
+            ...h.legal_holds,
+            { ...h.legal_holds[0], id: "hold_x", status: "mystery" as never },
+          ],
+        }}
+        onRetry={retry}
+      />,
+    );
+    const s = section();
+    expect(within(s).getByText("Couldn't load legal holds.")).toBeVisible();
+    expect(within(s).queryByRole("link")).toBeNull();
+    expect(s).not.toHaveTextContent("mystery");
+    await userEvent.click(within(s).getByRole("button", { name: "Try again" }));
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 });

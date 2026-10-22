@@ -75,20 +75,26 @@ export function HoldsView() {
 
   // Ask the service once typing pauses, not on every key.
   const [search, setSearch] = useState(q);
-  // Back and Forward change `q` under the box; follow them unless the person
-  // is typing (an echo of an earlier pause must not undo later keys).
-  const [typing, setTyping] = useState(false);
+  // Back and Forward change `q` under the box; follow them even while the box
+  // has focus. A `q` this box sent itself is only an echo and is not followed,
+  // so a late echo can't undo later keys.
+  const [sent, setSent] = useState<string[]>([]);
   const [seenQ, setSeenQ] = useState(q);
   if (q !== seenQ) {
     setSeenQ(q);
-    if (!typing) setSearch(q);
+    if (!sent.includes(q)) {
+      // Setting `search` to `q` also cancels any pending write (see below).
+      setSearch(q);
+      setSent([]);
+    }
   }
   useEffect(() => {
     if (search.trim() === q.trim()) return;
-    const t = setTimeout(
-      () => goRef.current({ q: search.trim() || undefined }),
-      250,
-    );
+    const t = setTimeout(() => {
+      const next = search.trim();
+      setSent((s) => [...s, next]);
+      goRef.current({ q: next || undefined });
+    }, 250);
     return () => clearTimeout(t);
   }, [search, q]);
 
@@ -127,8 +133,6 @@ export function HoldsView() {
                 aria-label="Search by reference"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onFocus={() => setTyping(true)}
-                onBlur={() => setTyping(false)}
                 placeholder="Search by reference"
                 className={`${inputClass} pl-9`}
               />

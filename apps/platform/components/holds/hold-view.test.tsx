@@ -113,7 +113,7 @@ describe("a hold's page", () => {
     renderWithAuth(<HoldView id="hold_hv" />);
     expect(
       await screen.findByText(
-        "This hold stopped Harbour View Hospital's removal. It is back to Removal pending and blocked.",
+        "Placing this hold stopped Harbour View Hospital's scheduled removal and sent it back to Removal pending.",
       ),
     ).toBeInTheDocument();
   });

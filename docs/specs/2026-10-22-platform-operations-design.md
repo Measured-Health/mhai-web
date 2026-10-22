@@ -440,7 +440,7 @@ review_on, mfa_code}` → the hold. **409** `hospital_removed`; **409** `removal
   `lift_requested`, with `lift.records_due` (the count in §4.5) and `lift.due_after`.
 - `POST …/lift/approve {version, mfa_code}` → `lifted`, `released_on` 7 days on;
   `POST …/lift/cancel {version}`; `POST …/lift/undo {version, mfa_code}` (only before
-  `released_on`) → `active`. Each sends the hold's `version` as the person saw it, so it acts
+  `released_on`) → `active` (or `review_due` if its review date has passed). Each sends the hold's `version` as the person saw it, so it acts
   only on the request they saw: a mismatch (for example, the request was cancelled and a new
   one made meanwhile) is **409** `conflict` ("Changed by someone else"). A lapsed request is
   still **409** `expired` on approval.
@@ -455,7 +455,8 @@ review_on, mfa_code}` → the hold. **409** `hospital_removed`; **409** `removal
 - the daily clean-up and every other deletion path (removal, a future erasure request) leave
   out every record covered by a hold that is active, review due, lift requested, or lifted
   before its `released_on`, in the deletion query itself;
-- `removal.checks.legal_holds` counts the same set;
+- `removal.checks.legal_holds` counts the same set, and `removal.checks` and `blocking`
+  reflect holds as they stand at each read;
 - placing a hold on a `removal_scheduled` hospital stops the removal if it hasn't started
   (back to `removal_pending`, blocked); the removal re-checks holds just before deleting;
 - `review_due` is set by the server from `review_on`; a hold never lifts itself;

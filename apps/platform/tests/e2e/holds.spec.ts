@@ -22,14 +22,19 @@ const holdsList = (page: Page) =>
     : page.getByRole("table", { name: "Legal holds" });
 
 /**
- * Picks a reason in the place-a-hold form. On a phone the form is taller than
- * the screen and the sticky header covers the radio whichever way Playwright
- * scrolls it, so the radio itself gets the click event.
+ * Picks a reason in the place-a-hold form by clicking its chip in the page.
+ * The radio is sr-only (the chip is what people tap). On a phone, Playwright's
+ * own click (on the chip, or a forced check on the radio) can miss on this
+ * tall form: it reports the chip outside the viewport or the top bar in the
+ * way, so the chip's click is sent from the page instead.
  */
 async function chooseReason(form: Locator, reason: string) {
   await form
-    .getByRole("radio", { name: reason, exact: true })
-    .dispatchEvent("click");
+    .getByText(reason, { exact: true })
+    .evaluate((chip) => (chip as HTMLElement).click());
+  await expect(
+    form.getByRole("radio", { name: reason, exact: true }),
+  ).toBeChecked();
 }
 
 /** Opens one hold from the list, by its hospital's name. */
@@ -253,7 +258,7 @@ test("phone: the list as cards, open a hold, back", async ({ page }) => {
   await expect(holdsList(page).getByText("HC/2026/0412")).toBeVisible();
 });
 
-test("a different admin sees the Riverside request as waiting for approval", async ({
+test("Tunde, who asked, sees Waiting for a different platform admin to approve and no Approve", async ({
   page,
 }) => {
   await signIn(page, TUNDE);

@@ -222,7 +222,7 @@ with their two-step code. The samples: Harbour View has an active hold
 yesterday (**Review due**); Riverside's hold has a request to lift it from
 Tunde, waiting for a different platform admin to approve; Lakeside's was
 lifted 3 days ago and its records are released in 4 (**Undo lift** until
-then); Havana's was lifted long ago. Lifting a hold needs two platform
+then, and it still blocks a removal); Havana's was lifted long ago. Lifting a hold needs two platform
 admins, each with their own code, and a lift request lapses after 7 days.
 Auditors see every hold, note and history, and change nothing.
 

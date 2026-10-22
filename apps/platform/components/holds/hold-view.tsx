@@ -59,7 +59,7 @@ export function HoldView({ id }: { id: string }) {
               {shown.stopped_removal && (
                 <Banner
                   tone="warn"
-                  title={`This hold stopped ${shown.hospital.name}'s removal. It is back to Removal pending and blocked.`}
+                  title={`Placing this hold stopped ${shown.hospital.name}'s scheduled removal and sent it back to Removal pending.`}
                 />
               )}
               <HoldFacts

@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Hospital } from "@/lib/api/contract";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
+import { HOLD_STATUSES } from "@/lib/api/holds-contract";
 import { holdStatusLabel } from "@/lib/holds/labels";
 import { scopeLabel } from "@/lib/holds/rules";
 import { Button } from "@mhai/ui/button";
 import { Section } from "../hospitals/section";
+import { CouldntLoad } from "../states/couldnt-load";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { PlaceHoldDialog } from "./place-hold-dialog";
 
@@ -30,11 +32,19 @@ function PlaceButton({ onClick }: { onClick(): void }) {
  * The holds that keep this hospital's records (spec §4), each linked to its
  * page. Platform admins can place one here, unless the hospital is Removed.
  */
-export function HospitalHoldsSection({ hospital: h }: { hospital: Hospital }) {
+export function HospitalHoldsSection({
+  hospital: h,
+  onRetry,
+}: {
+  hospital: Hospital;
+  onRetry(): void;
+}) {
   const { user } = useAuth();
   const router = useRouter();
   const [placing, setPlacing] = useState(false);
   const canPlace = isPlatformAdmin(user) && h.status !== "removed";
+  // A status this app has no words for fails this block, never the page.
+  const known = h.legal_holds.every((x) => HOLD_STATUSES.includes(x.status));
   return (
     <Section
       title="Legal holds"
@@ -42,7 +52,9 @@ export function HospitalHoldsSection({ hospital: h }: { hospital: Hospital }) {
         canPlace ? <PlaceButton onClick={() => setPlacing(true)} /> : null
       }
     >
-      {h.legal_holds.length === 0 ? (
+      {!known ? (
+        <CouldntLoad what="legal holds" onRetry={onRetry} />
+      ) : h.legal_holds.length === 0 ? (
         <p className="text-[13.5px] text-ink-3">No legal holds</p>
       ) : (
         <ul className="divide-y divide-line">

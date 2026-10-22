@@ -158,6 +158,21 @@ describe("the legal holds list", () => {
     );
   });
 
+  it("the search box follows Back even while it has focus", async () => {
+    renderWithAuth(<HoldsView />);
+    await screen.findByRole("table");
+    const box = screen.getByRole("searchbox", { name: "Search by reference" });
+    await userEvent.type(box, "cmp-0");
+    await waitFor(() => expect(url.get()).toBe("q=cmp-0"));
+    await userEvent.type(box, "1"); // a pending write, box still focused
+    expect(box).toHaveFocus();
+    act(() => url.set(""));
+    await waitFor(() => expect(box).toHaveValue(""));
+    await new Promise((r) => setTimeout(r, 400));
+    expect(url.get()).toBe("");
+    expect(box).toHaveValue("");
+  });
+
   it("starts from a link's query", async () => {
     url.set("hospital=h_havana&status=all");
     renderWithAuth(<HoldsView />);
