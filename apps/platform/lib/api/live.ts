@@ -98,5 +98,9 @@ export function createLivePlatformClient({
       ok(`/analytics/changes/${id(c)}/follow-up`, "PUT", b, o),
     undoFollowUp: (c, b, o) =>
       ok(`/analytics/changes/${id(c)}/follow-up`, "DELETE", b, o),
+    listNotifications: () => ok("/notifications"),
+    markSeen: (b, o) => ok("/notifications/seen", "POST", b, o),
+    getEmailPref: () => ok("/me/analytics-email"),
+    setEmailPref: (b, o) => ok("/me/analytics-email", "PUT", b, o),
   };
 }

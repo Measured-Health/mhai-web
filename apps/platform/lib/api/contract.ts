@@ -9,6 +9,7 @@ import type {
   Period,
   SeriesOut,
 } from "./analytics-contract";
+import type { EmailPref, NotificationsOut } from "./notifications-contract";
 
 export type HospitalStatus =
   | "active"
@@ -255,4 +256,18 @@ export interface PlatformClient {
     body: { version: number },
     opts: WriteOpts,
   ): Promise<Change>;
+  /** The signed-in person's notifications, newest first, at most 20. */
+  listNotifications(): Promise<NotificationsOut>;
+  /**
+   * Marks the given ones seen for the signed-in person, or all of them when
+   * no ids are given. Auditors may too: it is their own read state.
+   */
+  markSeen(
+    body: { ids?: string[] },
+    opts: WriteOpts,
+  ): Promise<{ unseen: number }>;
+  /** Platform admins only; an auditor gets 403. */
+  getEmailPref(): Promise<EmailPref>;
+  /** 409 `conflict` on a stale version; an auditor gets 403. */
+  setEmailPref(body: EmailPref, opts: WriteOpts): Promise<EmailPref>;
 }

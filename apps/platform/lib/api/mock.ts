@@ -33,10 +33,18 @@ import {
 import {
   buildAnalytics,
   buildSeries,
+  changeFlaggedAt,
   isAnalyticsHospital,
   seedChanges,
   type AnalyticsMode,
 } from "./analytics-fixtures";
+import {
+  EMAIL_MODES,
+  NOTIFICATIONS_MAX,
+  type EmailMode,
+  type EmailPref,
+  type Notification,
+} from "./notifications-contract";
 
 const PAGE = 50;
 /** An approved removal becomes final this long after approval (demo time). */
@@ -143,6 +151,7 @@ export function createMockPlatform({
   stepUp,
   twoStep,
   analytics = "normal",
+  notifications = "normal",
 }: {
   now?: () => number;
   /** The signed-in email, or null. */
@@ -154,6 +163,8 @@ export function createMockPlatform({
   twoStep?: (email: string) => boolean;
   /** Which sample analytics to serve (see `AnalyticsMode`). */
   analytics?: AnalyticsMode;
+  /** "unavailable": the notifications list and marking seen fail with 503. */
+  notifications?: "normal" | "unavailable";
 } = {}): PlatformClient {
   const codes = stepUp ?? getDemoStepUp();
   let hospitals = seedHospitals(now());
@@ -163,6 +174,10 @@ export function createMockPlatform({
   const changes = seedChanges(now(), analytics);
   /** Replies to writes already done, by Idempotency-Key. */
   const done = new Map<string, unknown>();
+  /** Notification ids each person has seen, by team member id. */
+  const seenBy = new Map<string, Set<string>>();
+  /** Each platform admin's analytics email preference, by team member id. */
+  const emailPrefs = new Map<string, EmailPref>();
   let nextId = 1;
 
   const wait = () =>
@@ -359,6 +374,49 @@ export function createMockPlatform({
   };
   const noSeries = () => {
     if (analytics === "unavailable") fail(503, "unavailable");
+  };
+
+  /** One per current change, newest first, as `m` has seen them. */
+  function notificationsFor(m: TeamMember): Notification[] {
+    if (notifications === "unavailable") fail(503, "unavailable");
+    const seen = seenBy.get(m.id);
+    return changes
+      .map((c): Notification => ({
+        id: `ntf_${c.id}`,
+        change_id: c.id,
+        hospital: c.hospital,
+        summary: c.summary,
+        serious: c.serious,
+        direction: c.direction,
+        at: changeFlaggedAt(c.id, now()),
+        seen: seen?.has(`ntf_${c.id}`) ?? false,
+      }))
+      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+      .slice(0, NOTIFICATIONS_MAX);
+  }
+  const unseenOf = (items: Notification[]) =>
+    items.filter((i) => !i.seen).length;
+  /**
+   * A write to the signed-in person's own state, which an auditor may make
+   * too; the same Idempotency-Key gets the same reply. Not logged: it is no
+   * admin action.
+   */
+  async function own<T>(
+    opts: WriteOpts | undefined,
+    fn: (m: TeamMember) => T,
+  ): Promise<T> {
+    await wait();
+    const m = you();
+    const key = opts?.idempotencyKey;
+    if (key && done.has(key)) return copy(done.get(key) as T);
+    const out = fn(m);
+    if (key) done.set(key, copy(out));
+    return copy(out);
+  }
+  /** The email preference is for platform admins only. */
+  const prefOf = (m: TeamMember): EmailPref => {
+    if (m.role !== "platform_admin") fail(403, "forbidden");
+    return emailPrefs.get(m.id) ?? { mode: "off", version: 1 };
   };
 
   return {
@@ -829,6 +887,46 @@ export function createMockPlatform({
           target: c.summary,
         });
         return copy(c);
+      }),
+
+    listNotifications: () =>
+      read((m) => {
+        const items = notificationsFor(m);
+        return { items, unseen: unseenOf(items) };
+      }),
+
+    markSeen: (body, opts) =>
+      own(opts, (m) => {
+        const raw = (body as { ids?: unknown } | null)?.ids;
+        if (
+          raw !== undefined &&
+          (!Array.isArray(raw) || raw.some((x) => typeof x !== "string"))
+        )
+          invalid();
+        const ids = raw as string[] | undefined;
+        const items = notificationsFor(m);
+        const seen = seenBy.get(m.id) ?? new Set<string>();
+        // No ids: all of them. Ids that aren't in the list are ignored.
+        for (const i of items) if (!ids || ids.includes(i.id)) seen.add(i.id);
+        seenBy.set(m.id, seen);
+        return { unseen: unseenOf(notificationsFor(m)) };
+      }),
+
+    getEmailPref: () => read((m) => prefOf(m)),
+
+    setEmailPref: (body, opts) =>
+      write(opts, (m) => {
+        const b = (body ?? {}) as { mode?: unknown; version?: unknown };
+        if (!EMAIL_MODES.includes(b.mode as EmailMode)) invalid();
+        if (typeof b.version !== "number") invalid();
+        const cur = prefOf(m);
+        if (b.version !== cur.version) fail(409, "conflict");
+        const next: EmailPref = {
+          mode: b.mode as EmailMode,
+          version: cur.version + 1,
+        };
+        emailPrefs.set(m.id, next);
+        return next;
       }),
   };
 }

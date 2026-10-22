@@ -237,6 +237,34 @@ const ROWS: Row[] = [
     "/api/v1/platform/analytics/changes/chg_ngh_1/follow-up",
     { version: 4 },
   ],
+  [
+    "listNotifications",
+    (c) => c.listNotifications(),
+    "GET",
+    "/api/v1/platform/notifications",
+    undefined,
+  ],
+  [
+    "markSeen",
+    (c) => c.markSeen({ ids: ["ntf_chg_ngh_1"] }, K),
+    "POST",
+    "/api/v1/platform/notifications/seen",
+    { ids: ["ntf_chg_ngh_1"] },
+  ],
+  [
+    "getEmailPref",
+    (c) => c.getEmailPref(),
+    "GET",
+    "/api/v1/platform/me/analytics-email",
+    undefined,
+  ],
+  [
+    "setEmailPref",
+    (c) => c.setEmailPref({ mode: "critical", version: 2 }, K),
+    "PUT",
+    "/api/v1/platform/me/analytics-email",
+    { mode: "critical", version: 2 },
+  ],
 ];
 
 describe("live platform client", () => {
@@ -267,6 +295,34 @@ describe("live platform client", () => {
       ).toEqual(body);
     },
   );
+
+  it("the live client uses the paths and an Idempotency-Key", async () => {
+    reply(() => Response.json({ items: [], unseen: 0 }));
+    await client().listNotifications();
+    await client().markSeen({}, { idempotencyKey: "seen-1" });
+    await client().getEmailPref();
+    await client().setEmailPref(
+      { mode: "critical_and_digest", version: 1 },
+      { idempotencyKey: "pref-1" },
+    );
+    const sent = fetchImpl.mock.calls.map(([url, init]) => [
+      url,
+      init?.method,
+      (init?.headers as Record<string, string>)["Idempotency-Key"],
+      init?.body === undefined ? undefined : JSON.parse(String(init.body)),
+    ]);
+    expect(sent).toEqual([
+      ["/api/v1/platform/notifications", "GET", undefined, undefined],
+      ["/api/v1/platform/notifications/seen", "POST", "seen-1", {}],
+      ["/api/v1/platform/me/analytics-email", "GET", undefined, undefined],
+      [
+        "/api/v1/platform/me/analytics-email",
+        "PUT",
+        "pref-1",
+        { mode: "critical_and_digest", version: 1 },
+      ],
+    ]);
+  });
 
   it("removeMember sends DELETE with the code in the body", async () => {
     reply(() => new Response(null, { status: 204 }));
