@@ -48,6 +48,8 @@ export type AuditMockOptions = {
   bad?: boolean;
   /** Overrides total, total_capped and the export row count. */
   matchCount?: number;
+  /** The server caps an export's file at this many rows (marked capped). */
+  exportCap?: number;
   /** Every audit read is 503. */
   unavailable?: boolean;
 };
@@ -435,12 +437,16 @@ export function createMockAudit(
     await core.checkCode(m, body);
     const x = parseExport(body);
     const named = x.kind === "named_access";
-    const snapshot = log
+    const matching = log
       .filter((e) => (named ? e.kind === "drilldown_named" : true))
       .filter((e) => matches(e, x.filters))
       .map(shown);
-    const rows = opts.matchCount ?? snapshot.length;
-    if (rows > EXPORT_MAX_ROWS) throw new TooManyRowsError(rows);
+    const matched = opts.matchCount ?? matching.length;
+    if (matched > EXPORT_MAX_ROWS) throw new TooManyRowsError(matched);
+    const cap = opts.exportCap;
+    const capped = cap !== undefined && matched > cap;
+    const rows = capped ? cap : matched;
+    const snapshot = capped ? matching.slice(0, cap) : matching;
 
     const now = core.now();
     const exportId = core.newId("exp");
@@ -452,7 +458,7 @@ export function createMockAudit(
       reason: x.reason,
       note: x.note,
       refs: { export_id: exportId },
-      facts: { rows, capped: false, filters: factFilters },
+      facts: { rows, capped, filters: factFilters },
     });
 
     const names = {
@@ -478,7 +484,7 @@ export function createMockAudit(
         ? snapshot.map((e) => ({ ...e, pseudonyms: pseudonyms[e.id] ?? [] }))
         : snapshot,
       demo: true,
-      capped: false,
+      capped,
     });
     const enc = new TextEncoder();
     const base = `audit-${named ? "named-access" : "events"}-${exportId}-${stamp(now)}Z`;
@@ -520,7 +526,7 @@ export function createMockAudit(
         filters: x.filters,
         filter_names: names,
         rows,
-        capped: false,
+        capped,
         checksum,
         expires_at: expires,
         downloaded_at: null,
@@ -530,7 +536,7 @@ export function createMockAudit(
     return {
       export_id: exportId,
       rows,
-      capped: false,
+      capped,
       checksum,
       expires_at: expires,
       file_name: fileName,
@@ -664,6 +670,17 @@ export function createMockAudit(
       const m = core.you();
       const rec =
         exportsList.find((r) => r.id === id) ?? fail(404, "not_found");
+      // Only its maker may download it; anyone else is refused (and the
+      // refusal says nothing of whether the file is still there).
+      if (rec.by.id !== m.id) {
+        record(actorOf(m), "export_download_refused", {
+          target: { kind: "export", id },
+          outcome: "refused",
+          reason: "not_owner",
+          refs: { export_id: id },
+        });
+        return fail(403, "forbidden");
+      }
       const blob = files.get(id);
       const at = core.now();
       if (rec.downloaded_at || !blob || at >= Date.parse(rec.expires_at)) {

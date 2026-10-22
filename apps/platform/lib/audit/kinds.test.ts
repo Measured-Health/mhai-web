@@ -152,6 +152,16 @@ describe("the audit kinds", () => {
       }),
     ).toBe("Tried to download export exp_7 again");
     expect(
+      KINDS.export_download_refused.words({
+        ...base,
+        type: "export",
+        kind: "export_download_refused",
+        outcome: "refused",
+        reason: "not_owner",
+        refs: { clearance_id: null, export_id: "exp_7", request_id: null },
+      }),
+    ).toBe("Tried to download export exp_7, made by someone else");
+    expect(
       KINDS.retention_run.words({
         ...base,
         type: "retention",
@@ -189,6 +199,7 @@ describe("the audit kinds", () => {
         "not_covered",
         "same_side",
         "gone",
+        "not_owner",
       ].sort(),
     );
   });

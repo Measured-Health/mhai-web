@@ -531,6 +531,65 @@ describe("exports", () => {
     ]);
   });
 
+  it("only the person who made an export may download it; anyone else is 403, recorded as refused", async () => {
+    const { m, as } = setup();
+    const out = await m.createExport(EXPORT, KEY());
+    as(TEAM_EMAILS.tunde);
+    expect(await failure(m.downloadExport(out.export_id))).toEqual([
+      403,
+      "forbidden",
+    ]);
+    as(TEAM_EMAILS.amara);
+    expect(await failure(m.downloadExport(out.export_id))).toEqual([
+      403,
+      "forbidden",
+    ]);
+    // Every entry still reads, the new refusal reason included.
+    const events = allEvents(await m.listAudit({ type: ["export"] }));
+    const refused = events.filter(
+      (e) =>
+        e.refs.export_id === out.export_id &&
+        e.kind === "export_download_refused",
+    );
+    expect(refused).toHaveLength(2);
+    expect(refused[0]).toMatchObject({
+      outcome: "refused",
+      reason: "not_owner",
+    });
+    expect(refused.map((e) => e.actor.id).sort()).toEqual([
+      "tm_amara",
+      "tm_tunde",
+    ]);
+    // Still there for its maker, once.
+    as(TEAM_EMAILS.ada);
+    expect((await m.listExports()).exports[0].downloaded_at).toBeNull();
+    await expect(m.downloadExport(out.export_id)).resolves.toBeInstanceOf(Blob);
+  });
+
+  it("exportCap caps the file: rows stop there and capped shows in the reply, the entry, the record and the file", async () => {
+    const { m } = setup({ exportCap: 3 });
+    const out = await m.createExport({ ...EXPORT, filters: {} }, KEY());
+    expect(out).toMatchObject({ rows: 3, capped: true });
+    const { events } = await m.listAudit({ type: ["export"] });
+    const e = events.find((x) => x.refs.export_id === out.export_id)!;
+    expect(e.facts).toMatchObject({ rows: 3, capped: true });
+    expect((await m.listExports()).exports[0]).toMatchObject({
+      rows: 3,
+      capped: true,
+    });
+    const text = new TextDecoder()
+      .decode(
+        new Uint8Array(
+          await (await m.downloadExport(out.export_id)).arrayBuffer(),
+        ),
+      )
+      .replace(/^\uFEFF/, "");
+    expect(text).toContain("\r\nCapped,Yes\r\n");
+    const table = text.slice(text.indexOf("Position,"));
+    // The header row and three entries.
+    expect(table.trim().split("\r\n")).toHaveLength(4);
+  });
+
   it("a download after 15 minutes is 410", async () => {
     const { m, advance } = setup();
     const out = await m.createExport(EXPORT, KEY());

@@ -3,9 +3,10 @@ import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import type { AuditTab } from "@/lib/audit/nav";
 import { cn } from "@mhai/ui/cn";
 
-/** The tabs in order. Each later tab adds its entry here. */
+/** The tabs in order. Named access (Task 9) goes after Events. */
 export const TABS: readonly { key: AuditTab; label: string }[] = [
   { key: "events", label: "Events" },
+  { key: "exports", label: "Exports" },
   { key: "integrity", label: "Integrity" },
 ];
 

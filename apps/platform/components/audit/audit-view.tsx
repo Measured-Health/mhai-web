@@ -1,18 +1,35 @@
 "use client";
-import { ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
+import {
+  Download,
+  ShieldAlert,
+  ShieldCheck,
+  TriangleAlert,
+} from "lucide-react";
 import { useState } from "react";
 import { headerLine, type Tone } from "@/lib/audit/integrity";
+import { useQueryClient } from "@tanstack/react-query";
+import type { AuditFilters, ExportReason } from "@/lib/api/audit-contract";
+import { checkCustomRange } from "@/lib/audit/dates";
 import { takeAuditTab, type AuditTab } from "@/lib/audit/nav";
-import { useIntegrityStatus } from "@/lib/queries/audit";
+import type { FilterNames } from "@/lib/audit/words";
+import {
+  cachedEventsCount,
+  useAuditHospitals,
+  useIntegrityStatus,
+} from "@/lib/queries/audit";
+import { Button } from "@mhai/ui/button";
 import { cn } from "@mhai/ui/cn";
 import { useNow } from "@mhai/ui/hooks/use-now";
+import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { TopBar } from "../shell/top-bar";
 import { AuditFooter } from "./audit-footer";
 import { AuditTabs } from "./audit-tabs";
-import { initialEvents, type EventsState } from "./event-filters";
+import { filtersOf, initialEvents, type EventsState } from "./event-filters";
 import { EventsTab } from "./events-tab";
+import { ExportDialog } from "./export-dialog";
+import { ExportsTab } from "./exports-tab";
 import { IntegrityBanner } from "./integrity-banner";
-import { IntegrityTab } from "./integrity-tab";
+import { IntegrityTab, type ExportPrefill } from "./integrity-tab";
 
 const TONE: Record<Tone, { Icon: typeof ShieldCheck; className: string }> = {
   ok: { Icon: ShieldCheck, className: "bg-ok-wash text-ok-deep" },
@@ -54,6 +71,57 @@ function IntegrityLine({
   );
 }
 
+/** What the export dialog is opened with. */
+type ExportOpen = {
+  filters: AuditFilters;
+  names: FilterNames;
+  count: string | null;
+  reason?: ExportReason;
+};
+
+/**
+ * Export CSV: the Events tab's current filters. Off while offline, and
+ * while the dates can't be used. It observes no list: the count is read
+ * from what the Events tab already loaded, once, when it is pressed.
+ */
+function ExportEventsButton({
+  events,
+  onOpen,
+}: {
+  events: EventsState;
+  onOpen(o: ExportOpen): void;
+}) {
+  const qc = useQueryClient();
+  const now = useNow();
+  const net = useNeedsConnection("audit-export-offline");
+  const built = filtersOf(events, now);
+  const filters = "filters" in built ? built.filters : null;
+  const hospitals = useAuditHospitals();
+  const hospital =
+    hospitals.data?.find((h) => h.id === events.hospital)?.name ?? null;
+  return (
+    <div className="flex flex-col items-end">
+      <Button
+        variant="ghost"
+        disabled={filters === null}
+        onClick={() =>
+          filters &&
+          onOpen({
+            filters,
+            names: { hospital, person: events.person?.name ?? null },
+            count: cachedEventsCount(qc, filters),
+          })
+        }
+        {...net.props}
+      >
+        <Download aria-hidden className="size-4" />
+        Export CSV
+      </Button>
+      <OfflineNote id="audit-export-offline" />
+    </div>
+  );
+}
+
 /**
  * The audit log (spec §6): the integrity line, the tabs and the footer. The
  * open tab and every filter live here, in memory: /audit never gains a
@@ -74,6 +142,19 @@ export function AuditView() {
     setEntry(null);
     setTab(t);
   };
+  const [exporting, setExporting] = useState<ExportOpen | null>(null);
+  // Integrity's "Export the entries around the break": whole local days,
+  // sent as [from, to + 1 day), with Security investigation chosen.
+  const exportAround = (p: ExportPrefill) => {
+    const range = checkCustomRange(p.filters.from, p.filters.to, Date.now());
+    if ("error" in range) return;
+    setExporting({
+      filters: { from: range.from, to: range.to },
+      names: {},
+      count: null,
+      reason: p.reason,
+    });
+  };
   const openEntry = (id: string) => {
     setEvents((e) => ({ ...e, q: id }));
     setEntry(id);
@@ -90,7 +171,7 @@ export function AuditView() {
               status={status}
               onOpen={() => showTab("integrity")}
             />
-            {/* Slot: Export CSV. */}
+            <ExportEventsButton events={events} onOpen={setExporting} />
           </div>
           <IntegrityBanner
             onOpen={() => showTab("integrity")}
@@ -104,12 +185,22 @@ export function AuditView() {
                   onChange={setEvents}
                   initialOpen={entry}
                 />
+              ) : t === "exports" ? (
+                <ExportsTab />
               ) : t === "integrity" ? (
-                // Slot: onExport opens Task 8's export dialog.
-                <IntegrityTab onOpenEntry={openEntry} />
+                <IntegrityTab onOpenEntry={openEntry} onExport={exportAround} />
               ) : null
             }
           </AuditTabs>
+          <ExportDialog
+            kind="events"
+            filters={exporting?.filters ?? {}}
+            names={exporting?.names ?? {}}
+            count={exporting?.count ?? null}
+            prefillReason={exporting?.reason}
+            open={exporting !== null}
+            onClose={() => setExporting(null)}
+          />
           <AuditFooter oldestKeptAt={status.data?.oldest_kept_at ?? null} />
         </div>
       </div>

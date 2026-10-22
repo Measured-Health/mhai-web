@@ -19,17 +19,24 @@ export const toCsv = (header: string[], rows: Cell[][]) =>
   [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") +
   "\r\n";
 
+/** How long a download's object URL is kept before it is let go. */
+export const REVOKE_MS = 10_000;
+
 /** Hands the file to the browser's download. Nothing is stored (R10). */
 export function downloadCsv(filename: string, csv: string): void {
-  const url = URL.createObjectURL(
-    new Blob([csv], { type: "text/csv;charset=utf-8" }),
-  );
+  downloadBlob(filename, new Blob([csv], { type: "text/csv;charset=utf-8" }));
+}
+
+/** Hands a file already in memory to the browser's download, as given. */
+export function downloadBlob(filename: string, blob: Blob): void {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   document.body.append(a);
   a.click();
   a.remove();
-  // After the click has started the download.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  // Well after the click has started the download: some browsers start the
+  // save late, and a once-only file can't be fetched again.
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_MS);
 }

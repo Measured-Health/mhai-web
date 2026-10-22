@@ -52,6 +52,7 @@ export const REASON_WORDS: Record<string, string> = {
   not_covered: "Not covered by a clearance letter",
   same_side: "Own hospital's letter",
   gone: "Already downloaded or expired",
+  not_owner: "Made by someone else",
 };
 
 export const ROLE_WORDS: Record<ActorRole, string> = {
@@ -491,10 +492,16 @@ export const KINDS: Record<string, Kind> = {
   ),
   export_download_refused: k(
     "export",
-    exportId(
-      (t) => `Tried to download export ${t} again`,
-      "Tried to download an export again",
-    ),
+    (e) =>
+      e.reason === "not_owner"
+        ? exportId(
+            (t) => `Tried to download export ${t}, made by someone else`,
+            "Tried to download an export made by someone else",
+          )(e)
+        : exportId(
+            (t) => `Tried to download export ${t} again`,
+            "Tried to download an export again",
+          )(e),
     { targets: ["export"] },
   ),
   activity_exported: k("export", "Exported a hospital's Activity", {
