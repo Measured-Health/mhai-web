@@ -1,5 +1,5 @@
 /** Fixed English month names: the same everywhere, never "Sept". */
-const MONTHS = [
+export const MONTHS = [
   "Jan",
   "Feb",
   "Mar",
@@ -29,3 +29,7 @@ export function dateLabel(value: string) {
 /** "21 Oct": `dateLabel` without the year (same local-date rule). */
 export const dayMonthLabel = (value: string) =>
   dateLabel(value).replace(/ \d{4}$/, "");
+
+const NUMBER = new Intl.NumberFormat("en-GB");
+/** "1,204,331". */
+export const num = (n: number) => NUMBER.format(n);
