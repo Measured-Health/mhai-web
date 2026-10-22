@@ -310,6 +310,7 @@ export function createMockAudit(
       to_seq: null,
       to_at: null,
       first_broken_seq: null,
+      first_broken_id: null,
       first_broken_at: null,
       error_code: null,
     };
@@ -328,6 +329,7 @@ export function createMockAudit(
         state: "broken",
         entries_checked: brokenAt - CHECKED_FROM_SEQ,
         first_broken_seq: brokenAt,
+        first_broken_id: log.find((e) => e.seq === brokenAt)!.id,
         first_broken_at: log.find((e) => e.seq === brokenAt)!.at,
       };
     return {
@@ -372,6 +374,7 @@ export function createMockAudit(
       to_seq: null,
       to_at: null,
       first_broken_seq: null,
+      first_broken_id: null,
       first_broken_at: null,
       error_code: null,
       outcome: null,
@@ -763,6 +766,7 @@ export function createMockAudit(
           id: `ntf_audit_${run.id}`,
           run_id: run.id,
           first_broken_seq: run.first_broken_seq,
+          first_broken_id: run.first_broken_id!,
           at: run.finished_at ?? run.started_at,
           seen: false,
         },

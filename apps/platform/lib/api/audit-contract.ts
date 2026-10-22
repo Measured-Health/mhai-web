@@ -221,6 +221,8 @@ export type VerifyRun = {
   to_seq: number | null;
   to_at: string | null;
   first_broken_seq: number | null;
+  /** The first broken entry's id: set exactly when first_broken_seq is. */
+  first_broken_id: string | null;
   first_broken_at: string | null;
   error_code: "timed_out" | "unreachable" | "unexpected_reply" | null;
   outcome: { note: string; by: Person; at: string } | null;

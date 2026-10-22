@@ -684,6 +684,10 @@ describe("integrity", () => {
       first_broken_seq: newest - 40 + 0,
     });
     const brokenFrom = s.open_failure!.first_broken_seq!;
+    // The run names the first broken entry by its id too.
+    expect(s.open_failure!.first_broken_id).toBe(
+      all.find((e) => e.seq === brokenFrom)!.id,
+    );
     expect(
       all.filter((e) => e.after_break).every((e) => e.seq >= brokenFrom),
     ).toBe(true);
@@ -709,6 +713,7 @@ describe("integrity", () => {
         kind: "audit_integrity",
         run_id: run.id,
         first_broken_seq: run.first_broken_seq,
+        first_broken_id: run.first_broken_id,
         seen: false,
       }),
     ]);

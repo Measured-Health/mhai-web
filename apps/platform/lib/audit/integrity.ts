@@ -33,6 +33,7 @@ function proven(r: Run, now: number): boolean {
     r.finished_at === null ||
     r.error_code !== null ||
     r.first_broken_seq !== null ||
+    r.first_broken_id !== null ||
     r.first_broken_at !== null
   )
     return false;
@@ -227,4 +228,52 @@ export function bannerOn(s: ReadStatus | undefined): {
   if (!failed) return { on: false, date: null };
   const at = endOf(failed);
   return { on: true, date: at ? dateLabel(at) : null };
+}
+
+/** Each state in words: shown beside its icon, never colour alone. */
+export const SHOWN_WORDS: Record<Shown, string> = {
+  intact: "Intact",
+  broken: "Broken",
+  couldnt_check: "Couldn't check",
+  checking: "Checking…",
+};
+
+/**
+ * A run's range for the history: "From the checkpoint of 4 Jan 2027 to entry
+ * 9,881,204", with the first broken entry when there is one.
+ */
+export function rangeWords(run: Run): string {
+  const from = startWords(run);
+  const to = run.to_seq !== null ? `entry ${num(run.to_seq)}` : null;
+  const span =
+    from && to
+      ? `From ${from} to ${to}`
+      : from
+        ? `From ${from}`
+        : to
+          ? `Up to ${to}`
+          : "Range not recorded";
+  return run.state === "broken" && run.first_broken_seq !== null
+    ? `${span} · first broken entry ${num(run.first_broken_seq)}`
+    : span;
+}
+
+/** A local calendar day, "YYYY-MM-DD". */
+export type LocalDay = string;
+
+const dayOf = (t: Date): LocalDay =>
+  `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+
+/**
+ * The days to export around a break, as whole local days (like a custom
+ * range): from the day before the first broken entry's day, through today.
+ */
+export function breakRange(
+  run: Run,
+  now: number,
+): { from: LocalDay; to: LocalDay } | null {
+  if (run.first_broken_at === null) return null;
+  const before = new Date(run.first_broken_at);
+  before.setDate(before.getDate() - 1);
+  return { from: dayOf(before), to: dayOf(new Date(now)) };
 }
