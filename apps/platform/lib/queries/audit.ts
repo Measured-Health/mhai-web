@@ -22,6 +22,7 @@ import { ROLE_WORDS } from "@/lib/audit/kinds";
 import {
   ID,
   readAuditList,
+  readDetail,
   readRun,
   readRunList,
   readStatus,
@@ -69,6 +70,23 @@ export function useAuditEvents(f: AuditFilters, enabled = true) {
     // A search may be for a patient's pseudonym: not kept once off screen.
     ...(f.q ? { gcTime: 0 } : {}),
     enabled,
+  });
+}
+
+/**
+ * One entry in full. Opening it is a recorded read, so it is fetched when it
+ * opens and not again on focus or reconnect.
+ */
+export function useAuditEvent(id: string | null) {
+  return useQuery({
+    queryKey: [...auditKey, "event", id] as const,
+    queryFn: () => getPlatformClient().getAuditEvent(id as string),
+    select: readDetail,
+    enabled: id !== null,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 }
 
