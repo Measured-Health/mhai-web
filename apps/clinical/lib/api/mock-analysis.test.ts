@@ -310,8 +310,33 @@ function walk(x: unknown, path: string, key = "") {
   for (const [k, v] of Object.entries(x)) walk(v, `${path}.${k}`, k);
 }
 
+/** A part of a total whose rest isn't sent: [part, total − part] is a set. */
+function checkPart(label: string, part: GuardedOut, total: GuardedOut) {
+  if (total.suppressed) {
+    expect((part.value ?? 0) > 0, `${label}: part under a hidden total`).toBe(
+      false,
+    );
+    return;
+  }
+  if (part.suppressed) return;
+  const rest = (total.value ?? 0) - (part.value ?? 0);
+  expect(rest, `${label}: part over total`).toBeGreaterThanOrEqual(0);
+  expect(small(rest), `${label}: rest ${rest} is derivable`).toBe(false);
+}
+
 function checkSeriesDays(v: ViewOut["prevalence"], label: string) {
   for (const s of v.series) {
+    // New is part of cases; the rest (existing that week) is a hidden member.
+    const id = `${label} week ${s.start}`;
+    if (s.cases.suppressed)
+      expect((s.new.value ?? 0) > 0, `${id}: new under hidden cases`).toBe(
+        false,
+      );
+    else if (!s.new.suppressed) {
+      const rest = (s.cases.value ?? 0) - (s.new.value ?? 0);
+      expect(rest, `${id}: new over cases`).toBeGreaterThanOrEqual(0);
+      expect(small(rest), `${id}: existing ${rest} is derivable`).toBe(false);
+    }
     expect(s.start, label).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(new Date(`${s.start}T00:00:00Z`).toISOString().slice(0, 10)).toBe(
       s.start,
@@ -372,6 +397,7 @@ function checkViews(v: { [V in ViewId]: ViewOut[V] }, label: string) {
     [al.by_severity.critical, al.by_severity.urgent, al.by_severity.info],
     al.total,
   );
+  checkPart(`${label} dismissed of alerts`, al.dismissed, al.total);
   checkSet(
     `${label} dismiss`,
     al.dismiss_reasons.map((r) => r.count),
@@ -392,6 +418,7 @@ function checkViews(v: { [V in ViewId]: ViewOut[V] }, label: string) {
       [r.corrections.approved, r.corrections.rejected, r.corrections.waiting],
       r.corrections.total,
     );
+    checkPart(`${id} rated of consultations`, r.rated, r.consultations);
     if (r.rated.suppressed)
       expect(r.agreement_rate.suppressed, `${id} rate`).toBe(true);
   }
