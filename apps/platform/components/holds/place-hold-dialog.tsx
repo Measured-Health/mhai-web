@@ -1,7 +1,14 @@
 "use client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
-import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import type { Person } from "@/lib/api/contract";
 import { HOLD_REASONS, type LegalHoldDetail } from "@/lib/api/holds-contract";
 import { ApiError } from "@mhai/api-client/errors";
@@ -19,6 +26,7 @@ import {
 } from "@/lib/holds/rules";
 import { usePlaceHold } from "@/lib/queries/holds";
 import { queryKeys } from "@/lib/queries/keys";
+import { useStepUpCall } from "@/lib/queries/step-up-call";
 import { inputClass } from "@mhai/ui/auth/password-fields";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
@@ -74,7 +82,7 @@ function PlaceFlow({
   onPlaced(hold: LegalHoldDetail): void;
 }) {
   const qc = useQueryClient();
-  const place = usePlaceHold();
+  const place = useStepUpCall(usePlaceHold());
   const [f, setF] = useState<PlaceForm>(() => blank(hospital ?? null));
   const [errors, setErrors] = useState<Errors>({});
   const [step, setStep] = useState<"form" | "confirm">("form");
@@ -95,7 +103,7 @@ function PlaceFlow({
         ? { backup_code: input.backup_code }
         : { mfa_code: input.mfa_code };
     const note = f.note.trim();
-    place.mutate(
+    place.run(
       {
         hospital_id: f.hospital!.id,
         ...(f.scope === "dates"
@@ -110,25 +118,24 @@ function PlaceFlow({
       },
       {
         onSuccess: (hold) => {
-          place.reset();
           onClose();
           onPlaced(hold);
         },
         onError: (e) => {
-          if (e instanceof ApiError && ENDS_IT.includes(e.code)) {
-            setRefusal(platformError(e).title);
-            setStep("form");
-            place.reset();
-            if (e.code === "hospital_removed")
-              void qc.invalidateQueries({ queryKey: queryKeys.hospitals });
-          }
+          if (!(e instanceof ApiError && ENDS_IT.includes(e.code)))
+            return false;
+          setRefusal(platformError(e).title);
+          setStep("form");
+          if (e.code === "hospital_removed")
+            void qc.invalidateQueries({ queryKey: queryKeys.hospitals });
+          return true;
         },
       },
     );
   };
 
   const back = () => {
-    place.reset();
+    place.clear();
     setStep("form");
   };
 
@@ -168,7 +175,7 @@ function PlaceFlow({
         confirmLabel="Place hold"
         dismissLabel="Back"
         tone="primary"
-        busy={place.isPending}
+        busy={place.busy}
         error={place.error}
         onClose={back}
         onConfirm={confirm}
@@ -203,6 +210,9 @@ function FormStep({
   const askedByRef = useRef<HTMLInputElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const reviewRef = useRef<HTMLInputElement>(null);
+  // Focus waits a tick for the messages to render; never after unmount.
+  const focusTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(focusTimer.current), []);
   const ORDER = [
     "hospital",
     "from",
@@ -230,7 +240,8 @@ function FormStep({
         note: noteRef,
         review_on: reviewRef,
       }[bad];
-      setTimeout(() => target.current?.focus(), 0);
+      clearTimeout(focusTimer.current);
+      focusTimer.current = setTimeout(() => target.current?.focus(), 0);
     }
   };
   const err = (k: keyof PlaceForm) =>

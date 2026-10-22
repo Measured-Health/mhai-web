@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { LegalHold } from "@/lib/api/holds-contract";
 import {
   defaultReviewOn,
+  inGrace,
   liftedLine,
   scopeLabel,
+  statusLine,
+  validateEdit,
   validatePlace,
   type PlaceForm,
 } from "./rules";
@@ -126,5 +129,74 @@ describe("validatePlace", () => {
     expect(e.reference).toBe("Keep it under 100 characters.");
     expect(e.asked_by).toBe("Keep it under 200 characters.");
     expect(e.note).toBe("Keep it under 500 characters.");
+  });
+});
+
+describe("statusLine", () => {
+  const now = Date.parse("2026-10-22T12:00:00Z");
+  const base = {
+    placed_by: ADA,
+    placed_at: "2026-10-01T10:00:00Z",
+    review_on: "2027-04-01",
+    lift: null,
+  } as unknown as LegalHold;
+  it("says who placed an active hold and when", () => {
+    expect(statusLine({ ...base, status: "active" }, now)).toBe(
+      "Active · placed by Ada Bakare · 1 Oct 2026",
+    );
+  });
+  it("says Review due with the date, and that a lift request is still active", () => {
+    expect(statusLine({ ...base, status: "review_due" }, now)).toBe(
+      "Review due · 1 Apr 2027",
+    );
+    expect(statusLine({ ...base, status: "lift_requested" }, now)).toBe(
+      "Lift requested · still active",
+    );
+  });
+  it("a lifted hold uses liftedLine, and is undoable only before released_on", () => {
+    const lifted = {
+      ...base,
+      status: "lifted",
+      lift: {
+        approved_by: ADA,
+        approved_at: "2026-10-19T10:00:00Z",
+        released_on: "2026-10-26T10:00:00Z",
+      },
+    } as LegalHold;
+    expect(statusLine(lifted, now)).toBe(
+      "Lifted · records released on 26 Oct 2026",
+    );
+    expect(inGrace(lifted, now)).toBe(true);
+    expect(inGrace(lifted, Date.parse("2026-10-26T10:00:00Z"))).toBe(false);
+    expect(inGrace({ ...base, status: "active" }, now)).toBe(false);
+  });
+});
+
+describe("validateEdit", () => {
+  const today = "2026-10-22";
+  it("a changed review date must be after today; an unchanged past one is fine", () => {
+    const h = { review_on: "2026-10-01", reason: "complaint" } as const;
+    expect(
+      validateEdit({ review_on: "2026-10-22", note: "" }, h, today),
+    ).toEqual({ review_on: "Choose a review date after today." });
+    expect(
+      validateEdit({ review_on: "2026-10-01", note: "" }, h, today),
+    ).toEqual({});
+    expect(validateEdit({ review_on: "", note: "" }, h, today)).toEqual({
+      review_on: "Choose a review date.",
+    });
+  });
+  it("Other keeps a note, and a note is at most 500 characters", () => {
+    const h = { review_on: "2027-01-01", reason: "other" } as const;
+    expect(
+      validateEdit({ review_on: "2027-01-01", note: " " }, h, today),
+    ).toEqual({ note: "Add a note." });
+    expect(
+      validateEdit(
+        { review_on: "2027-01-01", note: "x".repeat(501) },
+        { ...h, reason: "complaint" },
+        today,
+      ),
+    ).toEqual({ note: "Keep it under 500 characters." });
   });
 });

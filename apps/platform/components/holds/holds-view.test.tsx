@@ -9,10 +9,11 @@ import {
 } from "@/lib/api/client";
 import type { PlatformClient } from "@/lib/api/contract";
 import { createMockPlatform } from "@/lib/api/mock";
-import { createStepUp } from "@/lib/api/step-up";
+import { createStepUp, MOCK_CODE } from "@/lib/api/step-up";
 import { ADA, AMARA, renderWithAuth } from "@/tests/render";
 import { HoldsView } from "./holds-view";
 
+const push = vi.hoisted(() => ({ fn: (() => {}) as (to: string) => void }));
 // A tiny URL: replace() changes the query and tells every reader.
 const url = vi.hoisted(() => {
   let search = "";
@@ -32,7 +33,7 @@ const url = vi.hoisted(() => {
 vi.mock("next/navigation", () => ({
   usePathname: () => "/legal-holds",
   useRouter: () => ({
-    push: vi.fn(),
+    push: (to: string) => push.fn(to),
     replace: (to: string) => url.set(to.split("?")[1] ?? ""),
   }),
   useSearchParams: () => {
@@ -51,6 +52,7 @@ function install(over: Partial<PlatformClient> = {}) {
   return m;
 }
 beforeEach(() => {
+  push.fn = () => {};
   url.set("");
   install();
 });
@@ -224,5 +226,35 @@ describe("the legal holds list", () => {
     expect(
       within(list).getByRole("link", { name: "Harbour View Hospital" }),
     ).toHaveAttribute("href", "/legal-holds/hold_hv");
+  });
+
+  it("placing a hold opens the new hold's page", async () => {
+    const go = vi.fn();
+    push.fn = go;
+    renderWithAuth(<HoldsView />);
+    await screen.findByRole("table");
+    await userEvent.click(screen.getByRole("button", { name: "Place a hold" }));
+    const d = screen.getByRole("dialog", { name: "Place a legal hold" });
+    await userEvent.type(
+      within(d).getByRole("searchbox", { name: "Search hospitals" }),
+      "eastbrook",
+    );
+    await userEvent.click(
+      await within(d).findByRole("button", { name: /Eastbrook/ }),
+    );
+    await userEvent.click(within(d).getByLabelText("Complaint"));
+    await userEvent.type(within(d).getByLabelText(/^Reference/), "CMP-77");
+    await userEvent.type(within(d).getByLabelText(/^Asked for by/), "Office");
+    await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
+    const s = await screen.findByRole("dialog", {
+      name: /Place a legal hold on/,
+    });
+    await userEvent.click(within(s).getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard(MOCK_CODE);
+    await userEvent.click(
+      within(s).getByRole("button", { name: "Place hold" }),
+    );
+    await waitFor(() => expect(go).toHaveBeenCalledTimes(1));
+    expect(go.mock.calls[0]![0]).toMatch(/^\/legal-holds\/[A-Za-z0-9_-]+$/);
   });
 });

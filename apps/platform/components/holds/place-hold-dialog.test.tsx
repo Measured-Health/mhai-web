@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -201,6 +202,42 @@ describe("Place a hold: confirming", () => {
     expect(
       await within(s).findByText("That code didn't work. Try again."),
     ).toBeInTheDocument();
+  });
+
+  it("after a wrong code, the mutation cache holds no code", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderWithAuth(
+      <PlaceHoldDialog
+        open
+        hospital={HAVANA}
+        onClose={vi.fn()}
+        onPlaced={vi.fn()}
+      />,
+      { queryClient: qc },
+    );
+    const d = form();
+    await fill(d);
+    await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
+    const s = await screen.findByRole("dialog", {
+      name: /Place a legal hold on/,
+    });
+    await typeCode(s, "000000");
+    await userEvent.click(
+      within(s).getByRole("button", { name: "Place hold" }),
+    );
+    expect(
+      await within(s).findByText("That code didn't work. Try again."),
+    ).toBeInTheDocument();
+    const kept = () =>
+      JSON.stringify(
+        qc
+          .getMutationCache()
+          .getAll()
+          .map((m) => m.state.variables),
+      );
+    await waitFor(() => expect(kept()).not.toContain("000000"));
   });
 
   it("removal_started shows This hospital's removal has already started. Act outside the app now.", async () => {
