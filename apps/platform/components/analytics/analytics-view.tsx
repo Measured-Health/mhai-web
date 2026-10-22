@@ -80,6 +80,8 @@ export function AnalyticsView() {
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const headingRef = useRef<HTMLHeadingElement>(null);
   const returnTo = useRef<string | null>(null);
+  const hospitalRefs = useRef(new Map<string, HTMLButtonElement>());
+  const returnToHospital = useRef<string | null>(null);
 
   const items = state?.changes.status === "ok" ? state.changes.items : [];
   // The first row is selected on open, and stays selected by its id when
@@ -103,6 +105,9 @@ export function AnalyticsView() {
     else if (returnTo.current) {
       rowRefs.current.get(returnTo.current)?.focus();
       returnTo.current = null;
+    } else if (returnToHospital.current) {
+      hospitalRefs.current.get(returnToHospital.current)?.focus();
+      returnToHospital.current = null;
     }
   }, [phoneDetail, desktop]);
 
@@ -119,7 +124,8 @@ export function AnalyticsView() {
     if (!desktop) setPhoneDetail(true);
   };
   const back = () => {
-    returnTo.current = selected?.id ?? null;
+    if (detail?.kind === "hospital") returnToHospital.current = detail.id;
+    else returnTo.current = selected?.id ?? null;
     setPhoneDetail(false);
   };
 
@@ -224,6 +230,7 @@ export function AnalyticsView() {
               onRetry={() => void q.refetch()}
               pickedHospitalId={detail?.kind === "hospital" ? detail.id : null}
               onPickHospital={pickHospital}
+              rowRefs={hospitalRefs}
             />
           </div>
         </div>

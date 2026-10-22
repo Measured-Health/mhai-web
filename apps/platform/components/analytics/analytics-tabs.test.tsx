@@ -203,7 +203,21 @@ describe("the analytics tabs", () => {
     await userEvent.click(
       within(chart).getByRole("button", { name: "Show as table" }),
     );
-    expect(within(chart).getByText("Fewer than 5")).toBeInTheDocument();
+    const row = within(chart)
+      .getAllByRole("row")
+      .find((r) => within(r).queryByText("Fewer than 5"))!;
+    expect(
+      within(row)
+        .getAllByRole("cell")
+        .map((c) => c.textContent),
+    ).toEqual(["Fewer than 5"]);
+    await userEvent.click(
+      within(chart).getByRole("button", { name: "Show as chart" }),
+    );
+    const hiddenCol = within(chart)
+      .getAllByRole("listitem")
+      .find((li) => li.getAttribute("aria-label")?.includes("Fewer than 5"))!;
+    expect(hiddenCol.getAttribute("aria-label")).not.toMatch(/\b0\b/);
   });
 
   it("a tab's area failing shows its Couldn't load and leaves other tabs working", async () => {
@@ -331,5 +345,84 @@ describe("the analytics tabs", () => {
         }),
       ).toBeNull(),
     );
+  });
+
+  it("sorting a column with hidden values puts them last, either way", async () => {
+    await open();
+    await go("Hospitals");
+    const table = screen.getByRole("table");
+    const names = () =>
+      within(table)
+        .getAllByRole("row")
+        .slice(1)
+        .map((r) => within(r).getAllByRole("button")[0]!.textContent);
+    const head = within(table).getByRole("columnheader", {
+      name: /^Questions per clinician/,
+    });
+    await userEvent.click(within(head).getByRole("button"));
+    expect(names().slice(-2)).toContain("Lakeside Community Clinic");
+    await userEvent.click(within(head).getByRole("button"));
+    expect(head).toHaveAttribute("aria-sort", "descending");
+    expect(names().slice(-2)).toContain("Lakeside Community Clinic");
+  });
+
+  it("a failed area leaves its Hospitals cells Couldn't load while the others render", async () => {
+    const real = api.getAnalytics.bind(api);
+    vi.spyOn(api, "getAnalytics").mockImplementation(async (p) => ({
+      ...(await real(p)),
+      alerts: { unavailable: true },
+    }));
+    await open(false);
+    await go("Hospitals");
+    const row = within(screen.getByRole("table"))
+      .getAllByRole("row")
+      .find((r) => within(r).queryByText("Northgate General Hospital"))!;
+    const cells = within(row).getAllByRole("cell");
+    // Staff, Questions, Per clinician, Critical median, Critical within, Needs review
+    expect(cells.map((c) => c.textContent)).toEqual([
+      "214",
+      expect.stringMatching(/^[\d,]+$|^Fewer than 5$/),
+      expect.stringMatching(/^[\d.]+$/),
+      "Couldn't load",
+      "Couldn't load",
+      expect.stringMatching(/^\d+%$/),
+    ]);
+  });
+
+  it("only the selected tab points at the panel", async () => {
+    await open();
+    const panel = screen.getByRole("tabpanel");
+    for (const t of screen.getAllByRole("tab")) {
+      if (t.getAttribute("aria-selected") === "true")
+        expect(t).toHaveAttribute("aria-controls", panel.id);
+      else expect(t).not.toHaveAttribute("aria-controls");
+    }
+  });
+
+  it("at phone width Back from a hospital returns focus to its row", async () => {
+    vi.stubGlobal("matchMedia", (q: string) => ({
+      matches: false,
+      media: q,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    await open();
+    await go("Hospitals");
+    const row = screen.getByRole("button", {
+      name: "Riverside Children's Hospital",
+    });
+    await userEvent.click(row);
+    const heading = await screen.findByRole("heading", {
+      level: 2,
+      name: /Riverside Children's Hospital compared/,
+    });
+    expect(heading).toHaveFocus();
+    expect(screen.queryByRole("tab")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(tab("Hospitals")).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("button", { name: "Riverside Children's Hospital" }),
+    ).toHaveFocus();
+    vi.unstubAllGlobals();
   });
 });

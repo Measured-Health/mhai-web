@@ -5,7 +5,6 @@ import { dayMonthLabel } from "@/lib/format";
 import { BarList } from "@mhai/ui/charts/bar-list";
 import { ColumnChart } from "@mhai/ui/charts/column-chart";
 import type { BarItem, Column } from "@mhai/ui/charts/types";
-import { FEWER_THAN_5 } from "@mhai/ui/small-groups";
 import { AreaPanel } from "./area-panel";
 
 /**
@@ -37,15 +36,14 @@ export function UseTab({
             note: `${valueText(r.questions, "count")} questions · ${valueText(r.active_clinicians, "count")} active clinicians`,
           };
         });
-        // A hidden point draws no column: value 0 with a mark saying why
-        // (the shared chart has no hidden column of its own).
+        // A hidden point reads "Fewer than 5" and draws no column.
         const columns: Column[] = u.trend.map((p, i) => {
           const hidden = isHidden(p.value, "count");
           return {
             key: `${p.start}-${i}`,
             label: dayMonthLabel(p.start),
             value: hidden ? 0 : (p.value.value ?? 0),
-            mark: hidden ? FEWER_THAN_5 : null,
+            hidden,
           };
         });
         return (
@@ -72,7 +70,7 @@ export function UseTab({
               summary={`Questions across all hospitals, by period, ${columns.length} in all.`}
               valueText={countText}
               headers={["Period starting", "Questions"]}
-              markLegend="Fewer than 5 questions: no column drawn"
+              markLegend="Marked"
             />
           </div>
         );

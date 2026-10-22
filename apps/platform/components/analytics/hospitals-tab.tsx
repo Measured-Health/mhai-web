@@ -1,7 +1,7 @@
 "use client";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useId, useState, type Ref } from "react";
+import { useId, useState, type Ref, type RefObject } from "react";
 import type { Guarded, MeasureId, Period } from "@/lib/api/analytics-contract";
 import type { Person } from "@/lib/api/contract";
 import type { RankedChange } from "@/lib/analytics/changes";
@@ -89,12 +89,14 @@ export function HospitalsTab({
   onRetry,
   pickedId,
   onPick,
+  rowRefs,
 }: {
   state: AnalyticsState | null;
   failed: boolean;
   onRetry(): void;
   pickedId: string | null;
   onPick(hospital: Person): void;
+  rowRefs: RefObject<Map<string, HTMLButtonElement>>;
 }) {
   const [sort, setSort] = useState<{ key: Col["key"]; dir: 1 | -1 } | null>(
     null,
@@ -201,6 +203,10 @@ export function HospitalsTab({
                     <th scope="row" className="text-left font-normal">
                       <button
                         type="button"
+                        ref={(el) => {
+                          if (el) rowRefs.current.set(r.hospital.id, el);
+                          else rowRefs.current.delete(r.hospital.id);
+                        }}
                         aria-current={
                           r.hospital.id === pickedId ? "true" : undefined
                         }

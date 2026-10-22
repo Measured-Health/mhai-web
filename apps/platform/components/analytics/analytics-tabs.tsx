@@ -1,5 +1,11 @@
 "use client";
-import { useId, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import type { Person } from "@/lib/api/contract";
 import { AREA_TITLE, type AnalyticsState } from "@/lib/analytics/read";
 import { cn } from "@mhai/ui/cn";
@@ -22,6 +28,7 @@ export function AnalyticsTabs({
   onRetry,
   pickedHospitalId,
   onPickHospital,
+  rowRefs,
 }: {
   state: AnalyticsState | null;
   /** The whole request failed with nothing to show. */
@@ -29,6 +36,8 @@ export function AnalyticsTabs({
   onRetry(): void;
   pickedHospitalId: string | null;
   onPickHospital(hospital: Person): void;
+  /** The Hospitals rows' buttons by hospital id, so Back can refocus one. */
+  rowRefs: RefObject<Map<string, HTMLButtonElement>>;
 }) {
   const [tab, setTab] = useState<TabKey>("use");
   const base = useId();
@@ -71,7 +80,7 @@ export function AnalyticsTabs({
             role="tab"
             id={`${base}-tab-${k}`}
             aria-selected={tab === k}
-            aria-controls={`${base}-panel-${k}`}
+            aria-controls={tab === k ? `${base}-panel` : undefined}
             tabIndex={tab === k ? 0 : -1}
             onClick={() => setTab(k)}
             onKeyDown={(e) => move(e, i)}
@@ -88,7 +97,7 @@ export function AnalyticsTabs({
       </div>
       <div
         role="tabpanel"
-        id={`${base}-panel-${tab}`}
+        id={`${base}-panel`}
         aria-labelledby={`${base}-tab-${tab}`}
         tabIndex={0}
         className="focus-visible:outline-2 focus-visible:outline-mint-deep"
@@ -105,6 +114,7 @@ export function AnalyticsTabs({
             {...common}
             pickedId={pickedHospitalId}
             onPick={onPickHospital}
+            rowRefs={rowRefs}
           />
         )}
       </div>

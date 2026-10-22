@@ -10,6 +10,7 @@ import {
 import type { Column } from "./types";
 import { Button } from "../button";
 import { cn } from "../cn";
+import { FEWER_THAN_5 } from "../small-groups";
 
 const HEADING = { 2: "h2", 3: "h3", 4: "h4" } as const;
 
@@ -43,10 +44,10 @@ export function ColumnChart({
   const titleId = useId();
   const summaryId = useId();
   const H = HEADING[level];
-  const top = Math.max(1, ...columns.map((c) => c.value));
+  const top = Math.max(1, ...columns.map((c) => (c.hidden ? 0 : c.value)));
   const marked = columns.some((c) => c.mark);
   const describe = (c: Column) =>
-    `${c.label}: ${valueText(c.value)}${c.mark ? `, ${c.mark}` : ""}`;
+    `${c.label}: ${c.hidden ? FEWER_THAN_5 : valueText(c.value)}${c.mark ? `, ${c.mark}` : ""}`;
   const last = columns.length - 1;
   // The data can shrink under a live chart (period change, kept-alive route).
   const current = Math.min(active, Math.max(0, last));
@@ -123,7 +124,7 @@ export function ColumnChart({
                   {c.label}
                 </th>
                 <td className="py-1 text-right font-mono">
-                  {c.value.toLocaleString("en-GB")}
+                  {c.hidden ? FEWER_THAN_5 : c.value.toLocaleString("en-GB")}
                 </td>
                 {marked && (
                   <td className="py-1 pl-3 [overflow-wrap:anywhere]">
@@ -162,7 +163,7 @@ export function ColumnChart({
                     onBlur={() => setFocused(null)}
                     className="flex h-full min-w-0 flex-1 flex-col items-center justify-end rounded-t-sm focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-mint-deep max-sm:min-w-11"
                   >
-                    {c.mark && (
+                    {c.mark && !c.hidden && (
                       <span
                         aria-hidden
                         className="mb-0.5 text-[10px] leading-none text-warn-deep"
@@ -177,9 +178,10 @@ export function ColumnChart({
                         c.mark ? "bg-warn" : "bg-mint",
                       )}
                       style={{
-                        height: c.value
-                          ? `${Math.max(2, Math.round((c.value * 100) / top))}%`
-                          : 0,
+                        height:
+                          c.value && !c.hidden
+                            ? `${Math.max(2, Math.round((c.value * 100) / top))}%`
+                            : 0,
                       }}
                     />
                   </li>
