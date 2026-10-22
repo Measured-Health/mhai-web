@@ -145,6 +145,14 @@ const SHAPES: [Method, string][] = [
   ["GET", "platform/jobs"],
   ["POST", "platform/jobs/retry"],
   ["POST", "platform/jobs/cancel"],
+  ["GET", "platform/legal-holds"],
+  ["POST", "platform/legal-holds"],
+  ["GET", "platform/legal-holds/{id}"],
+  ["PATCH", "platform/legal-holds/{id}"],
+  ["POST", "platform/legal-holds/{id}/lift"],
+  ["POST", "platform/legal-holds/{id}/lift/approve"],
+  ["POST", "platform/legal-holds/{id}/lift/cancel"],
+  ["POST", "platform/legal-holds/{id}/lift/undo"],
 ];
 /** The one write an auditor may make: their own read state. */
 const AUDITOR_WRITES: [Method, string][] = [
@@ -293,6 +301,13 @@ describe("platform API proxy", () => {
     ["POST", ["platform", "jobs", "j1", "retry"]],
     ["PUT", ["platform", "jobs", "cancel"]],
     ["DELETE", ["platform", "jobs", "cancel"]],
+    ["POST", ["platform", "legal-holds", "x", "lift", "approve", "extra"]],
+    ["DELETE", ["platform", "legal-holds", "x"]],
+    ["PUT", ["platform", "legal-holds", "x"]],
+    ["GET", ["platform", "legal-holds", "x", "lift"]],
+    ["POST", ["platform", "legal-holds", "x", "lift", "delete"]],
+    ["POST", ["platform", "legal-holds", "..", "lift"]],
+    ["PATCH", ["platform", "legal-holds"]],
   ] as [Method, string[]][])(
     "unknown shapes are 404: %s %j",
     async (method, path) => {

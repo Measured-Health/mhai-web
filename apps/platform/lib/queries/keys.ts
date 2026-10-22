@@ -12,6 +12,7 @@ export const queryKeys = {
   analytics: ["analytics"] as const,
   notifications: ["notifications"] as const,
   ops: ["ops"] as const,
+  holds: ["holds"] as const,
 };
 
 /** The query client's defaults: memory-only cache, no retry on a 4xx. */

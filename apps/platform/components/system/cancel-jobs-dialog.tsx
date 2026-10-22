@@ -1,9 +1,8 @@
 "use client";
 import type { CancelReason, Job } from "@/lib/api/ops-contract";
-import { useAuth } from "@/lib/auth/auth-context";
 import { cancelEffects, jobsCount, resultLine } from "@/lib/ops/jobs";
 import { useCancelJobs } from "@/lib/queries/ops";
-import { useStepUpCall } from "@/lib/queries/step-up";
+import { useStepUpCall } from "@/lib/queries/step-up-call";
 import { useToast } from "@mhai/ui/toast";
 import { StepUpDialog, type StepUpInput } from "../hospitals/step-up-dialog";
 
@@ -26,7 +25,6 @@ export function CancelJobsDialog({
   const cancel = useCancelJobs();
   const run = useStepUpCall(cancel);
   const toast = useToast();
-  const { user, updateUser } = useAuth();
 
   const close = () => {
     run.clear();
@@ -37,7 +35,7 @@ export function CancelJobsDialog({
       "backup_code" in input
         ? { backup_code: input.backup_code }
         : { mfa_code: input.mfa_code };
-    run.call(
+    run.run(
       {
         ids: jobs.map((j) => j.id),
         reason: input.reason as CancelReason,
@@ -55,10 +53,6 @@ export function CancelJobsDialog({
             tone: "ok",
             live: "polite",
           });
-          if ("backup_code" in code && user?.backupCodesLeft != null)
-            updateUser({
-              backupCodesLeft: Math.max(0, user.backupCodesLeft - 1),
-            });
           onDone?.();
           close();
         },
@@ -85,7 +79,7 @@ export function CancelJobsDialog({
       dismissLabel="Keep"
       confirmLabel="Cancel jobs"
       tone="danger"
-      busy={run.pending}
+      busy={run.busy}
       error={run.error}
       onClose={close}
       onConfirm={confirm}
