@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ApiError } from "@mhai/api-client/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetPlatformClientForTests,
@@ -263,5 +264,50 @@ describe("Place a hold: confirming", () => {
       within(form()).getByRole("button", { name: "Continue" }),
     ).toBeVisible();
     expect(onPlaced).not.toHaveBeenCalled();
+  });
+
+  it("hospital_removed shows its words on the form, closes the code step and refreshes hospitals", async () => {
+    install({
+      placeHold: async () => {
+        throw new ApiError(409, "hospital_removed");
+      },
+    });
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const refresh = vi.spyOn(qc, "invalidateQueries");
+    const onPlaced = vi.fn();
+    renderWithAuth(
+      <PlaceHoldDialog
+        open
+        hospital={HAVANA}
+        onClose={vi.fn()}
+        onPlaced={onPlaced}
+      />,
+      { queryClient: qc },
+    );
+    const d = form();
+    await fill(d);
+    await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
+    const s = await screen.findByRole("dialog", {
+      name: /Place a legal hold on/,
+    });
+    await typeCode(s);
+    await userEvent.click(
+      within(s).getByRole("button", { name: "Place hold" }),
+    );
+    expect(
+      await screen.findByText(
+        "This hospital has been removed. There is nothing left to hold.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: /Place a legal hold on/ }),
+    ).toBeNull();
+    expect(
+      within(form()).getByRole("button", { name: "Continue" }),
+    ).toBeVisible();
+    expect(onPlaced).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledWith({ queryKey: ["hospitals"] });
   });
 });

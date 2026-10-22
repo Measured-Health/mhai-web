@@ -88,7 +88,12 @@ test("the legal-hold hospital can't be approved", async ({ page }) => {
   await signIn(page, ADA);
   await openHospital(page, "Harbour View Hospital");
   const removal = page.getByRole("region", { name: "Removal" });
-  await expect(removal.getByText("1 legal hold is active")).toBeVisible();
+  await expect(
+    removal.getByText("1 legal hold is active · View holds"),
+  ).toBeVisible();
+  await expect(
+    removal.getByRole("link", { name: "View holds" }),
+  ).toHaveAttribute("href", "/legal-holds?hospital=h_harbour&status=all");
   await expect(
     removal.getByText(
       "Removal can't go ahead until the checks above are cleared.",

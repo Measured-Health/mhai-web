@@ -211,6 +211,21 @@ digest**. Auditors get no email, so they don't see the setting. Emails name
 the hospital and the change and never include patient details. (The backend
 sends them; the demo only saves the setting and sends no email.)
 
+**Legal holds.** A legal hold keeps one hospital's records, all of them or
+those between two dates, past their retention period and through any removal
+until the hold is lifted, so the removal can't be approved while one is in
+force. **Legal holds** in the sidebar lists them (Open by default; filter by
+status, hospital or reference), and each hospital's page has a **Legal
+holds** section and a **Hold** tag on the list. Platform admins place a hold
+with their two-step code. The samples: Harbour View has an active hold
+(HC/2026/0412) that blocks its removal; Northgate's review date was
+yesterday (**Review due**); Riverside's hold has a request to lift it from
+Tunde, waiting for a different platform admin to approve; Lakeside's was
+lifted 3 days ago and its records are released in 4 (**Undo lift** until
+then); Havana's was lifted long ago. Lifting a hold needs two platform
+admins, each with their own code, and a lift request lapses after 7 days.
+Auditors see every hold, note and history, and change nothing.
+
 **The auditor** (Amara Eze) sees every hospital, the team and the activity,
 with no buttons to change anything; the server refuses an auditor's changes
 too. On Team, nobody can change their own role or remove themselves: another
