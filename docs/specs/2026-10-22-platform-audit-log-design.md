@@ -108,6 +108,18 @@ Retention · Security.
 
 A consultation entry carries only its specialty and confidence level, as today.
 
+**Facts, not text.** Each entry also carries `facts`: typed, optional, structured values (the
+specialty and confidence, the view and filters of a read, the number of patients, the purpose,
+purge counts, the id searched and what kind it was, rows, a checksum, a check's state). The
+app builds the line from them; an unknown key makes the entry "can't be displayed".
+
+**Export downloads.** `export_downloaded` is written when the file is handed over. A download
+that is refused writes `export_download_refused`, with a reason code:
+
+- `gone`: the file was already downloaded, or its 15 minutes passed;
+- `not_owner`: someone other than the person who made the export asked for it. It reads "Tried
+  to download export {id}, made by someone else"; the reason shows as "Made by someone else".
+
 ## 5. Patient data never enters the log view (anti-goal 1)
 
 - **Never shown, never in a file:** patient names, MRNs, dates of birth, addresses, question
@@ -149,10 +161,19 @@ Integrity tab, e.g. "Integrity: Intact · checked 06:00 today" (§8).
   - **Flagged only.**
 - **Search:** an exact id: event id, request id, export id, clearance id, or a patient
   pseudonym. A pseudonym search answers "who looked at this patient's entry on a list" for a
-  legal request, and is recorded with the pseudonym searched (design call).
+  legal request, and is recorded with the pseudonym searched (design call). **An exact-id
+  search ignores the other filters** (hospital, person, types, dates, outcome, flagged) and the
+  page says so: "Searching the whole log by id. Filters don't apply until you clear the search."
+  The filters are kept and apply again when the search is cleared. The server sends an id search
+  alone; it never narrows it by dates.
 - **The list:** a table (time, who, hospital, action, outcome, flags) on desktop, cards on
   phones. Newest first, 50 per page, **Load more** by cursor. The server sends a count for the
   filters ("1,284 events") or "More than 10,000".
+- **Reads are recorded once per applied filter set**, per person, per page load: the first page
+  of a new filter set writes one `audit_viewed` entry (or `audit_searched` for an id search).
+  **Load more** (a cursor) adds none. A custom range's dates apply on blur or Enter and the
+  Action type list on close, so typing a year digit by digit or ticking five types is one read.
+  The Named access tab records its reads the same way.
 - **Nothing in the URL** and nothing in browser storage: filters, searches and ids stay on the
   page, as the app's privacy rule says. Links between tabs carry state in memory only.
 - **Event detail:** a side panel (full page on phones) with every field in §4, the entry's
@@ -206,6 +227,15 @@ use UTC."
   so anyone can later check a row against the log.
 - **Download once, within 15 minutes** of creation (design call). The file isn't kept by the
   server; a new copy is a new export, recorded again.
+- **Only the person who made an export may download it.** Anyone else gets 403 `forbidden`,
+  recorded as `export_download_refused` with reason `not_owner`, and the app says "Only the person
+  who made this export can download it." The reply says nothing of whether the file is still there.
+- **Retry rules.** Downloading happens only from the dialog's ready step. A download that fails
+  before the server answers (a network error) or with a server fault (5xx) may be tried again.
+  Any other answer spends it: 410 `gone` means gone (the server is the one-time authority) and
+  says "This file was already downloaded or has expired. Make a new export."; 403 stays refused.
+  While a download is on its way the step can't be closed, and the browser asks before the page
+  is left (Back, reload, closing the tab), so the once-only file isn't lost.
 - **The checksum is shown** on screen and in the Exports tab, so a file handed over can be
   checked against the record.
 
@@ -246,8 +276,16 @@ One of four states, each with words and an icon, never colour alone:
   unexpected shape shows **Couldn't check**, never Intact.
 - **Coverage is always spelled out**: from where to where, how many entries, and that entries
   older than the checkpoint were removed by retention (with the checkpoint's date and count).
-- **Age is always shown** (anti-goal 4): "Checked 06:00 today" in the header. Past 26 hours the
-  header reads "Not checked since {date}" in warning style, not Intact.
+- **Age is always shown** (anti-goal 4): "Checked 06:00 today" in the header. One staleness
+  rule decides, for the header, the Integrity tab, the history, the banner and the bell: a proven
+  run is **stale** when it finished more than 26 hours ago, or when it began more than 26 hours
+  after the end of the range it covered (a quiet log is fine: the range end is measured against
+  the check's own start, not against now). A stale run is never Intact. Its header reads "Not
+  checked since {date}" in warning style when it is the finish that is old, and "Last check
+  covered entries up to {date}" when it is the range. The tab's sentence for the second is "Last
+  check covered entries up to 22 Oct 2026 06:00 UTC.". Exactly 26 hours old still reads
+  "checked …"; a minute later it turns stale on the shared clock, with no reload. A history row
+  is judged against its own finish, so an old Intact row stays Intact.
 - **History:** a list of past checks (when, who or the daily schedule, state, range).
 
 ### 8.2 When it runs
@@ -270,7 +308,10 @@ On **Broken**, the app:
 The **auditor's steps**, shown on the Integrity tab:
 
 1. **Don't treat later entries as evidence** until the failure is explained.
-2. **Note the first broken entry** (shown, with **Copy**) and open it to see what it was.
+2. **Note the first broken entry** (shown, with **Copy**) and open it to see what it was. The
+   run carries the entry's position (`first_broken_seq`) and its opaque id (`first_broken_id`);
+   **Open entry** is an exact-id search for that id plus its detail. A run that names one
+   without the other fails closed.
 3. **Run the check again** to rule out a passing fault. A second Broken confirms it; a later
    Intact doesn't erase the first result, which stays in the history.
 4. **Report it** to Measured Health's security lead (named on the tab, contacted outside the
@@ -349,9 +390,13 @@ of the gateway's `GET /security/audit` and `GET /security/audit/verify`, over th
   (`{id, name, removed}` or null), `type`, `kind`, `target` (`{kind, id, name?}`; a patient
   target has `pseudonym` only), `outcome` (`succeeded`, `refused`, `failed`), `ip`, `device`,
   `flag`, `reason`, `note` (only on kinds that allow one), `refs` (`clearance_id`, `export_id`,
-  `request_id`), `after_break` (boolean).
-  - `hospital=platform` selects platform-only events; `q` matches an id or pseudonym exactly.
-  - Every call with a new filter set writes an `audit_viewed` entry with the filters.
+  `request_id`), `facts` (typed, optional values, §4), `after_break` (boolean).
+  - `hospital=platform` selects platform-only events; `q` matches an id or pseudonym exactly,
+    and **a `q` request is answered on `q` alone** (the app sends no other filter with it).
+  - **Reads are recorded:** the first page of a filter set writes one `audit_viewed` entry (an
+    id search writes `audit_searched`, with the id and its kind) per person per page load. A
+    request with a `cursor` (Load more) writes nothing. The same holds for
+    `GET /platform/audit/named-access`.
 - `GET /platform/audit/{id}` → the event, with `patients: {count}` for drill-downs.
   `GET /platform/audit/{id}/patients` → `{pseudonyms}`; writes `audit_patients_viewed`.
 - `GET /platform/audit/named-access?hospital&person&clearance&from&to&cursor` → named drill-down
@@ -359,14 +404,33 @@ of the gateway's `GET /security/audit` and `GET /security/audit/verify`, over th
 - `POST /platform/audit/exports {kind: events|named_access, filters, reason, note?, reference?,
 mfa_code | backup_code}` → `{export_id, rows, capped, checksum, expires_at}`; **422**
   `too_many_rows` with `{rows}` over 50,000; the export entry is written before this returns.
+  `ExportOut` also carries `file_name` (`^[A-Za-z0-9._-]{1,120}$`), and a past export carries
+  `filter_names: {hospital, person, clearance}` so the filters can be put in words.
   `GET /platform/audit/exports/{id}/file` → the file, once, before `expires_at` (**410** `gone`
-  after). `GET /platform/audit/exports?cursor` → past exports.
+  after), **to the person who made the export only**: anyone else gets **403** `forbidden` and
+  an `export_download_refused` entry with reason `not_owner` (a used or expired file writes the
+  same kind with reason `gone`). `GET /platform/audit/exports?cursor` → past exports.
 - `POST /platform/audit/verify` → `{run_id}` (returns the running one if any).
   `GET /platform/audit/verify/runs?cursor` and `GET /platform/audit/verify/runs/{id}` →
   `{id, started_at, finished_at, by (person or schedule), state: running|intact|broken|error,
-entries_checked, from_checkpoint ({id, at, purged_count, reason}) | null, to_seq, to_at,
-first_broken_seq?, first_broken_at?, error_code?, outcome_note?}`.
-  `POST /platform/audit/verify/runs/{id}/outcome {note, version}` (auditors; broken runs only).
+entries_checked, from_checkpoint ({id, at, purged_count, before, kind: retention|re_anchor,
+incident_ref, reason}) | null, from_first, to_seq, to_at, first_broken_seq?, first_broken_id?,
+first_broken_at?, error_code?, version, outcome ({note, by, at}) | null}`. `first_broken_id` is the
+  first broken entry's opaque id, set exactly when `first_broken_seq` is.
+  `POST /platform/audit/verify/runs/{id}/outcome {note, version}` (auditors only: platform admins
+  get 403; broken runs only).
+- `GET /platform/audit/verify/status` → `{latest, running, open_failure, security_contact:
+{name, email}, oldest_kept_at}`: one small read for the header, the footer and the home banner.
+  The server decides `open_failure` (§8.3's clearing rule). **`GET .../verify/status` and
+  `GET .../verify/runs/{id}` are polled, and are sent with `X-MHAI-Background: 1`**, so a poll
+  doesn't count as activity and keeps no session alive.
+- `GET /platform/audit/people?q` (q of 2 or more characters) → `{people}`, at most 20, for the
+  person picker. `GET /platform/audit/hospitals` → `{hospitals: {id, name, removed}[]}`, every
+  hospital the log names. `POST /platform/audit/undisplayable {ids}` (1 to 50) → 204, recorded as
+  `audit_undisplayable_reported`: the app tells the server once per entry it can't display.
+- **Notifications.** `Notification` gains `kind: "analytics_change" | "audit_integrity"` (a
+  missing kind is read as `analytics_change`). An integrity item is `{kind, id, run_id,
+first_broken_seq, first_broken_id, at, seen}`; it is sent on `broken`, and seen is per person.
 - **Server duties:**
   - no patient data in any entry, field or file; patients only as pseudonyms;
   - `intact` only when the whole range was walked; anything short of that is `error`;

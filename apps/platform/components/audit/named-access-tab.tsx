@@ -476,7 +476,14 @@ export function NamedAccessTab({
 
         <LetterInput
           value={state.letter}
-          onApply={(letter) => set({ letter })}
+          onApply={(letter) =>
+            // "Any date" is offered only with a letter: clearing it goes back.
+            set(
+              letter === "" && state.preset === "any"
+                ? { letter, preset: "30d", range: rangeOf("30d", Date.now()) }
+                : { letter },
+            )
+          }
         />
 
         <div className="flex flex-col gap-1">
@@ -494,7 +501,7 @@ export function NamedAccessTab({
                 {words}
               </option>
             ))}
-            <option value="any">Any date</option>
+            {state.letter !== "" && <option value="any">Any date</option>}
           </select>
         </div>
 

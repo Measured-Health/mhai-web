@@ -149,6 +149,42 @@ describe("the Named access tab", () => {
     ).toBeVisible();
   });
 
+  it("'Any date' is offered only while a letter is set", async () => {
+    setup();
+    renderWithAuth(<NamedAccessTab />);
+    await screen.findByRole("group", { name: /cl_northgate_2026/ });
+    const anyDate = () =>
+      within(select("Dates")).queryByRole("option", { name: "Any date" });
+    expect(anyDate()).toBeNull();
+    const box = screen.getByLabelText("Clearance letter id");
+    fireEvent.change(box, { target: { value: LETTER } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(anyDate()).not.toBeNull());
+    await userEvent.selectOptions(select("Dates"), "Any date");
+    expect(select("Dates")).toHaveValue("any");
+    // Clearing the letter goes back to Last 30 days.
+    fireEvent.change(box, { target: { value: "" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(select("Dates")).toHaveValue("30d"));
+    expect(anyDate()).toBeNull();
+  });
+
+  it("reading the list is recorded once per filter set, like the other lists", async () => {
+    const m = setup();
+    const f = { hospital: "h_northgate", clearance: LETTER };
+    await m.listNamedAccess(f);
+    await m.listNamedAccess(f);
+    const log = await m.listAudit({ type: ["audit"] });
+    const seen = log.events.filter(
+      (e) =>
+        e.kind === "audit_viewed" &&
+        e.actor.name === "Ada Bakare" &&
+        (e.facts.filters as Record<string, unknown> | undefined)?.clearance ===
+          LETTER,
+    );
+    expect(seen).toHaveLength(1);
+  });
+
   it("an unusable letter id is refused", async () => {
     setup();
     renderWithAuth(<NamedAccessTab />);
@@ -247,7 +283,7 @@ describe("Export for a legal request", () => {
     expect(screen.queryByText(NEED)).toBeNull();
   });
 
-  it("a hospital with neither a letter nor dates stays disabled", async () => {
+  it("a hospital with a letter and Any date exports; clearing the letter goes back to dates, never to neither", async () => {
     setup();
     renderWithAuth(
       <NamedAccessTab
@@ -260,11 +296,13 @@ describe("Export for a legal request", () => {
     });
     expect(btn).toBeEnabled();
     const box = screen.getByLabelText("Clearance letter id");
+    await userEvent.selectOptions(select("Dates"), "Any date");
+    expect(btn).toBeEnabled();
     fireEvent.change(box, { target: { value: "" } });
     fireEvent.blur(box);
-    await userEvent.selectOptions(select("Dates"), "Any date");
-    await waitFor(() => expect(btn).toBeDisabled());
-    expect(screen.getByText(NEED)).toBeVisible();
+    await waitFor(() => expect(select("Dates")).toHaveValue("30d"));
+    expect(btn).toBeEnabled();
+    expect(screen.queryByText(NEED)).toBeNull();
   });
 
   it("is off while offline", async () => {

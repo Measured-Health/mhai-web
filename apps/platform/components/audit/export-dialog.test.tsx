@@ -494,12 +494,20 @@ describe("fix round 1", () => {
     );
     const close = within(ready).getByRole("button", { name: "Close" });
     expect(close).toBeDisabled();
+    // Reload, Back and sign-out would lose the once-only file: guarded.
+    const leave = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(leave);
+    expect(leave.defaultPrevented).toBe(true);
     await userEvent.keyboard("{Escape}");
     expect(ready).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: /is ready$/ })).toBe(ready);
     act(() => release());
     await waitFor(() => expect(saved).toHaveLength(1));
     await waitFor(() => expect(close).toBeEnabled());
+    // Once the file is in hand, leaving is free again.
+    const after = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
     await userEvent.click(close);
     expect(screen.queryByRole("dialog", { name: /is ready$/ })).toBeNull();
   });

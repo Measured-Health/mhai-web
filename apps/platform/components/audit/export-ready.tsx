@@ -94,6 +94,17 @@ export function ExportReady({
   const download = useDownloadExport();
   const pending = download.isPending;
   useEffect(() => onBusy?.(pending), [pending, onBusy]);
+  // While the file is on its way, leaving the page (reload, Back, closing
+  // the tab) would lose the once-only file: the browser asks first.
+  useEffect(() => {
+    if (!pending) return;
+    const guard = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [pending]);
   const net = useNeedsConnection("export-download-offline");
   const [clicked, setClicked] = useState(false);
   const [saved, setSaved] = useState(false);

@@ -595,6 +595,45 @@ describe("the Audit log page", () => {
     expect(screen.queryByText(SEARCH_WHOLE_LOG)).toBeNull();
   });
 
+  it("the filters note's status element is always mounted, so the note is announced", async () => {
+    setup();
+    const u = userEvent.setup();
+    renderWithAuth(<AuditView />);
+    await screen.findByRole("table", { name: "Audit log events" });
+    const note = () =>
+      document.querySelector<HTMLElement>('p[role="status"][id$="-searching"]');
+    const status = note();
+    expect(status).not.toBeNull();
+    expect(status).toBeEmptyDOMElement();
+    await u.type(
+      screen.getByRole("searchbox", { name: "Search by exact id" }),
+      "ev_1{Enter}",
+    );
+    await waitFor(() => expect(status).toHaveTextContent(SEARCH_WHOLE_LOG));
+    expect(note()).toBe(status);
+  });
+
+  it("tabbing out of the open Action type popover applies the ticks, like Escape", async () => {
+    const { listAudit } = spyList();
+    const u = userEvent.setup();
+    renderWithAuth(<AuditView />);
+    await screen.findByRole("table", { name: "Audit log events" });
+    await u.click(screen.getByRole("button", { name: "Action type (all)" }));
+    await u.click(screen.getByRole("checkbox", { name: "Audit" }));
+    for (let i = 0; i < 30; i++) {
+      if (screen.queryByRole("button", { name: "Action type (1)" })) break;
+      await u.tab();
+    }
+    expect(
+      screen.getByRole("button", { name: "Action type (1)" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    await waitFor(() =>
+      expect(listAudit.mock.lastCall![0]).toEqual(
+        expect.objectContaining({ type: ["audit"] }),
+      ),
+    );
+  });
+
   it("the person picker moves focus to Clear on choosing, and back to the input on Clear", async () => {
     setup();
     const u = userEvent.setup();
