@@ -53,10 +53,15 @@ export type Staleness =
  * after the end of the range it checked (a quiet log is fine: the range end
  * is measured against the check's own start, not against now).
  */
-export function staleness(run: Run, now: number): Staleness | null {
+export function staleness(
+  run: Run,
+  now: number,
+  ageFrom: number = now,
+): Staleness | null {
   if (!proven(run, now)) return null;
   const finished = run.finished_at!;
-  if (now - Date.parse(finished) > STALE_MS) return { kind: "age", finished };
+  if (ageFrom - Date.parse(finished) > STALE_MS)
+    return { kind: "age", finished };
   if (
     run.started_at !== null &&
     Date.parse(run.started_at) - Date.parse(run.to_at!) > STALE_MS
@@ -72,13 +77,20 @@ const staleWords = (s: Staleness) =>
 
 /**
  * `now` is the shared clock (`useNow`): a finish in the future isn't proof,
- * and a stale run is never Intact. (For a past run in a history, pass the
- * time it finished as `now`.)
+ * and a stale run is never Intact. `ageFrom` is the moment age is judged
+ * against (default `now`); a history row passes the run's own `finished_at`,
+ * and `now` stays the real clock, so a future finish never reads Intact.
  */
-export function integrityOf(run: Run, now: number): Shown {
+export function integrityOf(
+  run: Run,
+  now: number,
+  ageFrom: number = now,
+): Shown {
   if (run.state === "running") return "checking";
   if (run.state === "broken") return "broken";
-  return proven(run, now) && !staleness(run, now) ? "intact" : "couldnt_check";
+  return proven(run, now) && !staleness(run, now, ageFrom)
+    ? "intact"
+    : "couldnt_check";
 }
 
 /** A check is running only when the server says so in a run that reads. */
@@ -152,13 +164,17 @@ function startWords(r: Run): string | null {
 const UNKNOWN = "The check didn't finish, so the log's integrity is unknown.";
 
 /** The state block's sentence (spec §8.1, word for word). */
-export function runSentence(run: Run, now: number): string {
-  const stale = staleness(run, now);
+export function runSentence(
+  run: Run,
+  now: number,
+  ageFrom: number = now,
+): string {
+  const stale = staleness(run, now, ageFrom);
   if (stale)
     return stale.kind === "age"
       ? `${staleWords(stale)}.`
       : `Last check covered entries up to ${utc(stale.to_at)}.`;
-  switch (integrityOf(run, now)) {
+  switch (integrityOf(run, now, ageFrom)) {
     case "intact":
       return `No changes found. Checked ${num(run.entries_checked!)} entries, from ${startWords(run)} to entry ${num(run.to_seq!)} (${utc(run.to_at!)}).`;
     case "broken": {

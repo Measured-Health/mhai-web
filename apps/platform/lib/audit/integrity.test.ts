@@ -129,8 +129,24 @@ describe("headerLine", () => {
       "Integrity: Not checked since 21 Oct 2026",
     );
     expect(runSentence(run, late)).toBe("Not checked since 21 Oct 2026.");
-    // As a past run in a history (judged when it finished), it was Intact.
-    expect(integrityOf(run, Date.parse(run.finished_at!))).toBe("intact");
+    // As a past run in a history (age judged from its finish), it is Intact.
+    const done = Date.parse(run.finished_at!);
+    expect(integrityOf(run, late, done)).toBe("intact");
+    expect(runSentence(run, late, done)).toMatch(/^No changes found/);
+  });
+
+  it("a history row with a future finish reads Couldn't check; a normal past run reads Intact", () => {
+    const future = intactRun({
+      started_at: "2026-10-22T08:00:00Z",
+      to_at: "2026-10-22T08:00:00Z",
+      finished_at: "2026-10-23T08:00:00Z",
+    });
+    const f = Date.parse(future.finished_at!);
+    expect(integrityOf(future, NOW, f)).toBe("couldnt_check");
+    const past = intactRun();
+    expect(integrityOf(past, NOW, Date.parse(past.finished_at!))).toBe(
+      "intact",
+    );
   });
 
   it("a quiet log is fine: a range ending 20 h before the start, finished 1 h ago, is Intact", () => {
