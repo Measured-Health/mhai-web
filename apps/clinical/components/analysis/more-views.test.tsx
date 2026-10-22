@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GuardedOut } from "@/lib/api/admin-contract";
@@ -27,6 +27,8 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/analysis",
 }));
 import { AnalysisView } from "./analysis-view";
+import { pairBars } from "./co-occurring-view";
+import { findingBars } from "./findings-view";
 
 const TODAY = "2026-10-22";
 const S = (value: number): GuardedOut => ({ value, suppressed: false });
@@ -307,35 +309,127 @@ describe("MHAI quality", () => {
 });
 
 describe("the three views", () => {
-  it("each fails alone and the others keep working", async () => {
-    const real = createMockAnalysis({ delayMs: 0 });
-    holder.client = {
-      ...real,
-      getView: (async (v: ViewId, f: AnalysisFilters) => {
-        if (v === "findings") throw new Error("down");
-        return v in SAMPLES ? structuredClone(SAMPLES[v]) : real.getView(v, f);
-      }) as AnalysisClient["getView"],
-    };
-    await open("Findings and alerts");
+  const TITLE = {
+    "co-occurring": "Co-occurring conditions",
+    findings: "Findings and alerts",
+    quality: "MHAI quality",
+  } as const;
+  const LOWER = {
+    "co-occurring": "co-occurring conditions",
+    findings: "findings and alerts",
+    quality: "MHAI quality",
+  } as const;
+  const OK = {
+    "co-occurring": () =>
+      screen.findByRole("list", { name: "Patients by pair" }),
+    findings: () => screen.findByRole("list", { name: "Patients by finding" }),
+    quality: () => screen.findByText("Clinicians agreed 80% of 50 rated"),
+  };
+  it.each(["co-occurring", "findings", "quality"] as const)(
+    "%s fails alone and the others keep working",
+    async (bad) => {
+      // A reply off the contract fails the view at once, with no retries.
+      serve({ ...SAMPLES, [bad]: { not: "a view" } });
+      await open(TITLE[bad]);
+      expect(
+        await screen.findByText(`Couldn't load ${LOWER[bad]}`),
+      ).toBeVisible();
+      expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+      for (const other of (
+        ["co-occurring", "findings", "quality"] as const
+      ).filter((v) => v !== bad)) {
+        await userEvent.click(screen.getByRole("tab", { name: TITLE[other] }));
+        expect(await OK[other]()).toBeVisible();
+      }
+    },
+  );
+});
+
+describe("agreement wording", () => {
+  const qual = (rated: GuardedOut, rate: GuardedOut) => ({
+    ...QUAL,
+    by_condition: [{ ...QUAL.by_condition[0]!, rated, agreement_rate: rate }],
+  });
+  it("a hidden rate beside a shown rated count is neutral", async () => {
+    serve({ quality: qual(S(50), H) });
+    await open("MHAI quality");
     expect(
       await screen.findByText(
-        "Couldn't load findings and alerts",
-        {},
-        { timeout: 5000 },
+        "Agreement not shown for small groups (50 rated)",
       ),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
-    await userEvent.click(screen.getByRole("tab", { name: "MHAI quality" }));
+    expect(screen.queryByText(/Clinicians agreed/)).toBeNull();
+  });
+  it("a hidden rated count reads Fewer than 5 rated", async () => {
+    serve({ quality: qual(H, H) });
+    await open("MHAI quality");
+    expect(await screen.findByText("Fewer than 5 rated")).toBeVisible();
+    expect(screen.queryByText(/agreed/)).toBeNull();
+  });
+});
+
+describe("bars", () => {
+  it("a hidden share beside a shown count draws the bar without the share", async () => {
+    const co = structuredClone(CO);
+    co.pairs[0]!.share_of_a = H;
+    serve({ "co-occurring": co });
+    await open("Co-occurring conditions");
+    const list = await screen.findByRole("list", { name: "Patients by pair" });
+    const first = within(list).getAllByRole("listitem")[0]!;
+    expect(first).toHaveTextContent("Type 2 diabetes + Hypertension40");
+    expect(first.textContent).not.toMatch(/of people with/);
+    expect(first.querySelectorAll("[aria-hidden] > span")).toHaveLength(1);
+  });
+
+  it("an action renders in the note of shown rows only", () => {
+    const act = () => <button>Go</button>;
+    const pairs = pairBars(CO, act);
+    expect(pairs[0]!.hidden).toBe(false);
+    expect(pairs[0]!.note).not.toBeNull();
+    expect(pairBars(CO)[0]!.note).toBe("40% of people with Type 2 diabetes");
+    const finds = findingBars(FIND, act);
+    expect(finds.every((b) => b.note !== undefined)).toBe(true);
+    expect(findingBars(FIND)[3]!.note).toBe("14 results");
+  });
+
+  it("a hidden Critical median reads Fewer than 5 beside shown values", async () => {
+    const f = structuredClone(FIND);
+    f.alerts.critical_median_ack_minutes = H;
+    serve({ findings: f });
+    await open("Findings and alerts");
     expect(
-      await screen.findByText("Clinicians agreed 80% of 50 rated"),
-    ).toBeVisible();
-    await userEvent.click(
-      screen.getByRole("tab", { name: "Co-occurring conditions" }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("list", { name: "Patients by pair" }),
-      ).toBeVisible(),
-    );
-  }, 15000);
+      (await screen.findByText("Median, Critical alerts")).nextSibling,
+    ).toHaveTextContent("Fewer than 5");
+    expect(
+      screen.getByText("Median, all alerts").nextSibling,
+    ).toHaveTextContent("12.5 min");
+  });
+
+  it("dismiss reasons keep a fixed order: shown by size, hidden by name after", async () => {
+    const f = structuredClone(FIND);
+    f.alerts.dismissed = S(24);
+    f.alerts.dismiss_reasons = [
+      { reason: "other", count: S(5) },
+      { reason: "wrong_patient", count: H },
+      { reason: "not_relevant", count: S(11) },
+      { reason: "already_known", count: H },
+    ];
+    serve({ findings: f });
+    await open("Findings and alerts");
+    const list = await screen.findByRole("list", {
+      name: "Dismissed alerts by reason",
+    });
+    const names = within(list)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent);
+    expect(names).toHaveLength(4);
+    expect(names[0]).toMatch(/11$/);
+    expect(names[1]).toMatch(/5$/);
+    expect(names[2]).toMatch(/Fewer than 5$/);
+    expect(names[3]).toMatch(/Fewer than 5$/);
+    const hiddenNames = names
+      .slice(2)
+      .map((n) => n!.replace("Fewer than 5", ""));
+    expect(hiddenNames).toEqual([...hiddenNames].sort());
+  });
 });

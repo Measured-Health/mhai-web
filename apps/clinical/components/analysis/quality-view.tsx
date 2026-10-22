@@ -38,8 +38,9 @@ type Row = QualityOut["by_condition"][number];
 
 /** "Clinicians agreed 82% of 40 rated", or why it can't be said. */
 export function agreementText(r: Row): string {
-  if (r.rated.suppressed || r.agreement_rate.suppressed)
-    return "Clinicians agreed: Fewer than 5 rated";
+  if (r.rated.suppressed) return "Fewer than 5 rated";
+  if (r.agreement_rate.suppressed)
+    return `Agreement not shown for small groups (${countText(r.rated)} rated)`;
   if (r.rated.value === 0) return "No consultations rated yet";
   return `Clinicians agreed ${shareText(r.agreement_rate)} of ${countText(r.rated)} rated`;
 }

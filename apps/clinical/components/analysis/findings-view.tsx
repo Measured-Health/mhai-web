@@ -17,6 +17,7 @@ import {
   countText,
   minutesText,
 } from "@/lib/analysis/labels";
+import { noteOf } from "@/lib/analysis/note";
 import { viewSummary } from "@/lib/analysis/summary";
 import {
   SEVERITY,
@@ -50,13 +51,20 @@ function flagText(flag: string | null): string | null {
   return w ? w[0].toUpperCase() + w.slice(1) : null;
 }
 
-const findingName = (f: FindingsOut["findings"][number]) =>
-  f.name ?? NOT_STANDARDISED;
-const findingKey = (f: FindingsOut["findings"][number], i: number) =>
+const findingName = (f: Finding) => f.name ?? NOT_STANDARDISED;
+const findingKey = (f: Finding, i: number) =>
   `${f.name ?? ""}/${f.flag ?? ""}/${i}`;
 
-/** One bar per finding, the flag in words and an icon. See patients goes in `label` or `note`. */
-export function findingBars(d: FindingsOut): BarItem[] {
+type Finding = FindingsOut["findings"][number];
+
+/**
+ * One bar per finding, the flag in words and an icon. `action` (e.g. See
+ * patients) renders in the bar's note, which BarList leaves out for a hidden count.
+ */
+export function findingBars(
+  d: FindingsOut,
+  action?: (row: Finding) => ReactNode,
+): BarItem[] {
   return d.findings.map((f, i) => {
     const flag = flagText(f.flag);
     return {
@@ -66,7 +74,10 @@ export function findingBars(d: FindingsOut): BarItem[] {
       value: f.patients.value,
       text: countText(f.patients),
       hidden: !shows(f.patients),
-      note: shows(f.results) ? `${countText(f.results)} results` : undefined,
+      note: noteOf(
+        shows(f.results) ? `${countText(f.results)} results` : null,
+        action?.(f),
+      ),
     };
   });
 }
@@ -146,7 +157,14 @@ function FindingsTables({ d }: { d: FindingsOut }) {
           key: findingKey(f, i),
           cells: {
             finding: findingName(f),
-            flag: flagText(f.flag) ?? "—",
+            flag: f.flag ? (
+              <span className="inline-flex items-center gap-1.5">
+                {FLAG_ICON[flagWord(f.flag)!]}
+                {flagText(f.flag)}
+              </span>
+            ) : (
+              "—"
+            ),
             patients: f.patients,
             results: f.results,
           },
