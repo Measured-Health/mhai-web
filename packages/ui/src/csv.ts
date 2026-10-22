@@ -1,4 +1,4 @@
-/** The activity export stops here (R10). */
+/** Exports stop at this many rows. */
 export const CSV_MAX_ROWS = 10_000;
 
 export type Cell = string | number | null;
