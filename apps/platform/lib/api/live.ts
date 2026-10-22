@@ -19,6 +19,9 @@ const BLOCKS: readonly RemovalBlock[] = [
   "export_required",
 ];
 
+/** Marks a read as background: the proxy won't count it as activity. */
+const BACKGROUND = { "X-MHAI-Background": "1" };
+
 /** `?a=1&b=2` from the filters that are set, or "". */
 function query(q: Record<string, string | undefined>): string {
   const p = new URLSearchParams();
@@ -39,11 +42,12 @@ export function createLivePlatformClient({
     method = "GET",
     body?: unknown,
     opts?: WriteOpts,
+    extraHeaders?: Record<string, string>,
   ): Promise<T> {
     const { res, data } = await apiRequest(fetchImpl, `/platform${path}`, {
       method,
       body,
-      headers: keyHeader(opts),
+      headers: { ...keyHeader(opts), ...extraHeaders },
     });
     if (!res.ok) {
       const code = typeof data?.code === "string" ? data.code : "error";
@@ -98,7 +102,10 @@ export function createLivePlatformClient({
       ok(`/analytics/changes/${id(c)}/follow-up`, "PUT", b, o),
     undoFollowUp: (c, b, o) =>
       ok(`/analytics/changes/${id(c)}/follow-up`, "DELETE", b, o),
-    listNotifications: () => ok("/notifications"),
+    // The bell's poll is background: it must not count as activity (the
+    // proxy then leaves the server's idle clock alone).
+    listNotifications: () =>
+      ok("/notifications", "GET", undefined, undefined, BACKGROUND),
     markSeen: (b, o) => ok("/notifications/seen", "POST", b, o),
     getEmailPref: () => ok("/me/analytics-email"),
     setEmailPref: (b, o) => ok("/me/analytics-email", "PUT", b, o),

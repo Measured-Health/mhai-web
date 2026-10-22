@@ -35,6 +35,7 @@ export const useTabVisible = () =>
 
 /** What the app shows: the count, and the list only if every item reads. */
 export type NotificationsState = {
+  /** All of this person's unseen, which can be more than `items.length`. */
   unseen: number;
   /** False when the reply is the wrong shape or fails the summary rule. */
   ok: boolean;
@@ -51,8 +52,7 @@ function read(out: NotificationsOut): NotificationsState {
   const ok =
     items !== null &&
     items.length <= NOTIFICATIONS_MAX &&
-    items.every(notificationOk) &&
-    unseen <= items.length;
+    items.every(notificationOk);
   return { unseen, ok, items: ok ? (items as Notification[]) : [] };
 }
 
@@ -70,6 +70,8 @@ export function useNotifications() {
     select: read,
     refetchInterval: visible && online ? POLL_MS : false,
     refetchIntervalInBackground: false,
+    // A reconnect while the tab is hidden sends nothing.
+    refetchOnReconnect: visible,
   });
 }
 
@@ -97,6 +99,13 @@ export function useMarkSeen() {
       getPlatformClient().markSeen(ids ? { ids } : {}, {
         idempotencyKey: key,
       }),
-    { onSuccess: (r, ids) => seen(qc, ids, r.unseen) },
+    {
+      // A poll still in flight must not land after this and bring back the
+      // old count.
+      onSuccess: (r, ids) => {
+        void qc.cancelQueries({ queryKey: notificationsKey });
+        seen(qc, ids, r.unseen);
+      },
+    },
   );
 }

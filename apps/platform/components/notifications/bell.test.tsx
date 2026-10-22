@@ -1,4 +1,5 @@
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
+import { onlineManager } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
@@ -117,6 +118,83 @@ describe("the analytics bell", () => {
     expect(await bell("Notifications")).toBeInTheDocument();
   });
 
+  it("shows the list, the count and Mark all seen when unseen is more than the 20 shown", async () => {
+    const base = await api.listNotifications();
+    const items = Array.from({ length: 20 }, (_, i) => ({
+      ...base.items[0]!,
+      id: `ntf_big_${i}`,
+      seen: false,
+    }));
+    vi.spyOn(api, "listNotifications").mockResolvedValue({
+      items,
+      unseen: 35,
+    });
+    const mark = vi.spyOn(api, "markSeen");
+    mark.mockRejectedValueOnce(new ApiError(400, "invalid"));
+    renderWithAuth(<NotificationBell />);
+    const b = await bell("Notifications, 35 new");
+    expect(b).toHaveTextContent("35");
+    await userEvent.click(b);
+    await screen.findByRole("dialog", { name: "Notifications" });
+    expect(within(list()).getAllByRole("button")).toHaveLength(20);
+    expect(screen.queryByText(/Couldn't load notifications/)).toBeNull();
+    await waitFor(() => expect(mark).toHaveBeenCalledTimes(1));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Mark all seen" }),
+    );
+    expect(mark).toHaveBeenCalledTimes(2);
+    expect(mark.mock.calls[1]![0]).toEqual({});
+    expect(await bell("Notifications")).toBeInTheDocument();
+  });
+
+  it("opening offline with nothing loaded says so, not Loading", async () => {
+    // The first read waits for a connection (React Query's own online state).
+    onlineManager.setOnline(false);
+    try {
+      renderWithAuth(<NotificationBell />);
+      await userEvent.click(await bell("Notifications"));
+      expect(await screen.findByText(/You're offline/)).toBeInTheDocument();
+      expect(screen.queryByText("Loading…")).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("a poll in flight when the list marks seen doesn't bring the old count back", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const realMark = api.markSeen.bind(api);
+    let freeMark!: () => void;
+    const markHold = new Promise<void>((r) => (freeMark = r));
+    vi.spyOn(api, "markSeen").mockImplementation(async (b, o) => {
+      await markHold;
+      return realMark(b, o);
+    });
+    renderWithAuth(<NotificationBell />);
+    const b = await bell("Notifications, 6 new");
+    await userEvent.click(b);
+    await screen.findByRole("dialog", { name: "Notifications" });
+    // The poll starts (and reads 6) before the marking lands.
+    const realList = api.listNotifications.bind(api);
+    let freePoll!: () => void;
+    const pollHold = new Promise<void>((r) => (freePoll = r));
+    const poll = vi
+      .spyOn(api, "listNotifications")
+      .mockImplementationOnce(async () => {
+        const old = await realList();
+        await pollHold;
+        return old;
+      });
+    await act(() => vi.advanceTimersByTimeAsync(61_000));
+    expect(poll).toHaveBeenCalled();
+    await act(async () => freeMark());
+    expect(await bell("Notifications")).toBeInTheDocument();
+    await act(async () => freePoll());
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+    expect(
+      screen.getByRole("button", { name: "Notifications" }),
+    ).toBeInTheDocument();
+  });
+
   it("an item opens Analytics with that change selected", async () => {
     renderWithAuth(<NotificationBell />);
     await userEvent.click(await bell("Notifications, 6 new"));
@@ -233,6 +311,19 @@ describe("the analytics bell", () => {
     await bell("Notifications, 6 new");
     await act(() => vi.advanceTimersByTimeAsync(130_000));
     expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("going back online while the tab is hidden sends no request", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const read = vi.spyOn(api, "listNotifications");
+    renderWithAuth(<NotificationBell />);
+    await bell("Notifications, 6 new");
+    setVisible("hidden");
+    const before = read.mock.calls.length;
+    await act(async () => onlineManager.setOnline(false));
+    await act(async () => onlineManager.setOnline(true));
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    expect(read).toHaveBeenCalledTimes(before);
   });
 
   it("polls every minute while visible and online", async () => {

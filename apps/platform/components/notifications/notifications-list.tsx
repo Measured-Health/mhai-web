@@ -22,6 +22,7 @@ export function NotificationsList({
   items,
   failed,
   loading,
+  offline = false,
   fresh,
   unseen,
   onRetry,
@@ -31,6 +32,8 @@ export function NotificationsList({
   items: Notification[];
   failed: boolean;
   loading: boolean;
+  /** The first read is waiting for a connection. */
+  offline?: boolean;
   /** Ids that were unseen when the list opened. */
   fresh: ReadonlySet<string>;
   /** The count of unseen; Mark all seen shows only while there are some. */
@@ -40,6 +43,13 @@ export function NotificationsList({
   onMarkAll(): void;
 }) {
   if (failed) return <CouldntLoad what="notifications" onRetry={onRetry} />;
+  if (offline)
+    return (
+      <p className="text-[14px] text-ink-2">
+        You&apos;re offline. Notifications will load when you&apos;re back
+        online.
+      </p>
+    );
   if (loading) return <p className="text-[14px] text-ink-3">Loading…</p>;
   return (
     <div>

@@ -208,7 +208,8 @@ Ada seeing a change doesn't clear Tunde's bell. Platform admins and auditors
 both have the bell. On **Account**, platform admins choose **Analytics
 email**: **Off** (the default), **Critical only** or **Critical and weekly
 digest**. Auditors get no email, so they don't see the setting. Emails name
-the hospital and the change and never include patient details.
+the hospital and the change and never include patient details. (The backend
+sends them; the demo only saves the setting and sends no email.)
 
 **The auditor** (Amara Eze) sees every hospital, the team and the activity,
 with no buttons to change anything; the server refuses an auditor's changes

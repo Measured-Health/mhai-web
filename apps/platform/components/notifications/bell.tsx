@@ -41,6 +41,8 @@ function BellAndList() {
   // A failed read fails the list, even with an older one in hand.
   const failed = open && (q.isError || (!!q.data && !q.data.ok));
   const items = q.data?.ok ? q.data.items : [];
+  // The first read is waiting for a connection: say so, not "Loading…".
+  const waiting = open && !q.data && q.fetchStatus === "paused";
 
   // Opening looks again, then marks what that reply shows as seen (from
   // the reply itself, never a possibly stale cache read).
@@ -72,7 +74,8 @@ function BellAndList() {
     <NotificationsList
       items={items}
       failed={failed}
-      loading={open && q.isPending}
+      loading={open && q.isPending && !waiting}
+      offline={waiting}
       fresh={fresh}
       onRetry={() => void q.refetch()}
       onOpen={go}

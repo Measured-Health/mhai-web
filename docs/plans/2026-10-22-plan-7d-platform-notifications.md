@@ -44,7 +44,7 @@ It runs on sample data. Sending the emails is the backend's job, as written in t
   - focus moves into it on open and back to the bell on close;
   - targets are 44 px on phones.
 - **Contract** (spec §7 plus the backend's §14.7):
-  - `GET /platform/notifications` returns `{items: Notification[], unseen: number}`, where `Notification = {id, change_id, hospital: Person | null, summary, serious, direction, at, seen}`, newest first, at most 20;
+  - `GET /platform/notifications` returns `{items: Notification[], unseen: number}` (`unseen` counts ALL of this person's unseen notifications, which can be more than the 20 items returned), where `Notification = {id, change_id, hospital: Person | null, summary, serious, direction, at, seen}`, newest first, at most 20;
   - `POST /platform/notifications/seen {ids?: string[]}` marks the given ones seen, or all of them, and returns `{unseen}`;
   - `GET /platform/me/analytics-email` returns `{mode}`, and `PUT` with `{mode, version}` returns `{mode, version}`. Auditors get 403 on both;
   - every write sends an `Idempotency-Key`.

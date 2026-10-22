@@ -311,6 +311,13 @@ describe("live platform client", () => {
       (init?.headers as Record<string, string>)["Idempotency-Key"],
       init?.body === undefined ? undefined : JSON.parse(String(init.body)),
     ]);
+    // Only the poll is marked as background.
+    expect(
+      fetchImpl.mock.calls.map(
+        ([, init]) =>
+          (init?.headers as Record<string, string>)["X-MHAI-Background"],
+      ),
+    ).toEqual(["1", undefined, undefined, undefined]);
     expect(sent).toEqual([
       ["/api/v1/platform/notifications", "GET", undefined, undefined],
       ["/api/v1/platform/notifications/seen", "POST", "seen-1", {}],

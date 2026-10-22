@@ -149,7 +149,12 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   )
     return forbidden();
 
-  s = await touchSession(s);
+  // A background GET (a poll, not the person) is read and checked like any
+  // other, but leaves the idle clock alone. Writes ignore the header. It is
+  // never forwarded: only the headers listed below go upstream.
+  const background =
+    method === "GET" && req.headers.get("x-mhai-background") === "1";
+  if (!background) s = await touchSession(s);
   if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
 
   const body = method === "GET" ? undefined : await req.text();

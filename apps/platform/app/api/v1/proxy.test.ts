@@ -481,6 +481,68 @@ describe("platform API proxy", () => {
     expect(Date.now() - s!.lastSeenAt).toBeLessThan(5_000);
   });
 
+  describe("a background GET (X-MHAI-Background: 1)", () => {
+    const BG = { "x-mhai-background": "1" };
+    const TEN_MIN_AGO = () => Date.now() - 10 * 60_000;
+
+    it("doesn't extend the session, is still checked and is not forwarded", async () => {
+      const seenAt = TEN_MIN_AGO();
+      await session({ lastSeenAt: seenAt });
+      fetchMock.mockResolvedValueOnce(Response.json({ items: [], unseen: 0 }));
+      const res = await call("GET", ["platform", "notifications"], {
+        headers: BG,
+      });
+      expect(res.status).toBe(200);
+      expect((await readSession())!.lastSeenAt).toBe(seenAt);
+      expect(headersOf(calls()[0]!).has("x-mhai-background")).toBe(false);
+    });
+
+    it("is still refused for an idle session, even with polls in between", async () => {
+      await session({ lastSeenAt: Date.now() - IDLE_LIMIT_MS - 1000 });
+      fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+      const res = await call("GET", ["platform", "notifications"], {
+        headers: BG,
+      });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ code: "session_expired" });
+    });
+
+    it("still refreshes a token that is near its end, without touching the idle clock", async () => {
+      const seenAt = TEN_MIN_AGO();
+      await session({ expiresInMs: 2 * 60_000, lastSeenAt: seenAt });
+      fetchMock
+        .mockResolvedValueOnce(
+          Response.json({ access_token: "tok2", expires_in: 900 }),
+        )
+        .mockResolvedValueOnce(Response.json({}));
+      await call("GET", ["platform", "notifications"], { headers: BG });
+      const s = await readSession();
+      expect(s!.token).toBe("tok2");
+      expect(s!.lastSeenAt).toBe(seenAt);
+    });
+
+    it("a normal GET still extends the session", async () => {
+      await session({ lastSeenAt: TEN_MIN_AGO() });
+      fetchMock.mockResolvedValueOnce(Response.json({}));
+      await call("GET", ["platform", "notifications"]);
+      expect(Date.now() - (await readSession())!.lastSeenAt).toBeLessThan(
+        5_000,
+      );
+    });
+
+    it("a POST with the header is treated as a normal write and extends it", async () => {
+      await session({ lastSeenAt: TEN_MIN_AGO() });
+      fetchMock.mockResolvedValueOnce(Response.json({ unseen: 0 }));
+      const res = await call("POST", ["platform", "notifications", "seen"], {
+        headers: BG,
+      });
+      expect(res.status).toBe(200);
+      expect(Date.now() - (await readSession())!.lastSeenAt).toBeLessThan(
+        5_000,
+      );
+    });
+  });
+
   it("refreshes a token with under 5 minutes left, with the audience header", async () => {
     await session({ expiresInMs: 2 * 60_000 });
     fetchMock

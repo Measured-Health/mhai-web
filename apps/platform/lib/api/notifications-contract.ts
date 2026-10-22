@@ -28,6 +28,10 @@ export type Notification = {
   seen: boolean;
 };
 
+/**
+ * `unseen` is the count of ALL of this person's unseen notifications, which
+ * can be more than the (at most 20) `items` returned.
+ */
 export type NotificationsOut = { items: Notification[]; unseen: number };
 
 /** Which analytics emails a platform admin gets; auditors get none. */
