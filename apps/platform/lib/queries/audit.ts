@@ -5,8 +5,9 @@ import {
   useQuery,
   useQueryClient,
   type InfiniteData,
+  type QueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useKeyedMutation } from "@mhai/api-client/keyed-mutation";
 import { useOnline } from "@mhai/ui/hooks/use-online";
 import { getPlatformClient } from "@/lib/api/client";
@@ -19,16 +20,21 @@ import type {
   ExportOut,
   ExportRecord,
   IntegrityStatus,
+  VerifyRun,
 } from "@/lib/api/audit-contract";
 import { isRunning } from "@/lib/audit/integrity";
 import { ROLE_WORDS } from "@/lib/audit/kinds";
+import { countWords } from "@/lib/audit/words";
 import {
   ID,
   readAuditList,
   readDetail,
   readExportList,
+  readRun,
+  readRunList,
   readStatus,
   type AuditRow,
+  type ReadRun,
   type ReadStatus,
 } from "@/lib/audit/read";
 import { queryKeys } from "./keys";
@@ -40,6 +46,10 @@ export const RUNNING_POLL_MS = 2_000;
 const REPORT_MAX = 50;
 
 const auditKey = queryKeys.audit;
+
+const statusKey = [...auditKey, "status"] as const;
+const runsKey = [...auditKey, "runs"] as const;
+const runKey = (id: string | null) => [...auditKey, "run", id] as const;
 
 type ReadList = ReturnType<typeof readAuditList>;
 const readPages = (
@@ -68,6 +78,30 @@ export function useAuditEvents(f: AuditFilters, enabled = true) {
     ...(f.q ? { gcTime: 0 } : {}),
     enabled,
   });
+}
+
+/**
+ * "1,284 events" for a filter set, from what the Events list already
+ * loaded; null when it hasn't (or the page doesn't read). Subscribes to
+ * nothing and fetches nothing: no list read happens off the Events tab.
+ */
+export function cachedEventsCount(
+  qc: QueryClient,
+  f: AuditFilters,
+): string | null {
+  const d = qc.getQueryData<InfiniteData<AuditList, string | null>>([
+    ...auditKey,
+    "events",
+    f,
+  ]);
+  const first = d?.pages[0];
+  if (!first) return null;
+  try {
+    const page = readAuditList(first);
+    return countWords(page.total, page.total_capped);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -169,7 +203,7 @@ export function useIntegrityStatus() {
   const online = useOnline();
   const visible = useTabVisible();
   return useQuery<IntegrityStatus, Error, ReadStatus>({
-    queryKey: [...auditKey, "status"] as const,
+    queryKey: statusKey,
     queryFn: () => getPlatformClient().getIntegrityStatus(),
     select: readStatus,
     refetchInterval: (query) =>
@@ -181,6 +215,90 @@ export function useIntegrityStatus() {
     refetchIntervalInBackground: false,
     refetchOnReconnect: visible,
   });
+}
+
+/** The checks, newest first, a page at a time. Each run is read strictly. */
+export function useVerifyRuns() {
+  return useInfiniteQuery({
+    queryKey: runsKey,
+    queryFn: async ({ pageParam }) =>
+      readRunList(await getPlatformClient().listRuns(pageParam ?? undefined)),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
+  });
+}
+
+const runningRaw = (raw: VerifyRun | undefined) =>
+  raw !== undefined && readRun(raw).state === "running";
+
+/**
+ * One check, read every 2 s while it runs (only while the tab shows and is
+ * online). The read is marked background, as the status is.
+ */
+export function useRun(id: string | null) {
+  const online = useOnline();
+  const visible = useTabVisible();
+  return useQuery<VerifyRun, Error, ReadRun>({
+    queryKey: runKey(id),
+    queryFn: () => getPlatformClient().getRun(id!),
+    select: readRun,
+    enabled: id !== null,
+    // A run that stops loading isn't polled on its last good read.
+    refetchInterval: (query) =>
+      visible &&
+      online &&
+      query.state.status !== "error" &&
+      runningRaw(query.state.data)
+        ? RUNNING_POLL_MS
+        : false,
+    refetchIntervalInBackground: false,
+    refetchOnReconnect: visible,
+  });
+}
+
+/** After a check starts or ends, or an outcome is added. */
+export function useRefreshIntegrity() {
+  const qc = useQueryClient();
+  return useCallback(
+    () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: statusKey }),
+        qc.invalidateQueries({ queryKey: runsKey }),
+      ]),
+    [qc],
+  );
+}
+
+/**
+ * Starts a check, or returns the one already running: one Idempotency-Key
+ * per press. The run id is kept only when it reads as an id.
+ */
+export function useStartCheck() {
+  const refresh = useRefreshIntegrity();
+  return useKeyedMutation(
+    async (_: void, key) => {
+      const r = await getPlatformClient().startCheck({ idempotencyKey: key });
+      return { run_id: ID.test(r?.run_id ?? "") ? r.run_id : null };
+    },
+    { onSuccess: () => void refresh() },
+  );
+}
+
+/**
+ * The auditor's outcome note on a failed check, sent with the run's
+ * version: a 409 means someone else changed it first.
+ */
+export function useAddOutcome() {
+  const refresh = useRefreshIntegrity();
+  return useKeyedMutation(
+    (v: { runId: string; note: string; version: number }, key) =>
+      getPlatformClient().addOutcome(
+        v.runId,
+        { note: v.note, version: v.version },
+        { idempotencyKey: key },
+      ),
+    { onSuccess: () => void refresh() },
+  );
 }
 
 /** Ids already reported from this tab. */

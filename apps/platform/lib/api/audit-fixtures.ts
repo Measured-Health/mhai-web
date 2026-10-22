@@ -757,6 +757,9 @@ export function seedAudit(
       to_seq: brokenNow ? null : toSeq,
       to_at: brokenNow ? null : iso(start),
       first_broken_seq: brokenNow ? firstBrokenSeq : null,
+      first_broken_id: brokenNow
+        ? events.find((e) => e.seq === firstBrokenSeq)!.id
+        : null,
       first_broken_at: brokenNow
         ? events.find((e) => e.seq === firstBrokenSeq)!.at
         : null,
@@ -785,6 +788,7 @@ export function seedAudit(
     to_seq: handSeq,
     to_at: iso(handStart),
     first_broken_seq: null,
+    first_broken_id: null,
     first_broken_at: null,
     error_code: null,
     outcome: null,

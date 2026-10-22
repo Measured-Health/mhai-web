@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { checkpoint, intactRun } from "@/tests/audit-event";
 import {
+  SHOWN_WORDS,
   STALE_MS,
   bannerOn,
+  breakRange,
   coverageLine,
   errorWords,
   headerLine,
   integrityOf,
   isRunning,
+  rangeWords,
   runSentence,
   staleness,
 } from "./integrity";
@@ -32,6 +35,7 @@ const broken = intactRun({
   to_seq: null,
   to_at: null,
   first_broken_seq: 9_880_117,
+  first_broken_id: "ev_9880117",
   first_broken_at: "2026-10-21T23:14:00Z",
 });
 
@@ -310,6 +314,7 @@ describe("headerLine", () => {
     for (const over of [
       { error_code: "timed_out" as const },
       { first_broken_seq: 5 },
+      { first_broken_id: "ev_5" },
       { first_broken_at: "2026-10-22T05:00:00Z" },
     ])
       expect(integrityOf(intactRun(over), NOW), JSON.stringify(over)).toBe(
@@ -393,5 +398,52 @@ describe("the run's words", () => {
       on: true,
       date: "21 Oct 2026",
     });
+  });
+});
+
+describe("the history's words", () => {
+  it("states read as words", () => {
+    expect(SHOWN_WORDS).toEqual({
+      intact: "Intact",
+      broken: "Broken",
+      couldnt_check: "Couldn't check",
+      checking: "Checking…",
+    });
+  });
+
+  it("rangeWords names the start and the last entry, or the first broken one", () => {
+    expect(rangeWords(intactRun())).toBe(
+      "From the checkpoint of 4 Jan 2027 to entry 9,881,204",
+    );
+    expect(
+      rangeWords(intactRun({ from_checkpoint: null, from_first: true })),
+    ).toBe("From the first entry to entry 9,881,204");
+    expect(rangeWords(broken)).toBe(
+      "From the checkpoint of 4 Jan 2027 · first broken entry 9,880,117",
+    );
+    expect(rangeWords(intactRun({ from_checkpoint: null }))).toBe(
+      "Up to entry 9,881,204",
+    );
+    expect(
+      rangeWords(
+        intactRun({ from_checkpoint: null, to_seq: null, state: "error" }),
+      ),
+    ).toBe("Range not recorded");
+  });
+
+  it("breakRange gives whole local days: the day before the break's day, through today", () => {
+    // 21 Oct 23:14 (local, tests run in UTC) → from 20 Oct, to 22 Oct.
+    expect(breakRange(broken, NOW)).toEqual({
+      from: "2026-10-20",
+      to: "2026-10-22",
+    });
+    // Across a month end.
+    expect(
+      breakRange(
+        { ...broken, first_broken_at: "2026-11-01T00:30:00Z" },
+        Date.parse("2026-11-02T09:00:00Z"),
+      ),
+    ).toEqual({ from: "2026-10-31", to: "2026-11-02" });
+    expect(breakRange(intactRun(), NOW)).toBeNull();
   });
 });
