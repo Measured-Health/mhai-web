@@ -414,7 +414,9 @@ to all `GET`s below (the gateway gives agent status to admins only).
 
 **Two-person requests** share one shape: `{id, kind, requested_by, requested_at, reason,
 requested_by_you, expires_at}`, approved with `{mfa_code}` (**409** `same_person`, **409**
-`expired`), cancelled with no body.
+`expired`), cancelled with no body. `kind` is one of `hold_lift`, `retention_shorten` and
+`triage_on`. `requested_by_you` is set per caller, and is the only thing that decides who may
+approve. A request lapses 7 days after `requested_at` (`expires_at`).
 
 **Legal holds**
 
@@ -423,18 +425,24 @@ requested_by_you, expires_at}`, approved with `{mfa_code}` (**409** `same_person
   `reason` (`court_case`, `regulator`, `complaint`, `investigation`, `other`), `reference`,
   `asked_by`, `note`, `placed_by`, `placed_at`, `review_on`, `status` (`active`,
   `review_due`, `lift_requested`, `lifted`), `lift` (the two-person request plus
-  `authority`, `approved_by`, `approved_at`, `released_on`) or null, `version`.
+  `authority`, `approved_by`, `approved_at`, `released_on`) or null, `stopped_removal`
+  (boolean: placing it sent a scheduled removal back to pending), `version`.
+- The `status` filter is one of `open` (active, review due and lift requested; the default),
+  `active`, `review_due`, `lift_requested`, `lifted` or `all`.
 - `GET /platform/legal-holds/{id}` → the hold with `history` (events, newest first).
 - `POST /platform/legal-holds {hospital_id, from?, to?, reason, note?, reference, asked_by,
 review_on, mfa_code}` → the hold. **409** `hospital_removed`; **409** `removal_started`;
   **422** `invalid_range`.
 - `PATCH /platform/legal-holds/{id} {review_on?, note?, version}`.
-- `POST /platform/legal-holds/{id}/lift {reason, note?, authority, mfa_code}` → the hold,
+- `POST /platform/legal-holds/{id}/lift {reason, note?, authority, mfa_code}`, with `reason`
+  one of `case_closed`, `withdrawn`, `mistake` or `other` → the hold,
   `lift_requested`, with `lift.records_due` (the count in §4.5) and `lift.due_after`.
 - `POST …/lift/approve {mfa_code}` → `lifted`, `released_on` 7 days on;
   `POST …/lift/cancel`; `POST …/lift/undo {mfa_code}` (only before `released_on`) → `active`.
 - `GET /platform/hospitals` items gain `legal_holds_active`; `GET /platform/hospitals/{id}`
-  gains `legal_holds` (the active ones, short form).
+  gains `legal_holds` (the active ones, short form). Despite the name, `legal_holds_active`
+  counts the holds that keep records: active, review due, lift requested, or lifted before
+  their `released_on` (the same set as `removal.checks.legal_holds`).
 
 **Server duties for holds** (the app can't keep these):
 
@@ -456,11 +464,11 @@ versions, triage, clean_up}`:
     `documents`, `guidelines`, `clean_up`;
   - `queue`: `{waiting, oldest_wait_s}`; `failed_jobs`: `{now, last_24h}`;
   - `timing`: `{last_hour, last_24h}`, each `{overall: {p50_ms, p95_ms}, steps: [{step, p50_ms,
-p95_ms}]}`;
+p95_ms}]}`, with `step` one of `privacy`, `guidelines`, `answer` or `evidence`;
   - `errors`: `[{kind, last_hour, last_24h}]`, `kind` one of `timeout`, `unreachable`,
     `unreadable`, `invalid`, `other`;
   - `versions`: `[{part, label}]`; `triage`: `{enabled}`; `clean_up`: `{last_run_at, ok,
-paused}`.
+paused, paused_by, paused_at}`.
     No hospital, user or content anywhere in it.
 
 **Failed jobs**
@@ -471,19 +479,27 @@ paused}`.
   (`{id, name}` or null), `created_at`, `failed_at`, `attempts`, `kind` (as `errors`),
   `status` (`failed`, `retrying`, `retried`, `cancelled`), `cancelled_by`, `cancelled_at`.
   Never the subject, the user or the error message.
-- `POST /platform/jobs/retry {ids}` (1–50) → `{retried, skipped}`; a job no longer `failed` is
-  skipped, not an error.
-- `POST /platform/jobs/cancel {ids, reason, note?, mfa_code}` (1–50) → `{cancelled, skipped}`.
+- `POST /platform/jobs/retry {ids}` (1–50) → `{retried, skipped}` (each an array of job ids); a
+  job no longer `failed` is skipped, not an error.
+- `POST /platform/jobs/cancel {ids, reason, note?, mfa_code}` (1–50), with `reason` one of
+  `no_longer_needed`, `cant_succeed` or `other` → `{cancelled, skipped}` (each an array of job
+  ids).
   The subject moves to its failed state (a question shows "Couldn't complete").
 - Retried and cancelled jobs stay listed for 30 days.
 
 **Settings**
 
 - `GET /platform/settings` → `{retention, triage, feedback_buffer, pending}`:
-  - `retention`: `{paused, paused_by, paused_at, items: [{type, days, minimum_days, last_run:
-{at, ok, deleted, kept_for_holds}, next_run_at, changed_by, changed_at, version}]}`;
-  - `triage`: `{enabled, ready, not_ready_reason, changed_by, changed_at, version}`;
-  - `feedback_buffer`: `{waiting, last_reset: {by, at, reason, cleared}}`;
+  - `retention`: `{paused, paused_by, paused_at, confirmed, items: [{type, days, minimum_days,
+last_run: {at, ok, deleted, kept_for_holds}, next_run_at, changed_by, changed_at, version}]}`,
+    with `type` one of `records`, `documents`, `pending_corrections` or `audit_log`, and
+    `confirmed` false until the compliance lead has confirmed the periods;
+  - `triage`: `{enabled, ready, not_ready_reason, changed_by, changed_at, version}`, with
+    `not_ready_reason` one of `missing_report`, `missing_files` or `checksum_mismatch` (null
+    when ready);
+  - `feedback_buffer`: `{waiting, running, failed_job_id, last_reset: {by, at, reason,
+cleared}}`: `running` while a reset is under way, `failed_job_id` the failed reset's job (or
+    null);
   - `pending`: the two-person requests, each with `from` and `to`.
 - `GET /platform/settings/retention/{type}/preview?days` → `{would_delete}`.
 - `PUT /platform/settings/retention/{type} {days, reason, mfa_code, version}`: longer applies
@@ -495,6 +511,8 @@ paused}`.
 - `POST /platform/settings/requests/{id}/approve {mfa_code}`, `POST …/cancel`.
 - `POST /platform/settings/feedback-buffer/reset {reason, mfa_code}` → **202** `{job_id}`; the
   backend supplies its own confirm word.
+- Every other settings write answers with the whole `SettingsOut` (the `GET` shape), whether
+  it is **200** (applied) or **202** (a pending request).
 
 **Activity** gains the events above, with the hold's reference but never its note.
 

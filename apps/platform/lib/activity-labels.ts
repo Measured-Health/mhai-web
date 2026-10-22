@@ -46,6 +46,64 @@ export function actionLabel(a: ActivityAction, target?: string | null): string {
         : "edited a follow-up note";
     case "change_follow_up_undone":
       return t ? `undid the follow-up on “${t}”` : "undid a follow-up";
+    case "hold_placed":
+      return t ? `placed legal hold ${t}` : "placed a legal hold";
+    case "hold_edited":
+      return t
+        ? `changed the review date or note on legal hold ${t}`
+        : "changed the review date or note on a legal hold";
+    case "hold_lift_requested":
+      return t ? `asked to lift legal hold ${t}` : "asked to lift a legal hold";
+    case "hold_lift_cancelled":
+      return t
+        ? `cancelled the request to lift legal hold ${t}`
+        : "cancelled a request to lift a legal hold";
+    case "hold_lift_lapsed":
+      return t
+        ? `asked to lift legal hold ${t}; the request lapsed`
+        : "asked to lift a legal hold; the request lapsed";
+    case "hold_lifted":
+      return t
+        ? `approved lifting legal hold ${t}`
+        : "approved lifting a legal hold";
+    case "hold_lift_undone":
+      return t
+        ? `undid the lift of legal hold ${t}`
+        : "undid the lift of a legal hold";
+    case "hold_released":
+      return t
+        ? `released the records under legal hold ${t}`
+        : "released the records under a legal hold";
+    case "jobs_retried":
+      return t ? `retried ${t}` : "retried failed jobs";
+    case "jobs_cancelled":
+      return t ? `cancelled ${t}` : "cancelled failed jobs";
+    case "retention_changed":
+      return t
+        ? `changed records retention: ${t}`
+        : "changed records retention";
+    case "setting_change_requested":
+      return t ? `asked for a change: ${t}` : "asked for a change to a setting";
+    case "setting_change_approved":
+      return t ? `approved a change: ${t}` : "approved a change to a setting";
+    case "setting_change_cancelled":
+      return t
+        ? `cancelled a change request: ${t}`
+        : "cancelled a change request";
+    case "setting_change_lapsed":
+      return t
+        ? `asked for a change that lapsed: ${t}`
+        : "asked for a change that lapsed";
+    case "clean_up_paused":
+      return "paused the records clean-up";
+    case "clean_up_resumed":
+      return "resumed the records clean-up";
+    case "triage_switched_off":
+      return "switched triage off";
+    case "feedback_buffer_cleared":
+      return t
+        ? `cleared ${t} of unapproved learning data`
+        : "cleared unapproved learning data";
   }
 }
 
