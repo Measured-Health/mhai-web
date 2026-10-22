@@ -67,6 +67,14 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["POST", "platform/legal-holds/{id}/lift/approve"],
   ["POST", "platform/legal-holds/{id}/lift/cancel"],
   ["POST", "platform/legal-holds/{id}/lift/undo"],
+  ["GET", "platform/settings"],
+  ["GET", "platform/settings/retention/{id}/preview"],
+  ["PUT", "platform/settings/retention/{id}"],
+  ["PUT", "platform/settings/retention-pause"],
+  ["PUT", "platform/settings/triage"],
+  ["POST", "platform/settings/requests/{id}/approve"],
+  ["POST", "platform/settings/requests/{id}/cancel"],
+  ["POST", "platform/settings/feedback-buffer/reset"],
 ];
 
 /**

@@ -396,6 +396,83 @@ const ROWS: Row[] = [
     "/api/v1/platform/legal-holds/hold_hv/lift/undo",
     { version: 4, backup_code: "AAAA-BBBB" },
   ],
+  [
+    "getSettings",
+    (c) => c.getSettings(),
+    "GET",
+    "/api/v1/platform/settings",
+    undefined,
+  ],
+  [
+    "previewRetention",
+    (c) => c.previewRetention("pending_corrections", 90),
+    "GET",
+    "/api/v1/platform/settings/retention/pending_corrections/preview?days=90",
+    undefined,
+  ],
+  [
+    "setRetention",
+    (c) =>
+      c.setRetention(
+        "records",
+        { days: 1095, reason: "Agreed", version: 2, ...CODE },
+        K,
+      ),
+    "PUT",
+    "/api/v1/platform/settings/retention/records",
+    { days: 1095, reason: "Agreed", version: 2, mfa_code: "123456" },
+  ],
+  [
+    "setCleanUpPaused",
+    (c) => c.setCleanUpPaused({ paused: true, reason: "Audit", ...CODE }, K),
+    "PUT",
+    "/api/v1/platform/settings/retention-pause",
+    { paused: true, reason: "Audit", mfa_code: "123456" },
+  ],
+  [
+    "setTriage",
+    (c) =>
+      c.setTriage(
+        {
+          enabled: true,
+          reason: "Ready",
+          clinical_signoff: "Dr Eze, ref CS-12",
+          version: 1,
+          ...CODE,
+        },
+        K,
+      ),
+    "PUT",
+    "/api/v1/platform/settings/triage",
+    {
+      enabled: true,
+      reason: "Ready",
+      clinical_signoff: "Dr Eze, ref CS-12",
+      version: 1,
+      mfa_code: "123456",
+    },
+  ],
+  [
+    "approveRequest",
+    (c) => c.approveRequest("req_1", { version: 3, ...CODE }, K),
+    "POST",
+    "/api/v1/platform/settings/requests/req_1/approve",
+    { version: 3, mfa_code: "123456" },
+  ],
+  [
+    "cancelRequest",
+    (c) => c.cancelRequest("req_1", { version: 3 }, K),
+    "POST",
+    "/api/v1/platform/settings/requests/req_1/cancel",
+    { version: 3 },
+  ],
+  [
+    "resetFeedbackBuffer",
+    (c) => c.resetFeedbackBuffer({ reason: "Training data", ...CODE }, K),
+    "POST",
+    "/api/v1/platform/settings/feedback-buffer/reset",
+    { reason: "Training data", mfa_code: "123456" },
+  ],
 ];
 
 describe("live platform client", () => {
@@ -510,6 +587,7 @@ describe("live platform client", () => {
     await client().followUp("a/b", { version: 1 }, K);
     await client().listHolds({});
     await client().approveLift("a/b", { version: 1, ...CODE }, K);
+    await client().approveRequest("a/b", { version: 1, ...CODE }, K);
     expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
       "/api/v1/platform/hospitals",
       "/api/v1/platform/activity",
@@ -518,6 +596,7 @@ describe("live platform client", () => {
       "/api/v1/platform/analytics/changes/a%2Fb/follow-up",
       "/api/v1/platform/legal-holds",
       "/api/v1/platform/legal-holds/a%2Fb/lift/approve",
+      "/api/v1/platform/settings/requests/a%2Fb/approve",
     ]);
   });
 

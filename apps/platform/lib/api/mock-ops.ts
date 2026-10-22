@@ -13,6 +13,12 @@ import {
   type OpsClient,
 } from "./ops-contract";
 import {
+  SHARED_CLEAN_UP,
+  SHARED_TRIAGE,
+  type SharedCleanUp,
+  type SharedTriage,
+} from "./settings-fixtures";
+import {
   buildHealth,
   HEALTH_MODES,
   seedJobs,
@@ -93,7 +99,14 @@ export function createMockOps(
       core.read(() => {
         const now = mode;
         if (now === "unavailable") return fail(503, "unavailable");
-        return buildHealth(core.now(), now, failedNow(), failedLast24h());
+        const h = buildHealth(core.now(), now, failedNow(), failedLast24h());
+        // What Settings changed: the clean-up pause and triage.
+        const paused = core.shared[SHARED_CLEAN_UP] as
+          SharedCleanUp | undefined;
+        const triage = core.shared[SHARED_TRIAGE] as SharedTriage | undefined;
+        if (paused) h.clean_up = { ...h.clean_up, ...paused };
+        if (triage) h.triage = { enabled: triage.enabled };
+        return h;
       }),
 
     listJobs: (q: JobQuery) =>
