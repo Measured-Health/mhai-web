@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useSyncExternalStore } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -140,6 +140,20 @@ describe("the legal holds list", () => {
       ]),
     );
     expect(url.get()).toBe("q=cmp-0");
+  });
+
+  it("the search box follows the URL on Back", async () => {
+    renderWithAuth(<HoldsView />);
+    await screen.findByRole("table");
+    const box = screen.getByRole("searchbox", { name: "Search by reference" });
+    await userEvent.type(box, "cmp-0");
+    await waitFor(() => expect(url.get()).toBe("q=cmp-0"));
+    await userEvent.tab();
+    act(() => url.set(""));
+    await waitFor(() => expect(box).toHaveValue(""));
+    await waitFor(() =>
+      expect(hospitalsIn(screen.getByRole("table"))).toHaveLength(3),
+    );
   });
 
   it("starts from a link's query", async () => {

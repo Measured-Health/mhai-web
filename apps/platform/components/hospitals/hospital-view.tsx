@@ -4,6 +4,7 @@ import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
 import { platformError } from "@/lib/errors";
 import { useHospital } from "@/lib/queries/hospitals";
 import { Banner } from "@mhai/ui/banner";
+import { HospitalHoldsSection } from "../holds/hospital-holds-section";
 import { TopBar } from "../shell/top-bar";
 import { CouldntLoad } from "../states/couldnt-load";
 import { Loading } from "../states/loading";
@@ -56,6 +57,7 @@ export function HospitalView({ id }: { id: string }) {
                 onGone={() => void refetch()}
               />
               <RemovalPanel hospital={h} />
+              <HospitalHoldsSection hospital={h} />
               <DetailsSection
                 hospital={h}
                 canEdit={canAct && h.status !== "removed"}

@@ -77,6 +77,14 @@ export function HoldsView() {
 
   // Ask the service once typing pauses, not on every key.
   const [search, setSearch] = useState(q);
+  // Back and Forward change `q` under the box; follow them unless the person
+  // is typing (an echo of an earlier pause must not undo later keys).
+  const [typing, setTyping] = useState(false);
+  const [seenQ, setSeenQ] = useState(q);
+  if (q !== seenQ) {
+    setSeenQ(q);
+    if (!typing) setSearch(q);
+  }
   useEffect(() => {
     if (search.trim() === q.trim()) return;
     const t = setTimeout(
@@ -121,6 +129,8 @@ export function HoldsView() {
                 aria-label="Search by reference"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onFocus={() => setTyping(true)}
+                onBlur={() => setTyping(false)}
                 placeholder="Search by reference"
                 className={`${inputClass} pl-9`}
               />

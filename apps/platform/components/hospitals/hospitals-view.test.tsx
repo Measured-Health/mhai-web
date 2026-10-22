@@ -71,6 +71,18 @@ describe("the hospitals list", () => {
     expect(within(north).getByText(/^(On|Off)$/)).toBeInTheDocument();
   });
 
+  it("Harbour View, Northgate, Riverside and Lakeside show Hold; Havana, Southpoint and the rest don't", async () => {
+    renderWithAuth(<HospitalsView />);
+    const table = await screen.findByRole("table");
+    const held = ["Harbour View", "Northgate", "Riverside", "Lakeside"];
+    for (const row of within(table).getAllByRole("row").slice(1)) {
+      const has = held.some((n) => row.textContent?.startsWith(n));
+      const tag = within(row).queryByText("Hold");
+      expect(tag !== null, row.textContent ?? "").toBe(has);
+      if (tag) expect(tag.querySelector("svg")).not.toBeNull();
+    }
+  });
+
   it("search by short code finds the hospital", async () => {
     const api = install();
     const first = (await api.listHospitals({})).hospitals[4]!;
@@ -184,6 +196,24 @@ describe("the hospitals list", () => {
     expect(
       within(list).getByRole("link", { name: /^Northgate General Hospital/ }),
     ).toBeInTheDocument();
+  });
+
+  it("the phone cards show Hold on the same four", async () => {
+    vi.stubGlobal("matchMedia", (q: string) => ({
+      matches: false,
+      media: q,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    renderWithAuth(<HospitalsView />);
+    const list = await screen.findByRole("list", { name: "Hospitals" });
+    const held = within(list)
+      .getAllByRole("listitem")
+      .filter((li) => within(li).queryByText("Hold"))
+      .map((li) => within(li).getAllByRole("link")[0]!.textContent);
+    expect(held).toHaveLength(4);
+    for (const n of ["Harbour View", "Northgate", "Riverside", "Lakeside"])
+      expect(held.some((t) => t?.startsWith(n))).toBe(true);
   });
 
   it("Add is disabled offline with the reason", async () => {
