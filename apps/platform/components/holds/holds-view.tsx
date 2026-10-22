@@ -11,7 +11,6 @@ import { useHolds } from "@/lib/queries/holds";
 import { inputClass } from "@mhai/ui/auth/password-fields";
 import { Button } from "@mhai/ui/button";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
-import { useToast } from "@mhai/ui/toast";
 import { TopBar } from "../shell/top-bar";
 import { CouldntLoad } from "../states/couldnt-load";
 import { Empty } from "../states/empty";
@@ -53,7 +52,6 @@ export function HoldsView() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const toast = useToast();
   const status = asStatus(params.get("status"));
   const hospital = params.get("hospital") || undefined;
   const q = params.get("q") ?? "";
@@ -244,11 +242,7 @@ export function HoldsView() {
         open={placing}
         onClose={() => setPlacing(false)}
         onPlaced={(h) =>
-          toast.show({
-            title: `Legal hold placed on ${h.hospital.name}`,
-            tone: "ok",
-            live: "polite",
-          })
+          router.push(`/legal-holds/${encodeURIComponent(h.id)}`)
         }
       />
     </>

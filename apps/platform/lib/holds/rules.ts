@@ -34,6 +34,26 @@ export function liftedLine(h: LegalHold, now: number): string {
   return `Lifted${who ? ` by ${who}` : ""}${at ? ` · ${dateLabel(at)}` : ""}`;
 }
 
+/** Lifted, and its records not yet released: the lift can be undone. */
+export const inGrace = (h: LegalHold, now: number) =>
+  h.status === "lifted" &&
+  !!h.lift?.released_on &&
+  now < Date.parse(h.lift.released_on);
+
+/** A hold's status in a line: who placed an active one, and when. */
+export function statusLine(h: LegalHold, now: number): string {
+  switch (h.status) {
+    case "active":
+      return `Active · placed by ${h.placed_by.name} · ${dateLabel(h.placed_at)}`;
+    case "review_due":
+      return `Review due · ${dateLabel(h.review_on)}`;
+    case "lift_requested":
+      return "Lift requested · still active";
+    case "lifted":
+      return liftedLine(h, now);
+  }
+}
+
 /** Today as a calendar date (YYYY-MM-DD) where the person is. */
 export function todayLocal(now = new Date()): string {
   const p = (n: number) => String(n).padStart(2, "0");
@@ -89,5 +109,26 @@ export function validatePlace(
   else if (note.length > NOTE_MAX) e.note = over(NOTE_MAX);
   if (!f.review_on || f.review_on <= today)
     e.review_on = "Choose a review date after today.";
+  return e;
+}
+
+export type EditForm = { review_on: string; note: string };
+
+/**
+ * An edit's review date and note. A changed review date must be after
+ * today; a hold placed for Other keeps a note.
+ */
+export function validateEdit(
+  f: EditForm,
+  h: Pick<LegalHold, "review_on" | "reason">,
+  today = todayLocal(),
+): Partial<Record<keyof EditForm, string>> {
+  const e: Partial<Record<keyof EditForm, string>> = {};
+  if (!f.review_on) e.review_on = "Choose a review date.";
+  else if (f.review_on !== h.review_on && f.review_on <= today)
+    e.review_on = "Choose a review date after today.";
+  const note = f.note.trim();
+  if (h.reason === "other" && !note) e.note = "Add a note.";
+  else if (note.length > NOTE_MAX) e.note = over(NOTE_MAX);
   return e;
 }
