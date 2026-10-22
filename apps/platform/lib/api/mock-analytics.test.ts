@@ -426,10 +426,16 @@ describe("mock analytics", () => {
     );
     expect(added.admins).toEqual([]);
     for (const s of (await m.listHospitals({ status: "active" })).hospitals) {
+      if (s.id === "h_hilltop") continue;
       const admins = (await m.getHospital(s.id)).admins;
       expect(admins.length).toBeGreaterThanOrEqual(1);
       expect(admins.length).toBeLessThanOrEqual(2);
     }
+    // Hilltop is active, but its admin has left (R6).
+    const hilltop = await m.getHospital("h_hilltop");
+    expect(hilltop.status).toBe("active");
+    expect(hilltop.admins).toEqual([]);
+    expect(hilltop.first_admin?.status).toBe("accepted");
   });
 
   it("the series follow the change and the hospital, with the others' median", async () => {

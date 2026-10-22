@@ -418,7 +418,8 @@ export function seedHospitals(now: number): HospitalRecord[] {
       ...clear,
     },
     {
-      // Active for 9 days, nobody asking yet: zeros, no previous period.
+      // Active for 9 days, nobody asking yet: zeros, no previous period, and
+      // no active hospital admin.
       hospital: base(
         "h_hilltop",
         "Hilltop Cottage Hospital",
@@ -435,7 +436,8 @@ export function seedHospitals(now: number): HospitalRecord[] {
           ),
         },
       ),
-      admins: [admin("Kunle Bello", "kunle.bello@hilltop.example")],
+      // Its first admin has since left: nobody active to contact.
+      admins: [],
       sso: NO_SSO,
       ...clear,
     },
