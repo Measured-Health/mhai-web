@@ -19,10 +19,10 @@ vi.mock("@mhai/ui/csv", async (orig) => ({
   ...(await orig<typeof import("@mhai/ui/csv")>()),
   downloadCsv: vi.fn(),
 }));
-const nav = vi.hoisted(() => ({ search: "" }));
+const nav = vi.hoisted(() => ({ search: "", replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/analytics",
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: nav.replace }),
   useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
@@ -41,6 +41,7 @@ function install(analytics: AnalyticsMode = "normal", email = ADA.email) {
 }
 beforeEach(() => {
   nav.search = "";
+  nav.replace.mockClear();
   net.online = true;
   install();
 });
@@ -448,5 +449,13 @@ describe("opening Analytics on a change", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(rows()).toHaveLength(5);
+  });
+
+  it("picking another change leaves the link, so the note goes and it can be opened again", async () => {
+    nav.search = "change=chg_long_gone";
+    await open();
+    await screen.findByText("That change has cleared.");
+    await userEvent.click(rows()[1]!);
+    expect(nav.replace).toHaveBeenCalledWith("/analytics");
   });
 });

@@ -1,13 +1,14 @@
 "use client";
 import { Bell } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { Notification } from "@/lib/api/notifications-contract";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useMarkSeen, useNotifications } from "@/lib/queries/notifications";
 import { Dialog } from "@mhai/ui/dialog";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
 import { Sheet } from "@mhai/ui/sheet";
+import { useToast } from "@mhai/ui/toast";
 import { NotificationsList } from "./notifications-list";
 
 const NONE: ReadonlySet<string> = new Set();
@@ -33,7 +34,7 @@ function BellAndList() {
   const [open, setOpen] = useState(false);
   const [fresh, setFresh] = useState<ReadonlySet<string>>(NONE);
   const trigger = useRef<HTMLButtonElement>(null);
-  const marked = useRef(false);
+  const toast = useToast();
 
   // The last good count stays through a failed check; no count before one.
   const unseen = q.data?.unseen ?? 0;
@@ -41,19 +42,22 @@ function BellAndList() {
   const failed = open && (q.isError || (!!q.data && !q.data.ok));
   const items = q.data?.ok ? q.data.items : [];
 
-  // Opening marks what is shown as seen, once per open.
-  useEffect(() => {
-    if (!open) {
-      marked.current = false;
-      return;
-    }
-    if (marked.current || q.isFetching || q.isError || !q.data?.ok) return;
-    marked.current = true;
-    const ids = q.data.items.filter((i) => !i.seen).map((i) => i.id);
-    setFresh(new Set(ids));
-    if (ids.length) mark.mutate(ids);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, q.data, q.isError, q.isFetching]);
+  // Opening looks again, then marks what that reply shows as seen (from
+  // the reply itself, never a possibly stale cache read).
+  const openList = () => {
+    setOpen(true);
+    void q.refetch().then((r) => {
+      if (r.isError || !r.data?.ok) return;
+      const ids = r.data.items.filter((i) => !i.seen).map((i) => i.id);
+      setFresh(new Set(ids));
+      if (ids.length) mark.mutate(ids);
+    });
+  };
+  const markAll = () =>
+    mark.mutate(undefined, {
+      onError: () =>
+        toast.show({ title: "Couldn't mark them seen. Try again." }),
+    });
 
   const close = () => {
     setOpen(false);
@@ -61,7 +65,7 @@ function BellAndList() {
   };
   const go = (n: Notification) => {
     close();
-    router.push(`/analytics?change=${n.change_id}`);
+    router.push(`/analytics?change=${encodeURIComponent(n.change_id)}`);
   };
 
   const body = (
@@ -72,7 +76,8 @@ function BellAndList() {
       fresh={fresh}
       onRetry={() => void q.refetch()}
       onOpen={go}
-      onMarkAll={() => mark.mutate(undefined)}
+      unseen={unseen}
+      onMarkAll={markAll}
     />
   );
 
@@ -84,11 +89,7 @@ function BellAndList() {
         aria-label={bellLabel(unseen)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => {
-          setOpen(true);
-          // Look again on open, so the list is fresh.
-          void q.refetch();
-        }}
+        onClick={openList}
         className="relative grid size-11 place-items-center rounded-xl border border-white/30 text-white focus-visible:outline-2 focus-visible:outline-white md:size-[34px] md:rounded-[10px]"
       >
         <Bell aria-hidden className="size-4" />

@@ -388,6 +388,9 @@ export function createMockPlatform({
         summary: c.summary,
         serious: c.serious,
         direction: c.direction,
+        measure: c.measure,
+        previous: c.previous,
+        current: c.current,
         at: changeFlaggedAt(c.id, now()),
         seen: seen?.has(`ntf_${c.id}`) ?? false,
       }))

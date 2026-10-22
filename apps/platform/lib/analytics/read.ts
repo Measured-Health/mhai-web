@@ -351,42 +351,35 @@ function summarySafe(
 }
 
 /**
- * A notification's words, checked by the same summary rule. It has no
- * values to compare with, so a summary that says "fewer than 5" must carry
- * no percentage and at most one other number, and that one is taken as the
- * shown side. Anything it can't vouch for fails closed.
+ * What a change and a notification share: where, which measure, how it
+ * moved, and both sides read under the same rules, with the summary checked
+ * against what is hidden (summarySafe).
  */
-function notificationSummaryOk(summary: string): boolean {
-  if (!summary.match(FEWER)) return true;
-  const rest = summary.replace(FEWER, "").match(NUMBER) ?? [];
-  const nums = [...new Set(rest.map((t) => Number(t.replace(/,/g, ""))))];
-  if (nums.length === 0) return summarySafe(summary, HIDDEN, HIDDEN, "count");
-  return nums.length === 1
-    ? summarySafe(
-        summary,
-        HIDDEN,
-        { value: nums[0]!, suppressed: false },
-        "count",
-      )
-    : false;
+function sidesOk(c: Obj): boolean {
+  if (!(c.hospital === null || isPerson(c.hospital))) return false;
+  if (!MEASURE_IDS.has(c.measure as string)) return false;
+  if (!DIRECTIONS.has(c.direction as string)) return false;
+  if (typeof c.serious !== "boolean") return false;
+  if (typeof c.summary !== "string" || c.summary.trim() === "") return false;
+  const kind = MEASURE_KIND[c.measure as Change["measure"]];
+  return (
+    guardedOk(c.previous, kind, true) &&
+    guardedOk(c.current, kind, true) &&
+    summarySafe(c.summary, c.previous as Guarded, c.current as Guarded, kind)
+  );
 }
 
-/** A notification reads when its shape does and its words pass the summary rule. */
+/** A notification reads under the same rules as a change in What changed. */
 export function notificationOk(n: unknown): n is Notification {
-  if (!isObj(n)) return false;
   return (
+    isObj(n) &&
     typeof n.id === "string" &&
     ID.test(n.id) &&
     typeof n.change_id === "string" &&
     ID.test(n.change_id) &&
-    (n.hospital === null || isPerson(n.hospital)) &&
-    typeof n.summary === "string" &&
-    n.summary.trim() !== "" &&
-    typeof n.serious === "boolean" &&
-    DIRECTIONS.has(n.direction as string) &&
     isTime(n.at) &&
     typeof n.seen === "boolean" &&
-    notificationSummaryOk(n.summary)
+    sidesOk(n)
   );
 }
 
@@ -398,20 +391,10 @@ export function notificationOk(n: unknown): n is Notification {
 function changeOk(c: unknown): c is Change {
   if (!isObj(c)) return false;
   if (typeof c.id !== "string" || !ID.test(c.id)) return false;
-  if (!(c.hospital === null || isPerson(c.hospital))) return false;
   if (!CHANGE_AREAS.has(c.area as string)) return false;
-  if (!MEASURE_IDS.has(c.measure as string)) return false;
+  if (!sidesOk(c)) return false;
   if (MEASURE_AREA[c.measure as Change["measure"]] !== c.area) return false;
-  if (!DIRECTIONS.has(c.direction as string)) return false;
-  if (typeof c.serious !== "boolean") return false;
-  if (typeof c.summary !== "string" || c.summary.trim() === "") return false;
-  if (!followUpOk(c.follow_up) || !isCount(c.version)) return false;
-  const kind = MEASURE_KIND[c.measure as Change["measure"]];
-  return (
-    guardedOk(c.previous, kind, true) &&
-    guardedOk(c.current, kind, true) &&
-    summarySafe(c.summary, c.previous as Guarded, c.current as Guarded, kind)
-  );
+  return followUpOk(c.follow_up) && isCount(c.version);
 }
 
 /**

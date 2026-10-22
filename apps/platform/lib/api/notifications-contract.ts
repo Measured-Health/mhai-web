@@ -1,7 +1,7 @@
 // Notifications and the analytics email preference (spec §7, backend §14.7).
 // A notification is an analytics change from What changed, as one person
 // sees it: counts only, in the same words as the change itself.
-import type { Direction } from "./analytics-contract";
+import type { Direction, Guarded, MeasureId } from "./analytics-contract";
 import type { Person } from "./contract";
 
 /** At most this many notifications come back, newest first. */
@@ -18,6 +18,10 @@ export type Notification = {
   /** Critical-type: Critical handling or unhandled Critical alerts. */
   serious: boolean;
   direction: Direction;
+  /** As on the change: what it measures, and both sides, hidden when 1–4. */
+  measure: MeasureId;
+  previous: Guarded;
+  current: Guarded;
   /** When the change was first flagged. */
   at: string;
   /** Whether the signed-in person has seen it (per person, set by the server). */

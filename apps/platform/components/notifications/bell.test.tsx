@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
@@ -134,18 +134,24 @@ describe("the analytics bell", () => {
   });
 
   it("a failed check keeps the last count; the list shows Couldn't load notifications with Try again", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     renderWithAuth(<NotificationBell />);
-    const b = await bell("Notifications, 6 new");
-    vi.spyOn(api, "listNotifications").mockRejectedValue(
-      new ApiError(503, "unavailable"),
+    await bell("Notifications, 6 new");
+    const read = vi
+      .spyOn(api, "listNotifications")
+      .mockRejectedValue(new ApiError(503, "unavailable"));
+    // A failed poll leaves the count, with no error text or badge.
+    await act(() => vi.advanceTimersByTimeAsync(61_000));
+    expect(read).toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Notifications, 6 new" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/couldn't/i)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    // The list says so, and offers Try again.
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Notifications/ }),
     );
-    // A failed poll leaves the count and adds no error badge.
-    await act(async () => {
-      env.online = true;
-      await vi.waitFor(() => {});
-    });
-    await userEvent.click(b);
-    // Opening re-reads; the read fails.
     expect(
       await screen.findByText(/Couldn't load notifications/),
     ).toBeInTheDocument();
@@ -155,7 +161,6 @@ describe("the analytics bell", () => {
     expect(
       screen.getByRole("button", { name: "Notifications, 6 new" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/couldn't check/i)).toBeNull();
   });
 
   it("shows Couldn't load notifications when the first read fails, and Try again reads again", async () => {
@@ -190,6 +195,9 @@ describe("the analytics bell", () => {
           summary: "Northgate: fewer than 5 alerts, down 3 from 9 (60%)",
           serious: false,
           direction: "falling",
+          measure: "alerts_total",
+          previous: { value: 9, suppressed: false },
+          current: { value: 3, suppressed: false },
           at: "2026-10-22T09:00:00.000Z",
           seen: false,
         },
@@ -255,46 +263,111 @@ describe("the analytics bell", () => {
   });
 
   it("an auditor has the bell too, and seen is per person", async () => {
-    const view = renderWithAuth(<NotificationBell />, { user: AMARA });
     who = AMARA.email;
-    expect(await bell("Notifications, 6 new")).toBeInTheDocument();
+    const view = renderWithAuth(<NotificationBell />, { user: AMARA });
+    await userEvent.click(await bell("Notifications, 6 new"));
+    await screen.findByRole("list", { name: "New analytics changes" });
+    expect(await bell("Notifications")).toBeInTheDocument();
     view.unmount();
-    await api.markSeen({}, { idempotencyKey: "k-amara" });
     who = ADA.email;
     renderWithAuth(<NotificationBell />);
     expect(await bell("Notifications, 6 new")).toBeInTheDocument();
+    cleanup();
+    who = AMARA.email;
+    renderWithAuth(<NotificationBell />, { user: AMARA });
+    expect(await bell("Notifications")).toBeInTheDocument();
+  });
+
+  it("focus moves into the dialog and back to the bell", async () => {
+    renderWithAuth(<NotificationBell />);
+    const b = await bell("Notifications, 6 new");
+    await userEvent.click(b);
+    const dialog = await screen.findByRole("dialog", { name: "Notifications" });
+    await waitFor(() =>
+      expect(dialog).toContainElement(document.activeElement as HTMLElement),
+    );
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(b).toHaveFocus());
+  });
+
+  it("a failed Mark all seen shows a toast", async () => {
+    vi.spyOn(api, "markSeen").mockRejectedValue(new ApiError(400, "invalid"));
+    renderWithAuth(<NotificationBell />);
+    await userEvent.click(await bell("Notifications, 6 new"));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Mark all seen" }),
+    );
+    expect(
+      await screen.findByText("Couldn't mark them seen. Try again."),
+    ).toBeInTheDocument();
+  });
+
+  it("has no Mark all seen when nothing is unseen", async () => {
+    await api.markSeen({}, { idempotencyKey: "k-none" });
+    renderWithAuth(<NotificationBell />);
+    await userEvent.click(await bell("Notifications"));
+    await screen.findByRole("list", { name: "New analytics changes" });
+    expect(screen.queryByRole("button", { name: "Mark all seen" })).toBeNull();
   });
 });
 
 describe("notificationOk", () => {
+  const shown = (v: number) => ({ value: v, suppressed: false });
+  const HIDDEN = { value: null, suppressed: true };
   const base = {
     id: "ntf_a",
     change_id: "chg_a",
     hospital: null,
     serious: false,
     direction: "rising",
+    measure: "questions",
+    previous: shown(48),
+    current: shown(83),
+    summary: "All hospitals: questions rising (48 → 83 a week)",
     at: "2026-10-22T09:00:00.000Z",
     seen: false,
   };
-  it("accepts a plain summary and refuses a leaky one", () => {
+  it("passes a plain summary and a good hidden-side summary", () => {
+    expect(notificationOk(base)).toBe(true);
     expect(
       notificationOk({
         ...base,
-        summary: "All hospitals: rising (48 → 83 a week)",
+        previous: HIDDEN,
+        summary: "Fewer than 5 → 83 a week",
       }),
     ).toBe(true);
+  });
+  it("fails a hidden side whose words give a number away", () => {
     expect(
-      notificationOk({ ...base, summary: "Fewer than 5 → 83 a week" }),
-    ).toBe(true);
-    expect(
-      notificationOk({ ...base, summary: "Fewer than 5 → 83 (3 fewer)" }),
+      notificationOk({
+        ...base,
+        previous: HIDDEN,
+        summary: "Fewer than 5, up 79",
+      }),
     ).toBe(false);
     expect(
-      notificationOk({ ...base, summary: "Down 40% from fewer than 5" }),
+      notificationOk({
+        ...base,
+        previous: HIDDEN,
+        summary: "Down 40% from fewer than 5",
+      }),
     ).toBe(false);
+  });
+  it("fails an unhidden count of 1 to 4", () => {
+    expect(
+      notificationOk({
+        ...base,
+        measure: "unhandled_alerts",
+        previous: shown(3),
+        current: shown(40),
+        serious: true,
+        summary: "3 Critical alerts unhandled",
+      }),
+    ).toBe(false);
+  });
+  it("fails a bad shape", () => {
     expect(notificationOk({ ...base, summary: "" })).toBe(false);
-    expect(
-      notificationOk({ ...base, summary: "x", direction: "sideways" }),
-    ).toBe(false);
+    expect(notificationOk({ ...base, direction: "sideways" })).toBe(false);
+    expect(notificationOk({ ...base, measure: undefined })).toBe(false);
   });
 });

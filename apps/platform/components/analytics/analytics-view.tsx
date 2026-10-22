@@ -1,6 +1,6 @@
 "use client";
 import { Download } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useEffect,
   useId,
@@ -115,6 +115,13 @@ export function AnalyticsView() {
   // A bell notification opens the page on its change (?change=). Applied
   // once per link, when the list is in; a change that has cleared says so.
   const wanted = useSearchParams().get("change");
+  const router = useRouter();
+  const pathname = usePathname();
+  // Picking something else ends the link: the note goes, and the same
+  // notification can be opened again.
+  const leaveLink = () => {
+    if (wanted) router.replace(pathname);
+  };
   const [applied, setApplied] = useState<string | null>(null);
   const listed = state?.changes.status === "ok";
   const wantedFound = !!wanted && items.some((c) => c.id === wanted);
@@ -129,10 +136,12 @@ export function AnalyticsView() {
   const cleared = !!wanted && listed && !wantedFound;
 
   const select = (id: string) => {
+    leaveLink();
     setDetail({ kind: "change", id });
     if (!desktop) setPhoneDetail(true);
   };
   const pickHospital = (h: Person) => {
+    leaveLink();
     setDetail({
       kind: "hospital",
       id: h.id,

@@ -23,6 +23,7 @@ export function NotificationsList({
   failed,
   loading,
   fresh,
+  unseen,
   onRetry,
   onOpen,
   onMarkAll,
@@ -32,6 +33,8 @@ export function NotificationsList({
   loading: boolean;
   /** Ids that were unseen when the list opened. */
   fresh: ReadonlySet<string>;
+  /** The count of unseen; Mark all seen shows only while there are some. */
+  unseen: number;
   onRetry(): void;
   onOpen(n: Notification): void;
   onMarkAll(): void;
@@ -73,11 +76,13 @@ export function NotificationsList({
           })}
         </ul>
       )}
-      <div className="mt-3 flex justify-end">
-        <Button variant="ghost" size="sm" onClick={onMarkAll}>
-          Mark all seen
-        </Button>
-      </div>
+      {unseen > 0 && (
+        <div className="mt-3 flex justify-end">
+          <Button variant="ghost" size="sm" onClick={onMarkAll}>
+            Mark all seen
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -79,22 +79,17 @@ export const DIRECTION_WORD: Record<Change["direction"], string> = {
   falling: "Falling",
 };
 
-/**
- * What the sign needs of a change. A notification has no values or measure,
- * so its sign for "better" reads the move from the words ("140 → 83").
- */
-export type LineSource = Pick<Change, "direction" | "summary"> &
-  Partial<Pick<Change, "measure" | "previous" | "current">>;
-
-const MOVE = /(\d[\d,]*(?:\.\d+)?)[^\d→]{0,12}→\s*(\d[\d,]*(?:\.\d+)?)/;
+/** What the sign and words need of a change; a notification has them all. */
+export type LineSource = Pick<
+  Change,
+  "direction" | "summary" | "measure" | "previous" | "current"
+>;
 
 /** Better points the way the value moved, or the measure's good way. */
 function betterSign(c: LineSource): Sign {
-  const p = c.previous?.value ?? null;
-  const n = c.current?.value ?? null;
+  const p = c.previous.value;
+  const n = c.current.value;
   if (
-    c.previous &&
-    c.current &&
     !c.previous.suppressed &&
     !c.current.suppressed &&
     p !== null &&
@@ -102,15 +97,6 @@ function betterSign(c: LineSource): Sign {
     p !== n
   )
     return n > p ? "↑" : "↓";
-  if (!c.measure) {
-    const m = MOVE.exec(c.summary);
-    if (m) {
-      const a = Number(m[1]!.replace(/,/g, ""));
-      const b = Number(m[2]!.replace(/,/g, ""));
-      if (a !== b) return b > a ? "↑" : "↓";
-    }
-    return "↑";
-  }
   return LOWER_IS_BETTER.has(c.measure) ? "↓" : "↑";
 }
 
