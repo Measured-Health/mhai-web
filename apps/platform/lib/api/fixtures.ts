@@ -9,6 +9,12 @@ import type {
   SsoOut,
   TeamMember,
 } from "./contract";
+import {
+  keepsRecords,
+  shortHold,
+  type LegalHoldDetail,
+} from "./holds-contract";
+import { seedHolds } from "./holds-fixtures";
 
 const MIN = 60_000;
 const H = 60 * MIN;
@@ -41,7 +47,8 @@ export type HospitalRecord = {
    */
   admins: Hospital["admins"];
   sso: SsoOut;
-  legal_holds: number;
+  /** Its legal holds, each with its history, newest first. */
+  holds: LegalHoldDetail[];
   retention_until: string | null;
   export_required: boolean;
   export_done: boolean;
@@ -108,6 +115,7 @@ export function seedTeam(now: number): TeamMember[] {
 }
 
 export function seedHospitals(now: number): HospitalRecord[] {
+  const allHolds = seedHolds(now);
   const base = (
     id: string,
     name: string,
@@ -131,6 +139,8 @@ export function seedHospitals(now: number): HospitalRecord[] {
     first_admin: null,
     removal: null,
     admins: [],
+    legal_holds_active: 0,
+    legal_holds: [],
     ...over,
   });
   const accepted = (
@@ -147,7 +157,6 @@ export function seedHospitals(now: number): HospitalRecord[] {
     expires_at: iso(now - sentAgo + INVITE_MS),
   });
   const clear = {
-    legal_holds: 0,
     retention_until: null,
     export_required: false,
     export_done: false,
@@ -330,18 +339,19 @@ export function seedHospitals(now: number): HospitalRecord[] {
             approved_by: null,
             approved_at: null,
             checks: {
-              legal_holds: 1,
+              // Counted below from its holds.
+              legal_holds: 0,
               retention_until: null,
               export_required: true,
               export_done: true,
             },
-            blocking: ["legal_hold"],
+            // Derived below from its holds (hold_hv blocks it).
+            blocking: [],
           },
         },
       ),
       admins: [admin("Bisi Coker", "bisi.coker@harbourview.example")],
       sso: NO_SSO,
-      legal_holds: 1,
       retention_until: null,
       export_required: true,
       export_done: true,
@@ -389,7 +399,6 @@ export function seedHospitals(now: number): HospitalRecord[] {
       ),
       admins: [admin("Tobi Adeyemi", "tobi.adeyemi@southpoint.example")],
       sso: NO_SSO,
-      legal_holds: 0,
       retention_until: null,
       export_required: true,
       export_done: true,
@@ -441,13 +450,36 @@ export function seedHospitals(now: number): HospitalRecord[] {
       sso: NO_SSO,
       ...clear,
     },
-  ].map((r) => ({
-    ...r,
-    hospital: {
-      ...r.hospital,
-      admins: r.hospital.status === "active" ? r.admins : [],
-    },
-  }));
+  ].map((r) => {
+    // Each hospital its own list: the demo's changes stick per hospital.
+    const holds = allHolds.filter((h) => h.hospital.id === r.hospital.id);
+    // The hospital's name comes from its own record, so the two can't drift.
+    for (const h of holds)
+      h.hospital = { id: r.hospital.id, name: r.hospital.name };
+    const kept = holds.filter((h) => keepsRecords(h, now));
+    const removal = r.hospital.removal;
+    return {
+      ...r,
+      holds,
+      hospital: {
+        ...r.hospital,
+        admins: r.hospital.status === "active" ? r.admins : [],
+        legal_holds_active: kept.length,
+        legal_holds: kept.map(shortHold),
+        removal: removal && {
+          ...removal,
+          checks: { ...removal.checks, legal_holds: kept.length },
+          blocking:
+            kept.length > 0
+              ? [
+                  "legal_hold" as const,
+                  ...removal.blocking.filter((b) => b !== "legal_hold"),
+                ]
+              : removal.blocking,
+        },
+      },
+    };
+  });
 }
 
 /** 12 past events, newest first. */

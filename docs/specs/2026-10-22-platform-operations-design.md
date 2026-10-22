@@ -414,7 +414,8 @@ to all `GET`s below (the gateway gives agent status to admins only).
 
 **Two-person requests** share one shape: `{id, kind, requested_by, requested_at, reason,
 requested_by_you, expires_at}`, approved with `{mfa_code}` (**409** `same_person`, **409**
-`expired`), cancelled with no body. `kind` is one of `hold_lift`, `retention_shorten` and
+`expired`), cancelled with no body (a hold lift's approve, cancel and undo also send the
+hold's `version`: see Legal holds). `kind` is one of `hold_lift`, `retention_shorten` and
 `triage_on`. `requested_by_you` is set per caller, and is the only thing that decides who may
 approve. A request lapses 7 days after `requested_at` (`expires_at`).
 
@@ -437,12 +438,17 @@ review_on, mfa_code}` → the hold. **409** `hospital_removed`; **409** `removal
 - `POST /platform/legal-holds/{id}/lift {reason, note?, authority, mfa_code}`, with `reason`
   one of `case_closed`, `withdrawn`, `mistake` or `other` → the hold,
   `lift_requested`, with `lift.records_due` (the count in §4.5) and `lift.due_after`.
-- `POST …/lift/approve {mfa_code}` → `lifted`, `released_on` 7 days on;
-  `POST …/lift/cancel`; `POST …/lift/undo {mfa_code}` (only before `released_on`) → `active`.
+- `POST …/lift/approve {version, mfa_code}` → `lifted`, `released_on` 7 days on;
+  `POST …/lift/cancel {version}`; `POST …/lift/undo {version, mfa_code}` (only before
+  `released_on`) → `active`. Each sends the hold's `version` as the person saw it, so it acts
+  only on the request they saw: a mismatch (for example, the request was cancelled and a new
+  one made meanwhile) is **409** `conflict` ("Changed by someone else"). A lapsed request is
+  still **409** `expired` on approval.
 - `GET /platform/hospitals` items gain `legal_holds_active`; `GET /platform/hospitals/{id}`
-  gains `legal_holds` (the active ones, short form). Despite the name, `legal_holds_active`
-  counts the holds that keep records: active, review due, lift requested, or lifted before
-  their `released_on` (the same set as `removal.checks.legal_holds`).
+  gains `legal_holds` (those that keep records, short form). Despite the name, `legal_holds_active`
+  counts the holds that keep records: active, review due, lift requested, or lifted within
+  the 7-day grace period, before their `released_on` (the same set as
+  `removal.checks.legal_holds`).
 
 **Server duties for holds** (the app can't keep these):
 
