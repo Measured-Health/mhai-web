@@ -54,6 +54,7 @@ export async function openNav(
     | "Analytics"
     | "Legal holds"
     | "System"
+    | "Settings"
     | "Team"
     | "Activity"
     | "Account",
