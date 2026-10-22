@@ -70,6 +70,7 @@ export const intactRun = (overrides: Partial<VerifyRun> = {}): VerifyRun => ({
   to_seq: 9_881_204,
   to_at: "2026-10-22T06:00:00Z",
   first_broken_seq: null,
+  first_broken_id: null,
   first_broken_at: null,
   error_code: null,
   outcome: null,

@@ -35,6 +35,7 @@ const broken = intactRun({
   to_seq: null,
   to_at: null,
   first_broken_seq: 9_880_117,
+  first_broken_id: "ev_9880117",
   first_broken_at: "2026-10-21T23:14:00Z",
 });
 
@@ -313,6 +314,7 @@ describe("headerLine", () => {
     for (const over of [
       { error_code: "timed_out" as const },
       { first_broken_seq: 5 },
+      { first_broken_id: "ev_5" },
       { first_broken_at: "2026-10-22T05:00:00Z" },
     ])
       expect(integrityOf(intactRun(over), NOW), JSON.stringify(over)).toBe(

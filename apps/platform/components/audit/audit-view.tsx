@@ -67,9 +67,16 @@ export function AuditView() {
     initialEvents(Date.now()),
   );
   const status = useIntegrityStatus();
-  // Step 2's Open entry: the entry by its exact id, on Events.
+  // Integrity's Open entry: an exact id search on Events, with its detail
+  // open. Read once on arrival; any tab change forgets it.
+  const [entry, setEntry] = useState<string | null>(null);
+  const showTab = (t: AuditTab) => {
+    setEntry(null);
+    setTab(t);
+  };
   const openEntry = (id: string) => {
     setEvents((e) => ({ ...e, q: id }));
+    setEntry(id);
     setTab("events");
   };
 
@@ -79,17 +86,24 @@ export function AuditView() {
       <div className="flex-1 overflow-auto px-4 pb-10 pt-6 md:px-[26px]">
         <div className="mx-auto flex max-w-[1100px] flex-col gap-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <IntegrityLine status={status} onOpen={() => setTab("integrity")} />
+            <IntegrityLine
+              status={status}
+              onOpen={() => showTab("integrity")}
+            />
             {/* Slot: Export CSV. */}
           </div>
           <IntegrityBanner
-            onOpen={() => setTab("integrity")}
+            onOpen={() => showTab("integrity")}
             className="rounded-2xl border px-4 py-3.5"
           />
-          <AuditTabs tab={tab} onTab={setTab}>
+          <AuditTabs tab={tab} onTab={showTab}>
             {(t) =>
               t === "events" ? (
-                <EventsTab value={events} onChange={setEvents} />
+                <EventsTab
+                  value={events}
+                  onChange={setEvents}
+                  initialOpen={entry}
+                />
               ) : t === "integrity" ? (
                 // Slot: onExport opens Task 8's export dialog.
                 <IntegrityTab onOpenEntry={openEntry} />

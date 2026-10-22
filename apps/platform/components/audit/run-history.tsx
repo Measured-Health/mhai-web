@@ -123,7 +123,7 @@ export function RunHistory() {
           <Button
             variant="ghost"
             size="sm"
-            className="mt-3"
+            className="mt-3 min-h-11"
             {...net.props}
             disabled={net.offline || q.isFetchingNextPage}
             onClick={() => void q.fetchNextPage()}

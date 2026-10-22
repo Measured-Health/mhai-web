@@ -424,6 +424,25 @@ describe("the other readers", () => {
     expect(readRun({ ...intactRun(), extra: true }).state).toBe("error");
   });
 
+  it("a broken run names its first broken entry by id, or fails closed", () => {
+    const broken = intactRun({
+      state: "broken",
+      to_seq: null,
+      to_at: null,
+      first_broken_seq: 9_880_117,
+      first_broken_id: "ev_9880117",
+      first_broken_at: "2026-10-21T23:14:00Z",
+    });
+    expect(readRun(broken)).toEqual(broken);
+    for (const first_broken_id of [null, "ev 1", "", 7])
+      expect(readRun({ ...broken, first_broken_id }).state).toBe("error");
+    // An id without a position contradicts itself.
+    expect(readRun(intactRun({ first_broken_id: "ev_1" })).state).toBe("error");
+    const { first_broken_id, ...noKey } = broken;
+    void first_broken_id;
+    expect(readRun(noKey).state).toBe("error");
+  });
+
   it("readStatus keeps a broken run and throws only without the runs", () => {
     const status = {
       latest: intactRun(),
@@ -455,12 +474,15 @@ describe("the other readers", () => {
       to_seq: null,
       to_at: null,
       first_broken_seq: 9_880_117,
+      first_broken_id: "ev_9880117",
       first_broken_at: "2026-10-21T11:14:00Z",
       finished_at: "2026-10-21T12:00:00Z",
     });
     for (const security_contact of [
       null,
       { name: "Security", email: "ops team" },
+      // Nothing that could add to a mail link.
+      { name: "Security", email: "a@b.org?cc=c@d.org" },
     ]) {
       const s = readStatus({
         latest: intactRun(),
@@ -482,6 +504,7 @@ describe("the other readers", () => {
       id: "n_1",
       run_id: "run_0",
       first_broken_seq: 9_880_117,
+      first_broken_id: "ev_9880117",
       at: "2026-10-22T06:00:00Z",
       seen: false,
     };
@@ -491,6 +514,12 @@ describe("the other readers", () => {
       false,
     );
     expect(integrityNotificationOk({ ...n, first_broken_seq: 0 })).toBe(false);
+    expect(integrityNotificationOk({ ...n, first_broken_id: null })).toBe(
+      false,
+    );
+    expect(integrityNotificationOk({ ...n, first_broken_id: "a b" })).toBe(
+      false,
+    );
     expect(integrityNotificationOk({ ...n, seen: undefined })).toBe(false);
   });
 });

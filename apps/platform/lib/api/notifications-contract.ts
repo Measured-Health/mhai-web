@@ -36,6 +36,7 @@ export type IntegrityNotification = {
   id: string;
   run_id: string;
   first_broken_seq: number;
+  first_broken_id: string;
   at: string;
   seen: boolean;
 };

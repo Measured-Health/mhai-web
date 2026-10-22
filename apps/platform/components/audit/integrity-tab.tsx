@@ -6,13 +6,13 @@ import {
   breakRange,
   coverageLine,
   integrityOf,
+  isRunning,
   runSentence,
 } from "@/lib/audit/integrity";
 import type { ReadRun } from "@/lib/audit/read";
 import { isAuditor, useAuth } from "@/lib/auth/auth-context";
 import { platformError } from "@/lib/errors";
 import {
-  findEntryAt,
   useIntegrityStatus,
   useRefreshIntegrity,
   useRun,
@@ -25,6 +25,7 @@ import { useNow } from "@mhai/ui/hooks/use-now";
 import { CouldntLoad } from "../states/couldnt-load";
 import { Loading } from "../states/loading";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
+import { CopyButton } from "./copy-button";
 import { OutcomeNote } from "./outcome-note";
 import { RunHistory, SHOWN_LOOK } from "./run-history";
 
@@ -93,7 +94,7 @@ function StateBlock({
           <Button
             variant="ghost"
             size="sm"
-            className="mt-1"
+            className="mt-1 min-h-11"
             {...retry}
             onClick={onRetry}
           >
@@ -113,73 +114,34 @@ function FirstBroken({
   run: ReadRun;
   onOpenEntry(id: string): void;
 }) {
+  // Opening it is a search by its exact id, so it needs the network.
   const net = useNeedsConnection("open-entry-offline");
-  const [copied, setCopied] = useState<"no" | "yes" | "failed">("no");
-  const [opening, setOpening] = useState<"idle" | "busy" | "failed">("idle");
   const seq = run.first_broken_seq;
-  const at = run.first_broken_at;
-  if (seq === null)
+  const id = run.first_broken_id;
+  if (seq === null || id === null)
     return (
       <p className="mt-1 text-ink-3">
         The check didn&apos;t name the first broken entry.
       </p>
     );
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(String(seq));
-      setCopied("yes");
-    } catch {
-      setCopied("failed");
-    }
-  };
-  const open = async () => {
-    if (!at) return;
-    setOpening("busy");
-    try {
-      const id = await findEntryAt(seq, at);
-      if (id === null) throw new Error("not found");
-      setOpening("idle");
-      onOpenEntry(id);
-    } catch {
-      setOpening("failed");
-    }
-  };
-
   return (
     <div className="mt-1.5 flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-2">
         <code className="rounded-lg bg-white px-2 py-1 font-mono text-[13.5px]">
           {`#${seq}`}
         </code>
-        <Button variant="ghost" size="sm" onClick={() => void copy()}>
-          Copy
+        <CopyButton value={String(seq)} label="first broken entry" />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="min-h-11"
+          {...net.props}
+          onClick={() => onOpenEntry(id)}
+        >
+          Open entry
         </Button>
-        {at && (
-          <Button
-            variant="ghost"
-            size="sm"
-            {...net.props}
-            disabled={net.offline || opening === "busy"}
-            onClick={() => void open()}
-          >
-            Open entry
-          </Button>
-        )}
-        <span role="status" className="text-[13px] text-ink-3">
-          {copied === "yes"
-            ? "Copied"
-            : copied === "failed"
-              ? "Couldn't copy. Select the number instead."
-              : ""}
-        </span>
       </div>
       <OfflineNote id="open-entry-offline" />
-      {opening === "failed" && (
-        <p role="alert" className="text-[13px] text-bad-deep">
-          {`Couldn't open entry #${seq}. Try again.`}
-        </p>
-      )}
     </div>
   );
 }
@@ -238,7 +200,7 @@ function Steps({
               , outside the app.
             </>
           ) : (
-            "Report it to Measured Health's security lead, outside the app."
+            "Report it to Measured Health's security lead, outside the app. The security lead's contact couldn't be loaded."
           )}{" "}
           The app has already notified the platform team.
         </li>
@@ -247,7 +209,12 @@ function Steps({
           to preserve what is there now.
           {onExport && run.first_broken_at !== null && (
             <div className="mt-1.5">
-              <Button variant="ghost" size="sm" onClick={exportAround}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="min-h-11"
+                onClick={exportAround}
+              >
                 Export the entries around the break
               </Button>
             </div>
@@ -283,7 +250,9 @@ export function IntegrityTab({
   const net = useNeedsConnection("integrity-offline");
   const [runId, setRunId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
-  const tracked = useRun(runId).data ?? null;
+  const runQ = useRun(runId);
+  // A run that stops loading gives way to the status.
+  const tracked = runQ.isError ? null : (runQ.data ?? null);
   const trackedDone = tracked !== null && tracked.state !== "running";
 
   // When the check this page started ends, the status and history catch up.
@@ -313,7 +282,7 @@ export function IntegrityTab({
   const running =
     tracked?.state === "running"
       ? tracked
-      : s.running && !(trackedDone && s.running.id === tracked.id)
+      : isRunning(s) && !(trackedDone && s.running!.id === tracked.id)
         ? s.running
         : null;
   const shown =

@@ -16,16 +16,19 @@ export function EventsTab({
   value,
   onChange,
   onOpenNamed,
+  initialOpen = null,
 }: {
   value: EventsState;
   onChange(next: EventsState): void;
   onOpenNamed?: (f: NamedAccessFilters) => void;
+  /** An entry to open on arrival (Integrity's Open entry). */
+  initialOpen?: string | null;
 }) {
   const desktop = useIsDesktop();
   // The open entry lives in memory only: never in the URL or in storage.
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(initialOpen);
   const region = useRef<HTMLDivElement>(null);
-  const opened = useRef<string | null>(null);
+  const opened = useRef<string | null>(initialOpen);
   const openRow = (id: string) => {
     opened.current = id;
     setOpen(id);

@@ -95,7 +95,7 @@ const status = (over: Partial<IntegrityStatus>): IntegrityStatus => ({
 });
 
 describe("the Integrity tab", () => {
-  it("intact mode: Intact with the full sentence and coverage; the header reads Intact · checked 06:00 today", async () => {
+  it("intact mode: Intact with the full sentence and coverage; the header reads Intact · checked 06:01 today (the 06:00 daily check)", async () => {
     setup();
     renderWithAuth(<AuditView />);
     // The sample's daily check starts at 06:00 UTC and takes a minute.
@@ -299,7 +299,9 @@ describe("the Integrity tab", () => {
     );
     expect(steps[1]).toHaveTextContent(`#${seed.firstBrokenSeq}`);
     expect(
-      within(steps[1]!).getByRole("button", { name: "Copy" }),
+      within(steps[1]!).getByRole("button", {
+        name: "Copy first broken entry",
+      }),
     ).toBeVisible();
     expect(
       within(steps[1]!).getByRole("button", { name: "Open entry" }),
@@ -337,7 +339,9 @@ describe("the Integrity tab", () => {
     const seed = seedAudit(NOW, "broken");
     renderWithAuth(<AuditView />);
     await openIntegrity();
-    await userEvent.click(await screen.findByRole("button", { name: "Copy" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Copy first broken entry" }),
+    );
     expect(writeText).toHaveBeenCalledWith(String(seed.firstBrokenSeq));
     expect(await screen.findByText("Copied")).toBeInTheDocument();
     vi.unstubAllGlobals();
@@ -353,19 +357,45 @@ describe("the Integrity tab", () => {
     const entry = seed.events.find((e) => e.seq === seed.firstBrokenSeq)!;
     renderWithAuth(<AuditView />);
     await openIntegrity();
+    const open = await screen.findByRole("button", { name: "Open entry" });
+    const before = listAudit.mock.calls.length;
+    await userEvent.click(open);
+    expect(
+      await screen.findByRole("heading", { name: `Entry #${entry.seq}` }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Events", selected: true }),
+    ).toBeInTheDocument();
+    await tick(50);
+    // One read only: the exact id search, which is recorded as a search.
+    expect(listAudit.mock.calls.slice(before)).toEqual([
+      [{ q: entry.id }, undefined],
+    ]);
+  });
+
+  it("Open entry makes no list read but the id search", async () => {
+    let listAudit!: ReturnType<typeof vi.fn<PlatformClient["listAudit"]>>;
+    setup({ integrity: "broken" }, (m) => {
+      listAudit = vi.fn(m.listAudit);
+      return { listAudit };
+    });
+    const seed = seedAudit(NOW, "broken");
+    const entry = seed.events.find((e) => e.seq === seed.firstBrokenSeq)!;
+    env.path = "/audit";
+    renderWithAuth(<AuditView />);
+    await openIntegrity();
     await userEvent.click(
       await screen.findByRole("button", { name: "Open entry" }),
     );
+    await screen.findByRole("heading", { name: `Entry #${entry.seq}` });
+    await tick(50);
+    // No read narrowed to a moment the person never chose.
     expect(
-      await screen.findByRole("tab", { name: "Events", selected: true }),
-    ).toBeInTheDocument();
-    expect(listAudit).toHaveBeenLastCalledWith({ q: entry.id }, undefined);
-    const table = await screen.findByRole("table", {
-      name: "Audit log events",
-    });
-    await within(table).findByText(/After an integrity failure/);
-    expect(within(table).getAllByRole("row")).toHaveLength(2);
-    expect(screen.getByRole("searchbox")).toHaveValue(entry.id);
+      listAudit.mock.calls.filter(
+        ([f]) => f.from !== undefined && f.q === undefined,
+      ),
+    ).toHaveLength(1); // the Events tab's own first read
+    expect(listAudit.mock.calls.at(-1)).toEqual([{ q: entry.id }, undefined]);
   });
 
   it("only the auditor sees the outcome note; saving it adds the line and keeps the Broken run in history", async () => {
@@ -383,6 +413,11 @@ describe("the Integrity tab", () => {
     const note = await screen.findByRole("textbox", { name: "Outcome note" });
     const save = screen.getByRole("button", { name: "Save outcome" });
     expect(save).toBeDisabled();
+    // The note stops at 1000 characters.
+    await userEvent.click(note);
+    await userEvent.paste("x".repeat(1001));
+    expect(screen.getByText("1000 / 1000")).toBeInTheDocument();
+    await userEvent.clear(note);
     await userEvent.type(note, "Disk fault; restored.");
     expect(screen.getByText("21 / 1000")).toBeInTheDocument();
     await userEvent.click(save);

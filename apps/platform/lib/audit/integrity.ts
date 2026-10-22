@@ -33,6 +33,7 @@ function proven(r: Run, now: number): boolean {
     r.finished_at === null ||
     r.error_code !== null ||
     r.first_broken_seq !== null ||
+    r.first_broken_id !== null ||
     r.first_broken_at !== null
   )
     return false;

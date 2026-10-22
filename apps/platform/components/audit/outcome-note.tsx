@@ -91,7 +91,7 @@ export function OutcomeNote({
           <Button
             variant="ghost"
             size="sm"
-            className="mt-2"
+            className="mt-2 min-h-11"
             onClick={() => void reload()}
           >
             Reload
@@ -102,6 +102,7 @@ export function OutcomeNote({
       <div>
         <Button
           size="sm"
+          className="min-h-11"
           {...net.props}
           disabled={net.offline || !trimmed || add.isPending}
           onClick={save}

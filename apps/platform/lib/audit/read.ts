@@ -365,7 +365,7 @@ export type ReadRun = Omit<VerifyRun, "id" | "started_at"> & {
   id: string | null;
   started_at: string | null;
 };
-const isRun = exact({
+const isRunShape = exact({
   id: isId,
   started_at: isTime,
   finished_at: orNull(isTime),
@@ -377,6 +377,7 @@ const isRun = exact({
   to_seq: orNull(isPos),
   to_at: orNull(isTime),
   first_broken_seq: orNull(isPos),
+  first_broken_id: orNull(isId),
   first_broken_at: orNull(isTime),
   error_code: oneOf("timed_out", "unreachable", "unexpected_reply", null),
   outcome: orNull(
@@ -388,6 +389,11 @@ const isRun = exact({
   ),
   version: isCount,
 });
+/** The first broken entry is named by position and id together, or not at all. */
+const isRun = (v: unknown): boolean =>
+  isRunShape(v) &&
+  ((v as VerifyRun).first_broken_seq === null) ===
+    ((v as VerifyRun).first_broken_id === null);
 
 export function readRun(raw: unknown): ReadRun {
   if (isRun(raw)) return raw as VerifyRun;
@@ -403,6 +409,7 @@ export function readRun(raw: unknown): ReadRun {
     to_seq: null,
     to_at: null,
     first_broken_seq: null,
+    first_broken_id: null,
     first_broken_at: null,
     error_code: "unexpected_reply",
     outcome: null,
@@ -427,7 +434,7 @@ export type ReadStatus = {
   latest: ReadRun | null;
   running: ReadRun | null;
   open_failure: ReadRun | null;
-  /** Null when it doesn't read: the tab says it couldn't load it. */
+  /** Null when it doesn't read: step 4 says the contact couldn't be loaded. */
   security_contact: IntegrityStatus["security_contact"] | null;
   /** Null when it doesn't read: the footer leaves the date out. */
   oldest_kept_at: string | null;
@@ -437,7 +444,7 @@ const isContact = exact({
   email: (v) =>
     typeof v === "string" &&
     v.length <= 254 &&
-    /^[^\s@<>]+@[^\s@<>.]+\.[^\s@<>]+$/.test(v),
+    /^[^\s@<>?&#%]+@[^\s@<>.?&#%]+\.[^\s@<>?&#%]+$/.test(v),
 });
 
 /**
@@ -470,6 +477,7 @@ export const integrityNotificationOk = (n: unknown): boolean =>
     id: isId,
     run_id: isId,
     first_broken_seq: isPos,
+    first_broken_id: isId,
     at: isTime,
     seen: isBool,
   })(n);

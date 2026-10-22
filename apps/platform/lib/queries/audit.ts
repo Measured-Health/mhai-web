@@ -212,8 +212,12 @@ export function useRun(id: string | null) {
     queryFn: () => getPlatformClient().getRun(id!),
     select: readRun,
     enabled: id !== null,
+    // A run that stops loading isn't polled on its last good read.
     refetchInterval: (query) =>
-      visible && online && runningRaw(query.state.data)
+      visible &&
+      online &&
+      query.state.status !== "error" &&
+      runningRaw(query.state.data)
         ? RUNNING_POLL_MS
         : false,
     refetchIntervalInBackground: false,
@@ -232,24 +236,6 @@ export function useRefreshIntegrity() {
       ]),
     [qc],
   );
-}
-
-/**
- * The id of the entry at position `seq`, written at `at`: a read of that one
- * instant, matched by position. Null when no entry there has an id.
- */
-export async function findEntryAt(
-  seq: number,
-  at: string,
-): Promise<string | null> {
-  const to = new Date(Date.parse(at) + 1).toISOString();
-  const page = readAuditList(
-    await getPlatformClient().listAudit({ from: at, to }),
-  );
-  for (const r of page.events)
-    if (r.ok ? r.event.seq === seq : r.seq === seq)
-      return r.ok ? r.event.id : r.id;
-  return null;
 }
 
 /**
