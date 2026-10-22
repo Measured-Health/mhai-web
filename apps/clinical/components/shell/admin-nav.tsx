@@ -71,7 +71,7 @@ export function AdminNav({
         {
           href: ANALYSIS_HREF,
           label: "Analysis",
-          sub: "Sample data only",
+          sub: "Conditions and trends",
           Icon: ChartPie,
         },
       ]

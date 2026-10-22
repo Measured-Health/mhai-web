@@ -316,6 +316,9 @@ describe("Sidebar", () => {
         "Usage",
         "Analysis",
       ]);
+      expect(
+        within(group).getByRole("link", { name: "Analysis" }),
+      ).toHaveAccessibleDescription("Conditions and trends");
     });
     it("a director sees it once", () => {
       renderWithAuth(
