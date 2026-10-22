@@ -100,6 +100,8 @@ export type AlertsRow = {
 export type QualityRow = {
   hospital: Person;
   answers: Guarded;
+  /** Answers a reviewer looked at: what `agreement_rate` is over. */
+  reviews: Guarded;
   /** A share from 0 to 1. */
   needs_review_share: Guarded;
   confidence: Record<"high" | "medium" | "low", Guarded>;
@@ -112,7 +114,8 @@ export type AreaBlock<R> = {
   rows: R[];
   /** The all-hospitals median, under the same rules as a row. */
   median: Omit<R, "hospital">;
-  trend: { start: string; value: number }[];
+  /** Across all hospitals, under the same rule: a count of 1–4 is hidden. */
+  trend: { start: string; value: Guarded }[];
 };
 
 export type AnalyticsOut = {
