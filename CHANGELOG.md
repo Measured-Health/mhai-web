@@ -44,6 +44,15 @@ All notable changes to this project are documented here. The format follows
   browser storage, and needs `PLATFORM_SESSION_SECRET` in live mode. It is
   served at `platforms.<domain>` behind an IP allow list, from its own
   compose project. End-to-end tests cover it on desktop and phone.
+- Analytics in the platform admin app, on sample data: what changed
+  across every active hospital (the last 7 days against the 4 weeks
+  before), the selected change charted against the other hospitals, who
+  to contact, and follow-ups with a note that platform admins add and
+  undo and auditors read. Tabs and a CSV cover use, alert safety, answer
+  quality and hospitals for the chosen period, in counts only, with
+  counts of 1 to 4 shown as "Fewer than 5". Havana Hospital and two small
+  sample hospitals join the sample data. End-to-end tests cover it on
+  desktop and phone.
 - Shared packages `@mhai/ui` (components) and `@mhai/api-client` (API,
   session and two-step helpers), used by both apps.
 

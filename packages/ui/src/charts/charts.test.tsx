@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Activity } from "react";
 import { describe, expect, it } from "vitest";
 import { BarList } from "./bar-list";
-import type { Column } from "@/lib/charts";
+import type { Column } from "./types";
 import { ColumnChart } from "./column-chart";
 
 const bars = (list: HTMLElement) =>
@@ -357,5 +357,24 @@ describe("ColumnChart", () => {
     expect(screen.getByText("Most alerts on 14 Oct: 23")).toBeVisible();
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByRole("list")).toBeNull();
+  });
+
+  it("a hidden column reads Fewer than 5 everywhere, never 0, and draws no column", async () => {
+    const { container } = chart([
+      { key: "1", label: "12 Oct", value: 7 },
+      { key: "2", label: "13 Oct", value: 0, hidden: true },
+    ]);
+    const items = screen.getAllByRole("listitem");
+    expect(items[1]).toHaveAccessibleName("13 Oct: Fewer than 5");
+    expect(
+      items[1]!.querySelector("span[aria-hidden].block")!.getAttribute("style"),
+    ).toMatch(/height:\s*0/);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show as table" }),
+    );
+    const row = screen.getByRole("row", { name: /13 Oct/ });
+    expect(within(row).getByText("Fewer than 5")).toBeInTheDocument();
+    expect(row.textContent).not.toMatch(/\b0\b/);
+    expect(container.textContent).not.toContain("0 alerts");
   });
 });

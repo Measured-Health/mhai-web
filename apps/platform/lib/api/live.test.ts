@@ -202,6 +202,41 @@ const ROWS: Row[] = [
     "/api/v1/platform/activity?hospital=h_north&cursor=50",
     undefined,
   ],
+  [
+    "getAnalytics",
+    (c) => c.getAnalytics("90d"),
+    "GET",
+    "/api/v1/platform/analytics?period=90d",
+    undefined,
+  ],
+  [
+    "getChangeSeries",
+    (c) => c.getChangeSeries("chg_ngh_1", "7d"),
+    "GET",
+    "/api/v1/platform/analytics/changes/chg_ngh_1/series?period=7d",
+    undefined,
+  ],
+  [
+    "getHospitalSeries",
+    (c) => c.getHospitalSeries("h_north", "needs_review_share", "30d"),
+    "GET",
+    "/api/v1/platform/analytics/hospitals/h_north/series?measure=needs_review_share&period=30d",
+    undefined,
+  ],
+  [
+    "followUp",
+    (c) => c.followUp("chg_ngh_1", { note: "Called.", version: 3 }, K),
+    "PUT",
+    "/api/v1/platform/analytics/changes/chg_ngh_1/follow-up",
+    { note: "Called.", version: 3 },
+  ],
+  [
+    "undoFollowUp",
+    (c) => c.undoFollowUp("chg_ngh_1", { version: 4 }, K),
+    "DELETE",
+    "/api/v1/platform/analytics/changes/chg_ngh_1/follow-up",
+    { version: 4 },
+  ],
 ];
 
 describe("live platform client", () => {
@@ -251,10 +286,14 @@ describe("live platform client", () => {
     await client().listHospitals({});
     await client().listActivity({});
     await client().getHospital("a b/c");
+    await client().getChangeSeries("a/b", "30d");
+    await client().followUp("a/b", { version: 1 }, K);
     expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
       "/api/v1/platform/hospitals",
       "/api/v1/platform/activity",
       "/api/v1/platform/hospitals/a%20b%2Fc",
+      "/api/v1/platform/analytics/changes/a%2Fb/series?period=30d",
+      "/api/v1/platform/analytics/changes/a%2Fb/follow-up",
     ]);
   });
 

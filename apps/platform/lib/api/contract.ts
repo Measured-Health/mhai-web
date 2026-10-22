@@ -2,6 +2,13 @@
 // Hand-written; to be replaced by types generated from the backend OpenAPI
 // schema. Every id is opaque and matches /^[A-Za-z0-9_-]+$/ (R11).
 import { ApiError } from "@mhai/api-client/errors";
+import type {
+  AnalyticsOut,
+  Change,
+  MeasureId,
+  Period,
+  SeriesOut,
+} from "./analytics-contract";
 
 export type HospitalStatus =
   | "active"
@@ -45,6 +52,11 @@ export type Hospital = HospitalSummary & {
     expires_at: string;
   } | null;
   removal: RemovalRequest | null;
+  /**
+   * The hospital's active hospital admins: who to contact. Empty while the
+   * hospital is in set-up, or when nobody there can act.
+   */
+  admins: { name: string; email: string }[];
 };
 
 export type RemovalBlock = "legal_hold" | "retention" | "export_required";
@@ -136,7 +148,10 @@ export type ActivityAction =
   | "admin_invite_resent"
   | "team_invited"
   | "team_role_changed"
-  | "team_removed";
+  | "team_removed"
+  | "change_followed_up"
+  | "change_note_edited"
+  | "change_follow_up_undone";
 export type ActivityEvent = {
   id: string;
   at: string;
@@ -221,4 +236,23 @@ export interface PlatformClient {
   listActivity(
     q: ActivityQuery,
   ): Promise<{ events: ActivityEvent[]; next_cursor: string | null }>;
+  /** Every area for the period; What changed is always the fixed window. */
+  getAnalytics(period: Period): Promise<AnalyticsOut>;
+  getChangeSeries(changeId: string, period: Period): Promise<SeriesOut>;
+  getHospitalSeries(
+    hospitalId: string,
+    measure: MeasureId,
+    period: Period,
+  ): Promise<SeriesOut>;
+  /** Marks a change followed up, or edits the note (its author only). */
+  followUp(
+    changeId: string,
+    body: { note?: string; version: number },
+    opts: WriteOpts,
+  ): Promise<Change>;
+  undoFollowUp(
+    changeId: string,
+    body: { version: number },
+    opts: WriteOpts,
+  ): Promise<Change>;
 }
