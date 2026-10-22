@@ -8,7 +8,11 @@ import {
 import { useState } from "react";
 import { headerLine, type Tone } from "@/lib/audit/integrity";
 import { useQueryClient } from "@tanstack/react-query";
-import type { AuditFilters, ExportReason } from "@/lib/api/audit-contract";
+import type {
+  AuditFilters,
+  ExportReason,
+  NamedAccessFilters,
+} from "@/lib/api/audit-contract";
 import { checkCustomRange } from "@/lib/audit/dates";
 import { takeAuditTab, type AuditTab } from "@/lib/audit/nav";
 import type { FilterNames } from "@/lib/audit/words";
@@ -30,6 +34,11 @@ import { ExportDialog } from "./export-dialog";
 import { ExportsTab } from "./exports-tab";
 import { IntegrityBanner } from "./integrity-banner";
 import { IntegrityTab, type ExportPrefill } from "./integrity-tab";
+import {
+  NamedAccessTab,
+  initialNamed,
+  type NamedState,
+} from "./named-access-tab";
 
 const TONE: Record<Tone, { Icon: typeof ShieldCheck; className: string }> = {
   ok: { Icon: ShieldCheck, className: "bg-ok-wash text-ok-deep" },
@@ -134,6 +143,10 @@ export function AuditView() {
   const [events, setEvents] = useState<EventsState>(() =>
     initialEvents(Date.now()),
   );
+  // Named access: the filters it was handed, else its defaults.
+  const [named, setNamed] = useState<NamedState>(() =>
+    initialNamed(Date.now(), handoff?.named),
+  );
   const status = useIntegrityStatus();
   // Integrity's Open entry: an exact id search on Events, with its detail
   // open. Read once on arrival; any tab change forgets it.
@@ -154,6 +167,11 @@ export function AuditView() {
       count: null,
       reason: p.reason,
     });
+  };
+  // The event detail's "Open in Named access": its hospital and letter.
+  const openNamed = (f: NamedAccessFilters) => {
+    setNamed(initialNamed(Date.now(), f));
+    showTab("named");
   };
   const openEntry = (id: string) => {
     setEvents((e) => ({ ...e, q: id }));
@@ -183,8 +201,11 @@ export function AuditView() {
                 <EventsTab
                   value={events}
                   onChange={setEvents}
+                  onOpenNamed={openNamed}
                   initialOpen={entry}
                 />
+              ) : t === "named" ? (
+                <NamedAccessTab value={named} onChange={setNamed} />
               ) : t === "exports" ? (
                 <ExportsTab />
               ) : t === "integrity" ? (
