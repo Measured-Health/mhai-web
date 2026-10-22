@@ -86,7 +86,7 @@ It runs on sample data. Every read of the log is itself recorded, by the server.
 
 ## Rulings made while planning
 
-- **Contract additions beyond spec §13**, for the controller to carry to the backend requirements as §14.10:
+- **Contract additions beyond spec §13**, for the controller to carry to the backend requirements as §14.9:
   - `GET /platform/audit/people?q` (q ≥ 2 characters) → `{people: AuditPerson[]}`, at most 20. This backs the person picker.
   - `GET /platform/audit/hospitals` → `{hospitals: {id, name, removed}[]}`: every hospital the log names. Removed hospitals may leave the hospitals list, but their trail stays.
   - `POST /platform/audit/undisplayable {ids}` (1–50) → 204, which records `audit_undisplayable_reported`. This is how "the server is told".
@@ -889,7 +889,7 @@ Fingerprints are deterministic 64-hex values from a small synchronous FNV-based 
 - [ ] **Step 3: Verify** (remote): `npm test`, `npm run e2e` (both apps; the clinical counts are unchanged), lint, `format:check`, typecheck, build, `check:bundle` and `check:platform-marker`.
 - [ ] **Step 4: Commit:** "Test the audit log end to end; document the demo".
 
-The controller then adds the contract (spec §13 plus the additions in Rulings) to mhai-multiagent `docs/specs/2026-10-17-frontend-requirements.md` as §14.10, and the `Notification.kind` change to §14.7, through its own PR.
+The controller then adds the contract (spec §13 plus the additions in Rulings) to mhai-multiagent `docs/specs/2026-10-17-frontend-requirements.md` as §14.9, and the `Notification.kind` change to §14.7, through its own PR.
 
 ---
 
@@ -946,7 +946,7 @@ Every edit here is additive (new rows, a spread, an optional prop). Merge order 
   | §10 hospital Activity                       | backend duty (Rulings); no app change            |
   | §11 accessibility                           | 5–9 (tables, live regions, labelled panels)      |
   | §12 demo                                    | 3, 10                                            |
-  | §13 contract                                | 1, then the controller's PR for §14.10           |
+  | §13 contract                                | 1, then the controller's PR for §14.9           |
   | §14 delivery, 9b cut                        | this plan, Parallel work                         |
   | §15 tests                                   | 2–10                                             |
 
@@ -959,6 +959,6 @@ Every edit here is additive (new rows, a spread, an optional prop). Merge order 
 ## Across plans (controller, 22 Oct 2026)
 
 - **Platform sidebar order** once every plan has merged: Hospitals · Usage · Analysis · Clearances · Legal holds · System · Settings · Team · Activity · Audit log · Account. Whichever plan merges second fixes `nav.ts` to match.
-- **Backend requirements numbering:** Plan 6 is §14.8, Plan 8 is §14.9, Plan 9 is §14.10, Plan 11 is §14.11, and Plan 12 is §14.12.
+- **Backend requirements numbering:** Plan 6 updates §10 (Analysis), Plan 8 is §14.8, Plan 9 is §14.9, Plan 11 is §14.10 (plus its hospital side in §10), and Plan 12 is §14.10.
 - **Audit kinds:** Plans 8 and 11 add their event kinds to Plan 9's `lib/audit/kinds.ts` if Plan 9 has merged first; otherwise Plan 9 adds theirs.
 - **Binary pass-through:** Plans 9 and 11 share one helper in `route.ts`. Whichever lands second reuses it.
