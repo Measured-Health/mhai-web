@@ -90,6 +90,26 @@ describe("headerLine", () => {
     });
   });
 
+  it("a recent finish over a range ending 30 h ago is not fresh Intact", () => {
+    const run = intactRun({
+      started_at: "2026-10-21T00:50:00Z",
+      to_at: "2026-10-21T01:00:00Z",
+      finished_at: "2026-10-22T06:00:00Z",
+    });
+    const h = headerLine(status({ latest: run }), NOW);
+    expect(h.tone).toBe("warn");
+    expect(h.words).toBe("Integrity: Not checked since 21 Oct 2026");
+  });
+
+  it("a to_at an hour before started_at with a recent finish is still Intact", () => {
+    const run = intactRun({
+      started_at: "2026-10-22T06:00:00Z",
+      to_at: "2026-10-22T05:00:00Z",
+      finished_at: "2026-10-22T06:05:00Z",
+    });
+    expect(headerLine(status({ latest: run }), NOW).tone).toBe("ok");
+  });
+
   it("reads today's check as HH:mm today, and an older one with its date", () => {
     const local = new Date(2026, 9, 22, 6, 0).toISOString();
     const s = status({

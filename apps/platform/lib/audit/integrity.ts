@@ -98,10 +98,12 @@ export function headerLine(
     };
   }
   const finished = r.finished_at!;
-  if (now - Date.parse(finished) > STALE_MS)
+  // Stale when the finish or the end of the checked range is too old.
+  const since = Math.min(Date.parse(finished), Date.parse(r.to_at!));
+  if (now - since > STALE_MS)
     return {
       tone: "warn",
-      words: `Integrity: Not checked since ${dateLabel(finished)}`,
+      words: `Integrity: Not checked since ${dateLabel(new Date(since).toISOString())}`,
     };
   return {
     tone: "ok",
