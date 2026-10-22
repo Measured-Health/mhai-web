@@ -40,6 +40,7 @@ import {
 import type { Person, TeamMember, WriteOpts } from "./contract";
 import { storedZip } from "./demo-zip";
 import type { MockCore } from "./mock";
+import type { IntegrityNotification } from "./notifications-contract";
 
 export type AuditMockOptions = {
   integrity?: SeedMode;
@@ -49,16 +50,6 @@ export type AuditMockOptions = {
   matchCount?: number;
   /** Every audit read is 503. */
   unavailable?: boolean;
-};
-
-/** The bell's integrity item (Task 4 reads it). */
-export type IntegrityNotification = {
-  kind: "audit_integrity";
-  id: string;
-  run_id: string;
-  first_broken_seq: number;
-  at: string;
-  seen: boolean;
 };
 
 const PAGE = 50;

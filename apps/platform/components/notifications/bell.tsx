@@ -2,7 +2,8 @@
 import { Bell } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import type { Notification } from "@/lib/api/notifications-contract";
+import { isChange, type Notification } from "@/lib/api/notifications-contract";
+import { openAuditAt } from "@/lib/audit/nav";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useMarkSeen, useNotifications } from "@/lib/queries/notifications";
 import { Dialog } from "@mhai/ui/dialog";
@@ -18,7 +19,7 @@ export const bellLabel = (n: number) =>
   n > 0 ? `Notifications, ${n} new` : "Notifications";
 
 /**
- * The top bar's analytics bell, for every signed-in role: a count of the
+ * The top bar's bell, for every signed-in role: a count of the
  * changes this person hasn't seen, and a list of the newest.
  */
 export function NotificationBell() {
@@ -67,6 +68,12 @@ function BellAndList() {
   };
   const go = (n: Notification) => {
     close();
+    if (!isChange(n)) {
+      // The tab goes by memory, never the URL.
+      openAuditAt("integrity");
+      router.push("/audit");
+      return;
+    }
     router.push(`/analytics?change=${encodeURIComponent(n.change_id)}`);
   };
 
