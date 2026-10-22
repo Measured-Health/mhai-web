@@ -12,7 +12,7 @@ import type {
 } from "./analysis-contract";
 import { buildCohort, COHORT, FILTER_OPTIONS } from "./analysis-fixtures";
 import { ApiError } from "./errors";
-import { createMockAnalysis } from "./mock-analysis";
+import { createMockAnalysis, share } from "./mock-analysis";
 import { auditEvents, resetAudit } from "./mock-audit";
 
 const VENDORS = [
@@ -48,6 +48,7 @@ const VIEWS: ViewId[] = [
 ];
 const mock = (o: Parameters<typeof createMockAnalysis>[0] = {}) =>
   createMockAnalysis({ delayMs: 0, ...o });
+const hideG: GuardedOut = { value: null, suppressed: true };
 const small = (n: number | null) => n !== null && n > 0 && n < SMALL_GROUP_MIN;
 
 beforeEach(resetAudit);
@@ -155,6 +156,8 @@ describe("sample analysis", () => {
     expect(ev).toHaveLength(1);
     expect(ev[0]).toMatchObject({
       kind: "analysis_patients_viewed",
+      type: "security",
+      flag: null,
       count: 200,
     });
   });
@@ -177,6 +180,33 @@ describe("sample analysis", () => {
     });
     await expect(m.getView("prevalence", F)).resolves.toBeDefined();
     await expect(m.getFilterOptions()).resolves.toBeDefined();
+  });
+
+  it("refuses bad ranges and unknown views", async () => {
+    const m = mock();
+    for (const bad of [
+      { from: "2026-02-30" },
+      { from: "2026-10-22", to: "2026-10-21" },
+      { from: "2020-01-01" },
+    ])
+      await expect(
+        m.getView("affected", { ...F, ...bad }),
+      ).rejects.toMatchObject({
+        status: 422,
+        code: "invalid_range",
+      });
+    await expect(m.getView("nope" as ViewId, F)).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it("hides a median over a hidden count, even with nothing acknowledged", async () => {
+    const v = await mock().getView("findings", {
+      ...F,
+      specialty: "Emergency medicine",
+    });
+    if (v.alerts.by_severity.critical.suppressed)
+      expect(v.alerts.critical_median_ack_minutes.suppressed).toBe(true);
   });
 
   it("fails every call when unavailable", async () => {
@@ -240,18 +270,71 @@ function checkSet(label: string, members: GuardedOut[], total: GuardedOut) {
   }
 }
 
-function checkShare(
-  label: string,
-  num: number | null,
-  den: GuardedOut,
-  share: GuardedOut,
-) {
-  if (share.suppressed || share.value === null) return;
-  expect(den.suppressed, `${label}: share over a hidden count`).toBe(false);
-  const n = Math.round(share.value * (den.value ?? 0));
-  expect(small(n), `${label}: numerator ${n}`).toBe(false);
-  expect(small((den.value ?? 0) - n), `${label}: complement`).toBe(false);
-  void num;
+const NOT_COUNTS = new Set([
+  "share_of_a",
+  "agreement_rate",
+  "median_ack_minutes",
+  "critical_median_ack_minutes",
+]);
+const isGuarded = (x: unknown): x is GuardedOut =>
+  typeof x === "object" &&
+  x !== null &&
+  "value" in x &&
+  "suppressed" in x &&
+  typeof (x as GuardedOut).suppressed === "boolean";
+
+/** Every GuardedOut in a reply: hidden is null, shown counts are whole and never 1-4, drills only on shown 5+. */
+function walk(x: unknown, path: string, key = "") {
+  if (Array.isArray(x))
+    return x.forEach((v, i) => walk(v, `${path}[${i}]`, key));
+  if (typeof x !== "object" || x === null) return;
+  if (isGuarded(x)) {
+    if (x.suppressed) expect(x.value, `${path}: hidden has a value`).toBeNull();
+    if (x.value !== null && !NOT_COUNTS.has(key)) {
+      expect(Number.isInteger(x.value), `${path}: not whole`).toBe(true);
+      expect(x.value, `${path}: negative`).toBeGreaterThanOrEqual(0);
+      expect(small(x.value), `${path}: ${x.value} is shown`).toBe(false);
+    }
+    if (x.value !== null && key === "share_of_a")
+      expect(x.value >= 0 && x.value <= 1, `${path}: share range`).toBe(true);
+    const drill = (x as Drillable).drill;
+    if (typeof drill === "string") {
+      expect(x.suppressed, `${path}: drill on hidden`).toBe(false);
+      expect(x.value, `${path}: drill under 5`).toBeGreaterThanOrEqual(
+        SMALL_GROUP_MIN,
+      );
+      expect(drill).toMatch(/^[A-Za-z0-9_-]+$/);
+    }
+    return;
+  }
+  for (const [k, v] of Object.entries(x)) walk(v, `${path}.${k}`, k);
+}
+
+function checkSeriesDays(v: ViewOut["prevalence"], label: string) {
+  for (const s of v.series) {
+    expect(s.start, label).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(new Date(`${s.start}T00:00:00Z`).toISOString().slice(0, 10)).toBe(
+      s.start,
+    );
+    expect(s.start >= v.from && s.start <= v.to, label).toBe(true);
+  }
+}
+
+/** A pair: neither the shown count, its complement, nor the share may read 1-4. */
+function checkPair(label: string, r: ViewOut["co-occurring"]["pairs"][number]) {
+  const { a_patients: a, patients: p, share_of_a: sh } = r;
+  if (p.suppressed || a.suppressed) {
+    expect(sh.suppressed, `${label}: share over a hidden count`).toBe(true);
+    expect(p.drill).toBeNull();
+    return;
+  }
+  const rest = (a.value ?? 0) - (p.value ?? 0);
+  expect(rest, `${label}: complement`).toBeGreaterThanOrEqual(0);
+  expect(small(rest), `${label}: complement ${rest} is derivable`).toBe(false);
+  if (!sh.suppressed)
+    expect(sh.value).toBe(
+      Math.round(((p.value ?? 0) / (a.value ?? 1)) * 100) / 100,
+    );
 }
 
 function checkViews(v: { [V in ViewId]: ViewOut[V] }, label: string) {
@@ -273,7 +356,10 @@ function checkViews(v: { [V in ViewId]: ViewOut[V] }, label: string) {
       a.patients,
     );
   for (const r of v["co-occurring"].pairs)
-    checkShare(`${label} pair`, r.patients.value, r.a_patients, r.share_of_a);
+    checkPair(`${label} ${r.a.id}/${r.b.id}`, r);
+  for (const [name, reply] of Object.entries(v))
+    walk(reply, `${label} ${name}`);
+  checkSeriesDays(p, label);
   for (const d of allDrillables(v)) {
     if (d.drill !== null) {
       expect(d.suppressed).toBe(false);
@@ -291,15 +377,13 @@ function checkViews(v: { [V in ViewId]: ViewOut[V] }, label: string) {
     al.dismiss_reasons.map((r) => r.count),
     al.dismissed,
   );
-  for (const m of [al.median_ack_minutes, al.critical_median_ack_minutes])
-    expect(small(m.value)).toBe(false);
-  if (al.total.suppressed) {
-    expect(
-      al.median_ack_minutes.suppressed || al.median_ack_minutes.value === null,
-    ).toBe(true);
-  }
+  if (al.total.suppressed)
+    expect(al.median_ack_minutes.suppressed, `${label} median`).toBe(true);
   if (al.by_severity.critical.suppressed)
-    expect(al.critical_median_ack_minutes.value).toBeNull();
+    expect(
+      al.critical_median_ack_minutes.suppressed,
+      `${label} critical median`,
+    ).toBe(true);
   for (const r of v.quality.by_condition) {
     const id = `${label} quality ${r.condition.id}`;
     checkSet(`${id} confidence`, Object.values(r.confidence), r.consultations);
@@ -308,7 +392,8 @@ function checkViews(v: { [V in ViewId]: ViewOut[V] }, label: string) {
       [r.corrections.approved, r.corrections.rejected, r.corrections.waiting],
       r.corrections.total,
     );
-    checkShare(`${id} agreement`, null, r.rated, r.agreement_rate);
+    if (r.rated.suppressed)
+      expect(r.agreement_rate.suppressed, `${id} rate`).toBe(true);
   }
 }
 
@@ -370,6 +455,54 @@ describe("secondary suppression", () => {
       checkViews(await views(m, { ...F, location: loc.id }), loc.id);
     for (const specialty of FILTER_OPTIONS.specialties)
       checkViews(await views(m, { ...F, specialty }), specialty);
+  });
+
+  it("holds across condition, location and specialty crossed with age and sex", async () => {
+    const m = mock();
+    const ages: (AgeBand | null)[] = [
+      null,
+      "0-17",
+      "18-39",
+      "40-64",
+      "65-79",
+      "80+",
+    ];
+    const sexes: (Sex | null)[] = [
+      null,
+      "female",
+      "male",
+      "other",
+      "not_recorded",
+    ];
+    const conds = [null, ...FILTER_OPTIONS.conditions.map((c) => c.id)];
+    const locs = [null, ...FILTER_OPTIONS.locations.map((l) => l.id)];
+    for (const condition of conds)
+      for (const location of locs)
+        for (const age_band of ages)
+          for (const sex of sexes)
+            checkViews(
+              await views(m, { ...F, condition, location, age_band, sex }),
+              JSON.stringify({ condition, location, age_band, sex }),
+            );
+    for (const specialty of FILTER_OPTIONS.specialties)
+      for (const age_band of ages)
+        for (const sex of sexes)
+          checkViews(
+            await views(m, { ...F, specialty, age_band, sex }),
+            JSON.stringify({ specialty, age_band, sex }),
+          );
+  }, 60_000);
+
+  it("never reads a share's numerator or complement as 1 to 4", () => {
+    for (let den = 5; den <= 300; den++) {
+      const d = { value: den, suppressed: false };
+      for (let num = 0; num <= den; num++) {
+        const s = share(num, d, den);
+        const bad = small(num) || small(den - num);
+        expect(s.suppressed, `${num}/${den}`).toBe(bad);
+      }
+    }
+    expect(share(3, hideG, 3).suppressed).toBe(true);
   });
 
   it("hides the other half of a pair when one new/existing count is hidden", async () => {

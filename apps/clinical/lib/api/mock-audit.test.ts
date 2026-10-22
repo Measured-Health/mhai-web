@@ -4,7 +4,7 @@ import { auditEvents, recordAudit, resetAudit } from "./mock-audit";
 
 const event: Omit<ActivityEventOut, "id"> = {
   at: "2026-10-22T08:00:00.000Z",
-  type: "admin",
+  type: "security",
   kind: "analysis_patients_viewed",
   actor: { display_name: "Dr Mensah" },
   target: null,

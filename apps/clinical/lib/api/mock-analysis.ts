@@ -72,7 +72,7 @@ const drillable = (g: GuardedOut, drill: string): Drillable => ({
 });
 
 /** A share of `den` that must not give away its numerator or its complement. */
-function share(num: number, den: GuardedOut, denN: number): GuardedOut {
+export function share(num: number, den: GuardedOut, denN: number): GuardedOut {
   if (den.suppressed || denN === 0)
     return { value: null, suppressed: den.suppressed };
   if (isSmallCount(num) || isSmallCount(denN - num)) return hide();
@@ -87,8 +87,9 @@ function median(xs: number[]): number | null {
 }
 /** A median over fewer than 5 values, or over a count that is hidden, is hidden. */
 function guardMedian(xs: number[], base: GuardedOut): GuardedOut {
+  if (base.suppressed) return hide();
   if (xs.length === 0) return { value: null, suppressed: false };
-  if (base.suppressed || xs.length < SMALL_GROUP_MIN) return hide();
+  if (xs.length < SMALL_GROUP_MIN) return hide();
   return { value: median(xs), suppressed: false };
 }
 
@@ -133,12 +134,13 @@ function population(f: AnalysisFilters): CohortPatient[] {
 }
 
 function meta(f: AnalysisFilters, pop: CohortPatient[]): Meta {
+  // Weeks up to 91 days (the "Last 90 days" preset counts both ends).
   const days = (Date.parse(f.to) - Date.parse(f.from)) / 86_400_000 + 1;
   return {
     updated_at: UPDATED_AT,
     from: f.from,
     to: f.to,
-    bucket: days <= 92 ? "week" : "month",
+    bucket: days <= 91 ? "week" : "month",
     patients: guard(pop.length),
   };
 }
@@ -162,6 +164,20 @@ function buckets(f: AnalysisFilters, kind: "week" | "month") {
     cur = end + 86_400_000;
   }
   return out;
+}
+
+/** Real days, from not after to, at most 24 months: as the server must refuse. */
+function checkRange(f: AnalysisFilters) {
+  const real = (d: string) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(d) &&
+    new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+  if (
+    !real(f.from) ||
+    !real(f.to) ||
+    f.from > f.to ||
+    Date.parse(f.to) - Date.parse(f.from) > 731 * 86_400_000
+  )
+    throw new ApiError(422, "invalid_range");
 }
 
 // --- the five views ---
@@ -296,6 +312,7 @@ function affected(f: AnalysisFilters): AffectedOut {
 
 function pairsOf(pop: CohortPatient[], f: AnalysisFilters) {
   const have = pop.map((p) => new Set(scoped(p, f).map((c) => c.id)));
+  // "Not standardised" is counted in prevalence, but a pair with an unknown condition says nothing.
   const ids = CONDITIONS.filter((c) => c.id !== "unmapped").map((c) => c.id);
   const out: { a: string; b: string; a_n: number; both: number }[] = [];
   for (let i = 0; i < ids.length; i++)
@@ -315,7 +332,9 @@ function coOccurring(f: AnalysisFilters): CoOccurringOut {
     ...meta(f, pop),
     pairs: pairsOf(pop, f).map((p) => {
       const a_patients = guard(p.a_n);
-      const patients = guard(p.both);
+      // "With both" and "with a only" add up to a: guard them as one set, so a
+      // shown pair can't give away a complement of 1 to 4.
+      const [patients] = guardSet([p.both, p.a_n - p.both], p.a_n);
       return {
         a: condRef(p.a),
         b: condRef(p.b),
@@ -584,11 +603,14 @@ export function createMockAnalysis({
       if (analysis === "unavailable") unavailable();
       if (typeof analysis === "object" && analysis.failView === view)
         unavailable();
+      if (!(view in VIEW_FNS)) throw new ApiError(404, "not_found");
+      checkRange(f);
       return VIEW_FNS[view](f) as ViewOut[V];
     },
     async listPatients({ drill, level, filters }): Promise<PatientsOut> {
       await wait();
       if (analysis === "unavailable") unavailable();
+      checkRange(filters);
       if (level !== "deidentified")
         throw new ApiError(422, "level_not_supported");
       if (!shownDrills(filters).has(drill))
@@ -600,13 +622,14 @@ export function createMockAnalysis({
         .map((p) => rowOf(p, filters));
       recordAudit({
         at: new Date(now()).toISOString(),
-        type: "admin",
+        type: "security",
         kind: "analysis_patients_viewed",
         actor: { display_name: actor },
         target: null,
         specialty: null,
         confidence: null,
         device: null,
+        // The rows opened (at most 200), not the patients matched.
         count: patients.length,
         flag: null,
       });
