@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   AlertsRow,
   AnalyticsOut,
+  Guarded,
   Period,
 } from "../api/analytics-contract";
 import {
@@ -202,6 +203,15 @@ describe("readAnalytics: fails closed", () => {
       }),
     );
     expect(nr.quality.status).toBe("failed");
+    // 50 answers × 94% leaves 3 not needing review.
+    const rest = readAnalytics(
+      edit((a) => {
+        const r = row(qualityRows(a), "h_havana");
+        r.answers = v(50);
+        r.needs_review_share = v(0.94);
+      }),
+    );
+    expect(rest.quality.status).toBe("failed");
     // 20 Critical × 90% within target leaves 2 outside it.
     const within = (share: number) =>
       readAnalytics(
@@ -549,6 +559,49 @@ describe("readAnalytics: what changed", () => {
     expect(both("Riverside: questions fell to fewer than 5 from 4")).toBe(
       "failed",
     );
+  });
+
+  it("a summary carries only the shown side's number", () => {
+    const withSides = (summary: string, previous: Guarded, current: Guarded) =>
+      readAnalytics(
+        edit((a) => {
+          const c = items(a).find((c) => c.id === "chg_rch_questions")!;
+          c.previous = previous;
+          c.current = current;
+          c.summary = summary;
+        }),
+      ).changes.status;
+    const up = (summary: string) => withSides(summary, HIDDEN, v(83));
+    // A delta, or any number other than the shown side's, gives it away.
+    expect(
+      up("Riverside: questions up from fewer than 5 to 83, up by 79"),
+    ).toBe("failed");
+    expect(up("Riverside: questions up (fewer than 5; +79)")).toBe("failed");
+    expect(up("Riverside: questions up from fewer than 5 to 84")).toBe(
+      "failed",
+    );
+    // The shown side's number, as the app writes it, is fine.
+    expect(up("Riverside: questions up from fewer than 5 to 83")).toBe("ok");
+    expect(
+      withSides("Questions fell from 83 to fewer than 5", v(83), HIDDEN),
+    ).toBe("ok");
+    expect(
+      withSides("Questions rose from fewer than 5 to 1,180", HIDDEN, v(1180)),
+    ).toBe("ok");
+    expect(
+      withSides("Questions rose from fewer than 5 to 1180", HIDDEN, v(1180)),
+    ).toBe("ok");
+    // "fewer than 50" is not the phrase.
+    expect(up("Riverside: questions up from fewer than 50 to 83")).toBe(
+      "failed",
+    );
+    expect(
+      withSides(
+        "Riverside: questions fell, fewer than 50 both weeks",
+        HIDDEN,
+        HIDDEN,
+      ),
+    ).toBe("failed");
   });
 
   it("a change's measure belongs to its area", () => {

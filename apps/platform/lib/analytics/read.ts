@@ -114,12 +114,12 @@ const shows = (g: Guarded) => !g.suppressed && g.value !== null;
 
 /**
  * A share of a shown count gives its numerator away: `total × share`. It
- * must not come to 1–4, nor (with `complement`) leave 1–4 outside it.
+ * must not come to 1–4, nor leave 1–4 outside it.
  */
-function numeratorLeaks(total: Guarded, share: Guarded, complement: boolean) {
+function numeratorLeaks(total: Guarded, share: Guarded) {
   if (!shows(total) || !shows(share)) return false;
   const n = Math.round(total.value! * share.value!);
-  return isSmallCount(n) || (complement && isSmallCount(total.value! - n));
+  return isSmallCount(n) || isSmallCount(total.value! - n);
 }
 
 /** Every hidden value as `{value: null, suppressed: true}`, deep. */
@@ -223,8 +223,7 @@ function alertsOk(r: Obj, median: boolean): boolean {
     return false;
   // Within target, and outside it, are counts too (rows only: a median of
   // shares isn't a share of the median count).
-  if (!median && numeratorLeaks(crit, a.critical_within_target, true))
-    return false;
+  if (!median && numeratorLeaks(crit, a.critical_within_target)) return false;
   // Medians don't add up to the median total: only the set itself.
   return !setGivesAway(
     median ? null : a.total,
@@ -265,8 +264,8 @@ function qualityOk(r: Obj, median: boolean): boolean {
     return false;
   if (
     !median &&
-    (numeratorLeaks(q.answers, q.needs_review_share, false) ||
-      numeratorLeaks(q.reviews, q.agreement_rate, true))
+    (numeratorLeaks(q.answers, q.needs_review_share) ||
+      numeratorLeaks(q.reviews, q.agreement_rate))
   )
     return false;
   return !setGivesAway(
@@ -304,18 +303,49 @@ function followUpOk(f: unknown): boolean {
   );
 }
 
-const FEWER = /fewer than 5/gi;
+/** The phrase, and not "fewer than 50". */
+const FEWER = /fewer than 5(?!\d)/gi;
+/** A number as written: "83", "1,180", "3.5". */
+const NUMBER = /\d[\d,]*(?:\.\d+)?/g;
 
 /**
- * With a side hidden, the server's words must not give it away: they say
- * "fewer than 5" and carry no percentage (a change from a hidden number
- * works it out). With both hidden, no number at all beyond that phrase.
+ * The numbers the shown side may appear as, written the way the app
+ * writes it: the value, whole or to one place, and for minutes the hours
+ * and minutes of "1 h 5 min".
  */
-function summarySafe(summary: string, previous: Guarded, current: Guarded) {
-  const n = [previous, current].filter(hidden).length;
-  if (n === 0) return true;
+function shownNumbers(g: Guarded, kind: MeasureKind): number[] {
+  const v = g.value!;
+  const out = [v, Math.round(v), Math.round(v * 10) / 10];
+  if (kind === "minutes") {
+    const m = Math.round(v);
+    out.push(Math.floor(m / 60), m % 60);
+  }
+  if (kind === "hours") out.push(Math.round(v * 60));
+  return out;
+}
+
+/**
+ * With a side hidden, the server's words must not give it away (R8): they
+ * say "fewer than 5", carry no percentage, and no number but the shown
+ * side's (a delta or a second number works the hidden one out). With both
+ * hidden, no number at all beyond that phrase.
+ */
+function summarySafe(
+  summary: string,
+  previous: Guarded,
+  current: Guarded,
+  kind: MeasureKind,
+) {
+  const sides = [previous, current];
+  if (!sides.some(hidden)) return true;
   if (!summary.match(FEWER) || summary.includes("%")) return false;
-  return n === 1 || !/\d/.test(summary.replace(FEWER, ""));
+  const numbers = summary.replace(FEWER, "").match(NUMBER) ?? [];
+  const shown = sides.filter(shows);
+  const allowed = shown.flatMap((g) => shownNumbers(g, kind));
+  return numbers.every((t) => {
+    const n = Number(t.replace(/,/g, ""));
+    return allowed.some((a) => a === n);
+  });
 }
 
 /**
@@ -338,7 +368,7 @@ function changeOk(c: unknown): c is Change {
   return (
     guardedOk(c.previous, kind, true) &&
     guardedOk(c.current, kind, true) &&
-    summarySafe(c.summary, c.previous as Guarded, c.current as Guarded)
+    summarySafe(c.summary, c.previous as Guarded, c.current as Guarded, kind)
   );
 }
 

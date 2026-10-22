@@ -533,7 +533,7 @@ function toQualityRow(x: Raw): Body<QualityRow> {
     reviews,
     needs_review_share: over(
       x.needs_review / (x.answers || 1),
-      [answers, count(x.needs_review)],
+      [answers, count(x.needs_review), count(x.answers - x.needs_review)],
       x.answers,
       SHARE_DP,
     ),
