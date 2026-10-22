@@ -17,6 +17,7 @@ function setup(
     email?: string | null;
     triage?: "ready" | "not_ready";
     resetFails?: boolean;
+    delayMs?: number;
   } = {},
 ) {
   let t = START;
@@ -24,7 +25,7 @@ function setup(
   const m = createMockPlatform({
     now: () => t,
     me: () => me,
-    delayMs: 0,
+    delayMs: over.delayMs ?? 0,
     stepUp: createStepUp(() => t),
     triage: over.triage,
     resetFails: over.resetFails,
@@ -69,12 +70,12 @@ describe("mock settings", () => {
     ]);
     const r = s.retention.items[0]!;
     expect(r.last_run).toEqual({
-      at: "2026-10-21T02:00:00.000Z",
+      at: "2026-10-22T01:00:00.000Z",
       ok: true,
       deleted: 312,
       kept_for_holds: 1840,
     });
-    expect(r.next_run_at).toBe("2026-10-23T02:00:00.000Z");
+    expect(r.next_run_at).toBe("2026-10-23T01:00:00.000Z");
     expect(s.triage).toMatchObject({
       enabled: false,
       ready: true,
@@ -265,12 +266,12 @@ describe("mock settings", () => {
     expect(r.days).toBe(1095);
     expect(r.changed_by).toEqual({ id: "tm_tunde", name: "Tunde Okafor" });
     expect((await actions(m))[0]).toBe("setting_change_approved");
-    // A request gone is not found.
+    // A request already decided is a clash.
     expect(
       await failure(
         m.approveRequest(req.id, { version: r.version, ...CODE }, KEY()),
       ),
-    ).toEqual([404, "not_found"]);
+    ).toEqual([409, "conflict"]);
   });
 
   it("approval after 7 days is expired", async () => {
@@ -697,11 +698,11 @@ describe("mock settings", () => {
   });
 
   it("every change logs activity", async () => {
-    const { m, as } = setup();
+    const { m, as, advance } = setup();
     const v = (await item(m, "records")).version;
     await m.setRetention(
       "records",
-      { days: 2555, reason, version: v + 0, ...CODE },
+      { days: 2555, reason, version: v, ...CODE },
       KEY(),
     );
     const v2 = (await item(m, "documents")).version;
@@ -725,9 +726,41 @@ describe("mock settings", () => {
     await m.cancelRequest(r3.id, { version: r3.version }, KEY());
     await m.setCleanUpPaused({ paused: true, reason, ...CODE }, KEY());
     await m.setCleanUpPaused({ paused: false, reason, ...CODE }, KEY());
+    const tv = (await m.getSettings()).triage.version;
+    const tr = (
+      await m.setTriage(
+        {
+          enabled: true,
+          reason,
+          clinical_signoff: "ref",
+          version: tv,
+          ...CODE,
+        },
+        KEY(),
+      )
+    ).pending[0]!;
+    as(TEAM_EMAILS.ada);
+    await m.approveRequest(tr.id, { version: tr.version, ...CODE }, KEY());
+    await m.setTriage(
+      {
+        enabled: false,
+        reason,
+        version: (await m.getSettings()).triage.version,
+        ...CODE,
+      },
+      KEY(),
+    );
     await m.resetFeedbackBuffer({ reason, ...CODE }, KEY());
+    advance(3000);
+    await m.getSettings();
     const events = (await m.listActivity({})).events;
-    expect(events.slice(0, 7).map((e) => e.action)).toEqual([
+    expect(events.slice(0, 4).map((e) => e.action)).toEqual([
+      "feedback_buffer_cleared",
+      "triage_switched_off",
+      "setting_change_approved",
+      "setting_change_requested",
+    ]);
+    expect(events.slice(4, 11).map((e) => e.action)).toEqual([
       "clean_up_resumed",
       "clean_up_paused",
       "setting_change_cancelled",
@@ -737,7 +770,95 @@ describe("mock settings", () => {
       "retention_changed",
     ]);
     // Who did it, and never the reason's free text.
-    expect(events[0]!.actor.id).toBe("tm_tunde");
-    expect(JSON.stringify(events.slice(0, 7))).not.toContain(reason);
+    expect(events[4]!.actor.id).toBe("tm_tunde");
+    expect(JSON.stringify(events.slice(0, 11))).not.toContain(reason);
+  });
+
+  it("a request already approved or cancelled is a clash, not not_found", async () => {
+    const { m, as } = setup();
+    const v = (await item(m, "records")).version;
+    const a = (
+      await m.setRetention(
+        "records",
+        { days: 1095, reason, version: v, ...CODE },
+        KEY(),
+      )
+    ).pending[0]!;
+    as(TEAM_EMAILS.tunde);
+    await m.approveRequest(a.id, { version: a.version, ...CODE }, KEY());
+    expect(
+      await failure(
+        m.approveRequest(a.id, { version: a.version, ...CODE }, KEY()),
+      ),
+    ).toEqual([409, "conflict"]);
+    expect(
+      await failure(m.cancelRequest(a.id, { version: a.version }, KEY())),
+    ).toEqual([409, "conflict"]);
+    const v2 = (await item(m, "documents")).version;
+    const b = (
+      await m.setRetention(
+        "documents",
+        { days: 1095, reason, version: v2, ...CODE },
+        KEY(),
+      )
+    ).pending[0]!;
+    await m.cancelRequest(b.id, { version: b.version }, KEY());
+    expect(
+      await failure(
+        m.approveRequest(b.id, { version: b.version, ...CODE }, KEY()),
+      ),
+    ).toEqual([409, "conflict"]);
+    expect(
+      await failure(m.cancelRequest("req_nope", { version: 1 }, KEY())),
+    ).toEqual([404, "not_found"]);
+  });
+
+  it("a longer period replaces a shorten waiting on that type", async () => {
+    const { m, as } = setup();
+    const v = (await item(m, "records")).version;
+    const req = (
+      await m.setRetention(
+        "records",
+        { days: 1095, reason, version: v, ...CODE },
+        KEY(),
+      )
+    ).pending[0]!;
+    const s = await m.setRetention(
+      "records",
+      { days: 3650, reason, version: req.version, ...CODE },
+      KEY(),
+    );
+    expect(s.pending).toEqual([]);
+    expect(s.retention.items[0]!.days).toBe(3650);
+    as(TEAM_EMAILS.tunde);
+    // The stale shorten can never be approved.
+    expect(
+      await failure(
+        m.approveRequest(req.id, { version: req.version, ...CODE }, KEY()),
+      ),
+    ).toEqual([409, "conflict"]);
+    expect((await item(m, "records")).days).toBe(3650);
+  });
+
+  it("who is asking is decided before the delay", async () => {
+    const { m, as } = setup({ delayMs: 20 });
+    const v = (await item(m, "records")).version;
+    const p = m.setRetention(
+      "records",
+      { days: 2555, reason, version: v, ...CODE },
+      KEY(),
+    );
+    // Signed out, then someone else, while the call waits.
+    as(null);
+    const out = await p;
+    expect(out.retention.items[0]!.changed_by!.id).toBe("tm_ada");
+    as(TEAM_EMAILS.amara);
+    const q = m.getSettings();
+    as(TEAM_EMAILS.tunde);
+    expect((await q).pending).toEqual([]);
+    as(TEAM_EMAILS.ada);
+    const w = m.setCleanUpPaused({ paused: true, reason, ...CODE }, KEY());
+    as(TEAM_EMAILS.amara);
+    expect((await w).retention.paused_by!.id).toBe("tm_ada");
   });
 });

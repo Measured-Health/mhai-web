@@ -90,6 +90,8 @@ export function settingsMock(
   let pending: SettingsRequest[] = [];
   /** Requests that lapsed, so a late approval says `expired`, not 404. */
   const lapsed = new Set<string>();
+  /** Requests approved, cancelled or superseded: a late act is a clash. */
+  const decided = new Set<string>();
 
   // The health reading follows these.
   core.shared[SHARED_CLEAN_UP] = cleanUp;
@@ -211,6 +213,15 @@ export function settingsMock(
         await core.checkCode(m, body);
         const from = it.days;
         if (!shorter) {
+          // A longer period replaces a shorten waiting on this type, so its
+          // old `to` can't be approved later.
+          for (const old of pending.filter(
+            (r) => r.kind === "retention_shorten" && r.type === it.type,
+          )) {
+            pending = pending.filter((x) => x !== old);
+            decided.add(old.id);
+            log(person(m), "setting_change_cancelled", { target: words(old) });
+          }
           it.days = days;
           it.version++;
           it.changed_by = person(m);
@@ -291,8 +302,12 @@ export function settingsMock(
         settle();
         const version = versionOf(body);
         const r = pending.find((x) => x.id === id);
-        if (!r)
-          return lapsed.has(id) ? fail(409, "expired") : fail(404, "not_found");
+        if (!r) {
+          if (lapsed.has(id)) return fail(409, "expired");
+          return decided.has(id)
+            ? fail(409, "conflict")
+            : fail(404, "not_found");
+        }
         // Only the request the approver saw.
         if (version !== settingVersion(r)) fail(409, "conflict");
         // Only the server's record of who asked decides, never a name.
@@ -312,6 +327,7 @@ export function settingsMock(
           it.changed_at = at;
         }
         bump(r);
+        decided.add(r.id);
         pending = pending.filter((x) => x !== r);
         log(person(m), "setting_change_approved", { target: words(r) });
         return out();
@@ -323,11 +339,12 @@ export function settingsMock(
         const version = versionOf(body);
         const r = pending.find((x) => x.id === id);
         if (!r)
-          return lapsed.has(id)
+          return lapsed.has(id) || decided.has(id)
             ? fail(409, "conflict")
             : fail(404, "not_found");
         if (version !== settingVersion(r)) fail(409, "conflict");
         bump(r);
+        decided.add(r.id);
         pending = pending.filter((x) => x !== r);
         log(person(m), "setting_change_cancelled", { target: words(r) });
         return out();

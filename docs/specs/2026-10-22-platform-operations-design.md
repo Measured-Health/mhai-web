@@ -507,7 +507,11 @@ last_run: {at, ok, deleted, kept_for_holds}, next_run_at, changed_by, changed_at
   - `feedback_buffer`: `{waiting, running, failed_job_id, last_reset: {by, at, reason,
 cleared}}`: `running` while a reset is under way, `failed_job_id` the failed reset's job (or
     null);
-  - `pending`: the two-person requests, each with `from` and `to`.
+  - `pending`: the two-person requests, each `{id, kind, requested_by, requested_at, reason,
+requested_by_you, expires_at, version, from, to}`, plus `type` on a `retention_shorten`
+    and `clinical_signoff` on a `triage_on`. `version` is the version of the setting the
+    request is about (the retention item's or the triage's), which approving and cancelling
+    send.
 - `GET /platform/settings/retention/{type}/preview?days` → `{would_delete}`.
 - `PUT /platform/settings/retention/{type} {days, reason, mfa_code, version}`: longer applies
   at once; shorter returns **202** with the pending request; **422** `below_minimum`.
@@ -515,11 +519,21 @@ cleared}}`: `running` while a reset is under way, `failed_job_id` the failed res
 - `PUT /platform/settings/triage {enabled, reason, clinical_signoff?, mfa_code, version}`:
   off applies at once; on returns **202** with the pending request, **409** `not_ready`; the
   approval re-checks readiness (**409** `not_ready`).
-- `POST /platform/settings/requests/{id}/approve {mfa_code}`, `POST …/cancel`.
+- `POST /platform/settings/requests/{id}/approve {version, mfa_code}`, `POST …/cancel
+{version}` (no step-up). A different `version` is **409** `conflict`, and so is a request
+  already approved, cancelled or replaced; approving a lapsed one is **409** `expired`; the
+  requester approving is **409** `same_person`. Creating, approving, cancelling or lapsing a
+  request bumps the setting's `version`.
 - `POST /platform/settings/feedback-buffer/reset {reason, mfa_code}` → **202** `{job_id}`; the
   backend supplies its own confirm word.
-- Every other settings write answers with the whole `SettingsOut` (the `GET` shape), whether
-  it is **200** (applied) or **202** (a pending request).
+- Every settings write answers with the whole `SettingsOut` (the `GET` shape), whether it is
+  **200** (applied) or **202** (a pending request); the reset answers `{job_id}`.
+- Further refusals (**409** `conflict` unless noted): a second pending shorten for the same
+  type; triage on when already on or already requested; triage off when already off; pausing
+  when already paused (and resuming when not); a reset while one runs; a period equal to the
+  current one (**422** `invalid`); an unknown type or request id (**404**). A longer period
+  replaces a shorten waiting on the same type. A wrong code is **403** `mfa_invalid` and a
+  missing one **422** `invalid`.
 
 **Activity** gains the events above, with the hold's reference but never its note.
 

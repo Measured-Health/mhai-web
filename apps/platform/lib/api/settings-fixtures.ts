@@ -2,6 +2,7 @@
 // confirmed. Invented figures; no patient, clinician, question or answer
 // content.
 import type { Person } from "./contract";
+import { nextCleanUp } from "./holds-fixtures";
 import type {
   NotReadyReason,
   RetentionItem,
@@ -45,24 +46,20 @@ export function daysWords(days: number): string {
   return n(days, "day");
 }
 
-/** 02:00 on the day `offset` days from `now`'s date (UTC). */
-const at0200 = (now: number, offset: number) => {
-  const t = new Date(now);
-  t.setUTCHours(2, 0, 0, 0);
-  return iso(t.getTime() + offset * D);
-};
-
+/** The clean-up runs at 02:00 Lagos (01:00 UTC), as holds' dates say. */
 export function seedRetention(now: number): RetentionItem[] {
+  const next = nextCleanUp(now);
+  const last = iso(Date.parse(next) - D);
   return (Object.keys(RETENTION_DEFAULTS) as RetentionType[]).map((type) => ({
     type,
     ...RETENTION_DEFAULTS[type],
     last_run: {
-      at: at0200(now, -1),
+      at: last,
       ok: true,
       deleted: 312,
       kept_for_holds: 1840,
     },
-    next_run_at: at0200(now, 1),
+    next_run_at: next,
     changed_by: null,
     changed_at: null,
     version: 1,
