@@ -12,6 +12,7 @@ import type { BarItem, Column } from "@mhai/ui/charts/types";
 import { BarList } from "@mhai/ui/charts/bar-list";
 import { ColumnChart } from "@mhai/ui/charts/column-chart";
 import { DataTable } from "./data-table";
+import { DrillScope, SeePatients, drillable } from "./patients-panel";
 import { Panel, ViewFrame } from "./view-frame";
 
 const DAY = new Intl.DateTimeFormat("en-GB", {
@@ -51,29 +52,43 @@ function conditionBars(d: PrevalenceOut): BarItem[] {
     value: r.cases.value,
     text: countText(r.cases),
     hidden: !shows(r.cases),
-    note: shows(r.new) ? `${countText(r.new)} new in this period` : undefined,
+    note:
+      shows(r.new) || drillable(r.cases) ? (
+        <>
+          {shows(r.new) && `${countText(r.new)} new in this period `}
+          <SeePatients d={r.cases} label={conditionText(r.condition)} />
+        </>
+      ) : undefined,
   }));
 }
 
-export function PrevalenceBody({ d }: { d: PrevalenceOut }) {
+export function PrevalenceBody({
+  d,
+  filters,
+}: {
+  d: PrevalenceOut;
+  filters: AnalysisFilters;
+}) {
   const unit = d.bucket === "week" ? "week" : "month";
   return (
-    <div className="flex flex-col gap-4">
-      <div className="min-w-0">
-        <ColumnChart
-          title="Cases over time"
-          columns={seriesColumns(d)}
-          summary={`Cases each ${unit}. A ${unit} with fewer than 5 draws no column.`}
-          valueText={casesText}
-          headers={[unit === "week" ? "Week" : "Month", "Cases"]}
-          markLegend=""
-          tableToggle={false}
-        />
+    <DrillScope filters={filters}>
+      <div className="flex flex-col gap-4">
+        <div className="min-w-0">
+          <ColumnChart
+            title="Cases over time"
+            columns={seriesColumns(d)}
+            summary={`Cases each ${unit}. A ${unit} with fewer than 5 draws no column.`}
+            valueText={casesText}
+            headers={[unit === "week" ? "Week" : "Month", "Cases"]}
+            markLegend=""
+            tableToggle={false}
+          />
+        </div>
+        <Panel title="By condition">
+          <BarList label="Cases by condition" items={conditionBars(d)} />
+        </Panel>
       </div>
-      <Panel title="By condition">
-        <BarList label="Cases by condition" items={conditionBars(d)} />
-      </Panel>
-    </div>
+    </DrillScope>
   );
 }
 
@@ -137,7 +152,7 @@ export function PrevalenceView({ filters }: { filters: AnalysisFilters }) {
       updatedAt={d?.updated_at ?? null}
       onRetry={() => void q.refetch()}
       summary={d ? viewSummary("prevalence", d) : null}
-      chart={d && !none ? <PrevalenceBody d={d} /> : null}
+      chart={d && !none ? <PrevalenceBody d={d} filters={filters} /> : null}
       table={d && !none ? <PrevalenceTables d={d} /> : null}
     />
   );

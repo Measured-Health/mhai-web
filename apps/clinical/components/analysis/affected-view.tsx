@@ -17,6 +17,7 @@ import {
 import { viewSummary } from "@/lib/analysis/summary";
 import { BarList } from "@mhai/ui/charts/bar-list";
 import { DataTable } from "./data-table";
+import { DrillScope, SeePatients, drillable } from "./patients-panel";
 import { Panel, ViewFrame } from "./view-frame";
 
 /** One breakdown of the patients: its title, the group's name and its rows. */
@@ -76,24 +77,38 @@ export function affectedGroups(d: AffectedOut): Group[] {
   ];
 }
 
-function AffectedCharts({ d }: { d: AffectedOut }) {
+function AffectedCharts({
+  d,
+  filters,
+}: {
+  d: AffectedOut;
+  filters: AnalysisFilters;
+}) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {affectedGroups(d).map((g) => (
-        <Panel key={g.title} title={g.title}>
-          <BarList
-            label={`Patients ${g.title.toLowerCase()}`}
-            items={g.rows.map((r) => ({
-              key: r.key,
-              label: r.label,
-              value: r.patients.value,
-              text: countText(r.patients),
-              hidden: !shows(r.patients),
-            }))}
-          />
-        </Panel>
-      ))}
-    </div>
+    <DrillScope filters={filters}>
+      <div className="grid gap-4 md:grid-cols-2">
+        {affectedGroups(d).map((g) => (
+          <Panel key={g.title} title={g.title}>
+            <BarList
+              label={`Patients ${g.title.toLowerCase()}`}
+              items={g.rows.map((r) => ({
+                key: r.key,
+                label: r.label,
+                value: r.patients.value,
+                text: countText(r.patients),
+                hidden: !shows(r.patients),
+                note: drillable(r.patients) ? (
+                  <SeePatients
+                    d={r.patients}
+                    label={`${g.column}: ${r.label}`}
+                  />
+                ) : undefined,
+              }))}
+            />
+          </Panel>
+        ))}
+      </div>
+    </DrillScope>
   );
 }
 
@@ -131,7 +146,7 @@ export function AffectedView({ filters }: { filters: AnalysisFilters }) {
       updatedAt={d?.updated_at ?? null}
       onRetry={() => void q.refetch()}
       summary={d ? viewSummary("affected", d) : null}
-      chart={d && !none ? <AffectedCharts d={d} /> : null}
+      chart={d && !none ? <AffectedCharts d={d} filters={filters} /> : null}
       table={d && !none ? <AffectedTables d={d} /> : null}
     />
   );
