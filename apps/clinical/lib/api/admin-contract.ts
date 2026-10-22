@@ -11,7 +11,7 @@ import type {
   FindingFlag,
 } from "./alerts-contract";
 
-export type StaffRole = "clinician" | "hospital_admin";
+export type StaffRole = "clinician" | "analyst" | "hospital_admin";
 export type StaffStatus = "active" | "invited" | "deactivated";
 export type SignInMethod = "sso" | "password_mfa" | "password";
 export type StaffIssue = "mfa_not_set_up" | "invite_expired";
@@ -260,6 +260,9 @@ export type ActivityKind =
   | "reviewers_reminded"
   | "reviewer_assigned"
   | "policy_breach"
+  | "analyst_granted"
+  | "analyst_removed"
+  | "analysis_patients_viewed"
   /** An admin changed their own roles: allowed, audited, flagged `alert`. */
   | "self_role_change";
 

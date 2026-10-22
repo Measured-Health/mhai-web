@@ -119,6 +119,7 @@ export const DEMO_EMAILS = {
   director: "director.obi@havanahospital.org",
   platformAdmin: "platform.bakare@measured-health.example",
   locked: "locked.eze@havanahospital.org",
+  analyst: "analyst.adeyemi@havanahospital.org",
 } as const;
 
 /** Sample accounts for the demo's sign-in page. Any other email works too. */
@@ -152,6 +153,11 @@ export const SAMPLE_ACCOUNTS = [
     email: DEMO_EMAILS.director,
     label: "Medical director",
     note: "Clinician and hospital admin",
+  },
+  {
+    email: DEMO_EMAILS.analyst,
+    label: "Analyst",
+    note: "Clinician with Analysis",
   },
   {
     email: DEMO_EMAILS.platformAdmin,
@@ -205,6 +211,12 @@ const PEOPLE: Record<
     roleTitle: "Platform admin",
     specialty: null,
   },
+  analyst: {
+    displayName: "Dr. Adeyemi",
+    fullName: "Dr. Kemi Adeyemi",
+    roleTitle: "Consultant physician",
+    specialty: "Internal Medicine",
+  },
   auditor: {
     displayName: "Femi Adebayo",
     fullName: "Femi Adebayo",
@@ -224,6 +236,7 @@ const ROLES_FOR: Record<string, Role[]> = {
   admin: ["hospital_admin"],
   newadmin: ["hospital_admin"],
   director: ["clinician", "hospital_admin"],
+  analyst: ["clinician", "analyst"],
   platform: ["admin"],
   auditor: ["auditor"],
 };
@@ -237,6 +250,8 @@ function userFor(login: string, roles: Role[], mfaEnabled: boolean): User {
     hospital: "Havana Hospital",
     mfaEnabled,
     backupCodesLeft: mfaEnabled ? 8 : null,
+    // The demo has Analysis on for everyone (live mode is gated on the server).
+    features: { analysis: true },
   };
 }
 

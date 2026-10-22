@@ -352,6 +352,23 @@ describe("ColumnChart", () => {
     );
   });
 
+  it("can leave the table to the page: no Show as table, the columns only", () => {
+    render(
+      <ColumnChart
+        title="Cases over time"
+        columns={COLUMNS}
+        summary="s"
+        valueText={(n) => `${n} cases`}
+        headers={["Week", "Cases"]}
+        markLegend=""
+        tableToggle={false}
+      />,
+    );
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByRole("list", { name: "Cases over time" })).toBeVisible();
+  });
+
   it("shows only the summary when there are no columns", () => {
     chart([]);
     expect(screen.getByText("Most alerts on 14 Oct: 23")).toBeVisible();

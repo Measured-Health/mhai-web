@@ -20,6 +20,7 @@ import { getAuthClient } from "./client";
 import { onUnauthorized } from "./events";
 import {
   ADMIN_HOME,
+  canUseAnalysis,
   isClinical,
   isHospitalAdmin,
   type AuthClient,
@@ -58,10 +59,13 @@ const Ctx = createContext<AuthCtx | null>(null);
 /**
  * The first sign-in steps still owed. Every hospital admin, including a
  * clinician who is one, must have two-step on: without it the setup step is
- * owed even if the session didn't list it (amendment 3).
+ * owed even if the session didn't list it (amendment 3). So must anyone who
+ * can use Analysis.
  */
 export function stepsOwed(user: User | null, steps: FirstStep[]): FirstStep[] {
-  return isHospitalAdmin(user) && !user?.mfaEnabled && !steps.includes("mfa")
+  return (isHospitalAdmin(user) || canUseAnalysis(user)) &&
+    !user?.mfaEnabled &&
+    !steps.includes("mfa")
     ? [...steps, "mfa"]
     : steps;
 }

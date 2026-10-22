@@ -23,6 +23,39 @@ const fail = async (p: Promise<unknown>) => {
 };
 
 describe("mock auth client", () => {
+  it("every demo user has analysis on; the analyst sample is clinician and analyst with two-step", async () => {
+    for (const a of SAMPLE_ACCOUNTS) {
+      if (a.email === DEMO_EMAILS.locked) continue;
+      const c = createMockAuthClient();
+      const r = await c.signIn(a.email, "anything");
+      const user =
+        r.status === "signed_in"
+          ? r.user
+          : (await c.verifyCode(MOCK_CODE, {
+              backup: false,
+              trustDevice: false,
+            })) && (await c.getSession())!.user;
+      expect(user.features).toEqual({ analysis: true });
+    }
+    expect(DEMO_EMAILS.analyst).toBe("analyst.adeyemi@havanahospital.org");
+    expect(SAMPLE_ACCOUNTS).toContainEqual({
+      email: DEMO_EMAILS.analyst,
+      label: "Analyst",
+      note: "Clinician with Analysis",
+    });
+    const r = await createMockAuthClient().signIn(DEMO_EMAILS.analyst, "x");
+    if (r.status !== "signed_in") throw new Error();
+    expect(r.user).toMatchObject({
+      displayName: "Dr. Adeyemi",
+      fullName: "Dr. Kemi Adeyemi",
+      roleTitle: "Consultant physician",
+      specialty: "Internal Medicine",
+      roles: ["clinician", "analyst"],
+      mfaEnabled: true,
+    });
+    expect(r.steps).toEqual([]);
+  });
+
   it("signs a normal clinician straight in", async () => {
     const c = createMockAuthClient();
     const r = await c.signIn("a.reyes@havanahospital.org", "anything");
@@ -168,6 +201,7 @@ describe("mock auth client", () => {
       "New hospital admin",
       "Hospital admin",
       "Medical director",
+      "Analyst",
       "Platform admin",
       "Locked account",
     ]);
