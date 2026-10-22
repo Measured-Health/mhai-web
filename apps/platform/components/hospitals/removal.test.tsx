@@ -164,23 +164,35 @@ describe("the removal panel", () => {
         `Requested by Tunde Okafor · ${dateLabel(h.removal!.requested_at)} · The hospital closed in June.`,
       ),
     ).toBeInTheDocument();
-    expect(within(p).getByText("1 legal hold is active")).toBeInTheDocument();
+    expect(within(p).getByText(/^1 legal hold is active/)).toBeInTheDocument();
     expect(
       within(p).getByText("A data export is required · done"),
     ).toBeInTheDocument();
     expect(within(p).queryByText("All checks are clear")).toBeNull();
     const approve = within(p).getByRole("button", { name: "Approve removal" });
     expect(approve).toBeDisabled();
-    expect(approve).toHaveAccessibleDescription(
-      `${BLOCKED} Legal holds are managed in a later release.`,
-    );
+    expect(approve).toHaveAccessibleDescription(BLOCKED);
     expect(within(p).getByText(BLOCKED)).toBeVisible();
-    expect(
-      within(p).getByText("Legal holds are managed in a later release."),
-    ).toBeVisible();
     expect(
       within(p).getByRole("button", { name: "Cancel request" }),
     ).toBeEnabled();
+  });
+
+  it("Harbour View reads '1 legal hold is active · View holds', and the link filters by hospital", async () => {
+    await open("h_harbour");
+    const line = within(panel()).getByText(/^1 legal hold is active/);
+    expect(line).toHaveTextContent("1 legal hold is active · View holds");
+    expect(
+      within(line).getByRole("link", { name: "View holds" }),
+    ).toHaveAttribute("href", "/legal-holds?hospital=h_harbour&status=all");
+  });
+
+  it("the later-release line is gone", async () => {
+    await open("h_harbour");
+    expect(screen.queryByText(/managed in a later release/)).toBeNull();
+    expect(
+      within(panel()).getByRole("button", { name: "Approve removal" }),
+    ).not.toHaveAccessibleDescription(/later release/);
   });
 
   it("writes the checks in plain words with plurals and dates", () => {
@@ -458,7 +470,7 @@ describe("the removal panel", () => {
     const alert = await within(panel()).findByRole("alert");
     expect(alert).toHaveTextContent("Removal can't go ahead yet.");
     const p = panel();
-    expect(within(p).getByText("1 legal hold is active")).toBeVisible();
+    expect(within(p).getByText(/^1 legal hold is active/)).toBeVisible();
     expect(
       within(p).getByText("Records must be kept until 3 Mar 2031"),
     ).toBeVisible();
@@ -491,7 +503,7 @@ describe("the removal panel", () => {
       return screen.findByRole("region", { name: "Removal" });
     })();
     expect(
-      within(view).getByText("1 legal hold is active"),
+      within(view).getByText(/^1 legal hold is active/),
     ).toBeInTheDocument();
     expect(
       within(view).getByText(/^Requested by Tunde Okafor/),

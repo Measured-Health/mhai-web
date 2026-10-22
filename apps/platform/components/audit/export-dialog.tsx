@@ -1,6 +1,5 @@
 "use client";
 import { useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import {
   EXPORT_MAX_ROWS,
   EXPORT_NOTE_MAX,
@@ -12,7 +11,6 @@ import {
   type ExportReason,
   type NamedAccessFilters,
 } from "@/lib/api/audit-contract";
-import { useAuth } from "@/lib/auth/auth-context";
 import { REASON_WORDS } from "@/lib/audit/kinds";
 import { filtersInWords, type FilterNames } from "@/lib/audit/words";
 import { num } from "@/lib/format";
@@ -59,15 +57,13 @@ function Step({
       {children}
     </Dialog>
   ) : (
-    createPortal(
-      <Sheet open onClose={onClose} title={title}>
-        <h2 className="mb-3 font-display text-[28px] font-black leading-none">
-          {title}
-        </h2>
-        {children}
-      </Sheet>,
-      document.body,
-    )
+    // The Sheet portals itself to the body.
+    <Sheet open onClose={onClose} title={title}>
+      <h2 className="mb-3 font-display text-[28px] font-black leading-none">
+        {title}
+      </h2>
+      {children}
+    </Sheet>
   );
 }
 
@@ -101,7 +97,6 @@ export function ExportDialog({
 }) {
   const create = useCreateExport();
   const toast = useToast();
-  const { user, updateUser } = useAuth();
   const [stage, setStage] = useState<Stage>({ at: "form" });
   // A download on its way: closing now would lose a file already used up.
   const [downloading, setDownloading] = useState(false);
@@ -189,11 +184,7 @@ export function ExportDialog({
           },
           {
             onSuccess: (out) => {
-              // A backup code works once: one fewer left.
-              if ("backup_code" in code && user?.backupCodesLeft != null)
-                updateUser({
-                  backupCodesLeft: Math.max(0, user.backupCodesLeft - 1),
-                });
+              // useStepUpCall counts a backup code down, once.
               setStage({ at: "ready", out });
               if (exportOutOk(out))
                 toast.show({

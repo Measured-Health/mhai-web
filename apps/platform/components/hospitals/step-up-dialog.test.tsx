@@ -144,7 +144,7 @@ describe("StepUpDialog", () => {
       expect(within(d).getByLabelText(name)).toHaveAccessibleDescription(hint);
   });
 
-  it("the hint shows under a free reason, and extra's own hint replaces it", async () => {
+  it("the hint shows under a free reason, and under extra after extra's own hint", async () => {
     const hint = "Don't include patient names.";
     renderWithAuth(
       <StepUpDialog
@@ -161,7 +161,7 @@ describe("StepUpDialog", () => {
     );
     expect(
       within(d).getByLabelText(/^Asked for by/),
-    ).toHaveAccessibleDescription("Who asked, by role.");
+    ).toHaveAccessibleDescription(`Who asked, by role. ${hint}`);
   });
 
   it("noteMax limits the note and the free reason", () => {

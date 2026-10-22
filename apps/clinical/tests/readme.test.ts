@@ -111,11 +111,22 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(/\*\*Audit log\.\*\*/);
   });
 
+  it("documents the platform system demo", () => {
+    expect(readme).toMatch(/\*\*System\s+health\s+and\s+failed\s+jobs\.\*\*/);
+  });
+
   it("documents the platform notifications and the analytics email setting", () => {
     expect(readme).toMatch(/\*\*Notifications\.\*\*/);
     expect(readme).toMatch(/Analytics\s+email/);
     expect(readme).toMatch(/Critical\s+and\s+weekly\s+digest/);
     expect(readme).toMatch(/Auditors\s+get\s+no\s+email/);
+  });
+
+  it("documents the legal holds demo", () => {
+    expect(readme).toMatch(/\*\*Legal holds\.\*\*/);
+    expect(readme).toMatch(
+      /lifting\s+a\s+hold\s+needs\s+two\s+platform\s+admins/i,
+    );
   });
 
   it("says the 403 page has no link, and no longer sets its address", () => {
@@ -129,7 +140,30 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(/\*\*Patient alerts on Usage\.\*\*/);
     expect(readme).toMatch(/What\s+changed/);
     expect(readme).toMatch(/"Fewer\s+than\s+5"/);
-    expect(readme).toMatch(/Plan\s+6\s+Analysis/);
+    expect(readme).toMatch(/are\s+in\s+Analysis,\s+below/);
     expect(readme).not.toMatch(/\blab\b/i);
+  });
+
+  it("documents the analysis demo", () => {
+    expect(readme).toMatch(/\*\*Analysis\.\*\*/);
+    expect(readme).toContain("analyst.adeyemi@havanahospital.org");
+  });
+
+  it("says Analysis needs sign-off and stays off in live mode", () => {
+    const from = readme.indexOf("### Analysis");
+    expect(from).toBeGreaterThan(-1);
+    const to = readme.indexOf("### Tests", from);
+    const section = readme.slice(from, to === -1 ? undefined : to);
+    expect(section).toMatch(
+      /clinical,\s+privacy\s+and\s+legal\s+sign-off\s+before\s+live\s+use/,
+    );
+    expect(section).toMatch(/ANALYSIS_SIGNED_OFF=true/);
+    const contributing = readFileSync(
+      path.join(repositoryRoot, "CONTRIBUTING.md"),
+      "utf8",
+    );
+    expect(contributing).toMatch(
+      /Clinical,\s+privacy\s+and\s+legal\s+sign-off\s+is\s+required\s+before\s+live\s+use/,
+    );
   });
 });

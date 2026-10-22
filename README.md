@@ -111,8 +111,7 @@ Any group of fewer than 5 shows "Fewer than 5", in the CSV export too. In
 the sample, This month has a busy day, a rising finding and ward, and slower
 Critical handling; Last month has nothing unusual; Last 90 days has no
 earlier period to compare with. The sample numbers are written for 16
-October; on other dates the columns are a cut of the same sample. Deeper
-trends and drill-down come with Plan 6 Analysis.
+October; on other dates the columns are a cut of the same sample. Deeper trends and a de-identified patient list are in Analysis, below.
 
 **Notifications and patient alerts.** Sign in as the clinician sample (any
 clinician sees the same sample alerts). The bell in the top bar counts new
@@ -130,6 +129,23 @@ has two connected systems, "Main record" and "Results system", so each alert
 says which one it came from. Every name and MRN is synthetic, and like the
 rest of the demo it is all in memory only: the sample alerts and pop-up
 settings start afresh at each sign-in.
+
+**Analysis.** Sign in as the analyst sample (Dr. Kemi Adeyemi,
+`analyst.adeyemi@havanahospital.org`, a clinician with the Analyst role), or
+as the hospital admin or the medical director, and open **Analysis**. It
+shows how conditions and findings are spread across the hospital, in five
+views: Prevalence and trends, Who is affected, Co-occurring conditions,
+Findings and alerts, and MHAI quality. Filter by period, condition, age band,
+sex, ward or clinic, location type, specialty and (when there is more than
+one) source. Every chart has a **Table** view, and **Download CSV** saves the
+view on screen. **See patients** opens a de-identified list (a pseudonymous
+ID, age band, sex, location type, findings and conditions; never a name or
+record number) for any count of 5 or more; each opening is recorded in
+**Activity**. The numbers come from a made-up sample cohort of about 600
+patients. As everywhere, any group of fewer than 5 shows "Fewer than 5" (on
+screen, in tables and in the CSV), and a figure that would give one away is
+hidden too. A hospital admin gives the Analyst role to a clinician in Staff.
+Like the rest of the demo, nothing is kept in browser storage.
 
 ### Platform admin app
 
@@ -210,6 +226,38 @@ email**: **Off** (the default), **Critical only** or **Critical and weekly
 digest**. Auditors get no email, so they don't see the setting. Emails name
 the hospital and the change and never include patient details. (The backend
 sends them; the demo only saves the setting and sends no email.)
+
+**Legal holds.** A legal hold keeps one hospital's records, all of them or
+those between two dates, past their retention period and through any removal
+until the hold is lifted, so the removal can't be approved while one is in
+force. **Legal holds** in the sidebar lists them (Open by default; filter by
+status, hospital or reference), and each hospital's page has a **Legal
+holds** section and a **Hold** tag on the list. Platform admins place a hold
+with their two-step code. The samples: Harbour View has an active hold
+(HC/2026/0412) that blocks its removal; Northgate's review date was
+yesterday (**Review due**); Riverside's hold has a request to lift it from
+Tunde, waiting for a different platform admin to approve; Lakeside's was
+lifted 3 days ago and its records are released in 4 (**Undo lift** until
+then, and it still blocks a removal); Havana's was lifted long ago. Lifting a hold needs two platform
+admins, each with their own code, and a lift request lapses after 7 days.
+Auditors see every hold, note and history, and change nothing.
+
+**System health and failed jobs.** **System** in the sidebar has two tabs.
+**Health** says in one line whether the service is Working normally, Slower
+than usual, Having problems or Couldn't check, then lists the parts (with
+since when), the questions waiting, the failed jobs, how long answers take
+and recent errors by kind, all in counts and times with no patient, question
+or answer content. It refreshes every 30 seconds while the tab is visible
+and online, and **Refresh now** reads it at once; a reading more than 2
+minutes old shows Couldn't check with the last good time, never old
+figures. In the demo, a **Sample data** switch (Normal, Slower, Problems)
+changes the reading. **Failed jobs** lists the jobs that failed, with filters
+for what, which hospital, why and status. Platform admins choose up to 50
+and **Retry** them (a warning appears when some are questions asked more
+than a day ago) or **Cancel jobs** with a reason, an optional note and their
+own two-step code; a cancelled job reads "Cancelled by" the person. Try
+Northgate General Hospital's old question, or cancel the guideline search.
+On a phone the jobs are cards. Auditors see both tabs and no buttons.
 
 **Audit log.** **Audit log** in the sidebar is the record of what people and
 the system did across Measured Health, newest first: filters (hospital,
@@ -323,6 +371,18 @@ sign-off before live use, and it has not been given:
   don't pop up but are counted on the bell.
 
 Until it is given, alerts run on sample data only; see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Analysis
+
+Analysis shows hospital-wide counts of conditions, findings, alerts and
+corrections, and a de-identified patient list behind each count of 5 or more.
+It needs clinical, privacy and legal sign-off before live use, and it has not
+been given. It stays off in live mode until `ANALYSIS_SIGNED_OFF=true` is set
+on the server and the backend switches it on for the hospital; with either
+missing there is no page, no sidebar entry, no Analyst box and no API route
+(the proxy answers 404). Until then it runs on sample data only. Named
+drill-down and clearance letters are a later plan; see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Tests

@@ -15,6 +15,7 @@ import {
 } from "../api/notifications-contract";
 import { notificationOk } from "../analytics/read";
 import { queryKeys } from "./keys";
+import { SessionEnded, sessionEpoch } from "./session-end";
 
 /** How often the bell looks for new changes, while the tab is open and online. */
 export const POLL_MS = 60_000;
@@ -88,6 +89,9 @@ function seen(qc: QueryClient, ids: string[] | undefined, unseen: number) {
   );
 }
 
+/** The sign-out count each unfinished markSeen call began in, by its key. */
+const began = new Map<string, number>();
+
 /**
  * Marks the given notifications seen, or all of them with no ids: one
  * Idempotency-Key per call. Seen is this person's own.
@@ -95,10 +99,22 @@ function seen(qc: QueryClient, ids: string[] | undefined, unseen: number) {
 export function useMarkSeen() {
   const qc = useQueryClient();
   return useKeyedMutation(
-    (ids: string[] | undefined, key) =>
-      getPlatformClient().markSeen(ids ? { ids } : {}, {
+    async (ids: string[] | undefined, key) => {
+      const now = sessionEpoch();
+      // The session this call began in, kept across its retries.
+      const born = began.get(key) ?? now;
+      // Calls from finished sessions are forgotten.
+      for (const [k, e] of began) if (e !== now) began.delete(k);
+      if (born !== now) throw new SessionEnded();
+      began.set(key, born);
+      const r = await getPlatformClient().markSeen(ids ? { ids } : {}, {
         idempotencyKey: key,
-      }),
+      });
+      began.delete(key);
+      // Signed out meanwhile: the answer is not for the next person.
+      if (born !== sessionEpoch()) throw new SessionEnded();
+      return r;
+    },
     {
       // A poll still in flight must not land after this and bring back the
       // old count.

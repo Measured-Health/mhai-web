@@ -12,6 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { endSessionRequests } from "../queries/session-end";
 import { getAuthClient } from "./client";
 import { onUnauthorized } from "./events";
 import type { AuthClient, FirstStep, SignInResult, User } from "./types";
@@ -140,7 +141,9 @@ export function AuthProvider({
       if (!live.current.signedIn && !live.current.mfaPending) return;
       live.current = { signedIn: false, mfaPending: false };
       startTransition(() => {
-        // Nothing fetched for this person outlives the session.
+        // Nothing fetched for this person outlives the session, and nothing
+        // still in flight lands in the next person's.
+        endSessionRequests(queryClient);
         queryClient.clear();
         setState(SIGNED_OUT);
         setMfaPending(false);

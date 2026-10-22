@@ -14,6 +14,14 @@ import {
 import type { PlatformClient } from "@/lib/api/contract";
 import { ApiError } from "@mhai/api-client/errors";
 import type { AuditRow } from "@/lib/audit/read";
+
+const auth = vi.hoisted(() => ({ updateUser: vi.fn() }));
+vi.mock("@/lib/auth/auth-context", () => ({
+  useAuth: () => ({
+    user: { backupCodesLeft: 3 },
+    updateUser: auth.updateUser,
+  }),
+}));
 import { auditEvent } from "@/tests/audit-event";
 import {
   __resetReportedForTests,
@@ -153,5 +161,22 @@ describe("useCreateExport", () => {
     await waitFor(() => expect(rows).toBe(62_310));
     expect(hook.result.current.error).toBeNull();
     expect(leaked()).not.toContain("424242");
+  });
+
+  it("a backup code counts down once, in the shared step-up hook", async () => {
+    auth.updateUser.mockClear();
+    const { hook, leaked } = setup(async () => OUT);
+    let got: ExportOut | null = null;
+    const body: ExportIn = {
+      kind: "events",
+      filters: {},
+      reason: "legal_request",
+      backup_code: "AAAA-BBBB",
+    };
+    act(() => hook.result.current.run(body, { onSuccess: (r) => (got = r) }));
+    await waitFor(() => expect(got).toEqual(OUT));
+    expect(auth.updateUser).toHaveBeenCalledTimes(1);
+    expect(auth.updateUser).toHaveBeenCalledWith({ backupCodesLeft: 2 });
+    expect(leaked()).not.toContain("AAAA-BBBB");
   });
 });

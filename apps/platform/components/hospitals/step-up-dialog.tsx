@@ -54,7 +54,8 @@ export type StepUpDialogProps = {
   noteMax?: number;
   /**
    * One more text field, after the reason and note, sent back as `extra`.
-   * Required unless `required` is false; its own `hint` replaces `hint`.
+   * Required unless `required` is false; its own `hint` shows first, then
+   * `hint` (what not to write applies to every free-text field).
    */
   extra?: { label: string; max: number; hint?: string; required?: boolean };
   /** Shown under every free-text field (e.g. what not to write there). */
@@ -229,19 +230,26 @@ function StepUpForm({
     ) : null;
   const describe = (k: keyof Missing) =>
     missing[k] ? `${id}-${k}-err` : undefined;
-  /** A free-text field's hint (if any), then its error (if any). */
-  const hintFor = (k: keyof Missing) =>
-    (k === "extra" ? (extra?.hint ?? hint) : hint) || null;
+  /** A free-text field's hints: extra's own first, then the shared one. */
+  const hintsFor = (k: keyof Missing): string[] =>
+    [k === "extra" ? extra?.hint : undefined, hint].filter(
+      (h): h is string => !!h,
+    );
+  /** Its hints (if any), then its error (if any). */
   const describeText = (k: keyof Missing) =>
-    [hintFor(k) ? `${id}-${k}-hint` : null, describe(k)]
+    [...hintsFor(k).map((_, i) => `${id}-${k}-hint${i}`), describe(k)]
       .filter(Boolean)
       .join(" ") || undefined;
   const hintLine = (k: keyof Missing) =>
-    hintFor(k) ? (
-      <p id={`${id}-${k}-hint`} className="mt-1 text-[12.5px] text-ink-3">
-        {hintFor(k)}
+    hintsFor(k).map((h, i) => (
+      <p
+        key={i}
+        id={`${id}-${k}-hint${i}`}
+        className="mt-1 text-[12.5px] text-ink-3"
+      >
+        {h}
       </p>
-    ) : null;
+    ));
 
   return (
     <form noValidate onSubmit={submit}>

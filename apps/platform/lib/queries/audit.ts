@@ -17,7 +17,6 @@ import type {
   AuditList,
   AuditPerson,
   ExportIn,
-  ExportOut,
   ExportRecord,
   IntegrityStatus,
   NamedAccessFilters,
@@ -42,6 +41,7 @@ import {
 } from "@/lib/audit/read";
 import { queryKeys } from "./keys";
 import { POLL_MS, useTabVisible } from "./notifications";
+import { useStepUpCall } from "./step-up-call";
 
 /** While a check runs, its status is read this often. */
 export const RUNNING_POLL_MS = 2_000;
@@ -361,58 +361,26 @@ export function useReportUndisplayable(rows: AuditRow[]) {
 const exportsKey = [...auditKey, "exports"] as const;
 
 /**
- * Makes an export. The body carries the person's two-step code, so after
- * every answer, right or wrong, the mutation is reset and the cache lets
- * the call go at once (gcTime 0 as well): the code is never kept. The
- * refusal is kept here instead, for the StepUpDialog to show.
+ * Makes an export through the one step-up hook (`useStepUpCall`): the body
+ * carries the person's two-step code, so after every answer, right or wrong,
+ * the mutation is reset and the cache lets the call go at once (gcTime 0 as
+ * well): the code is never kept. A backup code used counts down there, once.
  */
 export function useCreateExport() {
   const qc = useQueryClient();
-  const m = useKeyedMutation(
-    (body: ExportIn, key) =>
-      getPlatformClient().createExport(body, { idempotencyKey: key }),
-    {
-      onSuccess: () => {
-        void qc.invalidateQueries({ queryKey: exportsKey });
-        void qc.invalidateQueries({ queryKey: [...auditKey, "events"] });
+  return useStepUpCall(
+    useKeyedMutation(
+      (body: ExportIn, key) =>
+        getPlatformClient().createExport(body, { idempotencyKey: key }),
+      {
+        onSuccess: () => {
+          void qc.invalidateQueries({ queryKey: exportsKey });
+          void qc.invalidateQueries({ queryKey: [...auditKey, "events"] });
+        },
       },
-    },
-    { gcTime: 0 },
+      { gcTime: 0 },
+    ),
   );
-  const [error, setError] = useState<unknown>(null);
-  return {
-    busy: m.isPending,
-    /** The last refusal to show; null when none. */
-    error,
-    /** Forgets the refusal and the call (when the dialog closes). */
-    clear() {
-      setError(null);
-      m.reset();
-    },
-    /**
-     * Sends it. `onError` returns true when it handled the refusal itself
-     * (it is then not kept as `error`).
-     */
-    run(
-      body: ExportIn,
-      on: {
-        onSuccess?(out: ExportOut): void;
-        onError?(e: Error): boolean | void;
-      } = {},
-    ) {
-      setError(null);
-      m.mutate(body, {
-        onSuccess: (out) => {
-          m.reset();
-          on.onSuccess?.(out);
-        },
-        onError: (e) => {
-          m.reset();
-          if (!on.onError?.(e)) setError(e);
-        },
-      });
-    },
-  };
 }
 
 /** Fetches an export's file: once, by its maker, within 15 minutes. */

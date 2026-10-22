@@ -12,7 +12,12 @@ export function CouldntLoad({
   return (
     <Banner tone="bad" title={`Couldn't load ${what}.`}>
       <p>Check your connection and try again.</p>
-      <Button variant="ghost" size="sm" className="mt-2" onClick={onRetry}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="mt-2 min-h-11"
+        onClick={onRetry}
+      >
         Try again
       </Button>
     </Banner>

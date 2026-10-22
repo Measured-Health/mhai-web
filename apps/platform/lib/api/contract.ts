@@ -10,7 +10,9 @@ import type {
   SeriesOut,
 } from "./analytics-contract";
 import type { AuditClient } from "./audit-contract";
+import type { HoldShort, HoldsClient } from "./holds-contract";
 import type { EmailPref, NotificationsOut } from "./notifications-contract";
+import type { OpsClient } from "./ops-contract";
 
 export type HospitalStatus =
   | "active"
@@ -33,6 +35,12 @@ export type HospitalSummary = {
   sso_enabled: boolean;
   created_at: string;
   last_activity_at: string | null;
+  /**
+   * Despite the name, the holds that keep records: active, review due, lift
+   * requested, or lifted within the grace period (`keepsRecords`), the same
+   * set as `removal.checks.legal_holds`.
+   */
+  legal_holds_active: number;
 };
 export type Hospital = HospitalSummary & {
   country: string;
@@ -59,6 +67,8 @@ export type Hospital = HospitalSummary & {
    * hospital is in set-up, or when nobody there can act.
    */
   admins: { name: string; email: string }[];
+  /** The holds that keep its records, in short form. */
+  legal_holds: HoldShort[];
 };
 
 export type RemovalBlock = "legal_hold" | "retention" | "export_required";
@@ -229,7 +239,8 @@ export class BlockedError extends ApiError {
  * Each area (legal holds, operations, settings, the audit log) keeps its
  * client in its own contract file and adds its name to `extends` here.
  */
-export interface PlatformClient extends AuditClient {
+
+export interface PlatformClient extends HoldsClient, OpsClient, AuditClient {
   listHospitals(
     q: HospitalQuery,
   ): Promise<{ hospitals: HospitalSummary[]; next_cursor: string | null }>;

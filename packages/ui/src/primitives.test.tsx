@@ -125,18 +125,20 @@ describe("Dialog (preflight R1, R2)", () => {
 describe("Sheet (preflight R3)", () => {
   it("is inert when closed and closes on Escape when open", async () => {
     const onClose = vi.fn();
-    const { rerender, container } = render(
+    const { rerender } = render(
       <Sheet open={false} onClose={onClose} title="Filters">
         <button>Apply</button>
       </Sheet>,
     );
-    expect(container.firstElementChild).toHaveAttribute("inert");
+    const root = () =>
+      screen.getByRole("dialog", { hidden: true }).parentElement!;
+    expect(root()).toHaveAttribute("inert");
     rerender(
       <Sheet open onClose={onClose} title="Filters">
         <button>Apply</button>
       </Sheet>,
     );
-    expect(container.firstElementChild).not.toHaveAttribute("inert");
+    expect(root()).not.toHaveAttribute("inert");
     expect(screen.getByRole("dialog", { name: "Filters" })).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalled();
@@ -157,6 +159,36 @@ describe("Sheet (preflight R3)", () => {
         document.activeElement as HTMLElement,
       );
     }
+  });
+});
+
+describe("Sheet portal", () => {
+  it("renders under document.body, outside its parent, with the root class", () => {
+    const { container } = render(
+      <div className="card" style={{ backdropFilter: "blur(18px)" }}>
+        <Sheet open onClose={() => {}} title="Filters" className="print:hidden">
+          <button>Apply</button>
+        </Sheet>
+      </div>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Filters" });
+    const root = dialog.parentElement!;
+    expect(root.parentElement).toBe(document.body);
+    expect(container).not.toContainElement(dialog);
+    expect(root).toHaveClass("fixed", "inset-0", "print:hidden");
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it("puts the side panel under document.body too", () => {
+    render(
+      <div>
+        <Sheet side="right" open onClose={() => {}} title="Staff member">
+          <button>Save</button>
+        </Sheet>
+      </div>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Staff member" });
+    expect(dialog.parentElement!.parentElement).toBe(document.body);
   });
 });
 

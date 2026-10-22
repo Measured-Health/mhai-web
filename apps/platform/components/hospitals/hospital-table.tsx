@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { HospitalSummary } from "@/lib/api/contract";
 import { activityLabel, dateLabel } from "./format";
+import { HoldTag } from "./hold-tag";
 import { StatusChip } from "./status-chip";
 
 const HEADERS = ["Name", "Status", "Staff", "SSO", "Created", "Last activity"];
@@ -30,6 +31,7 @@ export function HospitalTable({ rows }: { rows: HospitalSummary[] }) {
                 >
                   {h.name}
                 </Link>
+                {h.legal_holds_active > 0 && <HoldTag className="ml-2" />}
                 <small className="block font-mono text-[12px] text-ink-3">
                   {h.short_code}
                 </small>

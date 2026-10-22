@@ -29,7 +29,7 @@ const shell = (user?: User) =>
   );
 
 describe("the platform shell", () => {
-  it("the sidebar shows Platform and the six links in order", () => {
+  it("the sidebar shows Platform and the eight links in order", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     expect(within(nav).getByText("Platform")).toBeInTheDocument();
@@ -39,6 +39,8 @@ describe("the platform shell", () => {
     expect(links).toEqual([
       ["Hospitals", "/hospitals"],
       ["Analytics", "/analytics"],
+      ["Legal holds", "/legal-holds"],
+      ["System", "/system"],
       ["Team", "/team"],
       ["Activity", "/activity"],
       ["Audit log", "/audit"],
@@ -61,7 +63,21 @@ describe("the platform shell", () => {
     }
   });
 
-  it("the sidebar shows Analytics between Hospitals and Team", () => {
+  it("the sidebar shows Legal holds between Analytics and System", () => {
+    shell();
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    const names = within(nav)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
+    const at = names.indexOf("Legal holds");
+    expect(names[at - 1]).toBe("Analytics");
+    expect(names[at + 1]).toBe("System");
+    expect(
+      within(nav).getByRole("link", { name: "Legal holds" }),
+    ).toHaveAttribute("href", "/legal-holds");
+  });
+
+  it("the sidebar shows Analytics after Hospitals", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     const names = within(nav)
@@ -69,10 +85,26 @@ describe("the platform shell", () => {
       .map((l) => l.textContent);
     const at = names.indexOf("Analytics");
     expect(names[at - 1]).toBe("Hospitals");
-    expect(names[at + 1]).toBe("Team");
+    expect(names[at + 1]).toBe("Legal holds");
     expect(
       within(nav).getByRole("link", { name: "Analytics" }),
     ).toHaveAttribute("href", "/analytics");
+  });
+
+  it("System sits after Legal holds, before Team; active on /system/jobs", () => {
+    pathname.value = "/system/jobs";
+    shell();
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    const names = within(nav)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
+    const at = names.indexOf("System");
+    expect(names[at - 1]).toBe("Legal holds");
+    expect(names[at + 1]).toBe("Team");
+    expect(within(nav).getByRole("link", { name: "System" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   it("the current page link has aria-current", () => {

@@ -24,6 +24,8 @@ import {
   type HospitalRecord,
 } from "./fixtures";
 import { getDemoStepUp, requireStepUp, type DemoStepUp } from "./step-up";
+import { keepsRecords } from "./holds-contract";
+import { holdsMock, keptHolds, settleHolds } from "./mock-holds";
 import {
   MEASURES,
   PERIODS,
@@ -39,6 +41,8 @@ import {
   seedChanges,
   type AnalyticsMode,
 } from "./analytics-fixtures";
+import { createMockOps } from "./mock-ops";
+import type { HealthMode } from "./ops-fixtures";
 import {
   EMAIL_MODES,
   NOTIFICATIONS_MAX,
@@ -208,6 +212,8 @@ export function createMockPlatform({
   analytics = "normal",
   notifications = "normal",
   audit,
+  health = "normal",
+  removalStarted,
   onCore,
 }: {
   now?: () => number;
@@ -224,6 +230,13 @@ export function createMockPlatform({
   notifications?: "normal" | "unavailable";
   /** The sample audit log's state and faults (see `AuditMockOptions`). */
   audit?: AuditMockOptions;
+  /** Which sample health reading to serve (see `HealthMode`). */
+  health?: HealthMode;
+  /**
+   * Hospitals whose removal has already started deleting: placing a hold
+   * there is refused with 409 `removal_started`.
+   */
+  removalStarted?: string[];
   /** For tests: the core the areas are built on, once it exists. */
   onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
@@ -290,16 +303,31 @@ export function createMockPlatform({
     ];
   }
 
-  /** A hospital lists its admins while it is active; nobody acts elsewhere. */
-  function syncAdmins(h: Hospital) {
+  /**
+   * What a hospital shows from its record: its admins while it is active
+   * (nobody acts elsewhere), the holds that keep its records, and a pending
+   * removal's checks as they stand now.
+   */
+  function syncShown(h: Hospital) {
     const r = hospitals.find((x) => x.hospital === h);
-    if (r) h.admins = h.status === "active" ? copy(r.admins) : [];
+    if (!r) return;
+    h.admins = h.status === "active" ? copy(r.admins) : [];
+    h.legal_holds = keptHolds(r, now());
+    h.legal_holds_active = h.legal_holds.length;
+    if (h.status === "removal_pending" && h.removal) {
+      h.removal.checks.legal_holds = h.legal_holds_active;
+      h.removal.blocking = blocksOf(r);
+    }
   }
 
-  /** Time-driven changes: a removal a minute after approval; expired invites. */
+  /**
+   * Time-driven changes: a removal a minute after approval; expired invites;
+   * the holds' review dates, lapsed lift requests and released records.
+   */
   function settle(r: HospitalRecord) {
     const h = r.hospital;
-    syncAdmins(h);
+    settleHolds(r, now(), log);
+    syncShown(h);
     if (
       h.status === "removal_scheduled" &&
       h.removal?.approved_at &&
@@ -328,13 +356,13 @@ export function createMockPlatform({
   };
   const touch = (h: Hospital) => {
     h.version++;
-    syncAdmins(h);
+    syncShown(h);
     return copy(h);
   };
 
   function blocksOf(r: HospitalRecord): RemovalBlock[] {
     const b: RemovalBlock[] = [];
-    if (r.legal_holds > 0) b.push("legal_hold");
+    if (r.holds.some((x) => keepsRecords(x, now()))) b.push("legal_hold");
     if (r.retention_until && Date.parse(r.retention_until) > now())
       b.push("retention");
     if (r.export_required && !r.export_done) b.push("export_required");
@@ -369,8 +397,10 @@ export function createMockPlatform({
 
   /** A read: someone must be signed in. */
   async function read<T>(fn: (m: TeamMember) => T): Promise<T> {
-    await wait();
+    // Who is asking is decided when the call is made, as a cookie is, not
+    // after the delay.
     const m = you();
+    await wait();
     return forYou(copy(fn(m)), m);
   }
   /**
@@ -381,8 +411,10 @@ export function createMockPlatform({
     opts: WriteOpts | undefined,
     fn: (m: TeamMember) => Promise<T> | T,
   ): Promise<T> {
-    await wait();
+    // Who is asking is decided when the call is made, as a cookie is, not
+    // after the delay.
     const m = you();
+    await wait();
     if (m.role !== "platform_admin") fail(403, "forbidden");
     const key = opts?.idempotencyKey;
     if (key && done.has(key)) return forYou(copy(done.get(key) as T), m);
@@ -400,6 +432,7 @@ export function createMockPlatform({
     sso_enabled: h.sso_enabled,
     created_at: h.created_at,
     last_activity_at: h.last_activity_at,
+    legal_holds_active: h.legal_holds_active,
   });
   const usedCode = (code: string, except?: string) =>
     hospitals.some(
@@ -484,8 +517,10 @@ export function createMockPlatform({
     opts: WriteOpts | undefined,
     fn: (m: TeamMember) => T | Promise<T>,
   ): Promise<T> {
-    await wait();
+    // Who is asking is decided when the call is made, as a cookie is, not
+    // after the delay.
     const m = you();
+    await wait();
     const key = opts?.idempotencyKey;
     if (key && done.has(key)) return copy(done.get(key) as T);
     const out = await fn(m);
@@ -565,6 +600,8 @@ export function createMockPlatform({
           first_admin: newInvite(adminName, adminEmail),
           removal: null,
           admins: [],
+          legal_holds_active: 0,
+          legal_holds: [],
         };
         hospitals = [
           ...hospitals,
@@ -582,7 +619,7 @@ export function createMockPlatform({
               last_test: null,
               version: 1,
             },
-            legal_holds: 0,
+            holds: [],
             retention_until: null,
             export_required: false,
             export_done: false,
@@ -686,7 +723,7 @@ export function createMockPlatform({
           approved_by: null,
           approved_at: null,
           checks: {
-            legal_holds: r.legal_holds,
+            legal_holds: r.holds.filter((x) => keepsRecords(x, now())).length,
             retention_until: r.retention_until,
             export_required: r.export_required,
             export_done: r.export_done,
@@ -1029,10 +1066,11 @@ export function createMockPlatform({
       }),
   } satisfies Partial<PlatformClient>;
 
-  // Each area adds one spread, built on the same core, e.g.
-  // `...createMockHolds(core, holds)`.
+  // Each area adds one spread, built on the same core.
   return {
     ...hospitalsPart,
     ...auditPart,
+    ...createMockOps(core, { health }),
+    ...holdsMock(core, { removalStarted }),
   };
 }

@@ -4,10 +4,10 @@ MHAI has **two frontend apps** and **three kinds of user**. Both apps talk
 only to the MHAI API (`Measured-Health/mhai-multiagent`, base path
 `/api/v1`).
 
-| App                    | Who uses it                                         | What it does                                                                                                                                                                                                   | Status                                                                                    |
-| ---------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| **Clinical app**       | Clinicians, and hospital admins                     | **Clinical side:** ask questions, read evidence-checked results, give feedback, review corrections. **Hospital admin side:** manage the hospital's own staff, settings and usage                               | This repo, Phase 1                                                                        |
-| **Platform admin app** | Measured Health staff: platform admins and auditors | Run the service: hospitals (add, deactivate, two-person removal, single sign-on), the platform team and its activity, and analytics across hospitals. Later: system health, failed jobs, legal holds, settings | This repo, on sample data ([ADR 0002](docs/adr/0002-separate-clinical-and-admin-apps.md)) |
+| App                    | Who uses it                                         | What it does                                                                                                                                                                                                      | Status                                                                                    |
+| ---------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Clinical app**       | Clinicians, and hospital admins                     | **Clinical side:** ask questions, read evidence-checked results, give feedback, review corrections. **Hospital admin side:** manage the hospital's own staff, settings and usage                                  | This repo, Phase 1                                                                        |
+| **Platform admin app** | Measured Health staff: platform admins and auditors | Run the service: hospitals (add, deactivate, two-person removal, single sign-on), the platform team and its activity, analytics across hospitals, legal holds, and system health and failed jobs. Later: settings | This repo, on sample data ([ADR 0002](docs/adr/0002-separate-clinical-and-admin-apps.md)) |
 
 The three kinds of user:
 
@@ -143,6 +143,15 @@ flowchart TB
   admin side here; a clinician or hospital admin signing in to the
   platform admin app is told "This account can't use the platform admin
   app." and signed out.
+- **Analysis is gated, and is for two kinds of person:** hospital
+  admins, and clinicians with the **Analyst** role (a hospital admin
+  grants it in Staff; it needs Clinician), each for their own hospital
+  only, and both need two-step. The page, its sidebar entries and its API
+  paths exist only when `canUseAnalysis(user)` is true: always in the
+  demo; in live mode only when the API's user says `features.analysis` and
+  the server's `ANALYSIS_SIGNED_OFF` is exactly `true` (the proxy checks it
+  on every call and answers 404 `not_found` otherwise). Platform accounts
+  never see it.
 - **Researcher** has no endpoints yet, so it has no app.
 
 ## 3. Repository layout
@@ -218,6 +227,7 @@ flowchart TD
     home -->|hospital admin role| hset[Hospital settings]
     home -->|hospital admin role| huse[Usage]
     home -->|hospital admin role| hact[Activity & review oversight]
+    home -->|hospital admin or Analyst| ana[Analysis]
 ```
 
 Wireframe of the desktop layout:
@@ -444,6 +454,22 @@ Spec: `docs/specs/2026-10-17-notifications-design.md`. Clinicians only.
   state, pop-ups), never in storage or the URL, and clear on sign-out. "Ask
   MHAI about it" copies no identifiers into the consultation.
 
+### 4.9 Analysis
+
+Route: `/analysis`, outside `/admin` because analysts are not admins.
+Sidebar: a hospital admin sees it once, in the "Hospital admin" group after
+Usage ("Conditions and trends"); an analyst who is not an admin sees it under
+Review. The calls go through the same-origin proxy to `/api/v1/analysis/*`
+(GET only, the exact shapes the client uses). Five views (Prevalence and
+trends, Who is affected, Co-occurring conditions, Findings and alerts, MHAI
+quality) share one set of filters held in React state; nothing goes in the
+URL, the title or storage. Every count is read under the small-group rule
+(`lib/analysis/guards.ts`): a value the server should have hidden fails that
+view closed. **See patients** opens a de-identified list (level 1) that is
+never exported or kept, and each opening is logged in the hospital's
+activity. Sample data only; it needs clinical, privacy and legal sign-off
+before live use (see the README).
+
 ## 5. Platform admin app
 
 `apps/platform` (`@mhai/platform`) is for Measured Health staff: platform
@@ -451,15 +477,17 @@ admins and auditors. It runs on sample data until the backend has the
 platform endpoints; the contract it assumes is in
 [the platform admin spec, §13](docs/specs/2026-10-17-platform-admin-design.md).
 
-| Page      | What it does                                                                                                                | Who                            |
-| --------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| Hospitals | List, search, add a hospital and invite its first admin                                                                     | platform admin (auditors read) |
-| Hospital  | Details, deactivate and reactivate, single sign-on, two-person removal with retention and legal-hold checks, recent actions | platform admin (auditors read) |
-| Analytics | What changed, the tabs and a CSV, in counts only; follow-ups                                                                | platform admin (auditors read) |
-| Team      | Invite, change role, remove (never your own row)                                                                            | platform admin (auditors read) |
-| Activity  | Every platform action, newest first, by hospital                                                                            | both                           |
-| Audit log | Every entry in the log newest first, named access, exports, and the integrity check; reads are recorded                     | both                           |
-| Account   | Password, backup codes, signed-in devices                                                                                   | both                           |
+| Page        | What it does                                                                                                                           | Who                            |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Hospitals   | List, search, add a hospital and invite its first admin                                                                                | platform admin (auditors read) |
+| Hospital    | Details, deactivate and reactivate, single sign-on, two-person removal with retention and legal-hold checks, recent actions            | platform admin (auditors read) |
+| Analytics   | What changed, the tabs and a CSV, in counts only; follow-ups                                                                           | platform admin (auditors read) |
+| Legal holds | The holds list and filters, place a hold, a hold's page with edit and two-person lift and undo; also a section on each hospital's page | platform admin (auditors read) |
+| System      | Health (overall, parts, times, errors; refreshes every 30 s) and Failed jobs (retry, cancel with a code), in counts only               | platform admin (auditors read) |
+| Team        | Invite, change role, remove (never your own row)                                                                                       | platform admin (auditors read) |
+| Activity    | Every platform action, newest first, by hospital                                                                                       | both                           |
+| Audit log   | Every entry in the log newest first, named access, exports, and the integrity check; reads are recorded                                | both                           |
+| Account     | Password, backup codes, signed-in devices                                                                                              | both                           |
 
 ```text
 browser ──> platforms.<domain> (IP allow list)

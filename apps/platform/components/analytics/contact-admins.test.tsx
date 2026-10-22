@@ -34,6 +34,8 @@ const EASTBROOK: Hospital = {
   },
   removal: null,
   admins: [],
+  legal_holds_active: 0,
+  legal_holds: [],
 };
 
 describe("ContactAdmins", () => {

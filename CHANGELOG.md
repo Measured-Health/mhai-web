@@ -31,6 +31,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Legal holds in the platform admin app, on sample data: a Legal holds page
+  with filters, a hold on a hospital's records (all of them or a date range)
+  that blocks its removal, a Hold tag on the hospitals list, a Legal holds
+  section on each hospital's page, and a View holds link in the removal
+  panel. Lifting a hold needs two platform admins. Auditors read it all.
+  End-to-end tests cover it on desktop and phone.
+- Analysis, on sample data: for hospital admins and clinicians with the new
+  Analyst role (given in Staff), five views of conditions, who is affected,
+  co-occurring conditions, findings and alerts, and MHAI quality, with
+  filters, a Table view and Download CSV for each, and a de-identified
+  patient list behind every count of 5 or more (each opening is logged in
+  Activity). Groups of fewer than 5 show "Fewer than 5". It needs clinical,
+  privacy and legal sign-off before live use, and stays off in live mode
+  until `ANALYSIS_SIGNED_OFF=true` is set. End-to-end tests cover it on
+  desktop and phone.
 - The platform admin app (`apps/platform`, `npm run dev:platform`) for
   Measured Health's platform admins and auditors, on sample data. Sign in
   with a password and two-step (no skip, no "trust this device"); a new
@@ -61,6 +76,14 @@ All notable changes to this project are documented here. The format follows
   for platform admins an **Analytics email** setting on Account: Off,
   Critical only, or Critical and weekly digest. Auditors have the bell and
   get no email. End-to-end tests cover it on desktop and phone.
+- System in the platform admin app, on sample data: a Health tab (Working
+  normally, Slower than usual, Having problems or Couldn't check; the
+  parts, questions waiting, failed jobs, answer times and recent errors, in
+  counts only, refreshed every 30 seconds) with a demo switch between
+  Normal, Slower and Problems, and a Failed jobs tab where platform admins
+  retry (with a warning for old questions) or cancel jobs with a reason and
+  their two-step code, and auditors read. End-to-end tests cover it on
+  desktop and phone.
 - The audit log in the platform admin app, on sample data. **Audit log**
   in the sidebar lists every entry newest first, with filters (hospital,
   person, action type, dates, outcome, flagged only), an exact-id search

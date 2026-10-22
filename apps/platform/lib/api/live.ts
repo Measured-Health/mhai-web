@@ -9,6 +9,7 @@ import {
   type RemovalBlock,
   type WriteOpts,
 } from "./contract";
+import type { HoldsClient } from "./holds-contract";
 
 const { apiRequest } = createApiRequest({
   prefix: "/api/v1",
@@ -24,15 +25,6 @@ const BLOCKS: readonly RemovalBlock[] = [
 /** Marks a read as background: the proxy won't count it as activity. */
 const BACKGROUND = { "X-MHAI-Background": "1" };
 
-/** `ok` as the area clients take it. */
-export type LiveOk = <T>(
-  path: string,
-  method?: string,
-  body?: unknown,
-  opts?: WriteOpts,
-  extraHeaders?: Record<string, string>,
-) => Promise<T>;
-
 /** `?a=1&b=2` from the filters that are set, or "". */
 function query(q: Record<string, string | undefined>): string {
   const p = new URLSearchParams();
@@ -42,19 +34,56 @@ function query(q: Record<string, string | undefined>): string {
 }
 
 /**
+ * The live client's one way to call the API: a path under /platform, the
+ * method, the body, the write's key and any extra headers. Each area's
+ * client is built on it.
+ */
+export type LiveOk = <T>(
+  path: string,
+  method?: string,
+  body?: unknown,
+  opts?: WriteOpts,
+  extraHeaders?: Record<string, string>,
+) => Promise<T>;
+
+/** Legal holds (Plan 8a): rows `platform/legal-holds…` of the shape table. */
+function holdsLive(ok: LiveOk): HoldsClient {
+  const hold = (x: string, rest = "") =>
+    `/legal-holds/${encodeURIComponent(x)}${rest}`;
+  return {
+    listHolds: (q) =>
+      ok(
+        `/legal-holds${query({
+          status: q.status,
+          hospital: q.hospital,
+          q: q.q,
+          cursor: q.cursor,
+        })}`,
+      ),
+    getHold: (x) => ok(hold(x)),
+    placeHold: (b, o) => ok("/legal-holds", "POST", b, o),
+    editHold: (x, b, o) => ok(hold(x), "PATCH", b, o),
+    requestLift: (x, b, o) => ok(hold(x, "/lift"), "POST", b, o),
+    approveLift: (x, b, o) => ok(hold(x, "/lift/approve"), "POST", b, o),
+    cancelLift: (x, b, o) => ok(hold(x, "/lift/cancel"), "POST", b, o),
+    undoLift: (x, b, o) => ok(hold(x, "/lift/undo"), "POST", b, o),
+  };
+}
+
+/**
  * The platform API through this app's /api/v1 proxy (the token stays
  * server-side). Every path is a row of the proxy's shape table.
  */
 export function createLivePlatformClient({
   fetchImpl = (...a: Parameters<typeof fetch>) => fetch(...a),
 }: { fetchImpl?: typeof fetch } = {}): PlatformClient {
-  async function ok<T>(
+  const ok: LiveOk = async <T>(
     path: string,
     method = "GET",
     body?: unknown,
     opts?: WriteOpts,
     extraHeaders?: Record<string, string>,
-  ): Promise<T> {
+  ): Promise<T> => {
     const { res, data } = await apiRequest(fetchImpl, `/platform${path}`, {
       method,
       body,
@@ -81,7 +110,7 @@ export function createLivePlatformClient({
       throw new ApiError(res.status, code);
     }
     return data as T;
-  }
+  };
 
   const id = encodeURIComponent;
   const h = (hospital: string, rest = "") =>
@@ -129,5 +158,27 @@ export function createLivePlatformClient({
     getEmailPref: () => ok("/me/analytics-email"),
     setEmailPref: (b, o) => ok("/me/analytics-email", "PUT", b, o),
     ...liveAudit(ok, fetchImpl),
+    // The health poll is background too: it must not keep a session alive.
+    getHealth: (o) =>
+      ok(
+        "/health",
+        "GET",
+        undefined,
+        undefined,
+        o?.background ? BACKGROUND : undefined,
+      ),
+    listJobs: (q) =>
+      ok(
+        `/jobs${query({
+          status: q.status,
+          type: q.type,
+          hospital: q.hospital,
+          kind: q.kind,
+          cursor: q.cursor,
+        })}`,
+      ),
+    retryJobs: (b, o) => ok("/jobs/retry", "POST", b, o),
+    cancelJobs: (b, o) => ok("/jobs/cancel", "POST", b, o),
+    ...holdsLive(ok),
   };
 }
