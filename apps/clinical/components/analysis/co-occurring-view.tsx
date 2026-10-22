@@ -17,6 +17,7 @@ import { viewSummary } from "@/lib/analysis/summary";
 import type { BarItem } from "@mhai/ui/charts/types";
 import { BarList } from "@mhai/ui/charts/bar-list";
 import { DataTable } from "./data-table";
+import { DrillScope, SEE_COLUMN, seePatients } from "./patients-panel";
 import { Panel, ViewFrame } from "./view-frame";
 
 type Pair = CoOccurringOut["pairs"][number];
@@ -57,6 +58,7 @@ function CoOccurringTable({ d }: { d: CoOccurringOut }) {
         { key: "b", label: "Condition B" },
         { key: "patients", label: "Patients", numeric: true },
         { key: "share", label: "Share of condition A", numeric: true },
+        SEE_COLUMN,
       ]}
       rows={d.pairs.map((p) => ({
         key: `${p.a.id}/${p.b.id}`,
@@ -65,6 +67,7 @@ function CoOccurringTable({ d }: { d: CoOccurringOut }) {
           b: conditionText(p.b),
           patients: p.patients,
           share: shareText(p.share_of_a),
+          see: seePatients(p.patients, pairLabel(p)),
         },
       }))}
     />
@@ -86,12 +89,25 @@ export function CoOccurringView({ filters }: { filters: AnalysisFilters }) {
       summary={d ? viewSummary("co-occurring", d) : null}
       chart={
         d && !none ? (
-          <Panel title="Conditions found together">
-            <BarList label="Patients by pair" items={pairBars(d)} />
-          </Panel>
+          <DrillScope filters={filters}>
+            <Panel title="Conditions found together">
+              <BarList
+                label="Patients by pair"
+                items={pairBars(d, (p) =>
+                  seePatients(p.patients, pairLabel(p)),
+                )}
+              />
+            </Panel>
+          </DrillScope>
         ) : null
       }
-      table={d && !none ? <CoOccurringTable d={d} /> : null}
+      table={
+        d && !none ? (
+          <DrillScope filters={filters}>
+            <CoOccurringTable d={d} />
+          </DrillScope>
+        ) : null
+      }
     />
   );
 }

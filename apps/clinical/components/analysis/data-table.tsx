@@ -13,6 +13,11 @@ export type TableColumn = {
   label: string;
   /** Counts line up on the right. */
   numeric?: boolean;
+  /**
+   * A row's action (See patients): the last column of the table, and the
+   * card's action on a phone. An empty cell shows nothing.
+   */
+  action?: boolean;
 };
 export type TableRow = { key: string; cells: Record<string, TableCell> };
 
@@ -36,8 +41,10 @@ export function DataTable({
   rows: readonly TableRow[];
 }) {
   const desktop = useIsDesktop();
-  const [head, ...rest] = columns;
+  const [head, ...others] = columns;
   if (!head) return null;
+  const rest = others.filter((c) => !c.action);
+  const actions = others.filter((c) => c.action);
 
   if (!desktop)
     return (
@@ -62,6 +69,13 @@ export function DataTable({
                   </div>
                 ))}
               </dl>
+              {actions.map((c) =>
+                r.cells[c.key] ? (
+                  <div key={c.key} className="mt-1">
+                    {cellText(r.cells[c.key])}
+                  </div>
+                ) : null,
+              )}
             </li>
           ))}
         </ul>
@@ -76,7 +90,7 @@ export function DataTable({
         </caption>
         <thead className="text-[11px] uppercase tracking-[.08em] text-ink-3">
           <tr>
-            {columns.map((c) => (
+            {[head, ...rest, ...actions].map((c) => (
               <th
                 key={c.key}
                 scope="col"
@@ -108,6 +122,11 @@ export function DataTable({
                   )}
                 >
                   {cellText(r.cells[c.key])}
+                </td>
+              ))}
+              {actions.map((c) => (
+                <td key={c.key} className="px-4 py-1">
+                  {cellText(r.cells[c.key] ?? null)}
                 </td>
               ))}
             </tr>

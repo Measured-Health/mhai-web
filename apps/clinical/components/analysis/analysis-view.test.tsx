@@ -18,7 +18,7 @@ import { createMockAnalysis } from "@/lib/api/mock-analysis";
 import { hideAllWhenFew } from "@/lib/analysis-queries";
 import { analysisCsv } from "@/lib/analysis/csv";
 import { defaultFilters, rangeFor } from "@/lib/analysis/filters";
-import { countText } from "@/lib/analysis/labels";
+import { conditionText, countText } from "@/lib/analysis/labels";
 import { readView } from "@/lib/analysis/read";
 import { viewSummary } from "@/lib/analysis/summary";
 import { renderAdmin } from "@/tests/admin-render";
@@ -266,6 +266,7 @@ describe("AnalysisView", () => {
       "Cases",
       "New in this period",
       "Existing",
+      "Patient list",
     ]);
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(d.by_condition.length);
@@ -278,6 +279,9 @@ describe("AnalysisView", () => {
         countText(r.cases),
         countText(r.new),
         countText(r.existing),
+        r.cases.drill && !r.cases.suppressed
+          ? `See patients · ${conditionText(r.condition)}`
+          : "",
       ]);
     });
     expect(

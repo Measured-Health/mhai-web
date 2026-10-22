@@ -121,5 +121,8 @@ export const usePatients = (q: PatientsQuery | null) =>
       readPatients(await getAnalysisClient().listPatients(q!)),
     enabled: q !== null,
     gcTime: 0,
+    // Fetched once per opening: a refetch would log a second viewing.
+    staleTime: Infinity,
+    refetchOnReconnect: false,
     ...READ_RETRY,
   });
