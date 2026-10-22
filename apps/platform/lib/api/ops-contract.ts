@@ -124,7 +124,11 @@ export interface OpsClient {
   getHealth(opts?: { background?: boolean }): Promise<HealthOut>;
   /** Newest failure first; failed jobs unless `status` says otherwise. */
   listJobs(q: JobQuery): Promise<{ jobs: Job[]; next_cursor: string | null }>;
-  /** No step-up. Jobs that are no longer failed come back in `skipped`. */
+  /**
+   * No step-up. `retried` means attempted: a job can still be `failed`
+   * afterwards (an unreadable document), so don't assume it left the failed
+   * list. Jobs that are no longer failed come back in `skipped`.
+   */
   retryJobs(
     body: { ids: string[] },
     opts: WriteOpts,

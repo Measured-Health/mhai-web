@@ -388,11 +388,33 @@ describe("mock jobs", () => {
     expect(events[0]).toMatchObject({
       action: "jobs_cancelled",
       target: "1 failed job",
+      detail: "No longer needed",
       actor: { id: "tm_ada" },
     });
     expect(events[1]).toMatchObject({
       action: "jobs_retried",
       target: "2 failed jobs",
     });
+  });
+
+  it("cancel logs the reason in words and never the note", async () => {
+    const { m } = setup();
+    await m.cancelJobs(
+      {
+        ids: ["job_triage_1"],
+        reason: "other",
+        note: "SECRET-NOTE",
+        ...CODE,
+      },
+      KEY(),
+    );
+    await m.cancelJobs(
+      { ids: ["job_search_1"], reason: "cant_succeed", ...CODE },
+      KEY(),
+    );
+    const { events } = await m.listActivity({});
+    expect(events[0]!.detail).toBe("Can't succeed");
+    expect(events[1]!.detail).toBe("Other");
+    expect(JSON.stringify(events)).not.toContain("SECRET-NOTE");
   });
 });

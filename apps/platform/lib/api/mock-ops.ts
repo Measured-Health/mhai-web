@@ -38,6 +38,7 @@ const CANCEL_WORDS: Record<CancelReason, string> = {
 /** The most recent demo's way to change its health mode (see below). */
 let setActiveMode: ((mode: HealthMode) => void) | null = null;
 /**
+ * Acts on the most recently created mock (a second mock re-points it).
  * Switches the running demo's sample health reading (the Health tab's
  * "Sample data" control, shown only for the demo).
  */
