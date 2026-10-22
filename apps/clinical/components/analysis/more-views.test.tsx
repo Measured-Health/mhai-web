@@ -178,6 +178,7 @@ describe("Co-occurring conditions", () => {
       "Condition B",
       "Patients",
       "Share of condition A",
+      "Patients",
     ]);
     const row = within(table).getAllByRole("row")[1]!;
     expect(
@@ -185,7 +186,13 @@ describe("Co-occurring conditions", () => {
         within(row).getByRole("rowheader"),
         ...within(row).getAllByRole("cell"),
       ].map((c) => c.textContent),
-    ).toEqual(["Type 2 diabetes · E11", "Hypertension · I10", "40", "40%"]);
+    ).toEqual([
+      "Type 2 diabetes · E11",
+      "Hypertension · I10",
+      "40",
+      "40%",
+      "See patients · Type 2 diabetes + Hypertension",
+    ]);
   });
 });
 

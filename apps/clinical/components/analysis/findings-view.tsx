@@ -27,6 +27,7 @@ import {
 import type { BarItem } from "@mhai/ui/charts/types";
 import { BarList } from "@mhai/ui/charts/bar-list";
 import { DataTable } from "./data-table";
+import { DrillScope, SEE_COLUMN, seePatients } from "./patients-panel";
 import { Panel, ViewFrame } from "./view-frame";
 
 const SEVERITIES: readonly AlertSeverity[] = ["critical", "urgent", "info"];
@@ -57,6 +58,12 @@ const findingKey = (f: Finding, i: number) =>
 
 type Finding = FindingsOut["findings"][number];
 
+/** "Potassium · Low", or the name alone when there is no flag. */
+export function findingLabel(f: Finding): string {
+  const flag = flagText(f.flag);
+  return flag ? `${findingName(f)} · ${flag}` : findingName(f);
+}
+
 /**
  * One bar per finding, the flag in words and an icon. `action` (e.g. See
  * patients) renders in the bar's note, which BarList leaves out for a hidden count.
@@ -66,10 +73,9 @@ export function findingBars(
   action?: (row: Finding) => ReactNode,
 ): BarItem[] {
   return d.findings.map((f, i) => {
-    const flag = flagText(f.flag);
     return {
       key: findingKey(f, i),
-      label: flag ? `${findingName(f)} · ${flag}` : findingName(f),
+      label: findingLabel(f),
       icon: f.flag ? FLAG_ICON[flagWord(f.flag)!] : undefined,
       value: f.patients.value,
       text: countText(f.patients),
@@ -111,7 +117,12 @@ function FindingsCharts({ d }: { d: FindingsOut }) {
   return (
     <div className="flex flex-col gap-4">
       <Panel title="Findings">
-        <BarList label="Patients by finding" items={findingBars(d)} />
+        <BarList
+          label="Patients by finding"
+          items={findingBars(d, (f) =>
+            seePatients(f.patients, findingLabel(f)),
+          )}
+        />
       </Panel>
       <div className="grid gap-4 md:grid-cols-2">
         <Panel title="Alerts by severity">
@@ -152,6 +163,7 @@ function FindingsTables({ d }: { d: FindingsOut }) {
           { key: "flag", label: "Flag" },
           { key: "patients", label: "Patients", numeric: true },
           { key: "results", label: "Results", numeric: true },
+          SEE_COLUMN,
         ]}
         rows={d.findings.map((f, i) => ({
           key: findingKey(f, i),
@@ -167,6 +179,7 @@ function FindingsTables({ d }: { d: FindingsOut }) {
             ),
             patients: f.patients,
             results: f.results,
+            see: seePatients(f.patients, findingLabel(f)),
           },
         }))}
       />
@@ -244,8 +257,20 @@ export function FindingsView({ filters }: { filters: AnalysisFilters }) {
       updatedAt={d?.updated_at ?? null}
       onRetry={() => void q.refetch()}
       summary={d ? viewSummary("findings", d) : null}
-      chart={d && !none ? <FindingsCharts d={d} /> : null}
-      table={d && !none ? <FindingsTables d={d} /> : null}
+      chart={
+        d && !none ? (
+          <DrillScope filters={filters}>
+            <FindingsCharts d={d} />
+          </DrillScope>
+        ) : null
+      }
+      table={
+        d && !none ? (
+          <DrillScope filters={filters}>
+            <FindingsTables d={d} />
+          </DrillScope>
+        ) : null
+      }
     />
   );
 }

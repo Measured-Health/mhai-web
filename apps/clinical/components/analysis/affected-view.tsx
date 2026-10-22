@@ -17,7 +17,7 @@ import {
 import { viewSummary } from "@/lib/analysis/summary";
 import { BarList } from "@mhai/ui/charts/bar-list";
 import { DataTable } from "./data-table";
-import { DrillScope, SeePatients, drillable } from "./patients-panel";
+import { DrillScope, SEE_COLUMN, seePatients } from "./patients-panel";
 import { Panel, ViewFrame } from "./view-frame";
 
 /** One breakdown of the patients: its title, the group's name and its rows. */
@@ -97,12 +97,9 @@ function AffectedCharts({
                 value: r.patients.value,
                 text: countText(r.patients),
                 hidden: !shows(r.patients),
-                note: drillable(r.patients) ? (
-                  <SeePatients
-                    d={r.patients}
-                    label={`${g.column}: ${r.label}`}
-                  />
-                ) : undefined,
+                note:
+                  seePatients(r.patients, `${g.column}: ${r.label}`) ??
+                  undefined,
               }))}
             />
           </Panel>
@@ -112,24 +109,37 @@ function AffectedCharts({
   );
 }
 
-function AffectedTables({ d }: { d: AffectedOut }) {
+function AffectedTables({
+  d,
+  filters,
+}: {
+  d: AffectedOut;
+  filters: AnalysisFilters;
+}) {
   return (
-    <div className="flex flex-col gap-4">
-      {affectedGroups(d).map((g) => (
-        <DataTable
-          key={g.title}
-          caption={`Patients ${g.title.toLowerCase()}`}
-          columns={[
-            { key: "group", label: g.column },
-            { key: "patients", label: "Patients", numeric: true },
-          ]}
-          rows={g.rows.map((r) => ({
-            key: r.key,
-            cells: { group: r.label, patients: r.patients },
-          }))}
-        />
-      ))}
-    </div>
+    <DrillScope filters={filters}>
+      <div className="flex flex-col gap-4">
+        {affectedGroups(d).map((g) => (
+          <DataTable
+            key={g.title}
+            caption={`Patients ${g.title.toLowerCase()}`}
+            columns={[
+              { key: "group", label: g.column },
+              { key: "patients", label: "Patients", numeric: true },
+              SEE_COLUMN,
+            ]}
+            rows={g.rows.map((r) => ({
+              key: r.key,
+              cells: {
+                group: r.label,
+                patients: r.patients,
+                see: seePatients(r.patients, `${g.column}: ${r.label}`),
+              },
+            }))}
+          />
+        ))}
+      </div>
+    </DrillScope>
   );
 }
 
@@ -147,7 +157,7 @@ export function AffectedView({ filters }: { filters: AnalysisFilters }) {
       onRetry={() => void q.refetch()}
       summary={d ? viewSummary("affected", d) : null}
       chart={d && !none ? <AffectedCharts d={d} filters={filters} /> : null}
-      table={d && !none ? <AffectedTables d={d} /> : null}
+      table={d && !none ? <AffectedTables d={d} filters={filters} /> : null}
     />
   );
 }

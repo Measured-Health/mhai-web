@@ -18,7 +18,9 @@ import { ApiError } from "@/lib/api/errors";
 import type { GuardedOut } from "@/lib/api/admin-contract";
 import type { AnalysisClient } from "@/lib/api/analysis";
 import type {
+  CoOccurringOut,
   Drillable,
+  FindingsOut,
   Meta,
   PatientRowOut,
   PatientsOut,
@@ -37,6 +39,8 @@ vi.mock("@/lib/api/analysis", () => ({
   getAnalysisClient: () => holder.client,
 }));
 import { AffectedView } from "./affected-view";
+import { CoOccurringView } from "./co-occurring-view";
+import { FindingsView } from "./findings-view";
 import { PatientsPanel } from "./patients-panel";
 import { PrevalenceView } from "./prevalence-view";
 
@@ -432,5 +436,252 @@ describe("PatientsPanel", () => {
     });
     // Nothing about the drill goes in the URL.
     expect(window.location.href).not.toMatch(/sex-female|drill/);
+  });
+});
+
+const I10 = { id: "i10", name: "Hypertension", icd10: "I10" };
+const J45 = { id: "j45", name: "Asthma", icd10: "J45" };
+const CO: CoOccurringOut = {
+  ...meta(S(300)),
+  pairs: [
+    {
+      a: E11,
+      b: I10,
+      a_patients: S(100),
+      patients: D(S(40), "pair-e11-i10"),
+      share_of_a: S(0.4),
+    },
+    { a: J45, b: E11, a_patients: S(60), patients: D(H), share_of_a: H },
+  ],
+};
+const FIND: FindingsOut = {
+  ...meta(S(300)),
+  findings: [
+    {
+      name: "Potassium",
+      flag: "low",
+      patients: D(S(30), "f1"),
+      results: S(50),
+    },
+    { name: "ECG", flag: "abnormal", patients: D(H), results: H },
+  ],
+  alerts: {
+    total: S(60),
+    by_severity: { critical: S(10), urgent: S(20), info: S(30) },
+    median_ack_minutes: S(12),
+    critical_median_ack_minutes: S(6),
+    dismissed: S(15),
+    dismiss_reasons: [
+      { reason: "not_relevant", count: S(10) },
+      { reason: "already_known", count: S(5) },
+    ],
+  },
+};
+
+/** Serve this reply for every view, and five rows for any list. */
+function serveView(view: unknown) {
+  const spy = vi.fn(async () =>
+    reply(
+      5,
+      [1, 2, 3, 4, 5].map((i) => row(i)),
+    ),
+  );
+  holder.client = {
+    ...holder.client,
+    getView: (async () => structuredClone(view)) as AnalysisClient["getView"],
+    listPatients: spy,
+  };
+  return spy;
+}
+const showTable = () =>
+  userEvent.click(screen.getByRole("button", { name: "Table" }));
+const cellsOf = (r: HTMLElement) =>
+  [within(r).getByRole("rowheader"), ...within(r).getAllByRole("cell")].map(
+    (c) => c.textContent,
+  );
+
+describe("See patients in the other views", () => {
+  it("co-occurring: a shown pair opens its list; a hidden pair has no See patients", async () => {
+    const spy = serveView(CO);
+    renderWith(<CoOccurringView filters={F90} />);
+    const list = await screen.findByRole("list", { name: "Patients by pair" });
+    const [shown, hidden] = within(list).getAllByRole("listitem");
+    expect(within(hidden!).queryByRole("button")).toBeNull();
+    await userEvent.click(
+      within(shown!).getByRole("button", {
+        name: "See patients · Type 2 diabetes + Hypertension",
+      }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "5 patients · Type 2 diabetes + Hypertension",
+      }),
+    ).toBeVisible();
+    expect(spy).toHaveBeenCalledWith({
+      drill: "pair-e11-i10",
+      level: "deidentified",
+      filters: F90,
+    });
+  });
+
+  it("findings: a shown finding opens its list; a hidden one has no See patients", async () => {
+    const spy = serveView(FIND);
+    renderWith(<FindingsView filters={F90} />);
+    const list = await screen.findByRole("list", {
+      name: "Patients by finding",
+    });
+    const [shown, hidden] = within(list).getAllByRole("listitem");
+    expect(hidden).toHaveTextContent("Fewer than 5");
+    expect(within(hidden!).queryByRole("button")).toBeNull();
+    await userEvent.click(
+      within(shown!).getByRole("button", {
+        name: "See patients · Potassium · Low",
+      }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "5 patients · Potassium · Low",
+      }),
+    ).toBeVisible();
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ drill: "f1" }));
+    // Alerts are not patients: no See patients there.
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(
+      within(
+        screen.getByRole("list", { name: "Alerts by severity" }),
+      ).queryByRole("button"),
+    ).toBeNull();
+  });
+});
+
+describe("See patients in the tables", () => {
+  it("the prevalence table ends with a Patients column; a hidden count has an empty cell", async () => {
+    prevalenceWith(async () =>
+      reply(
+        5,
+        [1, 2, 3, 4, 5].map((i) => row(i)),
+      ),
+    );
+    await seeButton();
+    await showTable();
+    const table = screen.getByRole("table", { name: "Cases by condition" });
+    const heads = within(table)
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+    expect(heads.at(-1)).toBe("Patients");
+    const [, shown, hidden] = within(table).getAllByRole("row");
+    expect(cellsOf(shown!).at(-1)).toBe("See patients · Type 2 diabetes · E11");
+    expect(cellsOf(hidden!).at(-1)).toBe("");
+    expect(within(hidden!).queryByRole("button")).toBeNull();
+    // It opens the list, and closing gives focus back to it.
+    const b = within(shown!).getByRole("button", { name: /^See patients/ });
+    await userEvent.click(b);
+    const panel = screen.getByRole("dialog");
+    await within(panel).findByRole("list", { name: "Patients" });
+    await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(b).toHaveFocus();
+  });
+
+  it("the affected, co-occurring and findings tables: See patients only on shown rows", async () => {
+    renderWith(<AffectedView filters={F90} />);
+    await screen.findByRole("list", { name: "Patients by age band" });
+    await showTable();
+    const age = screen.getByRole("table", { name: "Patients by age band" });
+    expect(
+      within(age)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Age band", "Patients", "Patients"]);
+    expect(cellsOf(within(age).getAllByRole("row")[1]!).at(-1)).toBe(
+      "See patients · Age band: 0–17",
+    );
+    cleanup();
+
+    qc = new QueryClient();
+    serveView(CO);
+    renderWith(<CoOccurringView filters={F90} />);
+    await screen.findByRole("list", { name: "Patients by pair" });
+    await showTable();
+    let rows = within(
+      screen.getByRole("table", { name: "Conditions found together" }),
+    ).getAllByRole("row");
+    expect(cellsOf(rows[1]!).at(-1)).toBe(
+      "See patients · Type 2 diabetes + Hypertension",
+    );
+    expect(cellsOf(rows[2]!).at(-1)).toBe("");
+    expect(within(rows[2]!).queryByRole("button")).toBeNull();
+    cleanup();
+
+    qc = new QueryClient();
+    serveView(FIND);
+    renderWith(<FindingsView filters={F90} />);
+    await screen.findByRole("list", { name: "Patients by finding" });
+    await showTable();
+    const findings = screen.getByRole("table", { name: "Findings" });
+    expect(
+      within(findings)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Finding", "Flag", "Patients", "Results", "Patients"]);
+    rows = within(findings).getAllByRole("row");
+    expect(cellsOf(rows[1]!).at(-1)).toBe("See patients · Potassium · Low");
+    expect(cellsOf(rows[2]!).at(-1)).toBe("");
+    expect(
+      within(
+        screen.getByRole("table", { name: "Alerts by severity" }),
+      ).queryByRole("button"),
+    ).toBeNull();
+  });
+
+  it("is disabled offline in the table too, with the reason", async () => {
+    prevalenceWith(vi.fn());
+    await seeButton();
+    await showTable();
+    goOffline();
+    try {
+      const b = within(
+        screen.getByRole("table", { name: "Cases by condition" }),
+      ).getByRole("button", { name: /^See patients/ });
+      expect(b).toBeDisabled();
+      expect(b).toHaveAttribute(
+        "aria-describedby",
+        screen.getByText("You're offline. Reconnect to see patients.").id,
+      );
+    } finally {
+      goOnline();
+    }
+  });
+
+  it("on a phone, See patients is the card's action, and a hidden card has none", async () => {
+    vi.stubGlobal("matchMedia", (q: string) => ({
+      matches: false,
+      media: q,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    try {
+      prevalenceWith(async () =>
+        reply(
+          5,
+          [1, 2, 3, 4, 5].map((i) => row(i)),
+        ),
+      );
+      await seeButton();
+      await showTable();
+      expect(screen.queryByRole("table")).toBeNull();
+      const cards = screen.getByRole("list", { name: "Cases by condition" });
+      const [shown, hidden] = within(cards).getAllByRole("listitem");
+      // Not a label-and-value pair: the card's action, after the numbers.
+      expect(within(shown!).queryByText("Patients")).toBeNull();
+      const b = within(shown!).getByRole("button", {
+        name: "See patients · Type 2 diabetes · E11",
+      });
+      expect(shown!.lastElementChild).toContainElement(b);
+      expect(within(hidden!).queryByRole("button")).toBeNull();
+      await userEvent.click(b);
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

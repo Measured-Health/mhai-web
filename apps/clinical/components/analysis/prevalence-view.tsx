@@ -7,12 +7,13 @@ import { countLabel } from "@/lib/admin/report";
 import { frameState, useAnalysisView } from "@/lib/analysis-queries";
 import { shows } from "@/lib/analysis/guards";
 import { conditionName, conditionText, countText } from "@/lib/analysis/labels";
+import { noteOf } from "@/lib/analysis/note";
 import { viewSummary } from "@/lib/analysis/summary";
 import type { BarItem, Column } from "@mhai/ui/charts/types";
 import { BarList } from "@mhai/ui/charts/bar-list";
 import { ColumnChart } from "@mhai/ui/charts/column-chart";
 import { DataTable } from "./data-table";
-import { DrillScope, SeePatients, drillable } from "./patients-panel";
+import { DrillScope, SEE_COLUMN, seePatients } from "./patients-panel";
 import { Panel, ViewFrame } from "./view-frame";
 
 const DAY = new Intl.DateTimeFormat("en-GB", {
@@ -52,13 +53,10 @@ function conditionBars(d: PrevalenceOut): BarItem[] {
     value: r.cases.value,
     text: countText(r.cases),
     hidden: !shows(r.cases),
-    note:
-      shows(r.new) || drillable(r.cases) ? (
-        <>
-          {shows(r.new) && `${countText(r.new)} new in this period `}
-          <SeePatients d={r.cases} label={conditionText(r.condition)} />
-        </>
-      ) : undefined,
+    note: noteOf(
+      shows(r.new) ? `${countText(r.new)} new in this period` : null,
+      seePatients(r.cases, conditionText(r.condition)),
+    ),
   }));
 }
 
@@ -92,50 +90,60 @@ export function PrevalenceBody({
   );
 }
 
-export function PrevalenceTables({ d }: { d: PrevalenceOut }) {
+export function PrevalenceTables({
+  d,
+  filters,
+}: {
+  d: PrevalenceOut;
+  filters: AnalysisFilters;
+}) {
   return (
-    <div className="flex flex-col gap-4">
-      <DataTable
-        caption="Cases by condition"
-        columns={[
-          { key: "condition", label: "Condition" },
-          { key: "icd10", label: "ICD-10" },
-          { key: "cases", label: "Cases", numeric: true },
-          { key: "new", label: "New in this period", numeric: true },
-          { key: "existing", label: "Existing", numeric: true },
-        ]}
-        rows={d.by_condition.map((r) => ({
-          key: r.condition.id,
-          cells: {
-            condition: conditionName(r.condition),
-            icd10: r.condition.icd10 ?? "—",
-            cases: r.cases,
-            new: r.new,
-            existing: r.existing,
-          },
-        }))}
-      />
-      <DataTable
-        caption="Cases over time"
-        columns={[
-          { key: "start", label: d.bucket === "week" ? "Week" : "Month" },
-          { key: "cases", label: "Cases", numeric: true },
-          {
-            key: "new",
-            label: d.bucket === "week" ? "New that week" : "New that month",
-            numeric: true,
-          },
-        ]}
-        rows={d.series.map((p) => ({
-          key: p.start,
-          cells: {
-            start: bucketLabel(p.start, d.bucket),
-            cases: p.cases,
-            new: p.new,
-          },
-        }))}
-      />
-    </div>
+    <DrillScope filters={filters}>
+      <div className="flex flex-col gap-4">
+        <DataTable
+          caption="Cases by condition"
+          columns={[
+            { key: "condition", label: "Condition" },
+            { key: "icd10", label: "ICD-10" },
+            { key: "cases", label: "Cases", numeric: true },
+            { key: "new", label: "New in this period", numeric: true },
+            { key: "existing", label: "Existing", numeric: true },
+            SEE_COLUMN,
+          ]}
+          rows={d.by_condition.map((r) => ({
+            key: r.condition.id,
+            cells: {
+              condition: conditionName(r.condition),
+              icd10: r.condition.icd10 ?? "—",
+              cases: r.cases,
+              new: r.new,
+              existing: r.existing,
+              see: seePatients(r.cases, conditionText(r.condition)),
+            },
+          }))}
+        />
+        <DataTable
+          caption="Cases over time"
+          columns={[
+            { key: "start", label: d.bucket === "week" ? "Week" : "Month" },
+            { key: "cases", label: "Cases", numeric: true },
+            {
+              key: "new",
+              label: d.bucket === "week" ? "New that week" : "New that month",
+              numeric: true,
+            },
+          ]}
+          rows={d.series.map((p) => ({
+            key: p.start,
+            cells: {
+              start: bucketLabel(p.start, d.bucket),
+              cases: p.cases,
+              new: p.new,
+            },
+          }))}
+        />
+      </div>
+    </DrillScope>
   );
 }
 
@@ -153,7 +161,7 @@ export function PrevalenceView({ filters }: { filters: AnalysisFilters }) {
       onRetry={() => void q.refetch()}
       summary={d ? viewSummary("prevalence", d) : null}
       chart={d && !none ? <PrevalenceBody d={d} filters={filters} /> : null}
-      table={d && !none ? <PrevalenceTables d={d} /> : null}
+      table={d && !none ? <PrevalenceTables d={d} filters={filters} /> : null}
     />
   );
 }

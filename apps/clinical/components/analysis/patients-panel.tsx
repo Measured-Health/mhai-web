@@ -40,6 +40,7 @@ import { Button } from "@mhai/ui/button";
 import { useOnline } from "@mhai/ui/hooks/use-online";
 import { SidePanel } from "@mhai/ui/side-panel";
 import { Skeleton } from "@mhai/ui/skeleton";
+import type { TableColumn } from "./data-table";
 import { SMALL_GROUP_MIN } from "@mhai/ui/small-groups";
 
 /**
@@ -232,6 +233,17 @@ export function DrillScope({
 export const drillable = (d: Drillable): d is Drillable & { drill: string } =>
   d.drill !== null && shows(d) && d.value! >= SMALL_GROUP_MIN;
 
+/** The table's last column: See patients on drillable rows, empty otherwise. */
+export const SEE_COLUMN: TableColumn = {
+  key: "see",
+  label: "Patients",
+  action: true,
+};
+
+/** See patients for a drillable count, or nothing (an empty cell or note). */
+export const seePatients = (d: Drillable, label: string): ReactNode =>
+  drillable(d) ? <SeePatients d={d} label={label} /> : null;
+
 /**
  * See patients for one row, inside a `DrillScope`. Nothing for a hidden or
  * undrillable count. The drill key goes only in the query, never the URL.
@@ -262,11 +274,13 @@ export function SeePatients({ d, label }: { d: Drillable; label: string }) {
         ref={button}
         type="button"
         disabled={!scope.online}
+        aria-label={`See patients · ${label}`}
         aria-describedby={scope.online ? undefined : scope.reasonId}
         onClick={() => setOpen(true)}
         className="mt-0.5 inline-flex min-h-11 items-center gap-1 rounded-lg px-1 text-[12.5px] font-semibold text-mint-deep underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-mint-deep disabled:cursor-not-allowed disabled:text-ink-3 disabled:no-underline"
       >
-        See patients<span className="sr-only"> · {label}</span>
+        See patients
+        <span className="sr-only">{` · ${label}`}</span>
       </button>
       {open && (
         <PatientsPanel
