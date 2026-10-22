@@ -89,5 +89,14 @@ export function createLivePlatformClient({
     },
     listActivity: (q) =>
       ok(`/activity${query({ hospital: q.hospital, cursor: q.cursor })}`),
+    getAnalytics: (period) => ok(`/analytics${query({ period })}`),
+    getChangeSeries: (c, period) =>
+      ok(`/analytics/changes/${id(c)}/series${query({ period })}`),
+    getHospitalSeries: (x, measure, period) =>
+      ok(`/analytics/hospitals/${id(x)}/series${query({ measure, period })}`),
+    followUp: (c, b, o) =>
+      ok(`/analytics/changes/${id(c)}/follow-up`, "PUT", b, o),
+    undoFollowUp: (c, b, o) =>
+      ok(`/analytics/changes/${id(c)}/follow-up`, "DELETE", b, o),
   };
 }

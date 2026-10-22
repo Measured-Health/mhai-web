@@ -46,6 +46,11 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["PATCH", "platform/team/{id}"],
   ["DELETE", "platform/team/{id}"],
   ["GET", "platform/activity"],
+  ["GET", "platform/analytics"],
+  ["GET", "platform/analytics/changes/{id}/series"],
+  ["GET", "platform/analytics/hospitals/{id}/series"],
+  ["PUT", "platform/analytics/changes/{id}/follow-up"],
+  ["DELETE", "platform/analytics/changes/{id}/follow-up"],
 ];
 
 const PATTERNS = SHAPES.map(([method, shape]) => ({

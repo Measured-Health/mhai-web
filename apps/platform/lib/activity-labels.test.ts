@@ -19,6 +19,9 @@ const WITH: Record<ActivityAction, string> = {
   team_invited: "invited Kemi to the team",
   team_role_changed: "changed Kemi's role",
   team_removed: "removed Kemi from the team",
+  change_followed_up: "marked “Kemi” followed up",
+  change_note_edited: "edited the follow-up note on “Kemi”",
+  change_follow_up_undone: "undid the follow-up on “Kemi”",
 };
 const WITHOUT: Partial<Record<ActivityAction, string>> = {
   admin_invited: "invited the first hospital admin",
@@ -26,6 +29,9 @@ const WITHOUT: Partial<Record<ActivityAction, string>> = {
   team_invited: "invited someone to the team",
   team_role_changed: "changed a team member's role",
   team_removed: "removed a team member",
+  change_followed_up: "marked a change followed up",
+  change_note_edited: "edited a follow-up note",
+  change_follow_up_undone: "undid a follow-up",
 };
 
 describe("actionLabel", () => {

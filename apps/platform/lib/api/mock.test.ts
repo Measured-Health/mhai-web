@@ -46,10 +46,11 @@ const NEW: HospitalIn = {
 };
 
 describe("mock platform API", () => {
-  it("lists all six sample hospitals and filters by status and by name or short code", async () => {
+  it("lists all seven sample hospitals and filters by status and by name or short code", async () => {
     const { m } = setup();
     const all = await m.listHospitals({});
     expect(all.hospitals.map((h) => h.name)).toEqual([
+      "Havana Hospital",
       "Northgate General Hospital",
       "Riverside Children's Hospital",
       "Eastbrook Medical Centre",
@@ -67,6 +68,7 @@ describe("mock platform API", () => {
     ]);
     const active = await m.listHospitals({ status: "active" });
     expect(active.hospitals.map((h) => h.id)).toEqual([
+      "h_havana",
       "h_northgate",
       "h_riverside",
     ]);
@@ -88,7 +90,7 @@ describe("mock platform API", () => {
       staff_count: 96,
     });
     expect((await m.getHospital("h_eastbrook")).first_admin?.status).toBe(
-      "pending",
+      "expired",
     );
     expect(await m.getHospital("h_westfield")).toMatchObject({
       status: "deactivated",
@@ -163,7 +165,7 @@ describe("mock platform API", () => {
     expect(h.first_admin!.invite_id).toMatch(/^inv_[A-Za-z0-9_-]+$/);
     // A retry with the same key does not add it twice.
     expect((await m.addHospital(NEW, key)).id).toBe(h.id);
-    expect((await m.listHospitals({})).hospitals).toHaveLength(7);
+    expect((await m.listHospitals({})).hospitals).toHaveLength(8);
   });
 
   it("invites expire after 7 days", async () => {
@@ -470,7 +472,7 @@ describe("mock platform API", () => {
 
   it("an auditor's write is forbidden", async () => {
     const { m, as } = setup(TEAM_EMAILS.amara);
-    expect((await m.listHospitals({})).hospitals).toHaveLength(6);
+    expect((await m.listHospitals({})).hospitals).toHaveLength(7);
     expect((await m.listTeam()).members.find((x) => x.is_you)?.id).toBe(
       "tm_amara",
     );

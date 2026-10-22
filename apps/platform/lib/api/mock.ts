@@ -23,6 +23,19 @@ import {
   type HospitalRecord,
 } from "./fixtures";
 import { getDemoStepUp, requireStepUp, type DemoStepUp } from "./step-up";
+import {
+  MEASURES,
+  PERIODS,
+  type Change,
+  type Period,
+} from "./analytics-contract";
+import {
+  buildAnalytics,
+  buildSeries,
+  isAnalyticsHospital,
+  seedChanges,
+  type AnalyticsMode,
+} from "./analytics-fixtures";
 
 const PAGE = 50;
 /** An approved removal becomes final this long after approval (demo time). */
@@ -30,6 +43,7 @@ const REMOVAL_DELAY_MS = 60_000;
 
 const NAME_MAX = 120;
 const REASON_MAX = 500;
+const NOTE_MAX = 500;
 const SHORT_CODE = /^[A-Z0-9]{2,8}$/;
 const DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -127,6 +141,7 @@ export function createMockPlatform({
   delayMs = 150,
   stepUp,
   twoStep,
+  analytics = "normal",
 }: {
   now?: () => number;
   /** The signed-in email, or null. */
@@ -136,11 +151,15 @@ export function createMockPlatform({
   stepUp?: DemoStepUp;
   /** Whether this account has two-step on; by default the team list says. */
   twoStep?: (email: string) => boolean;
+  /** Which sample analytics to serve (see `AnalyticsMode`). */
+  analytics?: AnalyticsMode;
 } = {}): PlatformClient {
   const codes = stepUp ?? getDemoStepUp();
   let hospitals = seedHospitals(now());
   let team = seedTeam(now());
   let activity = seedActivity(now());
+  /** What changed, with its follow-ups: kept for the life of the demo. */
+  const changes = seedChanges(now(), analytics);
   /** Replies to writes already done, by Idempotency-Key. */
   const done = new Map<string, unknown>();
   let nextId = 1;
@@ -193,9 +212,16 @@ export function createMockPlatform({
     ];
   }
 
+  /** A hospital lists its admins while it is active; nobody acts elsewhere. */
+  function syncAdmins(h: Hospital) {
+    const r = hospitals.find((x) => x.hospital === h);
+    if (r) h.admins = h.status === "active" ? copy(r.admins) : [];
+  }
+
   /** Time-driven changes: a removal a minute after approval; expired invites. */
   function settle(r: HospitalRecord) {
     const h = r.hospital;
+    syncAdmins(h);
     if (
       h.status === "removal_scheduled" &&
       h.removal?.approved_at &&
@@ -224,6 +250,7 @@ export function createMockPlatform({
   };
   const touch = (h: Hospital) => {
     h.version++;
+    syncAdmins(h);
     return copy(h);
   };
 
@@ -312,6 +339,20 @@ export function createMockPlatform({
     is_you: t.id === m.id,
   });
 
+  const period = (p: unknown): Period =>
+    PERIODS.includes(p as Period) ? (p as Period) : invalid();
+  const theChange = (id: string): Change =>
+    changes.find((c) => c.id === id) ?? fail(404, "not_found");
+  /** Every follow-up write sends the version it saw; else 409. */
+  const sameVersion = (c: Change, body: unknown) => {
+    const v = (body as { version?: unknown } | null)?.version;
+    if (typeof v !== "number") invalid();
+    if (v !== c.version) fail(409, "conflict");
+  };
+  const noSeries = () => {
+    if (analytics === "unavailable") fail(503, "unavailable");
+  };
+
   return {
     listHospitals: (q) =>
       read(() => {
@@ -361,11 +402,13 @@ export function createMockPlatform({
           deactivation: null,
           first_admin: newInvite(adminName, adminEmail),
           removal: null,
+          admins: [],
         };
         hospitals = [
           ...hospitals,
           {
             hospital: h,
+            admins: [],
             sso: {
               enabled: false,
               sign_in_url: null,
@@ -705,6 +748,77 @@ export function createMockPlatform({
         );
         const p = page<ActivityEvent>(rows, q.cursor);
         return { events: p.rows, next_cursor: p.next_cursor };
+      }),
+
+    getAnalytics: (p) =>
+      read(() => buildAnalytics(period(p), now(), analytics, changes)),
+
+    getChangeSeries: (id, p) =>
+      read(() => {
+        const per = period(p);
+        noSeries();
+        const c = theChange(id);
+        return buildSeries(c.hospital?.id ?? null, c.measure, per, now());
+      }),
+
+    getHospitalSeries: (id, measure, p) =>
+      read(() => {
+        const per = period(p);
+        if (!MEASURES.includes(measure)) invalid();
+        noSeries();
+        if (!isAnalyticsHospital(id)) fail(404, "not_found");
+        return buildSeries(id, measure, per, now());
+      }),
+
+    followUp: (id, body, opts) =>
+      write(opts, (m) => {
+        const c = theChange(id);
+        const raw = (body as { note?: unknown } | null)?.note;
+        const note =
+          raw === undefined || raw === null
+            ? undefined
+            : typeof raw !== "string"
+              ? invalid()
+              : raw.trim() === ""
+                ? null
+                : text(raw, NOTE_MAX);
+        sameVersion(c, body);
+        const f = c.follow_up;
+        const target = { hospital: c.hospital, target: c.summary };
+        if (f) {
+          // Only its author edits a follow-up.
+          if (f.by.id !== m.id) fail(403, "forbidden");
+          f.note = note === undefined ? f.note : note;
+          f.version++;
+          log(person(m), "change_note_edited", { ...target, detail: f.note });
+        } else {
+          c.follow_up = {
+            by: person(m),
+            at: iso(now()),
+            note: note ?? null,
+            version: 1,
+          };
+          log(person(m), "change_followed_up", {
+            ...target,
+            detail: note ?? null,
+          });
+        }
+        c.version++;
+        return copy(c);
+      }),
+
+    undoFollowUp: (id, body, opts) =>
+      write(opts, (m) => {
+        const c = theChange(id);
+        sameVersion(c, body);
+        if (!c.follow_up) fail(409, "conflict");
+        c.follow_up = null;
+        c.version++;
+        log(person(m), "change_follow_up_undone", {
+          hospital: c.hospital,
+          target: c.summary,
+        });
+        return copy(c);
       }),
   };
 }

@@ -1,5 +1,7 @@
 // The platform demo's sample data. Every hospital and person is invented;
-// the names are not drawn from real organisations. No patient data.
+// the names are not drawn from real organisations. Havana Hospital is the
+// clinical demo's own (invented) hospital, so the two demos line up. No
+// patient data.
 import type {
   ActivityEvent,
   Hospital,
@@ -33,6 +35,11 @@ const TUNDE: Person = { id: "tm_tunde", name: "Tunde Okafor" };
  */
 export type HospitalRecord = {
   hospital: Hospital;
+  /**
+   * The hospital's admin accounts. `hospital.admins` lists them while the
+   * hospital is active; nobody can sign in to act anywhere else.
+   */
+  admins: Hospital["admins"];
   sso: SsoOut;
   legal_holds: number;
   retention_until: string | null;
@@ -123,6 +130,7 @@ export function seedHospitals(now: number): HospitalRecord[] {
     deactivation: null,
     first_admin: null,
     removal: null,
+    admins: [],
     ...over,
   });
   const accepted = (
@@ -144,7 +152,33 @@ export function seedHospitals(now: number): HospitalRecord[] {
     export_required: false,
     export_done: false,
   };
+  const admin = (name: string, email: string) => ({ name, email });
   return [
+    {
+      hospital: base(
+        "h_havana",
+        "Havana Hospital",
+        "HAVANA",
+        "havanahospital.org",
+        {
+          staff_count: 186,
+          created_at: iso(now - 500 * D),
+          last_activity_at: iso(now - 4 * MIN),
+          first_admin: accepted(
+            "inv_havana1",
+            "Grace Nwosu",
+            "admin.nwosu@havanahospital.org",
+            500 * D,
+          ),
+        },
+      ),
+      admins: [
+        admin("Grace Nwosu", "admin.nwosu@havanahospital.org"),
+        admin("Dr. Ngozi Obi", "director.obi@havanahospital.org"),
+      ],
+      sso: NO_SSO,
+      ...clear,
+    },
     {
       hospital: base(
         "h_northgate",
@@ -179,6 +213,10 @@ export function seedHospitals(now: number): HospitalRecord[] {
         },
         version: 1,
       },
+      admins: [
+        admin("Ifeoma Nnaji", "ifeoma.nnaji@northgate.example"),
+        admin("Emeka Udoh", "emeka.udoh@northgate.example"),
+      ],
       ...clear,
     },
     {
@@ -199,6 +237,9 @@ export function seedHospitals(now: number): HospitalRecord[] {
           ),
         },
       ),
+      admins: [
+        admin("Musa Danjuma", "musa.danjuma@riverside-children.example"),
+      ],
       sso: NO_SSO,
       ...clear,
     },
@@ -210,17 +251,19 @@ export function seedHospitals(now: number): HospitalRecord[] {
         "eastbrook.example",
         {
           status: "setup_incomplete",
-          created_at: iso(now - 2 * D),
+          created_at: iso(now - 9 * D - MIN),
+          // Sent 9 days ago and never accepted: it has expired.
           first_admin: {
             invite_id: "inv_eastbrook1",
             name: "Chiamaka Obi",
             email: "chiamaka.obi@eastbrook.example",
-            status: "pending",
-            sent_at: iso(now - 2 * D),
-            expires_at: iso(now - 2 * D + INVITE_MS),
+            status: "expired",
+            sent_at: iso(now - 9 * D),
+            expires_at: iso(now - 9 * D + INVITE_MS),
           },
         },
       ),
+      admins: [],
       sso: NO_SSO,
       ...clear,
     },
@@ -249,6 +292,7 @@ export function seedHospitals(now: number): HospitalRecord[] {
           },
         },
       ),
+      admins: [admin("Yemi Afolabi", "yemi.afolabi@westfield.example")],
       sso: NO_SSO,
       // The records retention period has passed.
       ...clear,
@@ -295,6 +339,7 @@ export function seedHospitals(now: number): HospitalRecord[] {
           },
         },
       ),
+      admins: [admin("Bisi Coker", "bisi.coker@harbourview.example")],
       sso: NO_SSO,
       legal_holds: 1,
       retention_until: null,
@@ -342,13 +387,20 @@ export function seedHospitals(now: number): HospitalRecord[] {
           },
         },
       ),
+      admins: [admin("Tobi Adeyemi", "tobi.adeyemi@southpoint.example")],
       sso: NO_SSO,
       legal_holds: 0,
       retention_until: null,
       export_required: true,
       export_done: true,
     },
-  ];
+  ].map((r) => ({
+    ...r,
+    hospital: {
+      ...r.hospital,
+      admins: r.hospital.status === "active" ? r.admins : [],
+    },
+  }));
 }
 
 /** 12 past events, newest first. */
@@ -377,11 +429,11 @@ export function seedActivity(now: number): ActivityEvent[] {
       "Contract ended; the data export was delivered.",
     ],
     [D, TUNDE, "removal_requested", HVH, null, "The hospital closed in June."],
-    [2 * D, ADA, "admin_invited", EMC, "chiamaka.obi@eastbrook.example", null],
-    [2 * D + MIN, ADA, "hospital_added", EMC, null, null],
     [3 * D, ADA, "sso_tested", NGH, null, "Sign-in works."],
     [3 * D + 5 * MIN, ADA, "sso_updated", NGH, null, null],
     [4 * D, ADA, "team_invited", null, TEAM_EMAILS.kemi, "Auditor"],
+    [9 * D, ADA, "admin_invited", EMC, "chiamaka.obi@eastbrook.example", null],
+    [9 * D + MIN, ADA, "hospital_added", EMC, null, null],
     [
       30 * D,
       TUNDE,
