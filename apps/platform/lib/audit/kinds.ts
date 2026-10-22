@@ -105,7 +105,7 @@ export const SEARCHED_WORDS: Record<SearchedKind, string> = {
   pseudonym: "patient id",
 };
 
-const CONFIDENCE_WORDS = { high: "High", medium: "Medium", low: "Low" };
+export const CONFIDENCE_WORDS = { high: "High", medium: "Medium", low: "Low" };
 
 export type TargetKind = AuditTarget["kind"];
 
@@ -153,7 +153,7 @@ const exportId =
     return t ? make(t) : without;
   };
 /** "Cardiology" from the code "cardiology". */
-const specialty = (e: AuditEvent): string[] => {
+export const specialty = (e: AuditEvent): string[] => {
   const s = e.facts.specialty;
   if (!s) return [];
   const w = s.replace(/_/g, " ");

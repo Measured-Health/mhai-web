@@ -1,9 +1,15 @@
 "use client";
 import { ArrowLeft, TriangleAlert } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import type { AuditDetail, NamedAccessFilters } from "@/lib/api/audit-contract";
 import { formatWhen } from "@/lib/activity-labels";
-import { LETTER_STATUS_WORDS, REASON_WORDS, kindOf } from "@/lib/audit/kinds";
+import {
+  CONFIDENCE_WORDS,
+  LETTER_STATUS_WORDS,
+  REASON_WORDS,
+  kindOf,
+  specialty,
+} from "@/lib/audit/kinds";
 import {
   eventLine,
   hospitalWords,
@@ -47,13 +53,24 @@ function targetLine(e: AuditDetail): string | null {
   return name ? `${name} · ${t.id}` : t.id;
 }
 
-function Field({ term, children }: { term: string; children: ReactNode }) {
+function Field({
+  term,
+  children,
+  pre,
+}: {
+  term: string;
+  children: ReactNode;
+  /** Keeps the line breaks of a note. */
+  pre?: boolean;
+}) {
   return (
     <div className="border-t border-line py-3 first:border-t-0">
       <dt className="text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
         {term}
       </dt>
-      <dd className="mt-1 text-[13.5px] [overflow-wrap:anywhere]">
+      <dd
+        className={`mt-1 text-[13.5px] [overflow-wrap:anywhere]${pre ? " whitespace-pre-wrap" : ""}`}
+      >
         {children}
       </dd>
     </div>
@@ -157,15 +174,11 @@ function Fields({
         {consult && (
           <>
             {e.facts.specialty && (
-              <Field term="Specialty">
-                {e.facts.specialty.charAt(0).toUpperCase() +
-                  e.facts.specialty.slice(1).replace(/_/g, " ")}
-              </Field>
+              <Field term="Specialty">{specialty(e)[0]}</Field>
             )}
             {e.facts.confidence && (
               <Field term="Confidence">
-                {e.facts.confidence.charAt(0).toUpperCase() +
-                  e.facts.confidence.slice(1)}
+                {CONFIDENCE_WORDS[e.facts.confidence]}
               </Field>
             )}
           </>
@@ -182,7 +195,9 @@ function Fields({
         </Field>
         {!consult && reason && <Field term="Reason">{reason}</Field>}
         {!consult && kind?.note && e.note && (
-          <Field term="Note">{e.note}</Field>
+          <Field term="Note" pre>
+            {e.note}
+          </Field>
         )}
         {links.length > 0 && (
           <Field term="Links">
@@ -253,6 +268,11 @@ export function EventDetail({
   const q = useAuditEvent(id);
   const seq = q.data?.ok ? q.data.event.seq : (q.data?.seq ?? null);
   const title = seq === null ? "Entry" : `Entry #${seq}`;
+  const heading = useRef<HTMLHeadingElement>(null);
+  // The phone page is announced by moving focus to its heading.
+  useEffect(() => {
+    if (!desktop) heading.current?.focus();
+  }, [desktop]);
   const body = <Body id={id} q={q} onOpenNamed={onOpenNamed} />;
 
   if (desktop)
@@ -268,7 +288,13 @@ export function EventDetail({
           <ArrowLeft aria-hidden className="size-4" />
           Back
         </Button>
-        <h2 className="text-[15px] font-semibold">{title}</h2>
+        <h2
+          ref={heading}
+          tabIndex={-1}
+          className="text-[15px] font-semibold outline-none"
+        >
+          {title}
+        </h2>
       </div>
       {body}
     </section>

@@ -24,6 +24,7 @@ export function EventsTab({
   const desktop = useIsDesktop();
   // The open entry lives in memory only: never in the URL or in storage.
   const [open, setOpen] = useState<string | null>(null);
+  const region = useRef<HTMLDivElement>(null);
   const opened = useRef<string | null>(null);
   const openRow = (id: string) => {
     opened.current = id;
@@ -34,9 +35,12 @@ export function EventsTab({
     if (open !== null || opened.current === null) return;
     const id = opened.current;
     opened.current = null;
-    document
-      .querySelector<HTMLElement>(`[data-row-id="${CSS.escape(id)}"]`)
-      ?.focus();
+    // The row may be gone (filters changed): the list's region instead.
+    (
+      document.querySelector<HTMLElement>(
+        `[data-row-id="${CSS.escape(id)}"]`,
+      ) ?? region.current
+    )?.focus();
   }, [open]);
   const now = useNow();
   const hospitals = useAuditHospitals();
@@ -55,7 +59,14 @@ export function EventsTab({
         />
       )}
       {/* Below md the detail is a full page: the list waits, state kept. */}
-      <div hidden={open !== null && !desktop} className="flex flex-col gap-5">
+      <div
+        ref={region}
+        tabIndex={-1}
+        role="region"
+        aria-label="Events"
+        hidden={open !== null && !desktop}
+        className="flex flex-col gap-5 outline-none"
+      >
         <EventFilters
           value={value}
           onChange={onChange}

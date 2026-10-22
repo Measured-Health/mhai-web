@@ -1,6 +1,8 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
+import { StrictMode } from "react";
+import { OFFLINE_NOTE } from "../states/offline-strip";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuditDetail } from "@/lib/api/audit-contract";
 import {
@@ -12,7 +14,7 @@ import { TEAM_EMAILS } from "@/lib/api/fixtures";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp } from "@/lib/api/step-up";
 import { utc } from "@/lib/audit/words";
-import { __resetReportedForTests, patientsKey } from "@/lib/queries/audit";
+import { __resetReportedForTests } from "@/lib/queries/audit";
 import { renderWithAuth } from "@/tests/render";
 import { AuditView } from "./audit-view";
 import { EventDetail } from "./event-detail";
@@ -39,6 +41,7 @@ beforeEach(() => __resetReportedForTests());
 afterEach(() => {
   __resetPlatformClientForTests();
   vi.restoreAllMocks();
+  act(() => void window.dispatchEvent(new Event("online")));
   vi.unstubAllGlobals();
 });
 
@@ -57,6 +60,14 @@ async function openRow(words: RegExp) {
   const row = (await screen.findAllByRole("button", { name: words }))[0]!;
   await u.click(row);
   return { u, row };
+}
+
+/** The list's first "3 patients" row opened, on a given query client. */
+async function openRowWith(qc: QueryClient) {
+  const u = userEvent.setup();
+  const r = renderWithAuth(<AuditView />, { queryClient: qc });
+  await u.click((await screen.findAllByRole("button", { name: THREE }))[0]!);
+  return { u, unmount: r.unmount };
 }
 
 const dialog = () => screen.findByRole("dialog");
@@ -110,6 +121,10 @@ describe("the event detail", () => {
     const d = await dialog();
     expect(await within(d).findByText("Specialty")).toBeInTheDocument();
     expect(within(d).getByText("Confidence")).toBeInTheDocument();
+    expect(
+      within(d).getByText("Specialty").nextElementSibling?.textContent,
+    ).toMatch(/^[A-Z][a-z ]+$/);
+    expect(within(d).getByText(/^(High|Medium|Low)$/)).toBeVisible();
     for (const t of ["Target", "Reason", "Note", "Patients"])
       expect(within(d).queryByText(t)).toBeNull();
   });
@@ -137,45 +152,6 @@ describe("the event detail", () => {
     expect(log.events.some((e) => e.kind === "audit_patients_viewed")).toBe(
       true,
     );
-  });
-
-  it("Hide patient ids removes them from the screen and the cache, and a reconnect does not fetch them again", async () => {
-    const spy = vi.fn();
-    setup((c) => ({
-      getAuditPatients: (id) => {
-        spy(id);
-        return c.getAuditPatients(id);
-      },
-    }));
-    const qc = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const u = userEvent.setup();
-    renderWithAuth(<AuditView />, { queryClient: qc });
-    await u.click(
-      await screen.findByRole("button", {
-        name: /Opened a named patient list · 3 patients/,
-      }),
-    );
-    const d = await dialog();
-    await u.click(
-      await within(d).findByRole("button", { name: "Show patient ids" }),
-    );
-    await within(d).findAllByText(/^p_[a-z]+_/);
-    const id = spy.mock.calls[0]![0] as string;
-    expect(
-      qc.getQueryCache().find({ queryKey: patientsKey(id) }),
-    ).toBeDefined();
-    window.dispatchEvent(new Event("online"));
-    expect(spy).toHaveBeenCalledTimes(1);
-    await u.click(within(d).getByRole("button", { name: "Hide patient ids" }));
-    expect(within(d).queryByText(/^p_[a-z]+_/)).toBeNull();
-    expect(
-      qc.getQueryCache().find({ queryKey: patientsKey(id) }),
-    ).toBeUndefined();
-    expect(
-      within(d).getByRole("button", { name: "Show patient ids" }),
-    ).toBeInTheDocument();
   });
 
   it("a named drill-down shows the letter and Open in Named access", async () => {
@@ -262,5 +238,281 @@ describe("the event detail", () => {
     expect(within(d).queryByText(/Jo/)).toBeNull();
     expect(within(d).queryByRole("term")).toBeNull();
     expect(within(d).queryByText("When")).toBeNull();
+  });
+
+  it("phone: opening moves focus to the page heading", async () => {
+    phone();
+    setup();
+    await openRow(/^Asked a question/);
+    const h = await screen.findByRole("heading", { name: /^Entry #\d+$/ });
+    await waitFor(() => expect(h).toHaveFocus());
+  });
+
+  it("desktop: Esc and Close return focus to the row", async () => {
+    setup();
+    const { u, row } = await openRow(/^Asked a question/);
+    await dialog();
+    await u.keyboard("{Escape}");
+    await waitFor(() => expect(row).toHaveFocus());
+    await u.click(row);
+    const d = await dialog();
+    await u.click(within(d).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(row).toHaveFocus());
+  });
+
+  it("a row that is gone sends focus to the Events region", async () => {
+    setup();
+    const { u } = await openRow(/^Asked a question/);
+    await dialog();
+    document.querySelectorAll("[data-row-id]").forEach((n) => n.remove());
+    await u.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.getByRole("region", { name: "Events" })).toHaveFocus(),
+    );
+  });
+});
+
+const IDS = /^p_[a-z]+_/;
+const flush = () =>
+  act(async () => {
+    await new Promise((r) => setTimeout(r, 30));
+  });
+const viewed = async (m: PlatformClient) =>
+  (await m.listAudit({ type: ["audit"] })).events.filter(
+    (e) => e.kind === "audit_patients_viewed",
+  ).length;
+
+function patientSpy() {
+  const spy = vi.fn();
+  const m = setup((c) => ({
+    getAuditPatients: (id) => {
+      spy(id);
+      return c.getAuditPatients(id);
+    },
+  }));
+  return { m, spy };
+}
+const THREE = /Opened a named patient list · 3 patients/;
+const qcOf = () =>
+  new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const noIdsCached = (qc: QueryClient) =>
+  expect(
+    qc
+      .getQueryCache()
+      .findAll()
+      .some((q) => JSON.stringify(q.state.data)?.includes("p_ng_")),
+  ).toBe(false);
+
+describe("patient ids are recorded once and never kept", () => {
+  it("reconnecting, focus, visibility and invalidation while shown do not request them again", async () => {
+    const { spy } = patientSpy();
+    const qc = qcOf();
+    const { u } = await openRowWith(qc);
+    const d = await dialog();
+    await u.click(
+      await within(d).findByRole("button", { name: "Show patient ids" }),
+    );
+    await within(d).findAllByText(IDS);
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    act(() => void window.dispatchEvent(new Event("offline")));
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    act(() => void window.dispatchEvent(new Event("online")));
+    window.dispatchEvent(new Event("focus"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    await qc.invalidateQueries();
+    await qc.invalidateQueries({ queryKey: ["audit"] });
+    await qc.refetchQueries();
+    await flush();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(within(d).getAllByText(IDS)).toHaveLength(3);
+    noIdsCached(qc);
+  });
+
+  it("Hide forgets them; Show again is a second request", async () => {
+    const { m, spy } = patientSpy();
+    const qc = qcOf();
+    const { u } = await openRowWith(qc);
+    const d = await dialog();
+    await u.click(
+      await within(d).findByRole("button", { name: "Show patient ids" }),
+    );
+    await within(d).findAllByText(IDS);
+    await u.click(within(d).getByRole("button", { name: "Hide patient ids" }));
+    expect(within(d).queryByText(IDS)).toBeNull();
+    expect(
+      within(d).getByRole("button", { name: "Show patient ids" }),
+    ).toBeVisible();
+    noIdsCached(qc);
+    await u.click(within(d).getByRole("button", { name: "Show patient ids" }));
+    await within(d).findAllByText(IDS);
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(await viewed(m)).toBe(2);
+  });
+
+  it("closing and reopening shows no ids and asks for none", async () => {
+    const { spy } = patientSpy();
+    const { u, row } = await openRow(THREE);
+    let d = await dialog();
+    await u.click(
+      await within(d).findByRole("button", { name: "Show patient ids" }),
+    );
+    await within(d).findAllByText(IDS);
+    await u.keyboard("{Escape}");
+    await u.click(row);
+    d = await dialog();
+    expect(await within(d).findByText("Patients: 3")).toBeVisible();
+    expect(within(d).queryByText(IDS)).toBeNull();
+    expect(
+      within(d).getByRole("button", { name: "Show patient ids" }),
+    ).toBeVisible();
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("unmounting and mounting again on the same client shows no ids", async () => {
+    const { spy } = patientSpy();
+    const qc = qcOf();
+    const first = await openRowWith(qc);
+    const d = await dialog();
+    await first.u.click(
+      await within(d).findByRole("button", { name: "Show patient ids" }),
+    );
+    await within(d).findAllByText(IDS);
+    first.unmount();
+    noIdsCached(qc);
+    const second = await openRowWith(qc);
+    const d2 = await dialog();
+    expect(await within(d2).findByText("Patients: 3")).toBeVisible();
+    expect(within(d2).queryByText(IDS)).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(1);
+    second.unmount();
+  });
+
+  it("StrictMode: one request and one audit_patients_viewed entry", async () => {
+    const { m, spy } = patientSpy();
+    const u = userEvent.setup();
+    renderWithAuth(
+      <StrictMode>
+        <AuditView />
+      </StrictMode>,
+    );
+    await u.click((await screen.findAllByRole("button", { name: THREE }))[0]!);
+    const d = await dialog();
+    await u.click(
+      await within(d).findByRole("button", { name: "Show patient ids" }),
+    );
+    await within(d).findAllByText(IDS);
+    await flush();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(await viewed(m)).toBe(1);
+  });
+
+  it("a failed request offers Try again, which is a second, deliberate request", async () => {
+    const spy = vi.fn();
+    setup((c) => ({
+      getAuditPatients: (id) => {
+        spy(id);
+        return spy.mock.calls.length === 1
+          ? Promise.reject(new Error("x"))
+          : c.getAuditPatients(id);
+      },
+    }));
+    const { u } = await openRow(THREE);
+    const d = await dialog();
+    await u.click(
+      await within(d).findByRole("button", { name: "Show patient ids" }),
+    );
+    await u.click(await within(d).findByRole("button", { name: "Try again" }));
+    await within(d).findAllByText(IDS);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("Show patient ids is off while offline, with the reason", async () => {
+    const { spy } = patientSpy();
+    await openRow(THREE);
+    const d = await dialog();
+    const b = await within(d).findByRole("button", {
+      name: "Show patient ids",
+    });
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    act(() => void window.dispatchEvent(new Event("offline")));
+    expect(b).toBeDisabled();
+    expect(b).toHaveAccessibleDescription(OFFLINE_NOTE);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("nothing is stored or put in the URL, and no id is logged", async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    const logs = (["log", "info", "warn", "error"] as const).map((k) =>
+      vi.spyOn(console, k).mockImplementation(() => {}),
+    );
+    patientSpy();
+    const { u } = await openRow(THREE);
+    const d = await dialog();
+    await u.click(
+      await within(d).findByRole("button", { name: "Show patient ids" }),
+    );
+    await within(d).findAllByText(IDS);
+    await u.click(within(d).getByRole("button", { name: "Hide patient ids" }));
+    expect(localStorage).toHaveLength(0);
+    expect(sessionStorage).toHaveLength(0);
+    expect(location.search).toBe("");
+    for (const l of logs)
+      expect(JSON.stringify(l.mock.calls)).not.toMatch(/p_ng_/);
+  });
+});
+
+describe("what the detail will not show", () => {
+  const override = (patch: (d: AuditDetail) => object) =>
+    setup((c) => ({
+      getAuditEvent: async (id) =>
+        ({ ...patch(await c.getAuditEvent(id)) }) as AuditDetail,
+    }));
+  const cantShow = async (secret: RegExp) => {
+    await openRow(/^Asked a question/);
+    const d = await dialog();
+    expect(await within(d).findByText(/can't be displayed/)).toBeVisible();
+    expect(within(d).queryByText(secret)).toBeNull();
+  };
+
+  it("a name on a kind that takes none makes the entry undisplayable", async () => {
+    override((d) => ({
+      ...d,
+      kind: "signed_out",
+      type: "sign_in",
+      target: { kind: "session", id: "s_1", name: "Jo Patient" },
+    }));
+    await cantShow(/Jo Patient/);
+  });
+
+  it("a note on a hold kind makes the entry undisplayable", async () => {
+    override((d) => ({
+      ...d,
+      kind: "hold_placed",
+      type: "retention",
+      note: "Jo Patient was involved",
+    }));
+    await cantShow(/Jo Patient/);
+  });
+
+  it("a patient target never shows its pseudonym in Target", async () => {
+    override((d) => ({
+      ...d,
+      kind: "drilldown_deidentified",
+      type: "analysis",
+      target: { kind: "patient", pseudonym: "p_zz_secret1" },
+      facts: { patient_count: 2 },
+      patients: { count: 2 },
+      letter: null,
+      reason: null,
+      refs: { clearance_id: null, export_id: null, request_id: null },
+    }));
+    await openRow(/^Asked a question/);
+    const d = await dialog();
+    expect(await within(d).findByText("Patients: 2")).toBeVisible();
+    expect(
+      within(d).getByText("Patients (ids shown on request)"),
+    ).toBeVisible();
+    expect(screen.queryByText(/p_zz_secret1/)).toBeNull();
   });
 });

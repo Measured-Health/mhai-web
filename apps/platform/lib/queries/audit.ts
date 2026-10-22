@@ -80,38 +80,6 @@ export function useAuditEvent(id: string | null) {
   });
 }
 
-/** The most pseudonyms one entry may list. */
-const PATIENTS_MAX = 10_000;
-const readPatients = (r: { pseudonyms: string[] }): string[] =>
-  Array.isArray(r?.pseudonyms)
-    ? r.pseudonyms
-        .filter((p) => typeof p === "string" && ID.test(p))
-        .slice(0, PATIENTS_MAX)
-    : [];
-
-export const patientsKey = (id: string) =>
-  [...auditKey, "patients", id] as const;
-
-/**
- * An entry's pseudonymous patient ids, only when asked for. Each fetch is a
- * request the server records, so a result is never kept (`gcTime: 0`), never
- * refetched on reconnect or focus, and never retried by itself.
- */
-export function useAuditPatients(id: string, enabled: boolean) {
-  return useQuery({
-    queryKey: patientsKey(id),
-    queryFn: () => getPlatformClient().getAuditPatients(id),
-    select: readPatients,
-    enabled,
-    gcTime: 0,
-    staleTime: 0,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    retry: false,
-  });
-}
-
 /** `value`, once it has stopped changing for `ms`. */
 function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value);
