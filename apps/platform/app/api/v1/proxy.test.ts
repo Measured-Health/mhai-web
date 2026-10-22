@@ -594,7 +594,7 @@ describe("platform API proxy", () => {
       expect(await res.json()).toEqual({ code: "too_many_rows", rows: 62310 });
       // A rows that isn't an integer is dropped.
       fetchMock.mockResolvedValueOnce(
-        Response.json({ code: "too_many_rows", rows: "lots" }, { status: 422 }),
+        Response.json({ code: "too_many_rows", rows: -5 }, { status: 422 }),
       );
       const bad = await call("POST", ["platform", "audit", "exports"], {
         body: "{}",
@@ -622,22 +622,21 @@ describe("platform API proxy", () => {
       }
     });
 
-    it("the file shape refuses text/html with 502", async () => {
+    it("the file shape refuses text/html, text/csvfoo and a missing type with 502", async () => {
       await session();
-      fetchMock.mockResolvedValueOnce(
-        new Response("<script>x</script>", {
-          headers: { "Content-Type": "text/html" },
-        }),
-      );
-      const res = await call("GET", [
-        "platform",
-        "audit",
-        "exports",
-        "exp_1",
-        "file",
-      ]);
-      expect(res.status).toBe(502);
-      expect(await res.json()).toEqual({ code: "bad_gateway" });
+      const path = ["platform", "audit", "exports", "exp_1", "file"];
+      for (const type of ["text/html", "text/csvfoo", null]) {
+        fetchMock.mockResolvedValueOnce(
+          type === null
+            ? new Response(new Uint8Array([60, 120]))
+            : new Response("<script>x</script>", {
+                headers: { "Content-Type": type },
+              }),
+        );
+        const res = await call("GET", path);
+        expect([type, res.status]).toEqual([type, 502]);
+        expect(await res.json()).toEqual({ code: "bad_gateway" });
+      }
     });
   });
 

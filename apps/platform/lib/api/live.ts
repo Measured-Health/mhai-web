@@ -74,7 +74,8 @@ export function createLivePlatformClient({
         res.status === 422 &&
         code === "too_many_rows" &&
         typeof data?.rows === "number" &&
-        Number.isInteger(data.rows)
+        Number.isSafeInteger(data.rows) &&
+        data.rows >= 0
       )
         throw new TooManyRowsError(data.rows);
       throw new ApiError(res.status, code);

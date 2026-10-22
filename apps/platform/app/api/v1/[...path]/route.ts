@@ -80,7 +80,8 @@ const FILE_TYPES = ["text/csv", "application/zip"];
  * The only writes an auditor may make, as `METHOD shape` rows of the table
  * above: marking notifications seen is their own read state, and the audit
  * writes (reporting an entry, exporting, running a check, noting its outcome)
- * are the auditor's job. None of them is an admin action. Every other write needs a platform admin.
+ * are the auditor's job. None of them is an admin action. Every other
+ * write needs a platform admin.
  */
 const AUDITOR_WRITES: ReadonlySet<string> = new Set([
   "POST platform/notifications/seen",
@@ -144,7 +145,8 @@ function problem(status: number, p: Record<string, unknown> | null) {
     status === 422 &&
     code === "too_many_rows" &&
     typeof p?.rows === "number" &&
-    Number.isInteger(p.rows)
+    Number.isSafeInteger(p.rows) &&
+    p.rows >= 0
   )
     return { code, rows: p.rows };
   return { code };
@@ -233,7 +235,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   // A file is passed through only as a CSV or a ZIP, never as anything else.
   if (
     shape === FILE_SHAPE &&
-    !FILE_TYPES.some((t) => type.toLowerCase().startsWith(t))
+    !FILE_TYPES.includes(type.split(";")[0]!.trim().toLowerCase())
   ) {
     await res.body?.cancel();
     return json(502, { code: "bad_gateway" });

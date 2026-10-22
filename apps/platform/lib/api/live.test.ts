@@ -529,11 +529,20 @@ describe("live platform client", () => {
     it("writes carry an Idempotency-Key", async () => {
       await client().reportUndisplayable(["ev_1"], { idempotencyKey: "k-1" });
       await client().startCheck({ idempotencyKey: "k-2" });
+      await client().createExport(
+        { kind: "events", filters: {}, reason: "other", ...CODE },
+        { idempotencyKey: "k-3" },
+      );
+      await client().addOutcome(
+        "run_1",
+        { note: "n", version: 1 },
+        { idempotencyKey: "k-4" },
+      );
       const keys = fetchImpl.mock.calls.map(
         ([, init]) =>
           (init?.headers as Record<string, string>)["Idempotency-Key"],
       );
-      expect(keys).toEqual(["k-1", "k-2"]);
+      expect(keys).toEqual(["k-1", "k-2", "k-3", "k-4"]);
     });
 
     it("the integrity status and a run are background reads, the rest are not", async () => {
@@ -566,8 +575,10 @@ describe("live platform client", () => {
         code: "too_many_rows",
         rows: 62310,
       });
-      // Without a whole-number rows it is an ordinary refusal.
-      reply(() => Response.json({ code: "too_many_rows" }, { status: 422 }));
+      // Without a whole, non-negative rows it is an ordinary refusal.
+      reply(() =>
+        Response.json({ code: "too_many_rows", rows: -5 }, { status: 422 }),
+      );
       const plain = await client()
         .listAudit({})
         .catch((x) => x);
