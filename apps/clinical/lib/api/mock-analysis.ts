@@ -1,4 +1,5 @@
 import { SMALL_GROUP_MIN, isSmallCount } from "@mhai/ui/small-groups";
+import { dismissReasonLabel } from "../notifications/alert-view";
 import type { ConfidenceLevel, GuardedOut } from "./admin-contract";
 import type { DismissReason } from "./alerts-contract";
 import type { AnalysisClient } from "./analysis";
@@ -570,6 +571,17 @@ const VIEW_FNS: { [V in ViewId]: (f: AnalysisFilters) => ViewOut[V] } = {
     const d = findings(f);
     return {
       ...d,
+      alerts: {
+        ...d.alerts,
+        dismiss_reasons: hiddenLast(
+          d.alerts.dismiss_reasons,
+          (r) => r.count,
+          (r) => ({
+            name: dismissReasonLabel(r.reason) ?? r.reason,
+            last: false,
+          }),
+        ),
+      },
       findings: hiddenLast(
         d.findings,
         (r) => r.patients,
