@@ -8,7 +8,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { PERIODS, type Period } from "@/lib/api/analytics-contract";
+import {
+  PERIODS,
+  type MeasureId,
+  type Period,
+} from "@/lib/api/analytics-contract";
 import type { Person } from "@/lib/api/contract";
 import { analyticsCsv, analyticsCsvName } from "@/lib/analytics/csv";
 import {
@@ -27,7 +31,10 @@ import { CouldntLoad } from "../states/couldnt-load";
 import { Loading } from "../states/loading";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { ChangeDetail } from "./change-detail";
+import { AnalyticsTabs } from "./analytics-tabs";
 import { ChangesList } from "./changes-list";
+import { defaultMeasure, HospitalDetail } from "./hospitals-tab";
+import { updatedLine } from "./updated-line";
 
 export const PERIOD_LABEL: Record<Period, string> = {
   "7d": "Last 7 days",
@@ -35,12 +42,16 @@ export const PERIOD_LABEL: Record<Period, string> = {
   "90d": "Last 90 days",
 };
 
-/** "Updated 14:32": the server's time for that area, in the viewer's clock. */
-export function updatedLine(iso: string) {
-  const t = new Date(iso);
-  const hh = String(t.getHours()).padStart(2, "0");
-  const mm = String(t.getMinutes()).padStart(2, "0");
-  return `Updated ${hh}:${mm}`;
+export { updatedLine };
+
+/** What the right-hand panel shows: a change, or a hospital's comparison. */
+export type Detail =
+  | { kind: "change"; id: string }
+  | { kind: "hospital"; id: string; measure: MeasureId };
+
+function hospitalOf(state: AnalyticsState, id: string): Person {
+  const rows = state.hospitals.status === "ok" ? state.hospitals.rows : [];
+  return rows.find((r) => r.hospital.id === id)?.hospital ?? { id, name: id };
 }
 
 /**
@@ -61,8 +72,9 @@ export function AnalyticsView() {
   );
   const csvNet = useNeedsConnection("csv-offline");
 
-  // Selected by id: a change keeps its id for as long as it lasts.
-  const [picked, setPicked] = useState<string | null>(null);
+  // What the right-hand panel shows. A change is selected by id: it keeps
+  // its id for as long as it lasts. Starts on the first change, once there is one.
+  const [detail, setDetail] = useState<Detail | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [phoneDetail, setPhoneDetail] = useState(false);
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -72,8 +84,16 @@ export function AnalyticsView() {
   const items = state?.changes.status === "ok" ? state.changes.items : [];
   // The first row is selected on open, and stays selected by its id when
   // the list re-ranks (after a follow-up, say).
-  if (picked === null && items[0]) setPicked(items[0].id);
-  const selected = items.find((c) => c.id === picked) ?? items[0] ?? null;
+  if (detail === null && items[0])
+    setDetail({ kind: "change", id: items[0].id });
+  const onHospital = detail?.kind === "hospital";
+  const selected = onHospital
+    ? null
+    : ((detail?.kind === "change"
+        ? items.find((c) => c.id === detail.id)
+        : undefined) ??
+      items[0] ??
+      null);
 
   // On a phone, focus follows the view: the detail's heading on open, the
   // row it came from on Back.
@@ -87,7 +107,15 @@ export function AnalyticsView() {
   }, [phoneDetail, desktop]);
 
   const select = (id: string) => {
-    setPicked(id);
+    setDetail({ kind: "change", id });
+    if (!desktop) setPhoneDetail(true);
+  };
+  const pickHospital = (h: Person) => {
+    setDetail({
+      kind: "hospital",
+      id: h.id,
+      measure: defaultMeasure(items, h.id),
+    });
     if (!desktop) setPhoneDetail(true);
   };
   const back = () => {
@@ -166,6 +194,18 @@ export function AnalyticsView() {
                 )}
               </WhatChanged>
             )}
+            {showDetail && detail?.kind === "hospital" && state && (
+              <HospitalDetail
+                key={detail.id}
+                hospital={hospitalOf(state, detail.id)}
+                measure={detail.measure}
+                onMeasure={(measure) => setDetail({ ...detail, measure })}
+                period={period}
+                hospitals={state.hospitals}
+                onBack={desktop ? undefined : back}
+                headingRef={headingRef}
+              />
+            )}
             {showDetail && selected && state && (
               <ChangeDetail
                 change={selected}
@@ -179,8 +219,16 @@ export function AnalyticsView() {
             )}
           </div>
 
-          {/* The tabs (Use, Alert safety, Answer quality, Hospitals) sit
-              here, below the two columns, each with its own Updated line. */}
+          {/* Kept mounted behind a phone's detail, so the open tab stays. */}
+          <div hidden={!showList}>
+            <AnalyticsTabs
+              state={state}
+              failed={q.isError && !q.data}
+              onRetry={() => void q.refetch()}
+              pickedHospitalId={detail?.kind === "hospital" ? detail.id : null}
+              onPickHospital={pickHospital}
+            />
+          </div>
         </div>
       </div>
     </>
