@@ -137,13 +137,20 @@ differ, the code is right. Add to spec §10 of the UI design:
     existing as members): a hidden point is `suppressed`, never drawn as 0.
   - **A hidden total hides what it contains.** A median, share or rate over a hidden count is
     hidden. A share of a shown count is hidden if its numerator or its complement is 1 to 4.
-    Shares and rates are sent at full precision, so a client can check that none gives away a
-    small number; the client fails the whole view if one does.
+    A median over fewer than 5 values is hidden too. The backend must send shares and rates at
+    full precision, so a client can check that none gives away a small number. The demo rounds
+    them to two places, and the client tolerates that rounding (it fails the whole view only when
+    every whole number the rounded value could stand for would give a small count away).
   - **Rows never reveal rank.** Shown rows come in order of value, then the hidden rows in a
     fixed order that does not depend on their size (by name; "Not standardised" and
     unknowns last). When the patient count is hidden, every number in the view is hidden,
     zeros included, and no row has a `drill`.
   - A `drill` key is set only on a shown count of 5 or more; it is opaque (`[A-Za-z0-9_-]+`).
+- Every view carries `updated_at`, `from`, `to`, `bucket` and a guarded `patients` (the
+  distinct patients matched). `bucket` is `week` for a range of up to about 90 days and `month`
+  beyond (a range may be at most 24 months). "New" means first recorded for that patient in the
+  period, "existing" means recorded before it; the server decides. The co-occurring list is the
+  top 20 pairs.
 - `GET /analysis/patients?drill&level=deidentified&…filters` — the de-identified patients
   behind one drillable count: at most 200 rows (`count` is the full number), each with only a
   pseudonymous ID, age band, sex, location type, conditions and findings (never a name, MRN,

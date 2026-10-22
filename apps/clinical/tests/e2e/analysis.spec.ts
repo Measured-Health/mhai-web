@@ -8,8 +8,9 @@ import {
   signIn,
 } from "./helpers";
 
-// Console messages that say the browser refused something under the page's
-// security policy; collected for every test and checked after it.
+// A console and page-error check, not a header test: the clinical app sends no
+// Content-Security-Policy. Console messages that mention one, and uncaught page
+// errors, are collected for every test and checked after it.
 const violations = new WeakMap<Page, string[]>();
 
 test.beforeEach(({ page }) => {
@@ -114,6 +115,38 @@ async function toTable(page: Page) {
   ).toHaveAttribute("aria-pressed", "true");
 }
 
+/**
+ * A view with nothing but hidden counts: no number 0 to 4 stands alone in it
+ * (ICD codes, dates, age bands, ward names and "Type 2" are not counts, so they are
+ * taken out first), no bar or column is drawn, and nothing opens a list.
+ */
+async function expectAllHidden(page: Page, title: string) {
+  const view = page.getByRole("region", { name: title });
+  await expect(view).toBeVisible();
+  // Wait for the numbers (the view shows a skeleton while it loads).
+  await expect(view).toContainText("Fewer than 5");
+  const text = (await view.innerText())
+    .replace(/Updated .*/g, "")
+    .replace(/\b[A-Z]\d{2}(\.\d+)?\b/g, "")
+    .replace(/\bICD-10\b/g, "")
+    .replace(/Week of \d+ \w+/g, "")
+    .replace(/\b\w{3} \d{4}\b/g, "")
+    .replace(/\d+\s?[–-]\s?\d+/g, "")
+    .replace(/Ward \d+/g, "")
+    .replace(/Type 2/g, "Type");
+  expect(text).toContain("Fewer than 5");
+  expect(text).not.toMatch(/(^|[^\w.])[0-4](?![\w.])/);
+  // BarList draws a track span; ColumnChart a column span: none has size.
+  await expect(view.locator("span.bg-lilac")).toHaveCount(0);
+  const heights = await view
+    .locator("ol > li > span.origin-bottom")
+    .evaluateAll((els) => els.map((e) => (e as HTMLElement).offsetHeight));
+  expect(heights.every((h) => h === 0)).toBe(true);
+  await expect(view.getByRole("button", { name: /See patients/ })).toHaveCount(
+    0,
+  );
+}
+
 const TINY = async (page: Page) =>
   withFilters(page, async () => {
     await page.getByLabel("Age band").selectOption({ label: "80 and over" });
@@ -135,6 +168,15 @@ test("the analyst signs in and opens Analysis from the sidebar", async ({
   ).toBeVisible();
   await expect(page.getByText(/^Updated /).first()).toBeVisible();
   // Not a hospital admin: no admin side.
+  if (isMobile(page))
+    await page.getByRole("button", { name: "Open menu" }).click();
+  await expect(
+    page
+      .getByRole("link", { name: "Review corrections", exact: false })
+      .filter({
+        visible: true,
+      }),
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Staff", exact: true }),
   ).toHaveCount(0);
@@ -192,11 +234,24 @@ test("filter to Type 2 diabetes, switch to Table and read the numbers", async ({
   await expect(cases).toContainText("Type 2 diabetes");
   await expect(cases).toContainText("E11");
   await expect(cases).not.toContainText("Hypertension");
-  // The count is a real number (the cohort is shown to 5 or more).
-  await expect(cases).toContainText(/\d{2,}/);
+  // The Cases cell is a number of 5 or more (not the ICD code beside it).
+  const row = isMobile(page)
+    ? cases.getByRole("listitem").filter({ hasText: "Type 2 diabetes" })
+    : cases.getByRole("row", { name: /Type 2 diabetes/ });
+  const count = isMobile(page)
+    ? row.locator("dt:text-is('Cases') + dd")
+    : row.getByRole("cell").nth(1);
+  await expect(count).toHaveText(/^([5-9]|[\d,]{2,})$/);
   await expect(cases).not.toContainText("Fewer than 5");
-  // The week-by-week table is there as well.
-  await expect(numbers(page, "Cases over time")).toBeVisible();
+  // The week-by-week table is there, with real numbers in it.
+  const weeks = numbers(page, "Cases over time");
+  await expect(weeks).toBeVisible();
+  await expect(
+    weeks
+      .locator(isMobile(page) ? "dd" : "td")
+      .filter({ hasText: /^\d+$/ })
+      .first(),
+  ).toBeVisible();
 });
 
 test("narrow to a tiny group and see Fewer than 5 everywhere", async ({
@@ -212,24 +267,21 @@ test("narrow to a tiny group and see Fewer than 5 everywhere", async ({
   await expect(items.first()).toBeVisible();
   for (const text of await items.allTextContents())
     expect(text).toMatch(/Fewer than 5$/);
-  // Nothing reads 0, nothing opens a patient list, and no bar is drawn.
-  await expect(bars).not.toContainText(/(^|\s)0(\s|$)/);
-  await expect(page.getByRole("button", { name: /See patients/ })).toHaveCount(
-    0,
-  );
+  await expectAllHidden(page, "Prevalence and trends");
   await toTable(page);
   await expect(numbers(page, "Cases by condition")).toContainText(
     "Fewer than 5",
   );
-  await expect(page.getByRole("button", { name: /See patients/ })).toHaveCount(
-    0,
-  );
+  await expectAllHidden(page, "Prevalence and trends");
 
   await openView(page, "Who is affected");
   await expect(page.getByText("Fewer than 5").first()).toBeVisible();
-  await expect(page.getByRole("button", { name: /See patients/ })).toHaveCount(
-    0,
+  await expectAllHidden(page, "Who is affected");
+  await toTable(page);
+  await expect(numbers(page, "Patients by age band")).toContainText(
+    "Fewer than 5",
   );
+  await expectAllHidden(page, "Who is affected");
 });
 
 test("Download CSV saves a file whose hidden values read Fewer than 5 and which has no patient IDs", async ({
@@ -252,7 +304,10 @@ test("Download CSV saves a file whose hidden values read Fewer than 5 and which 
   expect(csv).not.toMatch(/\bP-[A-Z0-9]{5}\b/);
   expect(csv).not.toMatch(/drill|MRN|@/i);
   // No bare number stands in for a hidden count.
-  const totals = csv.slice(csv.indexOf("Totals"));
+  const start = csv.indexOf("Totals");
+  expect(start).toBeGreaterThan(-1);
+  const totals = csv.slice(start);
+  expect(totals.split("\r\n")[2]).toMatch(/^Fewer than 5(,|$)/);
   expect(totals).not.toMatch(/(^|,)[1-4](,|\r\n)/m);
 });
 

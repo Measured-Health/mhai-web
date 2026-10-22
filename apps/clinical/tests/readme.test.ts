@@ -118,7 +118,7 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(/\*\*Patient alerts on Usage\.\*\*/);
     expect(readme).toMatch(/What\s+changed/);
     expect(readme).toMatch(/"Fewer\s+than\s+5"/);
-    expect(readme).toMatch(/Plan\s+6\s+Analysis/);
+    expect(readme).toMatch(/are\s+in\s+Analysis,\s+below/);
     expect(readme).not.toMatch(/\blab\b/i);
   });
 
@@ -128,11 +128,13 @@ describe("README demo instructions", () => {
   });
 
   it("says Analysis needs sign-off and stays off in live mode", () => {
-    expect(readme).toMatch(
+    const from = readme.indexOf("### Analysis");
+    expect(from).toBeGreaterThan(-1);
+    const to = readme.indexOf("### Tests", from);
+    const section = readme.slice(from, to === -1 ? undefined : to);
+    expect(section).toMatch(
       /clinical,\s+privacy\s+and\s+legal\s+sign-off\s+before\s+live\s+use/,
     );
-    expect(readme).toMatch(/ANALYSIS_SIGNED_OFF=true/);
-    const section = readme.slice(readme.indexOf("### Analysis"));
     expect(section).toMatch(/ANALYSIS_SIGNED_OFF=true/);
     const contributing = readFileSync(
       path.join(repositoryRoot, "CONTRIBUTING.md"),
