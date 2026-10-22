@@ -29,7 +29,12 @@ import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 
 const NOTE_MAX = 500;
 
-export type StepUpInput = { reason?: string; note?: string } & StepUp;
+export type StepUpInput = {
+  reason?: string;
+  note?: string;
+  /** The `extra` field's text, trimmed; left out when empty. */
+  extra?: string;
+} & StepUp;
 
 export type StepUpDialogProps = {
   open: boolean;
@@ -43,6 +48,17 @@ export type StepUpDialogProps = {
   freeReason?: boolean;
   /** The reason code that needs a note (e.g. "other"). */
   noteFor?: string;
+  /** The longest note or free reason, in characters (default 500). */
+  noteMax?: number;
+  /**
+   * One more text field, after the reason and note, sent back as `extra`.
+   * Required unless `required` is false; its own `hint` replaces `hint`.
+   */
+  extra?: { label: string; max: number; hint?: string; required?: boolean };
+  /** Shown under every free-text field (e.g. what not to write there). */
+  hint?: string;
+  /** The safe button's label (default "Cancel"). */
+  dismissLabel?: string;
   confirmLabel: string;
   tone: "danger" | "primary";
   busy: boolean;
@@ -98,7 +114,16 @@ export function StepUpDialog(props: StepUpDialogProps) {
   );
 }
 
-type Missing = { reason?: string; note?: string; code?: string };
+type Missing = {
+  reason?: string;
+  note?: string;
+  extra?: string;
+  code?: string;
+};
+
+/** "Lift authority" → "Enter lift authority." */
+const enter = (label: string) =>
+  `Enter ${label.charAt(0).toLowerCase()}${label.slice(1)}.`;
 
 function StepUpForm({
   intro,
@@ -106,6 +131,10 @@ function StepUpForm({
   reasonLabel = "Reason",
   freeReason,
   noteFor,
+  noteMax = NOTE_MAX,
+  extra,
+  hint,
+  dismissLabel = "Cancel",
   confirmLabel,
   tone,
   busy,
@@ -118,11 +147,13 @@ function StepUpForm({
   const net = useNeedsConnection(`${id}-offline`);
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
+  const [extraText, setExtraText] = useState("");
   const [missing, setMissing] = useState<Missing>({});
   const [focusKey, setFocusKey] = useState(0);
   const firstReason = useRef<HTMLInputElement>(null);
   const freeRef = useRef<HTMLTextAreaElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+  const extraRef = useRef<HTMLInputElement>(null);
   const backupRef = useRef<HTMLInputElement>(null);
   // One confirmation sends one request, even if a second click lands before
   // the caller's busy state renders. Released once the answer comes.
@@ -158,15 +189,18 @@ function StepUpForm({
     if (busy || sent.current || net.offline) return;
     const r = reason.trim();
     const n = note.trim();
+    const x = extraText.trim();
     const m: Missing = {};
     if ((reasons || freeReason) && !r)
       m.reason = reasons ? "Choose a reason." : "Enter a reason.";
     if (needsNote && !n) m.note = "Add a note.";
+    if (extra && extra.required !== false && !x) m.extra = enter(extra.label);
     if (!c.ready)
       m.code = c.backup ? "Enter a backup code." : "Enter your 6-digit code.";
     setMissing(m);
     if (m.reason) return (reasons ? firstReason : freeRef).current?.focus();
     if (m.note) return noteRef.current?.focus();
+    if (m.extra) return extraRef.current?.focus();
     if (m.code) return setFocusKey((k) => k + 1);
     sent.current = true;
     setUsedBackup(c.backup);
@@ -176,6 +210,7 @@ function StepUpForm({
     onConfirm({
       ...(r ? { reason: r } : {}),
       ...(reasons && n ? { note: n } : {}),
+      ...(extra && x ? { extra: x } : {}),
       ...code,
     });
   };
@@ -188,6 +223,19 @@ function StepUpForm({
     ) : null;
   const describe = (k: keyof Missing) =>
     missing[k] ? `${id}-${k}-err` : undefined;
+  /** A free-text field's hint (if any), then its error (if any). */
+  const hintFor = (k: keyof Missing) =>
+    (k === "extra" ? (extra?.hint ?? hint) : hint) || null;
+  const describeText = (k: keyof Missing) =>
+    [hintFor(k) ? `${id}-${k}-hint` : null, describe(k)]
+      .filter(Boolean)
+      .join(" ") || undefined;
+  const hintLine = (k: keyof Missing) =>
+    hintFor(k) ? (
+      <p id={`${id}-${k}-hint`} className="mt-1 text-[12.5px] text-ink-3">
+        {hintFor(k)}
+      </p>
+    ) : null;
 
   return (
     <form noValidate onSubmit={submit}>
@@ -242,17 +290,18 @@ function StepUpForm({
             ref={noteRef}
             id={`${id}-note`}
             rows={2}
-            maxLength={NOTE_MAX}
+            maxLength={noteMax}
             value={note}
             disabled={busy}
             aria-invalid={missing.note ? true : undefined}
-            aria-describedby={describe("note")}
+            aria-describedby={describeText("note")}
             onChange={(e) => {
               setNote(e.target.value);
               setMissing((p) => ({ ...p, note: undefined }));
             }}
             className={`${inputClass} py-2.5`}
           />
+          {hintLine("note")}
           {err("note")}
         </div>
       )}
@@ -269,18 +318,53 @@ function StepUpForm({
             ref={freeRef}
             id={`${id}-reason`}
             rows={2}
-            maxLength={NOTE_MAX}
+            maxLength={noteMax}
             value={reason}
             disabled={busy}
             aria-invalid={missing.reason ? true : undefined}
-            aria-describedby={describe("reason")}
+            aria-describedby={describeText("reason")}
             onChange={(e) => {
               setReason(e.target.value);
               setMissing((p) => ({ ...p, reason: undefined }));
             }}
             className={`${inputClass} py-2.5`}
           />
+          {hintLine("reason")}
           {err("reason")}
+        </div>
+      )}
+      {extra && (
+        <div className="mt-3">
+          <label
+            htmlFor={`${id}-extra`}
+            className="mb-1.5 block text-[12.5px] text-ink-2"
+          >
+            {extra.label}
+            {extra.required !== false && (
+              <>
+                {" "}
+                <span aria-hidden>*</span>
+                <span className="sr-only">(required)</span>
+              </>
+            )}
+          </label>
+          <input
+            ref={extraRef}
+            id={`${id}-extra`}
+            type="text"
+            maxLength={extra.max}
+            value={extraText}
+            disabled={busy}
+            aria-invalid={missing.extra ? true : undefined}
+            aria-describedby={describeText("extra")}
+            onChange={(e) => {
+              setExtraText(e.target.value);
+              setMissing((p) => ({ ...p, extra: undefined }));
+            }}
+            className={inputClass}
+          />
+          {hintLine("extra")}
+          {err("extra")}
         </div>
       )}
       <div className="mt-4">
@@ -334,7 +418,7 @@ function StepUpForm({
       <OfflineNote id={`${id}-offline`} />
       <div className="mt-5 flex flex-wrap justify-end gap-2">
         <Button variant="ghost" disabled={busy} onClick={onClose}>
-          Cancel
+          {dismissLabel}
         </Button>
         <Button
           type="submit"

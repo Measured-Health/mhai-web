@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
-import { BlockedError, type HospitalIn } from "./contract";
+import {
+  BlockedError,
+  type HospitalIn,
+  type TwoPersonRequest,
+  type WriteOpts,
+} from "./contract";
 import { TEAM_EMAILS } from "./fixtures";
-import { createMockPlatform } from "./mock";
+import { createMockPlatform, type MockCore } from "./mock";
 import { MOCK_CODE, createStepUp } from "./step-up";
 
 const START = Date.parse("2026-10-20T09:00:00.000Z");
@@ -667,5 +672,132 @@ describe("mock platform API", () => {
       KEY(),
     );
     expect(secret.last_test).toBeNull();
+  });
+});
+
+/**
+ * A stand-in for an area's mock (holds, operations, settings, audit): built
+ * on the core as the real ones are, so the seam is tested on its own.
+ */
+function sampleArea(core: MockCore) {
+  type Store = { requests: TwoPersonRequest[] };
+  const store = () => (core.shared.sample ??= { requests: [] }) as Store;
+  return {
+    ask: (reason: string, opts: WriteOpts) =>
+      core.write(opts, async (m) => {
+        await core.checkCode(m, { mfa_code: MOCK_CODE });
+        const req: TwoPersonRequest = {
+          id: core.newId("req"),
+          kind: "hold_lift",
+          requested_by: { id: m.id, name: m.name },
+          requested_at: new Date(core.now()).toISOString(),
+          reason,
+          // Set per caller on the way out.
+          requested_by_you: true,
+          expires_at: new Date(core.now() + 7 * 864e5).toISOString(),
+        };
+        store().requests.push(req);
+        core.log({ id: m.id, name: m.name }, "hold_lift_requested", {
+          hospital: { id: "h_lakeside", name: "Lakeside Community Clinic" },
+          target: "LH-1",
+        });
+        return { lift: req, pending: [req] };
+      }),
+    list: () => core.read(() => ({ pending: store().requests })),
+  };
+}
+
+function setupArea(email: string = TEAM_EMAILS.ada) {
+  const t = START;
+  let me: string | null = email;
+  let core: MockCore | undefined;
+  const m = createMockPlatform({
+    now: () => t,
+    me: () => me,
+    delayMs: 0,
+    stepUp: createStepUp(() => t),
+    onCore: (c) => void (core = c),
+  });
+  if (!core) throw new Error("onCore was not called");
+  return {
+    m,
+    core,
+    area: sampleArea(core),
+    as: (e: string | null) => void (me = e),
+  };
+}
+
+describe("the mock core that each area builds on", () => {
+  it("an extension's write refuses an auditor with 403", async () => {
+    const { area, as } = setupArea(TEAM_EMAILS.amara);
+    expect(await failure(area.ask("Case closed", KEY()))).toEqual([
+      403,
+      "forbidden",
+    ]);
+    as(null);
+    expect(await failure(area.list())).toEqual([401, "session_expired"]);
+  });
+
+  it("an extension's write replays the same Idempotency-Key", async () => {
+    const { m, area } = setupArea();
+    const before = (await m.listActivity({})).events.length;
+    const key = KEY();
+    const a = await area.ask("Case closed", key);
+    const b = await area.ask("Case closed", key);
+    expect(b.lift.id).toBe(a.lift.id);
+    expect((await area.list()).pending).toHaveLength(1);
+    expect((await m.listActivity({})).events).toHaveLength(before + 1);
+  });
+
+  it("the core's log shows in listActivity", async () => {
+    const { m, area } = setupArea();
+    await area.ask("Case closed", KEY());
+    const [first] = (await m.listActivity({})).events;
+    expect(first).toMatchObject({
+      actor: { id: "tm_ada", name: "Ada Bakare" },
+      action: "hold_lift_requested",
+      hospital: { id: "h_lakeside" },
+      target: "LH-1",
+      detail: null,
+    });
+    expect(first!.id).toMatch(/^[A-Za-z0-9_-]+$/);
+    const byHospital = await m.listActivity({ hospital: "h_lakeside" });
+    expect(byHospital.events[0]?.action).toBe("hold_lift_requested");
+  });
+
+  it("requested_by_you is true for the requester only, on any request it reads", async () => {
+    const { area, as } = setupArea();
+    const asked = await area.ask("Case closed", KEY());
+    expect(asked.lift.requested_by_you).toBe(true);
+    expect(asked.pending[0]?.requested_by_you).toBe(true);
+    as(TEAM_EMAILS.tunde);
+    expect((await area.list()).pending[0]?.requested_by_you).toBe(false);
+    as(TEAM_EMAILS.amara);
+    expect((await area.list()).pending[0]?.requested_by_you).toBe(false);
+    as(TEAM_EMAILS.ada);
+    expect((await area.list()).pending[0]?.requested_by_you).toBe(true);
+  });
+
+  it("the core gives the hospitals, the signed-in person, ids and own writes", async () => {
+    const { core, as } = setupArea(TEAM_EMAILS.amara);
+    expect(core.hospitals()).toHaveLength(9);
+    expect(core.findHospital("h_harbour").hospital.status).toBe(
+      "removal_pending",
+    );
+    expect(() => core.findHospital("h_nowhere")).toThrow(ApiError);
+    expect(core.you().id).toBe("tm_amara");
+    expect(core.now()).toBe(START);
+    const a = core.newId("x");
+    expect(a).toMatch(/^x_[A-Za-z0-9_-]+$/);
+    expect(core.newId("x")).not.toBe(a);
+    await core.wait();
+    // An own write: an auditor may make it; the same key replays.
+    let runs = 0;
+    const key = KEY();
+    const once = () => core.own(key, () => ++runs);
+    expect(await once()).toBe(1);
+    expect(await once()).toBe(1);
+    as(null);
+    expect(() => core.you()).toThrow(ApiError);
   });
 });
