@@ -142,6 +142,60 @@ export function setMockSignedIn(email: string | null) {
 }
 
 /**
+ * What each area's mock (legal holds, operations, settings, the audit log)
+ * is built on: the demo's clock, its people, its hospitals and its record
+ * of activity, shared with the hospitals part. Built once per mock.
+ */
+export type MockCore = {
+  now(): number;
+  /** A fresh opaque id: `${prefix}_m{n}`. */
+  newId(prefix: string): string;
+  /** The demo's network delay. */
+  wait(): Promise<void>;
+  /** The signed-in team member: 401 when nobody, 403 when not on the team. */
+  you(): TeamMember;
+  /** A read: someone must be signed in. The reply is a per-caller copy. */
+  read<T>(fn: (m: TeamMember) => T): Promise<T>;
+  /**
+   * A write: platform admins only (403 otherwise); the same Idempotency-Key
+   * gets the same reply without doing it again.
+   */
+  write<T>(
+    opts: WriteOpts | undefined,
+    fn: (m: TeamMember) => T | Promise<T>,
+  ): Promise<T>;
+  /**
+   * A write to the signed-in person's own state, which an auditor may make
+   * too; the same key replays. Not logged.
+   */
+  own<T>(
+    opts: WriteOpts | undefined,
+    fn: (m: TeamMember) => T | Promise<T>,
+  ): Promise<T>;
+  /** Adds a line to Activity, newest first. */
+  log(
+    actor: Person,
+    action: ActivityAction,
+    extra?: {
+      hospital?: Person | null;
+      target?: string | null;
+      detail?: string | null;
+    },
+  ): void;
+  /** The person's own two-step or backup code in `body`, else refused. */
+  checkCode(m: TeamMember, body: unknown): Promise<void>;
+  /** The hospital's record, brought up to date; 404 when there is none. */
+  findHospital(id: string): HospitalRecord;
+  /** Every hospital's record, as stored (changes stick). */
+  hospitals(): HospitalRecord[];
+  /**
+   * State one area keeps for another to read (e.g. whether the clean-up is
+   * paused), by a key the areas agree on. Memory only.
+   */
+  shared: Record<string, unknown>;
+};
+
+/**
  * The demo's platform API: memory only (a reload resets it), never stored.
  * It refuses what the proxy and the backend refuse, with the same codes.
  */
@@ -153,6 +207,7 @@ export function createMockPlatform({
   twoStep,
   analytics = "normal",
   notifications = "normal",
+  onCore,
 }: {
   now?: () => number;
   /** The signed-in email, or null. */
@@ -166,6 +221,8 @@ export function createMockPlatform({
   analytics?: AnalyticsMode;
   /** "unavailable": the notifications list and marking seen fail with 503. */
   notifications?: "normal" | "unavailable";
+  /** For tests: the core the areas are built on, once it exists. */
+  onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
   const codes = stepUp ?? getDemoStepUp();
   let hospitals = seedHospitals(now());
@@ -180,6 +237,7 @@ export function createMockPlatform({
   /** Each platform admin's analytics email preference, by team member id. */
   const emailPrefs = new Map<string, EmailPref>();
   let nextId = 1;
+  const newId = (prefix: string) => `${prefix}_m${nextId++}`;
 
   const wait = () =>
     delayMs > 0
@@ -217,7 +275,7 @@ export function createMockPlatform({
   ) {
     activity = [
       {
-        id: `ev_m${nextId++}`,
+        id: newId("ev"),
         at: iso(now()),
         actor,
         action,
@@ -281,12 +339,21 @@ export function createMockPlatform({
   }
 
   /**
-   * A reply as the signed-in member sees it: a hospital's removal says
-   * whether they asked for it (like TeamMember.is_you). `v` is a copy.
+   * A reply as the signed-in member sees it: every request in it (a
+   * hospital's removal, a two-person request, wherever it sits) says whether
+   * they asked for it, like TeamMember.is_you. `v` is a copy.
    */
   function forYou<T>(v: T, m: TeamMember): T {
-    const r = (v as { removal?: RemovalRequest | null } | null)?.removal;
-    if (r) r.requested_by_you = r.requested_by.id === m.id;
+    const walk = (x: unknown): void => {
+      if (Array.isArray(x)) return x.forEach(walk);
+      if (x === null || typeof x !== "object") return;
+      const o = x as Partial<Pick<RemovalRequest, "requested_by">> &
+        Record<string, unknown>;
+      if ("requested_by_you" in o && o.requested_by)
+        o.requested_by_you = o.requested_by.id === m.id;
+      Object.values(o).forEach(walk);
+    };
+    walk(v);
     // A change (a follow-up reply) or the analytics (its What changed list).
     const mine = (c: { follow_up?: FollowUp | null } | null | undefined) => {
       if (c?.follow_up) c.follow_up.by_you = c.follow_up.by.id === m.id;
@@ -336,7 +403,7 @@ export function createMockPlatform({
       (r) => r.hospital.short_code === code && r.hospital.id !== except,
     );
   const newInvite = (name: string, mail: string) => ({
-    invite_id: `inv_m${nextId++}`,
+    invite_id: newId("inv"),
     name,
     email: mail,
     status: "pending" as const,
@@ -407,13 +474,13 @@ export function createMockPlatform({
    */
   async function own<T>(
     opts: WriteOpts | undefined,
-    fn: (m: TeamMember) => T,
+    fn: (m: TeamMember) => T | Promise<T>,
   ): Promise<T> {
     await wait();
     const m = you();
     const key = opts?.idempotencyKey;
     if (key && done.has(key)) return copy(done.get(key) as T);
-    const out = fn(m);
+    const out = await fn(m);
     if (key) done.set(key, copy(out));
     return copy(out);
   }
@@ -423,7 +490,23 @@ export function createMockPlatform({
     return emailPrefs.get(m.id) ?? { mode: "off", version: 1 };
   };
 
-  return {
+  const core: MockCore = {
+    now,
+    newId,
+    wait,
+    you,
+    read,
+    write,
+    own,
+    log,
+    checkCode,
+    findHospital: find,
+    hospitals: () => hospitals,
+    shared: {},
+  };
+  onCore?.(core);
+
+  const hospitalsPart = {
     listHospitals: (q) =>
       read(() => {
         hospitals.forEach(settle);
@@ -765,7 +848,7 @@ export function createMockPlatform({
         if (!ROLES.includes(role)) invalid();
         if (team.some((t) => t.email === mail)) fail(409, "duplicate");
         const t: TeamMember = {
-          id: `tm_m${nextId++}`,
+          id: newId("tm"),
           name,
           email: mail,
           role,
@@ -932,6 +1015,12 @@ export function createMockPlatform({
         emailPrefs.set(m.id, next);
         return next;
       }),
+  } satisfies Partial<PlatformClient>;
+
+  // Each area adds one spread, built on the same core, e.g.
+  // `...createMockHolds(core, holds)`.
+  return {
+    ...hospitalsPart,
     ...unimplementedAudit(),
   };
 }
