@@ -13,7 +13,10 @@ import { AMARA, ADA, renderWithAuth } from "@/tests/render";
 import { url } from "@/tests/search-params";
 import { JobsView } from "./jobs-view";
 
-const net = vi.hoisted(() => ({ online: true }));
+const net = vi.hoisted(() => ({ online: true, desktop: true }));
+vi.mock("@mhai/ui/hooks/use-media", () => ({
+  useIsDesktop: () => net.desktop,
+}));
 vi.mock("@mhai/ui/hooks/use-online", () => ({ useOnline: () => net.online }));
 vi.mock("next/navigation", async () => {
   const m = await import("@/tests/search-params");
@@ -38,6 +41,7 @@ function install(over: Partial<PlatformClient> = {}) {
 }
 beforeEach(() => {
   net.online = true;
+  net.desktop = true;
   url.set("");
   install();
 });
@@ -135,6 +139,52 @@ describe("the failed jobs tab", () => {
     );
     expect(screen.getByRole("table")).toHaveTextContent("Read a document");
     void rerender;
+  });
+
+  it("the Hospital filter narrows and sits in the URL", async () => {
+    renderWithAuth(<JobsView />);
+    await screen.findByRole("table");
+    const picker = screen.getByLabelText("Hospital");
+    await waitFor(() => expect(picker).toBeEnabled());
+    await userEvent.selectOptions(picker, "Northgate General Hospital");
+    expect(url.search).toBe("hospital=h_northgate");
+    await waitFor(() =>
+      expect(screen.getAllByRole("row").slice(1)).toHaveLength(2),
+    );
+    for (const row of screen.getAllByRole("row").slice(1))
+      expect(row).toHaveTextContent("Northgate General Hospital");
+  });
+
+  it("the Hospital picker says when the hospitals couldn't load", async () => {
+    install({ listHospitals: () => Promise.reject(new Error("down")) });
+    renderWithAuth(<JobsView />);
+    await screen.findByRole("table");
+    expect(
+      await screen.findByText("Couldn't load hospitals"),
+    ).toBeInTheDocument();
+    // The jobs themselves still show.
+    expect(screen.getAllByRole("row").slice(1)).toHaveLength(8);
+  });
+
+  it("on a phone the jobs are cards with 44 px controls", async () => {
+    net.desktop = false;
+    renderWithAuth(<JobsView />);
+    const cards = await screen.findByRole("list", { name: "Jobs" });
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(within(cards).getAllByRole("listitem")).toHaveLength(8);
+    const box = within(cards).getByRole("checkbox", {
+      name: "Choose Search guidelines job_search_1",
+    });
+    expect(box.closest("label")).toHaveClass("size-11");
+    expect(
+      within(cards).getByRole("button", {
+        name: "Copy reference job_search_1",
+      }),
+    ).toHaveClass("min-h-11");
+    // The same words as the table, and still no subject or user.
+    expect(cards).toHaveTextContent("Answer a question");
+    expect(cards).toHaveTextContent("Northgate General Hospital");
+    expect(cards.textContent).not.toMatch(/run_query|@/);
   });
 
   it("Select all shown stops at 50", async () => {

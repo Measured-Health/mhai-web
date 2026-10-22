@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  getPlatformClient,
   __resetPlatformClientForTests,
   __setPlatformClientForTests,
 } from "@/lib/api/client";
@@ -128,5 +129,31 @@ describe("CancelJobsDialog", () => {
     ).toBeInTheDocument();
     expect(leaked()).not.toContain(MOCK_CODE);
     expect(leaked()).not.toContain("mfa_code");
+  });
+
+  it("an Other note is sent with the cancel and kept out of Activity", async () => {
+    const { jobs, cancel } = await setup(["job_search_1"]);
+    const api = getPlatformClient();
+    const NOTE = "Asked by the hospital to drop it";
+    renderWithAuth(<CancelJobsDialog jobs={jobs} onClose={() => {}} />);
+    await userEvent.click(screen.getByLabelText("Other"));
+    await userEvent.type(screen.getByLabelText(/^Note/), NOTE);
+    await userEvent.click(screen.getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard(MOCK_CODE);
+    await userEvent.click(screen.getByRole("button", { name: "Cancel jobs" }));
+    await waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
+    expect(cancel.mock.calls[0]![0]).toMatchObject({
+      reason: "other",
+      note: NOTE,
+    });
+    expect(
+      (await screen.findAllByText("Cancelled 1 job"))[0],
+    ).toBeInTheDocument();
+    const { events } = await api.listActivity({});
+    expect(events[0]).toMatchObject({
+      action: "jobs_cancelled",
+      detail: "Other",
+    });
+    expect(JSON.stringify(events)).not.toContain(NOTE);
   });
 });
