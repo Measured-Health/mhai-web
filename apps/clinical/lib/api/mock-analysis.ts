@@ -406,10 +406,18 @@ function findings(f: AnalysisFilters): FindingsOut {
       )
       .map((a) => a.ack_minutes as number);
   const dismissed = alerts.filter((a) => a.dismissed !== null);
-  const reasons = guardSet(
-    REASONS.map((r) => dismissed.filter((a) => a.dismissed === r).length),
-    dismissed.length,
+  // Dismissed and the rest add up to all alerts: guarded as one set.
+  const [dismissedG] = guardSet(
+    [dismissed.length, alerts.length - dismissed.length],
+    alerts.length,
   );
+  const reasonCounts = REASONS.map(
+    (r) => dismissed.filter((a) => a.dismissed === r).length,
+  );
+  // Under a hidden dismissed count, every reason above 0 is hidden too.
+  const reasons = dismissedG.suppressed
+    ? reasonCounts.map((n) => (n > 0 ? hide() : guard(0)))
+    : guardSet(reasonCounts, dismissed.length);
   return {
     ...meta(f, pop),
     findings: rows,
@@ -418,7 +426,7 @@ function findings(f: AnalysisFilters): FindingsOut {
       by_severity: { critical: sev[0], urgent: sev[1], info: sev[2] },
       median_ack_minutes: guardMedian(acked(), total),
       critical_median_ack_minutes: guardMedian(acked("critical"), sev[0]),
-      dismissed: guard(dismissed.length),
+      dismissed: dismissedG,
       dismiss_reasons: REASONS.map((reason, i) => ({
         reason,
         count: reasons[i],
@@ -452,7 +460,11 @@ function quality(f: AnalysisFilters): QualityOut {
       );
       const rated = cs.filter((c) => c.agreed !== null);
       const agreed = rated.filter((c) => c.agreed).length;
-      const ratedG = guard(rated.length);
+      // Rated and the rest add up to the consultations: one set.
+      const [ratedG] = guardSet(
+        [rated.length, cs.length - rated.length],
+        cs.length,
+      );
       const corr = cs.flatMap((c) => c.corrections);
       const outcomes = guardSet(
         (["approved", "rejected", "waiting"] as const).map(

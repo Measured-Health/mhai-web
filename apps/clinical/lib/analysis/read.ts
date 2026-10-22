@@ -8,9 +8,14 @@
 // de-identified only, and fails closed on any field outside its row.
 import { SMALL_GROUP_MIN, isSmallCount } from "@mhai/ui/small-groups";
 import type { GuardedOut } from "../api/admin-contract";
+import type { DismissReason, FindingFlag } from "../api/alerts-contract";
 import type {
   AgeBand,
+  ConditionRef,
+  Drillable,
   FilterOptionsOut,
+  LocationRef,
+  Meta,
   PatientRowOut,
   PatientsOut,
   Setting,
@@ -24,7 +29,6 @@ import {
   isNum,
   isObj,
   numeratorLeaks,
-  scrub,
   setGivesAway,
   shows,
 } from "./guards";
@@ -130,20 +134,24 @@ function newExistingOk(cases: unknown, fresh: unknown, existing: unknown) {
 }
 
 /**
- * A series point: new is part of cases, and the rest (existing, not sent)
- * is the set's hidden member. Shown together they must leave 0 or 5+;
- * under hidden cases, new is hidden or 0.
+ * A part of a total whose rest isn't sent: [part, total − part] is a set
+ * against the total. Shown together they must leave 0 or 5+ (and the part
+ * can't exceed the total); under a hidden total, the part is hidden or 0.
+ * Used for a series point (new of cases; the rest is existing), dismissed
+ * of all alerts, and rated of consultations.
  */
-function newOfCasesOk(cases: G, fresh: G): boolean {
-  if (hidden(cases)) return !(shows(fresh) && fresh.value! > 0);
-  if (shows(cases) && shows(fresh)) {
-    const rest = cases.value! - fresh.value!;
+function partOk(total: G, part: G): boolean {
+  if (hidden(total)) return !(shows(part) && part.value! > 0);
+  if (shows(total) && shows(part)) {
+    const rest = total.value! - part.value!;
     return rest >= 0 && !isSmallCount(rest);
   }
   return true;
 }
 
 function prevalenceOk(v: Obj): boolean {
+  // Not a set against `patients`: one patient can count under several
+  // conditions, so patients − cases gives nothing away.
   const t = v.total;
   if (
     !isObj(t) ||
@@ -167,7 +175,7 @@ function prevalenceOk(v: Obj): boolean {
       p.start <= (v.to as string) &&
       count(p.cases) &&
       count(p.new) &&
-      newOfCasesOk(p.cases as G, p.new as G),
+      partOk(p.cases as G, p.new as G),
     (p) => p.start,
   );
   return byCondition && series;
@@ -289,6 +297,7 @@ function findingsOk(v: Obj): boolean {
     return false;
   // A median over a hidden count is hidden too.
   if (hidden(total) && shows(a.median_ack_minutes as G)) return false;
+  if (!partOk(total, a.dismissed as G)) return false;
   if (
     (hidden(total) || hidden(critical)) &&
     shows(a.critical_median_ack_minutes as G)
@@ -334,6 +343,7 @@ function qualityRowOk(r: Obj): boolean {
     return false;
   if ((hidden(rated) || hidden(r.consultations as G)) && shows(rate))
     return false;
+  if (!partOk(r.consultations as G, rated)) return false;
   return !numeratorLeaks(rated, rate);
 }
 
@@ -355,8 +365,152 @@ export function readView<V extends ViewId>(
 ): ViewState<ViewOut[V]> {
   const ok = Object.hasOwn(VIEW_OK, view) ? VIEW_OK[view] : null;
   if (!ok || !isObj(raw) || !metaOk(raw) || !ok(raw)) return FAILED;
-  return { status: "ok", data: scrub(raw) as unknown as ViewOut[V] };
+  return { status: "ok", data: BUILD[view](raw) as ViewOut[V] };
 }
+
+// ---- Rebuilding a read view from its known keys -------------------------------------
+// Only the contract's keys reach the query cache: anything else the server
+// adds is dropped (not failed, so a newer server still reads). Every value
+// here has passed the checks above.
+
+/** A number: hidden as `{ value: null, suppressed: true }`; never a drill. */
+const g = (v: unknown): G => {
+  const x = v as G;
+  return x.suppressed
+    ? { value: null, suppressed: true }
+    : { value: x.value, suppressed: false };
+};
+/** A Drillable: its drill passed `drillOk` (shown, 5 or more, opaque) or is null. */
+const dr = (v: unknown): Drillable => ({
+  ...g(v),
+  drill: (v as Drillable).drill,
+});
+const cond = (v: unknown): ConditionRef => {
+  const c = v as ConditionRef;
+  return { id: c.id, name: c.name, icd10: c.icd10 };
+};
+const loc = (v: unknown): LocationRef | null => {
+  if (v === null) return null;
+  const l = v as LocationRef;
+  return { id: l.id, label: l.label, setting: l.setting };
+};
+const list = (v: unknown) => v as Obj[];
+const obj = (v: unknown) => v as Obj;
+
+const meta = (v: Obj): Meta => ({
+  updated_at: v.updated_at as string,
+  from: v.from as string,
+  to: v.to as string,
+  bucket: v.bucket as Meta["bucket"],
+  patients: g(v.patients),
+});
+
+const BUILD: { [V in ViewId]: (v: Obj) => ViewOut[V] } = {
+  prevalence: (v) => {
+    const t = obj(v.total);
+    return {
+      ...meta(v),
+      total: { cases: g(t.cases), new: g(t.new), existing: g(t.existing) },
+      by_condition: list(v.by_condition).map((r) => ({
+        condition: cond(r.condition),
+        cases: dr(r.cases),
+        new: g(r.new),
+        existing: g(r.existing),
+      })),
+      series: list(v.series).map((p) => ({
+        start: p.start as string,
+        cases: g(p.cases),
+        new: g(p.new),
+      })),
+    };
+  },
+  affected: (v) => ({
+    ...meta(v),
+    by_age: list(v.by_age).map((r) => ({
+      band: r.band as AgeBand,
+      patients: dr(r.patients),
+    })),
+    by_sex: list(v.by_sex).map((r) => ({
+      sex: r.sex as Sex,
+      patients: dr(r.patients),
+    })),
+    by_setting: list(v.by_setting).map((r) => ({
+      setting: r.setting as Setting | null,
+      patients: dr(r.patients),
+    })),
+    by_location: list(v.by_location).map((r) => ({
+      location: loc(r.location),
+      patients: dr(r.patients),
+    })),
+    by_specialty: list(v.by_specialty).map((r) => ({
+      specialty: r.specialty as string | null,
+      patients: dr(r.patients),
+    })),
+  }),
+  "co-occurring": (v) => ({
+    ...meta(v),
+    pairs: list(v.pairs).map((r) => ({
+      a: cond(r.a),
+      b: cond(r.b),
+      a_patients: g(r.a_patients),
+      patients: dr(r.patients),
+      share_of_a: g(r.share_of_a),
+    })),
+  }),
+  findings: (v) => {
+    const a = obj(v.alerts);
+    const sev = obj(a.by_severity);
+    return {
+      ...meta(v),
+      findings: list(v.findings).map((r) => ({
+        name: r.name as string | null,
+        flag: r.flag as FindingFlag | null,
+        patients: dr(r.patients),
+        results: g(r.results),
+      })),
+      alerts: {
+        total: g(a.total),
+        by_severity: {
+          critical: g(sev.critical),
+          urgent: g(sev.urgent),
+          info: g(sev.info),
+        },
+        median_ack_minutes: g(a.median_ack_minutes),
+        critical_median_ack_minutes: g(a.critical_median_ack_minutes),
+        dismissed: g(a.dismissed),
+        dismiss_reasons: list(a.dismiss_reasons).map((r) => ({
+          reason: r.reason as DismissReason,
+          count: g(r.count),
+        })),
+      },
+    };
+  },
+  quality: (v) => ({
+    ...meta(v),
+    by_condition: list(v.by_condition).map((r) => {
+      const mix = obj(r.confidence);
+      const c = obj(r.corrections);
+      return {
+        condition: cond(r.condition),
+        consultations: g(r.consultations),
+        confidence: {
+          high: g(mix.high),
+          caution: g(mix.caution),
+          review: g(mix.review),
+          failed: g(mix.failed),
+        },
+        agreement_rate: g(r.agreement_rate),
+        rated: g(r.rated),
+        corrections: {
+          total: g(c.total),
+          approved: g(c.approved),
+          rejected: g(c.rejected),
+          waiting: g(c.waiting),
+        },
+      };
+    }),
+  }),
+};
 
 // ---- The filter options ----------------------------------------------------------
 

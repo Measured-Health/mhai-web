@@ -415,6 +415,75 @@ describe("readView", () => {
     expect(ok("prevalence", fine)).toBe("ok");
   });
 
+  it("dismissed is part of all alerts: more, or a rest of 1–4, fails", () => {
+    expect(ok("findings", findings({ dismissed: S(41) }))).toBe("failed");
+    const three = findings({
+      dismissed: S(37),
+      dismiss_reasons: [{ reason: "other", count: S(37) }],
+    });
+    expect(ok("findings", three)).toBe("failed");
+    expect(
+      ok(
+        "findings",
+        findings({
+          total: H,
+          by_severity: { critical: H, urgent: S(0), info: S(0) },
+          median_ack_minutes: H,
+          critical_median_ack_minutes: H,
+          dismissed: S(5),
+          dismiss_reasons: [{ reason: "other", count: S(5) }],
+        }),
+      ),
+    ).toBe("failed");
+  });
+
+  it("rated is part of the consultations: more, or a rest of 1–4, fails", () => {
+    expect(
+      ok("quality", quality({ rated: S(41), agreement_rate: S(0.5) })),
+    ).toBe("failed");
+    expect(
+      ok("quality", quality({ rated: S(37), agreement_rate: S(0.49) })),
+    ).toBe("failed");
+  });
+
+  it("drops keys outside the contract", () => {
+    const v = {
+      ...prevalence(),
+      extra: [{ name: "Jane Doe" }],
+      x: { value: 9, suppressed: false },
+    };
+    v.by_condition[0] = {
+      ...v.by_condition[0],
+      condition: { ...E11, note: "Jane Doe" } as typeof E11,
+    };
+    const r = readView("prevalence", v);
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(JSON.stringify(r.data)).not.toContain("Jane Doe");
+    expect(r.data).not.toHaveProperty("extra");
+    expect(r.data).not.toHaveProperty("x");
+    expect(r.data).toEqual(prevalence());
+  });
+
+  it("total.new with a drill loses the drill", () => {
+    const v = prevalence();
+    v.total.new = { value: 30, suppressed: false, drill: "x" } as GuardedOut;
+    const r = readView("prevalence", v);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.data.total.new).toEqual(S(30));
+      expect(r.data.by_condition[0].cases.drill).toBe("cond-e11");
+    }
+  });
+
+  it("each view's output is exactly its input when nothing extra is sent", async () => {
+    for (const view of VIEWS) {
+      const raw = await mock.getView(view, F);
+      const r = readView(view, raw);
+      expect(r).toEqual({ status: "ok", data: raw });
+    }
+  });
+
   it("a median that isn't whole or a half fails", () => {
     expect(ok("findings", findings({ median_ack_minutes: S(12.3) }))).toBe(
       "failed",
