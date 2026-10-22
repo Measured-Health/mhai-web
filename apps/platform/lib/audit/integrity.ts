@@ -41,11 +41,44 @@ function proven(r: Run, now: number): boolean {
   return last <= end && end <= now + SKEW_MS;
 }
 
-/** `now` is the shared clock (`useNow`): a finish in the future isn't proof. */
+export type Staleness =
+  /** The check finished more than 26 h ago. */
+  | { kind: "age"; finished: string }
+  /** The check began long after the end of the range it covered. */
+  | { kind: "range"; to_at: string };
+
+/**
+ * The one staleness rule, for a run that is proven: null while fresh. It is
+ * stale when its finish is older than 26 h, or when it began more than 26 h
+ * after the end of the range it checked (a quiet log is fine: the range end
+ * is measured against the check's own start, not against now).
+ */
+export function staleness(run: Run, now: number): Staleness | null {
+  if (!proven(run, now)) return null;
+  const finished = run.finished_at!;
+  if (now - Date.parse(finished) > STALE_MS) return { kind: "age", finished };
+  if (
+    run.started_at !== null &&
+    Date.parse(run.started_at) - Date.parse(run.to_at!) > STALE_MS
+  )
+    return { kind: "range", to_at: run.to_at! };
+  return null;
+}
+
+const staleWords = (s: Staleness) =>
+  s.kind === "age"
+    ? `Not checked since ${dateLabel(s.finished)}`
+    : `Last check covered entries up to ${dateLabel(s.to_at)}`;
+
+/**
+ * `now` is the shared clock (`useNow`): a finish in the future isn't proof,
+ * and a stale run is never Intact. (For a past run in a history, pass the
+ * time it finished as `now`.)
+ */
 export function integrityOf(run: Run, now: number): Shown {
   if (run.state === "running") return "checking";
   if (run.state === "broken") return "broken";
-  return proven(run, now) ? "intact" : "couldnt_check";
+  return proven(run, now) && !staleness(run, now) ? "intact" : "couldnt_check";
 }
 
 /** A check is running only when the server says so in a run that reads. */
@@ -97,14 +130,9 @@ export function headerLine(
         : "Integrity: Couldn't check",
     };
   }
+  const stale = staleness(r, now);
+  if (stale) return { tone: "warn", words: `Integrity: ${staleWords(stale)}` };
   const finished = r.finished_at!;
-  // Stale when the finish or the end of the checked range is too old.
-  const since = Math.min(Date.parse(finished), Date.parse(r.to_at!));
-  if (now - since > STALE_MS)
-    return {
-      tone: "warn",
-      words: `Integrity: Not checked since ${dateLabel(new Date(since).toISOString())}`,
-    };
   return {
     tone: "ok",
     words: `Integrity: Intact · checked ${checkedAt(finished, now)}`,
@@ -125,6 +153,11 @@ const UNKNOWN = "The check didn't finish, so the log's integrity is unknown.";
 
 /** The state block's sentence (spec §8.1, word for word). */
 export function runSentence(run: Run, now: number): string {
+  const stale = staleness(run, now);
+  if (stale)
+    return stale.kind === "age"
+      ? `${staleWords(stale)}.`
+      : `Last check covered entries up to ${utc(stale.to_at)}.`;
   switch (integrityOf(run, now)) {
     case "intact":
       return `No changes found. Checked ${num(run.entries_checked!)} entries, from ${startWords(run)} to entry ${num(run.to_seq!)} (${utc(run.to_at!)}).`;

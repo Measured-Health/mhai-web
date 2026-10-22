@@ -559,12 +559,12 @@ export const KINDS: Record<string, Kind> = {
   hold_edited: k(
     "retention",
     (e) => `Changed the review date or note on a legal hold on ${hName(e)}`,
-    { note: true, targets: ["hold", "hospital"], named: true },
+    { targets: ["hold", "hospital"], named: true },
   ),
   hold_lift_requested: k(
     "retention",
     (e) => `Asked to lift a legal hold on ${hName(e)}`,
-    { note: true, targets: ["hold", "hospital"], named: true },
+    { targets: ["hold", "hospital"], named: true },
   ),
   hold_lift_cancelled: k(
     "retention",

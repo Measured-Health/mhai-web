@@ -26,6 +26,7 @@ const DOS_DATE = ((2026 - 1980) << 9) | (1 << 5) | 1;
 export function storedZip(
   files: { name: string; data: Uint8Array }[],
 ): Uint8Array {
+  if (files.length > 0xffff) throw new RangeError("too many files for a ZIP");
   const enc = new TextEncoder();
   const parts: Uint8Array[] = [];
   const central: Uint8Array[] = [];
@@ -37,6 +38,7 @@ export function storedZip(
   };
   for (const f of files) {
     const name = enc.encode(f.name);
+    if (name.length > 0xffff) throw new RangeError("file name too long");
     const crc = crc32(f.data);
     const local = header(30, (v) => {
       v.setUint32(0, 0x04034b50, true);

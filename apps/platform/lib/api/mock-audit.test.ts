@@ -322,6 +322,9 @@ describe("reading the log", () => {
     expect(
       (await m.searchAuditPeople("measured-health.example")).people.length,
     ).toBeGreaterThanOrEqual(3);
+    expect(
+      (await m.searchAuditPeople("chidi")).people.map((p) => p.id),
+    ).toEqual(["tm_new"]);
   });
 
   it("reads need someone signed in, of either role", async () => {
@@ -624,7 +627,7 @@ describe("integrity", () => {
     const { m } = setup({ integrity: "stale" });
     const s = await status(m);
     expect(START - Date.parse(s.latest!.finished_at!)).toBe(30 * 3_600_000);
-    expect(integrityOf(s.latest!, START)).toBe("intact");
+    expect(integrityOf(s.latest!, START)).toBe("couldnt_check");
   });
 
   it("startCheck returns the running run while one runs, then finishes intact with a full range", async () => {

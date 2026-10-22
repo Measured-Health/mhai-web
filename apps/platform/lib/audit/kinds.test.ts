@@ -226,4 +226,10 @@ describe("Plan 8's Activity actions", () => {
     expect(KINDS.setting_change_requested.targets).toEqual(["setting"]);
     expect(KINDS.jobs_retried.targets).toEqual([]);
   });
+
+  it("no hold kind accepts a note", () => {
+    const holds = Object.keys(KINDS).filter((k) => k.startsWith("hold_"));
+    expect(holds).toHaveLength(8);
+    for (const kind of holds) expect(KINDS[kind].note, kind).toBe(false);
+  });
 });

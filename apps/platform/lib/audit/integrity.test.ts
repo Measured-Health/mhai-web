@@ -9,6 +9,7 @@ import {
   integrityOf,
   isRunning,
   runSentence,
+  staleness,
 } from "./integrity";
 import type { ReadStatus } from "./read";
 
@@ -90,15 +91,58 @@ describe("headerLine", () => {
     });
   });
 
-  it("a recent finish over a range ending 30 h ago is not fresh Intact", () => {
+  it("a check that began 30 h after the range it covered is stale on all three", () => {
     const run = intactRun({
-      started_at: "2026-10-21T00:50:00Z",
-      to_at: "2026-10-21T01:00:00Z",
-      finished_at: "2026-10-22T06:00:00Z",
+      started_at: "2026-10-22T06:00:00Z",
+      to_at: "2026-10-21T00:00:00Z",
+      finished_at: "2026-10-22T06:05:00Z",
     });
-    const h = headerLine(status({ latest: run }), NOW);
-    expect(h.tone).toBe("warn");
-    expect(h.words).toBe("Integrity: Not checked since 21 Oct 2026");
+    expect(staleness(run, NOW)).toEqual({
+      kind: "range",
+      to_at: "2026-10-21T00:00:00Z",
+    });
+    expect(integrityOf(run, NOW)).toBe("couldnt_check");
+    expect(headerLine(status({ latest: run }), NOW)).toEqual({
+      tone: "warn",
+      words: "Integrity: Last check covered entries up to 21 Oct 2026",
+    });
+    const words = runSentence(run, NOW);
+    expect(words).toBe(
+      "Last check covered entries up to 21 Oct 2026 00:00 UTC.",
+    );
+    expect(words).not.toMatch(/No changes found|Intact/);
+  });
+
+  it("a finish older than 26 h is stale on all three, and says Not checked since", () => {
+    const run = intactRun({
+      started_at: "2026-10-21T05:59:00Z",
+      to_at: "2026-10-21T05:59:00Z",
+      finished_at: "2026-10-21T06:00:00Z",
+    });
+    const late = Date.parse("2026-10-22T09:00:00Z");
+    expect(staleness(run, late)).toEqual({
+      kind: "age",
+      finished: "2026-10-21T06:00:00Z",
+    });
+    expect(integrityOf(run, late)).toBe("couldnt_check");
+    expect(headerLine(status({ latest: run }), late).words).toBe(
+      "Integrity: Not checked since 21 Oct 2026",
+    );
+    expect(runSentence(run, late)).toBe("Not checked since 21 Oct 2026.");
+    // As a past run in a history (judged when it finished), it was Intact.
+    expect(integrityOf(run, Date.parse(run.finished_at!))).toBe("intact");
+  });
+
+  it("a quiet log is fine: a range ending 20 h before the start, finished 1 h ago, is Intact", () => {
+    const run = intactRun({
+      started_at: "2026-10-22T06:00:00Z",
+      to_at: "2026-10-21T10:00:00Z",
+      finished_at: "2026-10-22T06:05:00Z",
+    });
+    expect(staleness(run, NOW)).toBeNull();
+    expect(integrityOf(run, NOW)).toBe("intact");
+    expect(headerLine(status({ latest: run }), NOW).tone).toBe("ok");
+    expect(runSentence(run, NOW)).toMatch(/^No changes found/);
   });
 
   it("a to_at an hour before started_at with a recent finish is still Intact", () => {

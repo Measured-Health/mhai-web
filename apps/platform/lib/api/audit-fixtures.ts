@@ -176,6 +176,11 @@ export function auditPeople(): AuditPerson[] {
     [ADA, "ada.bakare@measured-health.example"],
     [TUNDE, "tunde.okafor@measured-health.example"],
     [AMARA, "amara.eze@measured-health.example"],
+    // Active in the demo, so their session reads and exports are in the log.
+    [
+      plat("tm_new", "Chidi Nwosu", "platform_admin"),
+      "new.admin@measured-health.example",
+    ],
   ];
   return [
     ...team.map(([a, email]) => ({
