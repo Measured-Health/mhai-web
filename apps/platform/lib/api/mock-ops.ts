@@ -37,6 +37,9 @@ const CANCEL_WORDS: Record<CancelReason, string> = {
 
 /** The most recent demo's way to change its health mode (see below). */
 let setActiveMode: ((mode: HealthMode) => void) | null = null;
+let activeMode: HealthMode = "normal";
+/** The running demo's current sample mode (for the Sample data control). */
+export const getDemoHealth = (): HealthMode => activeMode;
 /**
  * Acts on the most recently created mock (a second mock re-points it).
  * Switches the running demo's sample health reading (the Health tab's
@@ -66,7 +69,11 @@ export function createMockOps(
   { health = "normal" }: { health?: HealthMode } = {},
 ): OpsClient {
   let mode = HEALTH_MODES.includes(health) ? health : "normal";
-  setActiveMode = (m) => void (mode = m);
+  activeMode = mode;
+  setActiveMode = (m) => {
+    mode = m;
+    activeMode = m;
+  };
   const jobs: Job[] = seedJobs(core.now());
 
   const failedNow = () => jobs.filter((j) => j.status === "failed").length;
