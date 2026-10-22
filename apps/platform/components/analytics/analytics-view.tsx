@@ -122,8 +122,6 @@ export function AnalyticsView() {
     returnTo.current = selected?.id ?? null;
     setPhoneDetail(false);
   };
-  const isYou = (by: Person) =>
-    !!user && (by.id === user.id || by.name === user.name);
 
   const download = () => {
     const a = q.data;
@@ -212,7 +210,6 @@ export function AnalyticsView() {
                 period={period}
                 hospitals={state.hospitals}
                 canAct={canAct}
-                isYou={isYou}
                 onBack={desktop ? undefined : back}
                 headingRef={headingRef}
               />

@@ -27,6 +27,7 @@ import {
   MEASURES,
   PERIODS,
   type Change,
+  type FollowUp,
   type Period,
 } from "./analytics-contract";
 import {
@@ -270,6 +271,13 @@ export function createMockPlatform({
   function forYou<T>(v: T, m: TeamMember): T {
     const r = (v as { removal?: RemovalRequest | null } | null)?.removal;
     if (r) r.requested_by_you = r.requested_by.id === m.id;
+    // A change (a follow-up reply) or the analytics (its What changed list).
+    const mine = (c: { follow_up?: FollowUp | null } | null | undefined) => {
+      if (c?.follow_up) c.follow_up.by_you = c.follow_up.by.id === m.id;
+    };
+    mine(v as { follow_up?: FollowUp | null } | null);
+    const ch = (v as { changes?: { items?: unknown } } | null)?.changes;
+    if (Array.isArray(ch?.items)) ch.items.forEach(mine);
     return v;
   }
 
@@ -794,6 +802,8 @@ export function createMockPlatform({
         } else {
           c.follow_up = {
             by: person(m),
+            // Set per caller on the way out (see forYou).
+            by_you: false,
             at: iso(now()),
             note: note ?? null,
             version: 1,

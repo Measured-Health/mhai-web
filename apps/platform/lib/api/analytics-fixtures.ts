@@ -244,6 +244,7 @@ export function seedChanges(now: number, mode: AnalyticsMode): Change[] {
         "Riverside Children's Hospital: questions down 41% (140 → 83 a week)",
       follow_up: {
         by: TUNDE,
+        by_you: false,
         at: iso(now - DAY),
         note: "Called Musa Danjuma: two wards changed their rota. Checking again next week.",
         version: 1,

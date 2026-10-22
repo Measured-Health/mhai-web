@@ -45,6 +45,11 @@ export type FollowUp = {
   by: Person;
   at: string;
   note: string | null;
+  /**
+   * Whether the signed-in person wrote it, set by the server per caller:
+   * only the author may edit the note.
+   */
+  by_you: boolean;
   /** Moves on each time the follow-up itself changes (a note edit). */
   version: number;
 };
