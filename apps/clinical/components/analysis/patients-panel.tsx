@@ -173,7 +173,12 @@ export function PatientsPanel({
               className="size-5 shrink-0 text-bad-deep"
             />
             <span className="flex-1">Couldn&apos;t load these patients</span>
-            <Button size="sm" variant="ghost" onClick={() => void q.refetch()}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="min-h-11"
+              onClick={() => void q.refetch()}
+            >
               Try again
             </Button>
           </div>
@@ -236,7 +241,7 @@ export const drillable = (d: Drillable): d is Drillable & { drill: string } =>
 /** The table's last column: See patients on drillable rows, empty otherwise. */
 export const SEE_COLUMN: TableColumn = {
   key: "see",
-  label: "Patients",
+  label: "Patient list",
   action: true,
 };
 

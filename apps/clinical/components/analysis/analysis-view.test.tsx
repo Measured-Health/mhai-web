@@ -266,7 +266,7 @@ describe("AnalysisView", () => {
       "Cases",
       "New in this period",
       "Existing",
-      "Patients",
+      "Patient list",
     ]);
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(d.by_condition.length);

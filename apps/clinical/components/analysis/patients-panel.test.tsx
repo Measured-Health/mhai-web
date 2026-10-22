@@ -244,6 +244,7 @@ describe("PatientsPanel", () => {
       { mrn: "MRN-123456" },
       { dob: "1950-01-01" },
       { address: "1 High St" },
+      { ward_bed: "4B" },
     ]) {
       qc = new QueryClient();
       prevalenceWith(async () => ({
@@ -568,7 +569,8 @@ describe("See patients in the tables", () => {
     const heads = within(table)
       .getAllByRole("columnheader")
       .map((h) => h.textContent);
-    expect(heads.at(-1)).toBe("Patients");
+    expect(heads.at(-1)).toBe("Patient list");
+    expect(new Set(heads).size).toBe(heads.length);
     const [, shown, hidden] = within(table).getAllByRole("row");
     expect(cellsOf(shown!).at(-1)).toBe("See patients · Type 2 diabetes · E11");
     expect(cellsOf(hidden!).at(-1)).toBe("");
@@ -591,7 +593,7 @@ describe("See patients in the tables", () => {
       within(age)
         .getAllByRole("columnheader")
         .map((h) => h.textContent),
-    ).toEqual(["Age band", "Patients", "Patients"]);
+    ).toEqual(["Age band", "Patients", "Patient list"]);
     expect(cellsOf(within(age).getAllByRole("row")[1]!).at(-1)).toBe(
       "See patients · Age band: 0–17",
     );
@@ -622,7 +624,7 @@ describe("See patients in the tables", () => {
       within(findings)
         .getAllByRole("columnheader")
         .map((h) => h.textContent),
-    ).toEqual(["Finding", "Flag", "Patients", "Results", "Patients"]);
+    ).toEqual(["Finding", "Flag", "Patients", "Results", "Patient list"]);
     rows = within(findings).getAllByRole("row");
     expect(cellsOf(rows[1]!).at(-1)).toBe("See patients · Potassium · Low");
     expect(cellsOf(rows[2]!).at(-1)).toBe("");

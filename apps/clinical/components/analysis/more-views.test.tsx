@@ -178,7 +178,7 @@ describe("Co-occurring conditions", () => {
       "Condition B",
       "Patients",
       "Share of condition A",
-      "Patients",
+      "Patient list",
     ]);
     const row = within(table).getAllByRole("row")[1]!;
     expect(
