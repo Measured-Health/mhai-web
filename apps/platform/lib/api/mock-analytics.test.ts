@@ -89,9 +89,12 @@ function countsOf(a: AnalyticsOut): [string, Guarded][] {
   }
   for (const r of rows<QualityRow>(quality)) {
     out.push([`quality.${r.hospital.id}.answers`, r.answers]);
+    out.push([`quality.${r.hospital.id}.reviews`, r.reviews]);
     for (const [k, g] of Object.entries(r.confidence))
       out.push([`quality.${r.hospital.id}.${k}`, g]);
   }
+  for (const area of [use, alerts] as const)
+    area.trend.forEach((p, i) => out.push([`trend.${i}`, p.value]));
   for (const r of ok(a.hospitals).rows) {
     out.push([`size.${r.hospital.id}.clin`, r.size.active_clinicians]);
     out.push([`size.${r.hospital.id}.q`, r.size.questions]);

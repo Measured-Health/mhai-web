@@ -135,9 +135,17 @@ describe("analyticsCsv", () => {
     );
     ok(a.changes).items = [...ok(a.changes).items, ...many];
     const csv = analyticsCsv(a, "30d");
-    const data = CSV_SECTIONS.flatMap((s) => section(csv, s).slice(1));
-    expect(data.length).toBeLessThanOrEqual(CSV_MAX_ROWS);
+    const ls = lines(csv);
+    // The whole file stops at the cap, and says so on its last line.
+    expect(ls.at(-1)).toBe(`Stopped at ${CSV_MAX_ROWS} rows`);
+    expect(ls.at(-2)).toBe("");
+    expect(ls.length - 2).toBe(CSV_MAX_ROWS);
+    // The changes list is what's cut: every area is still written.
     expect(section(csv, "What changed").length).toBeGreaterThan(100);
+    expect(section(csv, "Hospitals")).toHaveLength(6);
+    expect(section(csv, "Use")).toHaveLength(7);
+    // Under the cap there's no such line.
+    expect(analyticsCsv(sample(), "30d")).not.toContain("Stopped at");
   });
 
   it("names the file by date", () => {

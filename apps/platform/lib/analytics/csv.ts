@@ -11,6 +11,7 @@ import {
   measureLabel,
   type MeasureKind,
 } from "./measures";
+import { DIRECTION_WORD } from "./changes";
 import { AREA_TITLE, AREAS, readAnalytics, type AreaKey } from "./read";
 
 /** The one row a failed or unavailable area leaves (as in Plan 5b). */
@@ -23,12 +24,6 @@ const PERIOD_LABEL: Record<Period, string> = {
   "90d": "Last 90 days",
 };
 const MEDIAN = "Median of all hospitals";
-const DIRECTION: Record<string, string> = {
-  worse: "Worse",
-  better: "Better",
-  rising: "Rising",
-  falling: "Falling",
-};
 
 /**
  * "Fewer than 5" for hidden, empty for nothing to show; shares as whole
@@ -113,6 +108,7 @@ export function analyticsCsv(a: AnalyticsOut, period: Period): string {
     ): Cell[] => [
       cell(r.answers, "count"),
       cell(r.needs_review_share, "share"),
+      cell(r.reviews, "count"),
       cell(r.confidence.high, "count"),
       cell(r.confidence.medium, "count"),
       cell(r.confidence.low, "count"),
@@ -124,6 +120,7 @@ export function analyticsCsv(a: AnalyticsOut, period: Period): string {
         "Hospital",
         "Answers",
         "Needing review (%)",
+        "Reviews",
         "High confidence",
         "Medium confidence",
         "Low confidence",
@@ -168,7 +165,7 @@ export function analyticsCsv(a: AnalyticsOut, period: Period): string {
           c.hospital?.name ?? "All hospitals",
           AREA_TITLE[c.area],
           measureLabel(c.measure),
-          DIRECTION[c.direction] ?? null,
+          DIRECTION_WORD[c.direction],
           c.serious ? "Yes" : "No",
           cell(c.previous, k),
           cell(c.current, k),
@@ -179,19 +176,22 @@ export function analyticsCsv(a: AnalyticsOut, period: Period): string {
       }),
     };
 
-  // The areas are short; the changes list takes what's left of the cap.
-  let budget = CSV_MAX_ROWS;
-  for (const k of AREAS)
-    if (k !== "changes" && tables[k]) budget -= tables[k]!.rows.length;
-  if (tables.changes)
-    tables.changes.rows = tables.changes.rows.slice(0, Math.max(0, budget));
-
   const out: Cell[][] = [];
   for (const k of AREAS) {
     out.push([], [AREA_TITLE[k]]);
     const t = tables[k];
     if (!t) out.push([CSV_FAILED]);
     else out.push(t.header, ...t.rows);
+  }
+  // The whole file stops at CSV_MAX_ROWS lines (the first one included).
+  // Only the changes list can be long, so it's what is cut: every area is
+  // still written, and the last line says the file stopped.
+  const over = out.length + 1 - CSV_MAX_ROWS;
+  if (over > 0 && tables.changes) {
+    const at = out.findIndex((r) => r === tables.changes!.header);
+    const keep = Math.max(0, tables.changes.rows.length - over);
+    out.splice(at + 1 + keep, tables.changes.rows.length - keep);
+    out.push([], [`Stopped at ${CSV_MAX_ROWS} rows`]);
   }
   return toCsv(
     ["Analytics", PERIOD_LABEL[period], `${day(a?.from)} to ${day(a?.to)}`],

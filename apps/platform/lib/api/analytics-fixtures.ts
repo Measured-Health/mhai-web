@@ -312,6 +312,12 @@ export function seedChanges(now: number, mode: AnalyticsMode): Change[] {
 // ---- The small-group rule -------------------------------------------------
 
 const HIDDEN: Guarded = { value: null, suppressed: true };
+/**
+ * Shares to 4 places, so the numbers they're over can be worked out
+ * exactly enough for the app's own check (the reader refuses a share whose
+ * numerator, or its complement, comes to 1–4).
+ */
+const SHARE_DP = 4;
 const small = (n: number) => n >= 1 && n <= 4;
 /** A count: 1–4 is hidden, 0 shows. */
 const count = (n: number): Guarded =>
@@ -507,11 +513,12 @@ function toAlertsRow(x: Raw): Body<AlertsRow> {
       [crit],
       x.critical,
     ),
+    // Hidden when the alerts within or outside the target are 1–4.
     critical_within_target: over(
       x.within / (x.critical || 1),
-      [crit, count(x.within)],
+      [crit, count(x.within), count(x.critical - x.within)],
       x.critical,
-      2,
+      SHARE_DP,
     ),
     critical_target_minutes: CRITICAL_TARGET_MINUTES,
     critical_overdue: count(x.overdue),
@@ -523,22 +530,24 @@ function toQualityRow(x: Raw): Body<QualityRow> {
   const reviews = count(x.reviews);
   return {
     answers,
+    reviews,
     needs_review_share: over(
       x.needs_review / (x.answers || 1),
       [answers, count(x.needs_review)],
       x.answers,
-      2,
+      SHARE_DP,
     ),
     confidence: set({
       high: count(x.high),
       medium: count(x.medium),
       low: count(x.low),
     }),
+    // Hidden when the reviews that agreed or disagreed are 1–4.
     agreement_rate: over(
       x.agreed / (x.reviews || 1),
-      [reviews, count(x.agreed)],
+      [reviews, count(x.agreed), count(x.reviews - x.agreed)],
       x.reviews,
-      2,
+      SHARE_DP,
     ),
     median_review_hours: over(x.review_hours, [reviews], x.reviews),
   };
@@ -612,8 +621,10 @@ function toAlertsMedian(rows: Body<AlertsRow>[]): Body<AlertsRow> {
 }
 function toQualityMedian(rows: Body<QualityRow>[]): Body<QualityRow> {
   const answers = medCount(rows.map((r) => r.answers));
+  const reviews = medCount(rows.map((r) => r.reviews));
   return {
     answers,
+    reviews,
     needs_review_share: medRate(
       rows.map((r) => r.needs_review_share),
       [answers],
@@ -626,12 +637,12 @@ function toQualityMedian(rows: Body<QualityRow>[]): Body<QualityRow> {
     }),
     agreement_rate: medRate(
       rows.map((r) => r.agreement_rate),
-      [answers],
+      [reviews],
       2,
     ),
     median_review_hours: medRate(
       rows.map((r) => r.median_review_hours),
-      [answers],
+      [reviews],
     ),
   };
 }
@@ -692,7 +703,7 @@ export function buildAnalytics(
   const use = rows<UseRow>(toUseRow);
   const alerts = rows<AlertsRow>(toAlertsRow);
   const quality = rows<QualityRow>(toQualityRow);
-  const trend = (value: (xs: Raw[]) => number) =>
+  const trend = (value: (xs: Raw[]) => Guarded) =>
     buckets(period, to).map((b) => ({
       start: iso(b.start),
       value: value(PROFILES.map((p) => sum(p, b.k0, b.k1, 0))),
@@ -711,13 +722,15 @@ export function buildAnalytics(
       updated_at: ago(4),
       rows: use,
       median: toUseMedian(use),
-      trend: trend((xs) => total(xs, (x) => x.questions)),
+      trend: trend((xs) => count(total(xs, (x) => x.questions))),
     },
     alerts: {
       updated_at: ago(2),
       rows: alerts,
       median: toAlertsMedian(alerts),
-      trend: trend((xs) => total(xs, (x) => x.critical + x.urgent + x.info)),
+      trend: trend((xs) =>
+        count(total(xs, (x) => x.critical + x.urgent + x.info)),
+      ),
     },
     quality: {
       updated_at: ago(9),
@@ -725,9 +738,8 @@ export function buildAnalytics(
       median: toQualityMedian(quality),
       trend: trend((xs) => {
         const a = total(xs, (x) => x.answers);
-        return a
-          ? Math.round((total(xs, (x) => x.needs_review) / a) * 100) / 100
-          : 0;
+        const n = total(xs, (x) => x.needs_review);
+        return over(n / (a || 1), [count(a), count(n)], a, 2);
       }),
     },
     hospitals: {

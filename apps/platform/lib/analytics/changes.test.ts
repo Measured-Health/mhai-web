@@ -106,6 +106,28 @@ describe("rankChanges", () => {
     expect(ranked.map((c) => c.comparable)).toEqual([true, false, false]);
   });
 
+  it("a hidden side ranks unsized within its group", () => {
+    const HIDDEN = { value: null, suppressed: true };
+    const ranked = rankChanges([
+      change("hidden_serious", { serious: true, previous: HIDDEN }),
+      change("tiny", { previous: g(100), current: g(99) }),
+      change("hidden", { current: HIDDEN }),
+      change("big_serious", {
+        serious: true,
+        previous: g(10),
+        current: g(40),
+      }),
+    ]);
+    expect(ids(ranked)).toEqual([
+      "big_serious",
+      "hidden_serious",
+      "tiny",
+      "hidden",
+    ]);
+    // Hidden isn't "no previous period".
+    expect(ranked.every((c) => c.comparable)).toBe(true);
+  });
+
   it("does not change the list it was given", () => {
     const list = [change("a"), change("b", { serious: true })];
     rankChanges(list);

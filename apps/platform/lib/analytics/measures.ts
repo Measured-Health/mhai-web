@@ -1,7 +1,7 @@
 // The analytics measures in plain words, and their values under the
 // small-group rule (spec §5). Display only: the server computes every number.
 import { FEWER_THAN_5, isSmallCount } from "@mhai/ui/small-groups";
-import type { Guarded, MeasureId } from "../api/analytics-contract";
+import type { Area, Guarded, MeasureId } from "../api/analytics-contract";
 
 /**
  * How a value reads. "rate" is a ratio of counts (questions per active
@@ -36,6 +36,20 @@ export const MEASURE_KIND: Record<MeasureId, MeasureKind> = {
   needs_review_share: "share",
   agreement_rate: "share",
   median_review_hours: "hours",
+};
+
+/** The tab each measure belongs to. */
+export const MEASURE_AREA: Record<MeasureId, Area> = {
+  questions_per_clinician: "use",
+  questions: "use",
+  active_clinicians: "use",
+  critical_median_ack_minutes: "alerts",
+  critical_within_target: "alerts",
+  unhandled_alerts: "alerts",
+  alerts_total: "alerts",
+  needs_review_share: "quality",
+  agreement_rate: "quality",
+  median_review_hours: "quality",
 };
 
 /** Where a fall is the good way (times, review load, unhandled alerts). */

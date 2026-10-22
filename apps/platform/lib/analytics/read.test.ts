@@ -10,7 +10,7 @@ import {
   type AnalyticsMode,
 } from "../api/analytics-fixtures";
 import { noPrevious } from "./changes";
-import { valueText } from "./measures";
+import { measureText, valueText } from "./measures";
 import {
   AREAS,
   NOTHING_UNUSUAL,
@@ -155,7 +155,7 @@ describe("readAnalytics: fails closed", () => {
       ).hospitals.status,
     ).toBe("failed");
     expect(
-      readAnalytics(edit((a) => void (ok(a.use).trend[0]!.value = 1))).use
+      readAnalytics(edit((a) => void (ok(a.use).trend[0]!.value = v(1)))).use
         .status,
     ).toBe("failed");
     expect(
@@ -183,13 +183,118 @@ describe("readAnalytics: fails closed", () => {
       }),
     );
     expect(w.alerts.status).toBe("failed");
-    // A change sitting over a hidden value is refused too.
+    // A hidden side whose summary still gives the number is refused.
     const c = readAnalytics(
       edit((a) => {
         items(a)[0]!.previous = HIDDEN;
       }),
     );
     expect(c.changes.status).toBe("failed");
+  });
+
+  it("a share whose numerator works out to 1–4 fails closed", () => {
+    // 50 answers × 6% needing review = 3.
+    const nr = readAnalytics(
+      edit((a) => {
+        const r = row(qualityRows(a), "h_havana");
+        r.answers = v(50);
+        r.needs_review_share = v(0.06);
+      }),
+    );
+    expect(nr.quality.status).toBe("failed");
+    // 20 Critical × 90% within target leaves 2 outside it.
+    const within = (share: number) =>
+      readAnalytics(
+        edit((a) => {
+          const r = row(alertRows(a), "h_havana");
+          const sev = r.by_severity;
+          sev.critical = v(20);
+          r.total = v(20 + sev.urgent.value! + sev.info.value!);
+          r.critical_within_target = v(share);
+        }),
+      ).alerts.status;
+    expect(within(0.9)).toBe("failed");
+    expect(within(0.1)).toBe("failed");
+    expect(within(0.5)).toBe("ok");
+  });
+
+  it("agreement is hidden over hidden reviews or 1–4 disagreements", () => {
+    const hiddenReviews = readAnalytics(
+      edit((a) => {
+        const r = row(qualityRows(a), "h_havana");
+        r.reviews = HIDDEN;
+        r.median_review_hours = HIDDEN;
+      }),
+    );
+    expect(hiddenReviews.quality.status).toBe("failed");
+    const hours = readAnalytics(
+      edit((a) => {
+        const r = row(qualityRows(a), "h_havana");
+        r.reviews = HIDDEN;
+        r.agreement_rate = HIDDEN;
+      }),
+    );
+    expect(hours.quality.status).toBe("failed");
+    // 50 reviews × (1 − 96%) = 2 disagreements.
+    const two = readAnalytics(
+      edit((a) => {
+        const r = row(qualityRows(a), "h_havana");
+        r.reviews = v(50);
+        r.agreement_rate = v(0.96);
+      }),
+    );
+    expect(two.quality.status).toBe("failed");
+    // Every hidden together reads, as the server sends it.
+    const all = readAnalytics(
+      edit((a) => {
+        const r = row(qualityRows(a), "h_havana");
+        r.reviews = HIDDEN;
+        r.agreement_rate = HIDDEN;
+        r.median_review_hours = HIDDEN;
+      }),
+    );
+    expect(all.quality.status).toBe("ok");
+  });
+
+  it("a median that isn't a whole number reads; one under 5 doesn't", () => {
+    const half = readAnalytics(
+      edit((a) => void (ok(a.use).median.questions = v(125.5))),
+    );
+    expect(half.use.status).toBe("ok");
+    expect(
+      readAnalytics(edit((a) => void (ok(a.use).median.questions = v(2.5)))).use
+        .status,
+    ).toBe("failed");
+    expect(
+      readAnalytics(edit((a) => void (ok(a.alerts).median.total = v(4.5))))
+        .alerts.status,
+    ).toBe("failed");
+    // A row's count is still a whole number.
+    expect(
+      readAnalytics(
+        edit((a) => void (row(useRows(a), "h_havana").questions = v(125.5))),
+      ).use.status,
+    ).toBe("failed");
+  });
+
+  it("trends: a hidden point reads, an unhidden 1–4 fails", () => {
+    const s = readAnalytics(
+      edit((a) => {
+        ok(a.use).trend[0]!.value = HIDDEN;
+        ok(a.alerts).trend[1]!.value = HIDDEN;
+        ok(a.quality).trend[2]!.value = HIDDEN;
+      }),
+    );
+    expect(statuses(s)).toEqual(ALL_OK);
+    expect(okState(s, "use").trend[0]!.value).toEqual(HIDDEN);
+    expect(
+      readAnalytics(edit((a) => void (ok(a.alerts).trend[3]!.value = v(3))))
+        .alerts.status,
+    ).toBe("failed");
+    expect(
+      readAnalytics(edit((a) => void (ok(a.quality).trend[0]!.value = v(1.5))))
+        .quality.status,
+    ).toBe("failed");
   });
 
   it("a severity set with one hidden member hides the set", () => {
@@ -397,6 +502,63 @@ describe("readAnalytics: what changed", () => {
     )!;
     expect(c.followedUp).toBe(true);
     expect(c.follow_up?.by.name).toBe("Tunde Okafor");
+  });
+
+  it("a hidden side shows 'Fewer than 5' and the list still reads", () => {
+    const hidePrevious = (summary: string) =>
+      readAnalytics(
+        edit((a) => {
+          const c = items(a).find((c) => c.id === "chg_rch_questions")!;
+          c.previous = HIDDEN;
+          c.summary = summary;
+        }),
+      );
+    const s = hidePrevious(
+      "Riverside Children's Hospital: questions up from fewer than 5 to 83 a week",
+    );
+    const c = okState(s, "changes").items.find(
+      (c) => c.id === "chg_rch_questions",
+    )!;
+    expect(measureText(c.measure, c.previous)).toBe("Fewer than 5");
+    expect(c.comparable).toBe(true);
+    expect(
+      hidePrevious("Riverside: questions up (Fewer Than 5 → 83)").changes
+        .status,
+    ).toBe("ok");
+    // A summary that could give the hidden side away is refused.
+    expect(
+      hidePrevious("Riverside: questions up (3 → 83)").changes.status,
+    ).toBe("failed");
+    expect(
+      hidePrevious("Riverside: questions up from fewer than 5, up 2000%")
+        .changes.status,
+    ).toBe("failed");
+    // Both sides hidden: no number at all beyond "fewer than 5".
+    const both = (summary: string) =>
+      readAnalytics(
+        edit((a) => {
+          const c = items(a).find((c) => c.id === "chg_rch_questions")!;
+          c.previous = HIDDEN;
+          c.current = HIDDEN;
+          c.summary = summary;
+        }),
+      ).changes.status;
+    expect(both("Riverside: questions fell, both weeks fewer than 5")).toBe(
+      "ok",
+    );
+    expect(both("Riverside: questions fell to fewer than 5 from 4")).toBe(
+      "failed",
+    );
+  });
+
+  it("a change's measure belongs to its area", () => {
+    const s = readAnalytics(
+      edit((a) => {
+        const c = items(a).find((c) => c.id === "chg_rch_questions")!;
+        c.area = "alerts";
+      }),
+    );
+    expect(s.changes.status).toBe("failed");
   });
 
   it("a malformed follow-up fails the list", () => {

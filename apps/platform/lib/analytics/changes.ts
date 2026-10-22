@@ -1,8 +1,10 @@
 // What changed: ordering and wording (spec §4). The server decides what
 // changed and how serious it is; the app only orders and words it.
-import { dateLabel } from "@/components/hospitals/format";
+import { dayMonthLabel } from "../format";
 import type { Change, FollowUp, Guarded } from "../api/analytics-contract";
 import { LOWER_IS_BETTER } from "./measures";
+
+export { dayMonthLabel };
 
 /** Rows shown before "Show all ({n})". */
 export const TOP = 5;
@@ -69,7 +71,8 @@ export function topChanges<T>(
 }
 
 export type Sign = "⚠" | "↑" | "↓";
-const WORD: Record<Change["direction"], string> = {
+/** The direction in a word: the screen's lines and the CSV. */
+export const DIRECTION_WORD: Record<Change["direction"], string> = {
   worse: "Worse",
   better: "Better",
   rising: "Rising",
@@ -101,12 +104,8 @@ export function changeLine(c: Change): { sign: Sign; words: string } {
         : c.direction === "falling"
           ? "↓"
           : betterSign(c);
-  return { sign, words: `${WORD[c.direction]}: ${c.summary}` };
+  return { sign, words: `${DIRECTION_WORD[c.direction]}: ${c.summary}` };
 }
-
-/** "21 Oct": the viewer's local date, fixed English month names. */
-export const dayMonthLabel = (iso: string) =>
-  dateLabel(iso).replace(/ \d{4}$/, "");
 
 export const followUpLine = (f: FollowUp) =>
   `Followed up by ${f.by.name} · ${dayMonthLabel(f.at)}`;

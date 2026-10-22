@@ -18,7 +18,7 @@ import {
 } from "../api/analytics-contract";
 import type { Person } from "../api/contract";
 import { rankChanges, type RankedChange } from "./changes";
-import { MEASURE_KIND, type MeasureKind } from "./measures";
+import { MEASURE_AREA, MEASURE_KIND, type MeasureKind } from "./measures";
 
 export const NOTHING_UNUSUAL = "Nothing unusual this period";
 export const NOT_ENOUGH_TO_COMPARE = "Not enough data to compare yet";
@@ -91,20 +91,36 @@ const isPerson = (v: unknown): v is Person =>
 
 /**
  * A readable value of its kind. Hidden is always readable (its number, if
- * any, is dropped). Null is nothing to show, allowed where `nullable`. A
- * count of 1–4 sent unhidden is not readable (a leak).
+ * any, is dropped). Null is nothing to show, allowed where `loose`. A
+ * count sent unhidden between 0 and 5 is not readable (a leak). A count is
+ * a whole number, except where `loose`: a median of counts over an even
+ * number of hospitals, or a weekly average in a change, can be 125.5.
  */
-function guardedOk(v: unknown, kind: MeasureKind, nullable: boolean): boolean {
+function guardedOk(v: unknown, kind: MeasureKind, loose: boolean): boolean {
   if (!isObj(v) || typeof v.suppressed !== "boolean") return false;
   if (v.suppressed) return true;
-  if (v.value === null) return nullable;
-  if (kind === "count") return isCount(v.value) && !isSmallCount(v.value);
+  if (v.value === null) return loose;
+  if (kind === "count") {
+    const n = v.value;
+    if (!isNum(n) || n < 0 || (!loose && !Number.isInteger(n))) return false;
+    return !(n > 0 && n < SMALL_GROUP_MIN);
+  }
   if (kind === "share") return isNum(v.value) && v.value >= 0 && v.value <= 1;
   return isNum(v.value) && v.value >= 0;
 }
 
 const hidden = (g: Guarded) => g.suppressed;
 const shows = (g: Guarded) => !g.suppressed && g.value !== null;
+
+/**
+ * A share of a shown count gives its numerator away: `total × share`. It
+ * must not come to 1–4, nor (with `complement`) leave 1–4 outside it.
+ */
+function numeratorLeaks(total: Guarded, share: Guarded, complement: boolean) {
+  if (!shows(total) || !shows(share)) return false;
+  const n = Math.round(total.value! * share.value!);
+  return isSmallCount(n) || (complement && isSmallCount(total.value! - n));
+}
 
 /** Every hidden value as `{value: null, suppressed: true}`, deep. */
 function scrub<T>(v: T): T {
@@ -157,13 +173,13 @@ function blockOk(
     return false;
   if (!uniqueHospitals(rows as { hospital: Person }[])) return false;
   if (!bodyOk(b.median, true)) return false;
-  // A trend across all hospitals is a count (or a share): a count of 1–4
-  // is a value the server should have hidden.
+  // A trend across all hospitals is a count (or a share) under the same
+  // rule: hidden points read, an unhidden 1–4 is a leak.
   return (b.trend as unknown[]).every(
     (p) =>
       isObj(p) &&
       isTime(p.start) &&
-      guardedOk({ value: p.value, suppressed: false }, trend, false),
+      guardedOk(p.value, trend, trend !== "count"),
   );
 }
 
@@ -205,6 +221,10 @@ function alertsOk(r: Obj, median: boolean): boolean {
   if (hidden(crit) && overCritical) return false;
   if (hidden(a.total) && (overCritical || shows(a.median_ack_minutes)))
     return false;
+  // Within target, and outside it, are counts too (rows only: a median of
+  // shares isn't a share of the median count).
+  if (!median && numeratorLeaks(crit, a.critical_within_target, true))
+    return false;
   // Medians don't add up to the median total: only the set itself.
   return !setGivesAway(
     median ? null : a.total,
@@ -218,6 +238,7 @@ function qualityOk(r: Obj, median: boolean): boolean {
   const mix = r.confidence;
   if (
     !guardedOk(r.answers, "count", median) ||
+    !guardedOk(r.reviews, "count", median) ||
     !isObj(mix) ||
     !CONFIDENCE.every((k) => guardedOk(mix[k], "count", median)) ||
     !guardedOk(r.needs_review_share, "share", true) ||
@@ -226,12 +247,26 @@ function qualityOk(r: Obj, median: boolean): boolean {
   )
     return false;
   const q = r as unknown as QualityRow;
-  // Reviews are some of the answers: hidden answers hide all three.
+  // Reviews are some of the answers: hidden answers hide all three, and
+  // leave reviews hidden or 0.
   if (
     hidden(q.answers) &&
     (shows(q.needs_review_share) ||
       shows(q.agreement_rate) ||
-      shows(q.median_review_hours))
+      shows(q.median_review_hours) ||
+      (shows(q.reviews) && q.reviews.value! > 0))
+  )
+    return false;
+  // Agreement and review time are over the reviews.
+  if (
+    hidden(q.reviews) &&
+    (shows(q.agreement_rate) || shows(q.median_review_hours))
+  )
+    return false;
+  if (
+    !median &&
+    (numeratorLeaks(q.answers, q.needs_review_share, false) ||
+      numeratorLeaks(q.reviews, q.agreement_rate, true))
   )
     return false;
   return !setGivesAway(
@@ -269,10 +304,24 @@ function followUpOk(f: unknown): boolean {
   );
 }
 
+const FEWER = /fewer than 5/gi;
+
 /**
- * A change reads when its shape does, and when it sits over nothing hidden
- * (a change computed over a hidden group is hidden too, so the server
- * never sends one). Previous may be null: no previous period.
+ * With a side hidden, the server's words must not give it away: they say
+ * "fewer than 5" and carry no percentage (a change from a hidden number
+ * works it out). With both hidden, no number at all beyond that phrase.
+ */
+function summarySafe(summary: string, previous: Guarded, current: Guarded) {
+  const n = [previous, current].filter(hidden).length;
+  if (n === 0) return true;
+  if (!summary.match(FEWER) || summary.includes("%")) return false;
+  return n === 1 || !/\d/.test(summary.replace(FEWER, ""));
+}
+
+/**
+ * A change reads when its shape does. A side may be hidden (shown
+ * "Fewer than 5", ranked unsized) when the summary doesn't give it away;
+ * previous may be null: no previous period.
  */
 function changeOk(c: unknown): c is Change {
   if (!isObj(c)) return false;
@@ -280,13 +329,16 @@ function changeOk(c: unknown): c is Change {
   if (!(c.hospital === null || isPerson(c.hospital))) return false;
   if (!CHANGE_AREAS.has(c.area as string)) return false;
   if (!MEASURE_IDS.has(c.measure as string)) return false;
+  if (MEASURE_AREA[c.measure as Change["measure"]] !== c.area) return false;
   if (!DIRECTIONS.has(c.direction as string)) return false;
   if (typeof c.serious !== "boolean") return false;
   if (typeof c.summary !== "string" || c.summary.trim() === "") return false;
   if (!followUpOk(c.follow_up) || !isCount(c.version)) return false;
   const kind = MEASURE_KIND[c.measure as Change["measure"]];
-  return [c.previous, c.current].every(
-    (g) => guardedOk(g, kind, true) && !(g as Guarded).suppressed,
+  return (
+    guardedOk(c.previous, kind, true) &&
+    guardedOk(c.current, kind, true) &&
+    summarySafe(c.summary, c.previous as Guarded, c.current as Guarded)
   );
 }
 
