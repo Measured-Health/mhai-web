@@ -258,16 +258,22 @@ export function rangeWords(run: Run): string {
     : span;
 }
 
-const DAY_MS = 24 * 3_600_000;
+/** A local calendar day, "YYYY-MM-DD". */
+export type LocalDay = string;
 
-/** The dates to export around a break: a day before it, up to now. */
+const dayOf = (t: Date): LocalDay =>
+  `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+
+/**
+ * The days to export around a break, as whole local days (like a custom
+ * range): from the day before the first broken entry's day, through today.
+ */
 export function breakRange(
   run: Run,
   now: number,
-): { from: string; to: string } | null {
+): { from: LocalDay; to: LocalDay } | null {
   if (run.first_broken_at === null) return null;
-  return {
-    from: new Date(Date.parse(run.first_broken_at) - DAY_MS).toISOString(),
-    to: new Date(now).toISOString(),
-  };
+  const before = new Date(run.first_broken_at);
+  before.setDate(before.getDate() - 1);
+  return { from: dayOf(before), to: dayOf(new Date(now)) };
 }

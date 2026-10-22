@@ -8,6 +8,7 @@ import {
   integrityOf,
   isRunning,
   runSentence,
+  type LocalDay,
 } from "@/lib/audit/integrity";
 import type { ReadRun } from "@/lib/audit/read";
 import { isAuditor, useAuth } from "@/lib/auth/auth-context";
@@ -32,7 +33,8 @@ import { RunHistory, SHOWN_LOOK } from "./run-history";
 /** What step 5 hands to the export dialog. */
 export type ExportPrefill = {
   reason: "security_investigation";
-  filters: { from: string; to: string };
+  /** Whole local days, both included (the dialog sends [from, to + 1 day)). */
+  filters: { from: LocalDay; to: LocalDay };
 };
 
 const startedMs = (r: ReadRun) =>

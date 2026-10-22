@@ -508,7 +508,7 @@ describe("the Integrity tab", () => {
     act(() => void window.dispatchEvent(new Event("online")));
   });
 
-  it("Export the entries around the break asks for Security investigation, from a day before the break to now", async () => {
+  it("Export the entries around the break asks for Security investigation, in whole days from the day before the break through today", async () => {
     setup({ integrity: "broken" });
     const seed = seedAudit(NOW, "broken");
     const at = seed.runs[0]!.first_broken_at!;
@@ -521,12 +521,11 @@ describe("the Integrity tab", () => {
     );
     expect(onExport).toHaveBeenCalledWith({
       reason: "security_investigation",
+      // Tests run in UTC, so the local day is the ISO date.
       filters: {
-        from: new Date(Date.parse(at) - 24 * H).toISOString(),
-        to: expect.any(String),
+        from: new Date(Date.parse(at) - 24 * H).toISOString().slice(0, 10),
+        to: "2026-10-22",
       },
     });
-    const to = Date.parse(onExport.mock.calls[0]![0].filters.to);
-    expect(Math.abs(to - Date.now())).toBeLessThan(5_000);
   });
 });

@@ -431,11 +431,19 @@ describe("the history's words", () => {
     ).toBe("Range not recorded");
   });
 
-  it("breakRange runs from a day before the first broken entry to now", () => {
+  it("breakRange gives whole local days: the day before the break's day, through today", () => {
+    // 21 Oct 23:14 (local, tests run in UTC) → from 20 Oct, to 22 Oct.
     expect(breakRange(broken, NOW)).toEqual({
-      from: "2026-10-20T23:14:00.000Z",
-      to: new Date(NOW).toISOString(),
+      from: "2026-10-20",
+      to: "2026-10-22",
     });
+    // Across a month end.
+    expect(
+      breakRange(
+        { ...broken, first_broken_at: "2026-11-01T00:30:00Z" },
+        Date.parse("2026-11-02T09:00:00Z"),
+      ),
+    ).toEqual({ from: "2026-10-31", to: "2026-11-02" });
     expect(breakRange(intactRun(), NOW)).toBeNull();
   });
 });
