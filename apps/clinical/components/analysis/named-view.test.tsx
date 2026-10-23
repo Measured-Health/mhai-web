@@ -1,6 +1,10 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, onlineManager } from "@tanstack/react-query";
+import {
+  QueryClient,
+  focusManager,
+  onlineManager,
+} from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
 import type { AnalysisClient } from "@/lib/api/analysis";
@@ -50,6 +54,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   onlineManager.setOnline(true);
+  focusManager.setFocused(undefined);
 });
 
 const SECOND = 1000;
@@ -151,7 +156,7 @@ describe("NamedView", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Named access has ended");
     expect(alert).toHaveTextContent(
-      "The clearance letter's end date has passed.",
+      "This named view has ended. Show names again to continue.",
     );
     expect(screen.queryByRole("table", { name: /^Named patients/ })).toBeNull();
     expect(namedQueries()).toHaveLength(0);
@@ -197,6 +202,54 @@ describe("NamedView", () => {
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(namedQueries()).toHaveLength(0);
     expect(cached()).not.toMatch(/HH-\d{6}|"mrn"/);
+  });
+
+  it("a revoke ends names within 30 seconds in a hidden tab too", async () => {
+    const user = fakeClock();
+    open(GRACE);
+    await showNames("Clinical follow-up", undefined, user);
+    act(() => focusManager.setFocused(false));
+    await sharedClearances(DEMO_EMAILS.hospitalAdmin).revokeClearance(
+      "cl_act",
+      { reason: "no_longer_needed", mfaCode: MOCK_CODE },
+      { idempotencyKey: "k-revoke-hidden" },
+    );
+    await act(() => vi.advanceTimersByTimeAsync(30 * SECOND));
+    await ended("The clearance letter was revoked.");
+  });
+
+  it.each([
+    ["a 404", () => Promise.reject(new ApiError(404, "not_found"))],
+    ["a 401", () => Promise.reject(new ApiError(401, "unauthorized"))],
+    ["a 503", () => Promise.reject(new ApiError(503, "unavailable"))],
+    ["a malformed reply", async () => ({ named: "yes" }) as never],
+  ])("%s from the check ends names (fail closed)", async (_, reply) => {
+    const user = fakeClock();
+    open(GRACE);
+    await showNames("Audit", undefined, user);
+    vi.spyOn(holder.client, "getClearanceMe").mockImplementation(reply);
+    // The 30-second check, and a 5xx's retries.
+    await act(() => vi.advanceTimersByTimeAsync(30 * SECOND));
+    await act(() => vi.advanceTimersByTimeAsync(30 * SECOND));
+    await ended("Your clearance changed.");
+    expect(namedQueries()).toHaveLength(0);
+  });
+
+  it("a network failure of the check keeps names; named_until still ends them", async () => {
+    const user = fakeClock();
+    open(GRACE);
+    await showNames("Audit", undefined, user);
+    vi.spyOn(holder.client, "getClearanceMe").mockRejectedValue(
+      new ApiError(0, "network"),
+    );
+    await act(() => vi.advanceTimersByTimeAsync(5 * MINUTE));
+    expect(
+      screen.getByRole("table", { name: /^Named patients/ }),
+    ).toBeVisible();
+    expect(screen.queryByText("Named access has ended")).toBeNull();
+    // Grace's view lasts an hour in the sample server.
+    await act(() => vi.advanceTimersByTimeAsync(55 * MINUTE));
+    await ended("This named view has ended. Show names again to continue.");
   });
 
   it("a 403 clearance_ended on refetch drops the names at once", async () => {

@@ -8,6 +8,7 @@ import type {
   NamedPatientRowOut,
   NamedPurpose,
 } from "@/lib/api/analysis-contract";
+import { ApiError } from "@/lib/api/errors";
 import { countLabel } from "@/lib/admin/report";
 import { useClearanceMe, useNamedPatients } from "@/lib/analysis-queries";
 import {
@@ -39,6 +40,9 @@ const clockText = (ms: number) => {
   return `${two(d.getHours())}:${two(d.getMinutes())}`;
 };
 
+/** No answer at all (offline, or the network failed): not a reason to end. */
+const networkDown = (e: unknown) => e instanceof ApiError && e.status === 0;
+
 /** Stable text for filters, so a new object with the same filters isn't a change. */
 const filtersText = (f: AnalysisFilters) =>
   JSON.stringify(Object.entries(f).sort(([a], [b]) => a.localeCompare(b)));
@@ -69,8 +73,9 @@ function useClock(): number {
  *
  * Names end, each calling `onEnd` once with the reason:
  * - at `named_until`, on a timer that runs offline too;
- * - when the 30-second `clearance/me` check changes (or says names are over);
- * - on a 403 that ends access, from the named list or the check;
+ * - when the 30-second `clearance/me` check changes, says names are over,
+ *   can't be read, or fails for any reason but the network;
+ * - on a 403 that ends access, from the named list;
  * - when the drill or the filters change.
  *
  * The request is fixed when the view opens, with its own Idempotency-Key, so
@@ -127,11 +132,18 @@ export function NamedView({
     return () => clearTimeout(t);
   }, [until]);
 
-  // A refusal that ends access, from the list or from the check.
+  // A refusal that ends access, from the list.
   useEffect(() => {
-    const r = endReasonFrom(q.error) ?? endReasonFrom(me.error);
+    const r = endReasonFrom(q.error);
     if (r) end(r);
-  }, [q.error, me.error]);
+  }, [q.error]);
+
+  // The check failing ends names (fail closed), unless the network is down:
+  // then the named_until timer keeps running and the next check decides.
+  useEffect(() => {
+    if (me.error && !networkDown(me.error))
+      end(endReasonFrom(me.error) ?? "changed");
+  }, [me.error]);
 
   // The check: anything but the same, still-current letter ends names.
   const first = useRef<ClearanceMeOut | null>(null);

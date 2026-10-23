@@ -5,7 +5,6 @@ import { getAnalysisClient } from "./api/analysis";
 import type {
   AnalysisFilters,
   NamedPatientsIn,
-  PatientLevel,
   ViewId,
   ViewOut,
 } from "./api/analysis-contract";
@@ -24,7 +23,8 @@ import {
 /** One patient list behind a shown count (Task 7's panel). */
 export type PatientsQuery = {
   drill: string;
-  level: PatientLevel;
+  /** Names are never asked for here: that is `useNamedPatients`, a POST. */
+  level: "deidentified";
   filters: AnalysisFilters;
 };
 
@@ -174,7 +174,7 @@ export function useNamedAccessOn(): boolean {
 /**
  * Whether this person may see names right now, read and checked (null when
  * it can't be read, which ends names). Asked only while the switch is On;
- * never kept. With `poll`, asked again every 30 seconds.
+ * never kept. With `poll`, asked again every 30 seconds, in a hidden tab too.
  */
 export function useClearanceMe({ poll }: { poll: boolean }) {
   const on = useNamedAccessOn();
@@ -184,6 +184,8 @@ export function useClearanceMe({ poll }: { poll: boolean }) {
       readClearanceMe(await getAnalysisClient().getClearanceMe()),
     enabled: on,
     refetchInterval: poll ? CLEARANCE_POLL_MS : false,
+    // A revoke ends names in a hidden tab too.
+    refetchIntervalInBackground: poll,
     gcTime: 0,
     ...READ_RETRY,
   });

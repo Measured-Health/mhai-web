@@ -24,7 +24,6 @@ import type {
   FindingsOut,
   Meta,
   PatientRowOut,
-  PatientsOut,
   PrevalenceOut,
 } from "@/lib/api/analysis-contract";
 import { createMockAdmin } from "@/lib/api/mock-admin";
@@ -319,7 +318,7 @@ describe("PatientsPanel", () => {
             [1, 2, 3, 4, 5].map((i) => row(i)),
           ),
           level: "named",
-        }) as unknown as PatientsOut,
+        }) as unknown as DeidentifiedPatientsOut,
     );
     const { panel } = await openList();
     expect(

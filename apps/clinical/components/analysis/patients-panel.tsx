@@ -145,7 +145,7 @@ export function PatientsPanel({
   drill: string;
   label: string;
   filters: AnalysisFilters;
-  level?: PatientLevel;
+  level?: "deidentified";
   onClose(): void;
 }) {
   const q = usePatients({ drill, level, filters });

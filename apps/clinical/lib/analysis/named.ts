@@ -28,7 +28,7 @@ export type EndReason =
 
 /** Each shown after "Named access has ended". */
 export const END_TEXT: Record<EndReason, string> = {
-  until: "The clearance letter's end date has passed.",
+  until: "This named view has ended. Show names again to continue.",
   changed: "Your clearance changed.",
   ended: "The clearance letter has ended.",
   revoked: "The clearance letter was revoked.",
