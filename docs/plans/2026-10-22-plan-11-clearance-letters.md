@@ -56,6 +56,7 @@
   - the reply's `level` is `"named"` with `named_until` in the future.
 
   Anything else fails closed to the de-identified list.
+
 - **Ending access** (anti-goal 3):
   - names are dropped at `named_until`, without waiting for the server;
   - while names are on screen, `GET analysis/clearance/me` is checked every **30 seconds**, and any change to `named`, `clearance_id` or `version` drops them;
@@ -64,6 +65,7 @@
   - sign-out and the idle timeout drop them.
 
   "Dropping" means removing the query (`gcTime: 0`) and the component state, then showing the de-identified list with "Named access has ended" and the reason.
+
 - **The letter** (anti-goal 4):
   - accepted: PDF, PNG and JPEG, up to **10 MB** (`10 * 1024 * 1024` bytes) and **20 pages**;
   - the app checks the type (by the file's first bytes) and the size before sending, and shows only the file name and size, never a preview;
@@ -153,6 +155,7 @@
   - every other clearance event has type `admin` and flag null.
 
   The platform mock logs its actions to its own Activity.
+
 - **The step-up fields in the clinical app** move out of `account-actions.tsx`'s `RemoveDialog` into `components/admin/step-up-fields.tsx`, with no change in behaviour. The clearance dialogs then reuse them inside `ConfirmDialog`.
 
 ## Shared with in-flight plans (merge sequencing)
@@ -248,27 +251,46 @@ apps/platform/tests/e2e/clearances.spec.ts
 ```ts
 export type NamedPosition = "off" | "letters_only" | "on";
 export type ClearanceStatus =
-  | "checking" | "refused" | "waiting" | "active" | "rejected" | "ended" | "revoked";
+  | "checking"
+  | "refused"
+  | "waiting"
+  | "active"
+  | "rejected"
+  | "ended"
+  | "revoked";
 export type RefusedReason =
-  | "file_type" | "file_too_large" | "too_many_pages"
-  | "password_protected" | "unreadable" | "failed_safety_check";
+  | "file_type"
+  | "file_too_large"
+  | "too_many_pages"
+  | "password_protected"
+  | "unreadable"
+  | "failed_safety_check";
 export type RejectReason =
-  | "wrong_people" | "end_date_mismatch" | "not_leadership" | "unreadable" | "other";
+  | "wrong_people"
+  | "end_date_mismatch"
+  | "not_leadership"
+  | "unreadable"
+  | "other";
 export type RevokeReason =
-  | "no_longer_needed" | "person_left" | "uploaded_in_error" | "security_concern" | "other";
-export type NarrowReason = "person_left" | "no_longer_needed" | "uploaded_in_error" | "other";
+  | "no_longer_needed"
+  | "person_left"
+  | "uploaded_in_error"
+  | "security_concern"
+  | "other";
+export type NarrowReason =
+  "person_left" | "no_longer_needed" | "uploaded_in_error" | "other";
 export const POSITION_LABEL: Record<NamedPosition, string>; // "Off" | "Letters only" | "On"
-export const POSITION_ORDER: readonly NamedPosition[];       // off < letters_only < on
-export const REFUSED_TEXT: Record<RefusedReason, string>;   // spec §7 wording, exactly
-export const REJECT_LABEL: Record<RejectReason, string>;    // spec §6.3 wording
-export const REVOKE_LABEL: Record<RevokeReason, string>;    // spec §5.3 wording
+export const POSITION_ORDER: readonly NamedPosition[]; // off < letters_only < on
+export const REFUSED_TEXT: Record<RefusedReason, string>; // spec §7 wording, exactly
+export const REJECT_LABEL: Record<RejectReason, string>; // spec §6.3 wording
+export const REVOKE_LABEL: Record<RevokeReason, string>; // spec §5.3 wording
 export const NARROW_LABEL: Record<NarrowReason, string>;
 export const LETTER_MAX_BYTES = 10 * 1024 * 1024;
 export const LETTER_MAX_PAGES = 20;
 export const COVER_MAX = 20;
 export const NOTE_MAX = 500;
 export const ENDING_SOON_DAYS = 30;
-export function dayLabel(ymd: string): string;               // "2027-03-12" → "12 Mar 2027"
+export function dayLabel(ymd: string): string; // "2027-03-12" → "12 Mar 2027"
 export function daysBetween(fromYmd: string, toYmd: string): number;
 ```
 
@@ -403,31 +425,65 @@ All under `apps/clinical/`.
 type Who = { display_name: string };
 type CoveredOut = { id: string; display_name: string };
 type ClearanceEventKind =
-  | "uploaded" | "refused" | "ready" | "verified" | "rejected"
-  | "narrowed" | "revoked" | "ended" | "reminded";
+  | "uploaded"
+  | "refused"
+  | "ready"
+  | "verified"
+  | "rejected"
+  | "narrowed"
+  | "revoked"
+  | "ended"
+  | "reminded";
 type ClearanceEventOut = {
-  at: string; kind: ClearanceEventKind; by: Who | null;
+  at: string;
+  kind: ClearanceEventKind;
+  by: Who | null;
   side: "hospital" | "platform" | null;
-  reason: string | null; note: string | null; removed?: CoveredOut[];
+  reason: string | null;
+  note: string | null;
+  removed?: CoveredOut[];
 };
 type ClearanceOut = {
-  id: string; status: ClearanceStatus; refused_reason: RefusedReason | null;
-  signed_by: string; signer_title: string; letter_date: string; // YYYY-MM-DD
+  id: string;
+  status: ClearanceStatus;
+  refused_reason: RefusedReason | null;
+  signed_by: string;
+  signer_title: string;
+  letter_date: string; // YYYY-MM-DD
   covered: CoveredOut[];
-  covered_platform: CoveredOut[];                               // Measured Health staff the letter names (Plan 12b)
-  end_date: string;                                             // the hospital's day
-  uploaded_by: Who; uploaded_at: string;
-  verified_by: Who | null; verified_at: string | null;
+  covered_platform: CoveredOut[]; // Measured Health staff the letter names (Plan 12b)
+  end_date: string; // the hospital's day
+  uploaded_by: Who;
+  uploaded_at: string;
+  verified_by: Who | null;
+  verified_at: string | null;
   rejection: { reason: RejectReason; note: string | null; at: string } | null;
-  revocation: { by: Who; side: "hospital" | "platform"; at: string; reason: RevokeReason; note: string | null } | null;
-  renews: string | null; pages: number; // 0 until ready
-  history: ClearanceEventOut[]; version: number;
+  revocation: {
+    by: Who;
+    side: "hospital" | "platform";
+    at: string;
+    reason: RevokeReason;
+    note: string | null;
+  } | null;
+  renews: string | null;
+  pages: number; // 0 until ready
+  history: ClearanceEventOut[];
+  version: number;
 };
-type ClearancesOut = { clearances: ClearanceOut[]; today: string; max_end_date: string };
+type ClearancesOut = {
+  clearances: ClearanceOut[];
+  today: string;
+  max_end_date: string;
+};
 type ClearanceUpload = {
-  file: File; signed_by: string; signer_title: string; letter_date: string;
-  covered: string[]; covered_platform?: string[]; // emails, as written in the letter
-  end_date: string; renews?: string;
+  file: File;
+  signed_by: string;
+  signer_title: string;
+  letter_date: string;
+  covered: string[];
+  covered_platform?: string[]; // emails, as written in the letter
+  end_date: string;
+  renews?: string;
 } & StepUp;
 type NamedAccessOut = { position: NamedPosition; since: string | null }; // the effective one
 ```
@@ -446,33 +502,33 @@ type NamedAccessOut = { position: NamedPosition; since: string | null }; // the 
 
 **Activity kinds and wording:**
 
-| Kind                      | Type     | Flag              | Wording                                                     |
-| ------------------------- | -------- | ----------------- | ----------------------------------------------------------- |
-| `clearance_uploaded`      | admin    | null              | "{actor} uploaded a clearance letter"                       |
-| `clearance_refused`       | security | `alert` on safety | "A clearance letter's file was refused"                     |
-| `clearance_verified`      | admin    | null              | "{actor} at Measured Health verified a clearance letter"    |
-| `clearance_rejected`      | admin    | null              | "{actor} at Measured Health rejected a clearance letter"    |
-| `clearance_narrowed`      | admin    | null              | "{actor} removed {target} from a clearance letter"          |
-| `clearance_revoked`       | admin    | null              | "{actor} revoked a clearance letter"                        |
-| `clearance_ended`         | admin    | null              | "A clearance letter ended"                                  |
-| `clearance_viewed`        | admin    | null              | "{actor} viewed a clearance letter"                         |
-| `clearance_reminder_sent` | admin    | null              | "A reminder was sent to {target} about a letter ending"     |
-| `analysis_named_viewed`   | security | `alert`           | "{actor} viewed {count} patients by name in Analysis"       |
+| Kind                      | Type     | Flag              | Wording                                                  |
+| ------------------------- | -------- | ----------------- | -------------------------------------------------------- |
+| `clearance_uploaded`      | admin    | null              | "{actor} uploaded a clearance letter"                    |
+| `clearance_refused`       | security | `alert` on safety | "A clearance letter's file was refused"                  |
+| `clearance_verified`      | admin    | null              | "{actor} at Measured Health verified a clearance letter" |
+| `clearance_rejected`      | admin    | null              | "{actor} at Measured Health rejected a clearance letter" |
+| `clearance_narrowed`      | admin    | null              | "{actor} removed {target} from a clearance letter"       |
+| `clearance_revoked`       | admin    | null              | "{actor} revoked a clearance letter"                     |
+| `clearance_ended`         | admin    | null              | "A clearance letter ended"                               |
+| `clearance_viewed`        | admin    | null              | "{actor} viewed a clearance letter"                      |
+| `clearance_reminder_sent` | admin    | null              | "A reminder was sent to {target} about a letter ending"  |
+| `analysis_named_viewed`   | security | `alert`           | "{actor} viewed {count} patients by name in Analysis"    |
 
 `ActivityEventOut` gains `purpose?: NamedPurpose`, which Task 13 defines; declare the type here.
 
 **Sample letters (`clearances-fixtures.ts`)** for Havana Hospital, relative to the mock's clock. The hospital's day is computed in `Africa/Lagos` inside the mock only.
 
-| Id         | Status    | Covered                         | Other                                                |
-| ---------- | --------- | ------------------------------- | ---------------------------------------------------- |
-| `cl_check` | checking  | Kemi Adeyemi                    | becomes `waiting` after `CHECK_MS = 3000`            |
-| `cl_bad`   | refused   | Grace Nwosu                     | `failed_safety_check`                                |
-| `cl_wait`  | waiting   | Dr. Ngozi Obi; platform: Tunde Okafor | 3 pages                                        |
-| `cl_act`   | active    | Grace Nwosu                     | ends in about 4½ months; verified by Tunde Okafor    |
-| `cl_soon`  | active    | Kemi Adeyemi                    | ends in 12 days; a 30-day `reminded` event           |
-| `cl_rej`   | rejected  | Kemi Adeyemi                    | `end_date_mismatch`                                  |
-| `cl_end`   | ended     | Grace Nwosu                     | ended 2 months ago                                   |
-| `cl_rev`   | revoked   | a since-deactivated analyst     | `person_left`, by Grace Nwosu                        |
+| Id         | Status   | Covered                               | Other                                             |
+| ---------- | -------- | ------------------------------------- | ------------------------------------------------- |
+| `cl_check` | checking | Kemi Adeyemi                          | becomes `waiting` after `CHECK_MS = 3000`         |
+| `cl_bad`   | refused  | Grace Nwosu                           | `failed_safety_check`                             |
+| `cl_wait`  | waiting  | Dr. Ngozi Obi; platform: Tunde Okafor | 3 pages                                           |
+| `cl_act`   | active   | Grace Nwosu                           | ends in about 4½ months; verified by Tunde Okafor |
+| `cl_soon`  | active   | Kemi Adeyemi                          | ends in 12 days; a 30-day `reminded` event        |
+| `cl_rej`   | rejected | Kemi Adeyemi                          | `end_date_mismatch`                               |
+| `cl_end`   | ended    | Grace Nwosu                           | ended 2 months ago                                |
+| `cl_rev`   | revoked  | a since-deactivated analyst           | `person_left`, by Grace Nwosu                     |
 
 The signer is "Dr. Funmi Ade, Chief Medical Director", an invented name. Every other letter has `covered_platform: []`.
 
@@ -753,41 +809,97 @@ The controller then adds spec §10, with this plan's rulings on the contract, to
 
 ```ts
 type ClearanceEvent = {
-  at: string; kind: "uploaded" | "refused" | "ready" | "verified" | "rejected" | "narrowed" | "revoked" | "ended" | "reminded";
-  by: Person | null; side: "hospital" | "platform" | null; reason: string | null; note: string | null;
+  at: string;
+  kind:
+    | "uploaded"
+    | "refused"
+    | "ready"
+    | "verified"
+    | "rejected"
+    | "narrowed"
+    | "revoked"
+    | "ended"
+    | "reminded";
+  by: Person | null;
+  side: "hospital" | "platform" | null;
+  reason: string | null;
+  note: string | null;
 };
 type Clearance = {
-  id: string; hospital: Person; status: ClearanceStatus; refused_reason: RefusedReason | null;
-  signed_by: string; signer_title: string; letter_date: string;
+  id: string;
+  hospital: Person;
+  status: ClearanceStatus;
+  refused_reason: RefusedReason | null;
+  signed_by: string;
+  signer_title: string;
+  letter_date: string;
   covered: Person[];
   /** Measured Health platform admins the letter names (Plan 12b). */
   covered_platform: Person[];
   /** The caller is in `covered_platform`: they can't verify or reject it. */
   covers_you: boolean;
-  end_date: string; uploaded_by: Person; uploaded_at: string;
-  ready_at: string | null; verified_by: Person | null; verified_at: string | null;
-  rejection: { by: Person; at: string; reason: RejectReason; note: string | null } | null;
-  revocation: { by: Person; side: "hospital" | "platform"; at: string; reason: RevokeReason; note: string | null } | null;
-  pages: number; history: ClearanceEvent[];
+  end_date: string;
+  uploaded_by: Person;
+  uploaded_at: string;
+  ready_at: string | null;
+  verified_by: Person | null;
+  verified_at: string | null;
+  rejection: {
+    by: Person;
+    at: string;
+    reason: RejectReason;
+    note: string | null;
+  } | null;
+  revocation: {
+    by: Person;
+    side: "hospital" | "platform";
+    at: string;
+    reason: RevokeReason;
+    note: string | null;
+  } | null;
+  pages: number;
+  history: ClearanceEvent[];
   /** Decided by the server for the caller: false for auditors and linked admins. */
   verifiable_by_you: boolean;
   version: number;
 };
 type ClearanceTab = "waiting" | "active" | "ending_soon" | "all";
-type ClearanceQuery = { status?: ClearanceTab; hospital?: string; covers?: "me"; cursor?: string }; // covers=me: "my clearances" (Plan 12b)
+type ClearanceQuery = {
+  status?: ClearanceTab;
+  hospital?: string;
+  covers?: "me";
+  cursor?: string;
+}; // covers=me: "my clearances" (Plan 12b)
 type Signoff = { by: string; at: string; ref: string }; // name and role, YYYY-MM-DD, document reference
 type Signoffs = { clinical: Signoff; privacy: Signoff; legal: Signoff };
 type SwitchRequest = {
-  id: string; position: NamedPosition; requested_by: Person; requested_by_you: boolean;
-  requested_at: string; signoffs: Signoffs;
+  id: string;
+  position: NamedPosition;
+  requested_by: Person;
+  requested_by_you: boolean;
+  requested_at: string;
+  signoffs: Signoffs;
 };
 type SwitchChange = {
-  at: string; from: NamedPosition; to: NamedPosition;
-  requested_by: Person | null; approved_by: Person | null; lowered_by: Person | null;
-  reason: string | null; signoffs: Signoffs | null;
+  at: string;
+  from: NamedPosition;
+  to: NamedPosition;
+  requested_by: Person | null;
+  approved_by: Person | null;
+  lowered_by: Person | null;
+  reason: string | null;
+  signoffs: Signoffs | null;
 };
-type SwitchState = { position: NamedPosition; since: string | null; history: SwitchChange[]; request: SwitchRequest | null };
-type HospitalSwitch = SwitchState & { hospital: Person; effective: NamedPosition };
+type SwitchState = {
+  position: NamedPosition;
+  since: string | null;
+  history: SwitchChange[];
+  request: SwitchRequest | null;
+};
+type HospitalSwitch = SwitchState & {
+  hospital: Person;
+  effective: NamedPosition;
+};
 type NamedAccessOut = { global: SwitchState; hospitals: HospitalSwitch[] };
 ```
 
@@ -821,19 +933,19 @@ A letter's target is "the clearance letter signed by {signed_by}"; a switch targ
 
 **Proxy `SHAPES` gains:**
 
-| Method | Path                                           |
-| ------ | ---------------------------------------------- |
-| GET    | `platform/clearances`                          |
-| GET    | `platform/clearances/{id}`                     |
-| GET    | `platform/clearances/{id}/pages/{id}`          |
-| POST   | `platform/clearances/{id}/verify`              |
-| POST   | `platform/clearances/{id}/reject`              |
-| POST   | `platform/clearances/{id}/revoke`              |
-| GET    | `platform/named-access`                        |
-| POST   | `platform/named-access/requests`               |
-| POST   | `platform/named-access/requests/{id}/approve`  |
-| POST   | `platform/named-access/requests/{id}/cancel`   |
-| POST   | `platform/named-access/lower`                  |
+| Method | Path                                          |
+| ------ | --------------------------------------------- |
+| GET    | `platform/clearances`                         |
+| GET    | `platform/clearances/{id}`                    |
+| GET    | `platform/clearances/{id}/pages/{id}`         |
+| POST   | `platform/clearances/{id}/verify`             |
+| POST   | `platform/clearances/{id}/reject`             |
+| POST   | `platform/clearances/{id}/revoke`             |
+| GET    | `platform/named-access`                       |
+| POST   | `platform/named-access/requests`              |
+| POST   | `platform/named-access/requests/{id}/approve` |
+| POST   | `platform/named-access/requests/{id}/cancel`  |
+| POST   | `platform/named-access/lower`                 |
 
 None of them is in `AUDITOR_WRITES`. A page reply passes only as PNG or JPEG, with `no-store`, `inline` and `nosniff`; anything else is 502 `bad_page`.
 
@@ -1049,6 +1161,7 @@ None of them is in `AUDITOR_WRITES`. A page reply passes only as PNG or JPEG, wi
   - the two-step code.
 
   It is built from the same code fields as `StepUpDialog`. Its intro reads "A different platform admin must approve before this takes effect."
+
 - **Approve:** a `StepUpDialog` showing the request's sign-offs. The requester sees `requestLine`'s waiting text and no Approve. 409 `same_person` reads "You asked for this change, so a different platform admin must approve it".
 - **Turn down:** a `StepUpDialog` with `freeReason` over `lowerOptions`, and the intro "This takes effect at once and ends every named view on screen."
 - `signoff_missing` reads `signoffProblem`'s words; `above_global` reads "A hospital can't be turned higher than every hospital's switch".
@@ -1117,17 +1230,35 @@ None of them is in `AUDITOR_WRITES`. A page reply passes only as PNG or JPEG, wi
 
 ```ts
 type PatientLevel = "deidentified" | "named";
-type NamedPurpose = "clinical_follow_up" | "quality_improvement" | "audit" | "other";
+type NamedPurpose =
+  "clinical_follow_up" | "quality_improvement" | "audit" | "other";
 type NamedPatientRowOut = PatientRowOut & { name: string; mrn: string };
-type DeidentifiedPatientsOut = { level: "deidentified"; count: number; patients: PatientRowOut[] };
+type DeidentifiedPatientsOut = {
+  level: "deidentified";
+  count: number;
+  patients: PatientRowOut[];
+};
 type NamedPatientsOut = {
-  level: "named"; count: number; patients: NamedPatientRowOut[];
-  named_until: string; clearance: { id: string; end_date: string };
+  level: "named";
+  count: number;
+  patients: NamedPatientRowOut[];
+  named_until: string;
+  clearance: { id: string; end_date: string };
 };
 type PatientsOut = DeidentifiedPatientsOut | NamedPatientsOut;
 type ClearanceMeOut = {
-  named: boolean; until: string | null; clearance_id: string | null; version: number;
-  reason: "none" | "ended" | "revoked" | "removed_from_letter" | "role_or_account" | "switched_off" | null;
+  named: boolean;
+  until: string | null;
+  clearance_id: string | null;
+  version: number;
+  reason:
+    | "none"
+    | "ended"
+    | "revoked"
+    | "removed_from_letter"
+    | "role_or_account"
+    | "switched_off"
+    | null;
 };
 ```
 
@@ -1298,28 +1429,28 @@ The controller then updates §14.10 from Task 7 with any change made in 11b or 1
 
 - **Spec coverage:**
 
-  | Spec section                                              | Task(s)                                     |
-  | --------------------------------------------------------- | ------------------------------------------- |
-  | §2 goals, anti-goals                                      | Global Constraints; 2–15                    |
-  | §3 who                                                    | 2, 8, 10                                    |
-  | §4 the switch (three positions, two-person, per hospital) | 3 (read), 8, 9, 11; Q1, Q2 rulings          |
-  | §5.1 list and statuses                                    | 4, 5                                        |
-  | §5.2 upload                                               | 1, 2 (multipart), 3, 4, 5                   |
-  | §5.3 detail, revoke, narrow, renew                        | 6                                           |
-  | §5.4 staff panel, Analysis line, role-change confirms     | 6, 14                                       |
-  | §6.1 queue                                                | 9, 10                                       |
-  | §6.2 safe viewing                                         | 1 (viewer), 2 and 8 (proxy), 10             |
-  | §6.3 verify, reject, same-side                            | 8, 9, 10                                    |
-  | §6.4 revoke                                               | 8, 10                                       |
-  | §7 the document                                           | 1, 2, 3, 4, 5                               |
-  | §8 expiry and ending access                               | 3 (ended), 13, 14; reminders: server (3, a seeded event) |
-  | §9 named drill-down and audit                             | 3 (kinds), 13, 14                           |
-  | §10 contract                                              | 3, 8, 13, then the controller's PR as §14.10 (Task 7) |
-  | Plan 12b needs (controller): platform people on a letter; no self-verify | 3, 5, 6 (clinical); 8, 9, 10 (platform) |
-  | §11 delivery                                              | the three parts                             |
-  | §12 demo                                                  | 3, 8                                        |
-  | §13 testing                                               | 2–15; Review Focus                          |
-  | §15 decisions                                             | rulings (Q1, Q2); Q3 one verifier; Q4 purpose required (13, 14); Q5 no download (1, 10); Q6 reminders server-side |
+  | Spec section                                                             | Task(s)                                                                                                           |
+  | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+  | §2 goals, anti-goals                                                     | Global Constraints; 2–15                                                                                          |
+  | §3 who                                                                   | 2, 8, 10                                                                                                          |
+  | §4 the switch (three positions, two-person, per hospital)                | 3 (read), 8, 9, 11; Q1, Q2 rulings                                                                                |
+  | §5.1 list and statuses                                                   | 4, 5                                                                                                              |
+  | §5.2 upload                                                              | 1, 2 (multipart), 3, 4, 5                                                                                         |
+  | §5.3 detail, revoke, narrow, renew                                       | 6                                                                                                                 |
+  | §5.4 staff panel, Analysis line, role-change confirms                    | 6, 14                                                                                                             |
+  | §6.1 queue                                                               | 9, 10                                                                                                             |
+  | §6.2 safe viewing                                                        | 1 (viewer), 2 and 8 (proxy), 10                                                                                   |
+  | §6.3 verify, reject, same-side                                           | 8, 9, 10                                                                                                          |
+  | §6.4 revoke                                                              | 8, 10                                                                                                             |
+  | §7 the document                                                          | 1, 2, 3, 4, 5                                                                                                     |
+  | §8 expiry and ending access                                              | 3 (ended), 13, 14; reminders: server (3, a seeded event)                                                          |
+  | §9 named drill-down and audit                                            | 3 (kinds), 13, 14                                                                                                 |
+  | §10 contract                                                             | 3, 8, 13, then the controller's PR as §14.10 (Task 7)                                                             |
+  | Plan 12b needs (controller): platform people on a letter; no self-verify | 3, 5, 6 (clinical); 8, 9, 10 (platform)                                                                           |
+  | §11 delivery                                                             | the three parts                                                                                                   |
+  | §12 demo                                                                 | 3, 8                                                                                                              |
+  | §13 testing                                                              | 2–15; Review Focus                                                                                                |
+  | §15 decisions                                                            | rulings (Q1, Q2); Q3 one verifier; Q4 purpose required (13, 14); Q5 no download (1, 10); Q6 reminders server-side |
 
 - **Names used across tasks:**
   - `@mhai/ui/clearances`: `NamedPosition`, `ClearanceStatus`, `RefusedReason`, `RejectReason`, `RevokeReason`, `NarrowReason`, `POSITION_LABEL`, `REFUSED_TEXT`, `REJECT_LABEL`, `REVOKE_LABEL`, `NARROW_LABEL`, `LETTER_MAX_BYTES`, `COVER_MAX`, `ENDING_SOON_DAYS`, `dayLabel`, `daysBetween`;
