@@ -130,6 +130,16 @@
   - the per-hospital switch fields;
   - `reason` on `GET /analysis/clearance/me`;
   - **422** `would_empty` on narrow;
+  - `renews` (a letter id or null) on the letter itself, so a renewal shows what it replaces;
+  - `revocation.day` (the revocation's `at` as the hospital's `YYYY-MM-DD` day), required with every revocation, so the browser does no time-zone arithmetic;
+  - an optional `version` on `POST /hospital/clearances/{id}/revoke`: when sent, a letter changed since is refused with **409** `conflict`; the clinical app always sends it;
+  - `POST /analysis/patients/named {drill, purpose, note?, filters}` for named rows, with an `Idempotency-Key`; `GET /analysis/patients` is de-identified only, so a purpose note is never in a URL;
+  - the idempotency rules:
+    - uploads, revoke, narrow and named views carry an `Idempotency-Key` (`[A-Za-z0-9_-]+`); a replay returns the first reply and records nothing again;
+    - a named view's key is bound to the person and the request (`drill`, `filters`, `purpose`, `note`): the same key with another person or body is **422** `idempotency_mismatch`, before any other check;
+    - a replay re-runs every check and returns the original `named_until`, never a later one;
+    - once `named_until` has passed, the key is spent: **409** `expired`, and it is never renewed;
+    - the proxy answers **422** `invalid` to a named view with no key or a malformed one;
   - for Plan 12b: `covered_platform` on the letter (both apps) and on upload; `covers_you` on the platform letter; `covers=me` on the platform list ("my clearances"); **409** `same_person` on verify and reject when the caller is covered;
   - the whole contract is **§14.10** in mhai-multiagent's frontend requirements.
 - **Narrowing to nobody is refused.** Removing everyone is a revocation. The server still ends a letter's access when its last covered person loses their role.

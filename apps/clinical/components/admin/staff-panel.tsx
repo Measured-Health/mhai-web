@@ -38,23 +38,37 @@ function joined(s: StaffOut): string | null {
   return Number.isFinite(t) ? `joined ${JOINED.format(t)}` : null;
 }
 
-/**
- * This person's named access (Plan 11), from the hospital's letters:
- * `undefined` while there is nothing to show (the switch isn't On, or the
- * letters haven't loaded), `null` for none (no active letter, or no longer
- * someone a letter can cover), or the latest end date.
- */
-function useNamedAccessOf(row: StaffOut): { until: string } | null | undefined {
+type NamedState = {
+  /**
+   * This person's named access, from the hospital's letters: `undefined`
+   * while there is nothing to show (the switch isn't On, or the letters are
+   * still loading), `null` for none (no active letter, or no longer someone a
+   * letter can cover), or the latest end date.
+   */
+  access: { until: string } | null | undefined;
+  /** Set when the position or the letters failed to load: try them again. */
+  retry: (() => void) | null;
+};
+
+function useNamedAccessOf(row: StaffOut): NamedState {
   const { user } = useAuth();
   const allowed = canOpenNamedAccess(user);
   const position = useNamedAccess({ enabled: allowed });
   const on = allowed && position.data?.position === "on";
   const letters = useClearances({ enabled: on });
-  if (!on || !letters.data) return undefined;
+  // Without the letters the warnings can't be made, so say so (spec §5.4).
+  if (allowed && position.isError && !position.data)
+    return { access: undefined, retry: () => void position.refetch() };
+  if (on && letters.isError && !letters.data)
+    return { access: undefined, retry: () => void letters.refetch() };
+  if (!on || !letters.data) return { access: undefined, retry: null };
   // A letter still lists someone deactivated, without two-step or without a
   // covering role, but their access has ended (spec §5.4, §8).
-  if (!eligibility(row).ok) return null;
-  return namedAccessFor(row.id, letters.data.clearances, letters.data.today);
+  if (!eligibility(row).ok) return { access: null, retry: null };
+  return {
+    access: namedAccessFor(row.id, letters.data.clearances, letters.data.today),
+    retry: null,
+  };
 }
 
 function NamedAccessLine({ access }: { access: { until: string } | null }) {
@@ -65,6 +79,21 @@ function NamedAccessLine({ access }: { access: { until: string } | null }) {
       {until
         ? `Named access until ${until} · letter on file`
         : "No named access"}
+    </p>
+  );
+}
+
+function NamedAccessFailed({ retry }: { retry(): void }) {
+  return (
+    <p
+      role="alert"
+      className="mt-2 flex flex-wrap items-center gap-x-2 text-[12.5px] text-bad-deep"
+    >
+      <FileKey aria-hidden className="size-4 shrink-0" />
+      <span className="font-semibold">Couldn&apos;t load named access</span>
+      <Button size="sm" variant="ghost" onClick={retry}>
+        Try again
+      </Button>
     </p>
   );
 }
@@ -140,7 +169,7 @@ function Member({
   const activity = useStaffActivity(row.id);
   const recentId = useId();
   const note = inviteNote(row, now);
-  const named = useNamedAccessOf(row);
+  const { access: named, retry: retryNamed } = useNamedAccessOf(row);
   return (
     <div className="flex flex-col gap-5">
       <header className="flex items-start gap-3">
@@ -155,6 +184,7 @@ function Member({
             <StaffStatusChip staff={row} now={now} />
           </div>
           {named !== undefined && <NamedAccessLine access={named} />}
+          {retryNamed && <NamedAccessFailed retry={retryNamed} />}
         </div>
       </header>
 

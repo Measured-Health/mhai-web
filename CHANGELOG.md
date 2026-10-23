@@ -31,6 +31,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Named access in the hospital admin side, on sample data: a Named access
+  page with the hospital's clearance letters in every status, uploading a
+  PDF, PNG or JPEG letter (checked, then waiting for Measured Health),
+  viewing it page by page with no download or print, revoking it, removing a
+  person and renewing it, each with the admin's two-step code, and a named
+  access line and warnings on the Staff panel. It stays off in live mode
+  until clinical, privacy and legal sign-off, `NAMED_ACCESS_SIGNED_OFF=true`
+  and the backend switch. End-to-end tests cover it on desktop and phone.
 - Legal holds in the platform admin app, on sample data: a Legal holds page
   with filters, a hold on a hospital's records (all of them or a date range)
   that blocks its removal, a Hold tag on the hospitals list, a Legal holds

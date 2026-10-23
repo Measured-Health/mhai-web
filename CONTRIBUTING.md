@@ -98,6 +98,19 @@ Every PR must pass:
   filters, counts or patient rows in storage, the URL, the title or logs,
   and never export or print the patient list. Any change to what Analysis
   shows or who can open it needs `clinical-review` and that sign-off.
+- **Named access shows patient names, and only to someone covered by a
+  verified clearance letter** (Plan 11). Clinical, privacy and legal
+  sign-off is required before live use, and it hasn't been given, so it runs
+  on sample data only and stays off in live mode until
+  `NAMED_ACCESS_SIGNED_OFF=true` is set and the backend switch is raised.
+  The letter rules: **no preview** (show only the file's name and size; pages
+  are viewed one server-made image at a time, as a Blob in component state,
+  with no download and no print); **no caching** (never in a query cache,
+  browser storage, a service worker or the URL, and the page images are
+  `no-store`); **no file names in logs** or analytics. Names end at their end
+  date, on a revocation and on any `clearance_ended`, `not_cleared` or
+  `named_access_off` refusal. Any change to this needs `clinical-review` and
+  that sign-off.
 - **Alerts are EMR-agnostic** ([ADR 0003](docs/adr/0003-many-emr-systems.md)):
   no vendor or product names anywhere, the record link comes from the API
   (`emr_link`), and only the hospital's own `source_label` is shown.
