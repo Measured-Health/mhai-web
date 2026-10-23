@@ -1,7 +1,7 @@
 // The audit log's words: lines, people, hospitals, outcomes, counts,
 // filters and gaps. Built from fields only; dates use fixed English months.
 import {
-  PSEUDONYM_PREFIX,
+  isPseudonym,
   type AuditActor,
   type AuditEvent,
   type AuditFilters,
@@ -105,7 +105,7 @@ export function filtersInWords(
   if ("flagged" in f && f.flagged) parts.push("Flagged only");
   if ("q" in f && f.q)
     parts.push(
-      typeof f.q === "object" || f.q.startsWith(PSEUDONYM_PREFIX)
+      typeof f.q === "object" || isPseudonym(f.q)
         ? "Searched for a patient id"
         : "Searched for one id",
     );

@@ -51,9 +51,11 @@ const hex8 = (n: number) => n.toString(16).padStart(8, "0");
 /** 64 hex characters, the same for the same position and id. */
 export const fingerprint = (seq: number, id: string): string =>
   Array.from({ length: 8 }, (_, i) => hex8(fnv(`${i}|${seq}|${id}`))).join("");
-/** "p_ng_7f3a2c": a hospital's pseudonymous patient id. */
+/** "P-7F3A2C": a patient's pseudonymous id (Plan 6's Analysis id). */
 const pseudonym = (key: string, n: number) =>
-  `p_${key}_${hex8(fnv(`${key}|${n}`)).slice(0, 6)}`;
+  `P-${hex8(fnv(`${key}|${n}`))
+    .slice(0, 6)
+    .toUpperCase()}`;
 const rnd = (i: number, salt: string) => fnv(`${i}|${salt}`);
 export const sha64 = (label: string) =>
   Array.from({ length: 8 }, (_, i) => hex8(fnv(`${i}#${label}`))).join("");
@@ -671,7 +673,7 @@ export function seedAudit(
       hospital: ngH,
       target: {
         kind: "patient",
-        pseudonym: "p_ng_bad001",
+        pseudonym: "P-BAD001",
         name: "Sample Name",
       } as unknown as AuditTarget,
       facts: { view: VIEWS[0], patient_count: 9 },

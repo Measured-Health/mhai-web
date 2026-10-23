@@ -10,7 +10,6 @@ import {
   EXPORT_NOTE_MAX,
   EXPORT_REFERENCE_MAX,
   OUTCOME_NOTE_MAX,
-  PSEUDONYM_PREFIX,
   type AuditDetail,
   type AuditEvent,
   type AuditList,
@@ -116,12 +115,12 @@ const isTypes = (v: unknown) =>
 const isMarker = exact({ kind: oneOf("patient_id") });
 
 /**
- * A pseudonym anywhere in a string: `p_` at the start, or after anything
- * but a letter, digit, `_` or `-`.
+ * A pseudonym (`P-7F3K2`) anywhere in a string, case-sensitive: not
+ * straight after a letter or digit (so a reference such as `CMP-0193`
+ * isn't one), but after `_`, `-` or any other character (`req-P-7F3K2`);
+ * and not followed by a letter or digit.
  */
-const PSEUDONYM_IN = new RegExp(
-  `(^|[^A-Za-z0-9_-])${PSEUDONYM_PREFIX}[A-Za-z0-9]`,
-);
+const PSEUDONYM_IN = /(^|[^A-Za-z0-9])P-[A-Z0-9]{4,12}(?![A-Za-z0-9])/;
 /**
  * Whether a pseudonym appears anywhere in a value, at any depth. Outside
  * the recorded reveal (`/patients`) one never may: the entry then fails

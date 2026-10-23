@@ -272,7 +272,7 @@ log's tamper check (**Run check now**). **Export CSV** and **Export for a
 legal request** need a reason and the two-step code `123456`; the file shows
 an export id and a checksum, downloads once, and its first line says Demo.
 The sample has a Northgate General clearance letter with three named patient
-lists (search `p_ng_6dc445` to find one), two earlier exports and an Intact
+lists (search `P-6DC445` to find one), two earlier exports and an Intact
 check. Auditors and platform admins both read; the demo does not mirror the
 session's other platform actions into the log.
 

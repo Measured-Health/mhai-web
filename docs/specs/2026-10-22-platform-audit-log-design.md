@@ -401,13 +401,17 @@ of the gateway's `GET /security/audit` and `GET /security/audit/verify`, over th
     and each `audit_viewed` names its list in `facts.list`: `"events"` or `"named_access"`. So
     opening Named access is recorded even when its filters equal the Events filters.
   - **Pseudonyms only through the recorded reveal.** No list, detail or export payload carries
-    a pseudonym (a hospital's pseudonymous id starts `p_`, and no other id does); only
+    a pseudonym; only
     `GET /platform/audit/{id}/patients` does, and it is recorded. Where a pseudonym was searched,
     the server sends the marker `{kind: "patient_id"}` in its place: as `facts.searched` (with
     `searched_kind: "pseudonym"`) and as `filters.q` in an entry's facts and in an export record.
     A pseudonym search entry answers `patients: {count: 1}` on its detail, and its `/patients`
     returns the pseudonym searched, so **Show patient ids** reveals it, recorded. The app fails
     closed: an entry or export record with a pseudonym anywhere is "can't be displayed".
+  - **The pseudonym format** is the Analysis id (§3; Plan 6's `pid`): `^P-[A-Z0-9]{4,12}$`, e.g.
+    `P-7F3K2`, case-sensitive. **No other id, reference or name in any audit payload may contain
+    that form** where it isn't straight after a letter or digit and isn't followed by one (so
+    `CMP-0193` is fine, `req-P-7F3K2` is not). The app's fail-closed check looks for exactly that.
 - `GET /platform/audit/{id}` → the event, with `patients: {count}` for drill-downs.
   `GET /platform/audit/{id}/patients` → `{pseudonyms}`; writes `audit_patients_viewed`.
 - `GET /platform/audit/named-access?hospital&person&clearance&from&to&cursor` → named drill-down

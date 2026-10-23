@@ -13,6 +13,7 @@ import {
 import { integrityOf } from "@/lib/audit/integrity";
 import {
   TooManyRowsError,
+  isPseudonym,
   type AuditFilters,
   type ExportIn,
 } from "./audit-contract";
@@ -159,7 +160,9 @@ describe("the sample log", () => {
       expect(pseudonyms.length).toBeGreaterThanOrEqual(3);
       expect(pseudonyms.length).toBeLessThanOrEqual(12);
       expect(pseudonyms.length).toBe(e.facts.patient_count);
-      for (const p of pseudonyms) expect(p).toMatch(/^p_ng_[0-9a-f]{6}$/);
+      for (const p of pseudonyms) expect(p).toMatch(/^P-[0-9A-F]{6}$/);
+      // Plan 6's Analysis id form.
+      for (const p of pseudonyms) expect(isPseudonym(p)).toBe(true);
     }
     const d = await m.getAuditEvent(named[0].id);
     expect(d.letter).toMatchObject({
@@ -335,10 +338,22 @@ describe("reading the log", () => {
       await m.listNamedAccess({ hospital: "h_northgate" }),
       await m.listExports(),
     ];
-    for (const e of (await m.listAudit({})).events.slice(0, 30))
-      sent.push(await m.getAuditEvent(e.id));
-    sent.push(await m.getAuditEvent(named.id));
-    expect(JSON.stringify(sent)).not.toMatch(/p_ng_/);
+    // Every entry in the log, and every entry's detail.
+    const all = await everything(m);
+    sent.push(all);
+    for (const e of all) sent.push(await m.getAuditEvent(e.id));
+    const json = JSON.stringify(sent);
+    // No pseudonym of any kind, and none of the seeded ones.
+    expect(json).not.toMatch(/(^|[^A-Za-z0-9])P-[A-Z0-9]{4,12}(?![A-Za-z0-9])/);
+    const seeded = (
+      await Promise.all(
+        all
+          .filter((e) => e.kind === "drilldown_named")
+          .map(async (e) => (await m.getAuditPatients(e.id)).pseudonyms),
+      )
+    ).flat();
+    expect(seeded.length).toBeGreaterThan(0);
+    for (const s of seeded) expect(json).not.toContain(s);
     const rec = (await m.listExports()).exports[0]!;
     expect(rec.filters).toEqual({ q: { kind: "patient_id" } });
     expect(readExportList(await m.listExports()).exports[0]!.ok).toBe(true);
@@ -688,7 +703,7 @@ describe("exports", () => {
     const text = new TextDecoder().decode(bytes);
     expect(text).toContain(`${out.file_name.replace(".zip", ".csv")}`);
     expect(text).toContain("letter-cl_northgate_2026.txt");
-    expect(text).toContain("p_ng_");
+    expect(text).toMatch(/P-[0-9A-F]{6}/);
     // The end record counts two files.
     expect(dv.getUint16(bytes.length - 22 + 10, true)).toBe(2);
     // The sha-256 of the zip matches.

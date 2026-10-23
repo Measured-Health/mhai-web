@@ -112,7 +112,7 @@ describe("the audit words", () => {
           person: "u_ada",
           from: local(2025, 12, 1),
           to: local(2026, 1, 2),
-          q: "p_ng_7f3a2c",
+          q: "P-7F3A2C",
         },
         { hospital: "Northgate General Hospital", person: "Ada Bakare" },
       ),
@@ -141,7 +141,7 @@ describe("the audit words", () => {
       "Northgate General Hospital · Clearance letter cl_northgate_2026 · All dates",
     );
     // The pseudonym searched never shows.
-    expect(filtersInWords({ q: "p_ng_7f3a2c" }, {})).not.toContain("p_ng");
+    expect(filtersInWords({ q: "P-7F3A2C" }, {})).not.toContain("P-7F3A2C");
     expect(filtersInWords({ q: { kind: "patient_id" } }, {})).toBe(
       "All hospitals · All dates · Searched for a patient id",
     );

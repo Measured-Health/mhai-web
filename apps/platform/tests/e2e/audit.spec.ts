@@ -15,7 +15,7 @@ import {
 test.afterEach(async ({ page }) => expectNoStorage(page));
 
 /** A Northgate patient's pseudonym in the demo's log (lib/api/audit-fixtures.ts). */
-const PSEUDONYM = "p_ng_6dc445";
+const PSEUDONYM = "P-6DC445";
 const LETTER = "cl_northgate_2026";
 
 /** The events as a table row (desktop) or a card (phones). */

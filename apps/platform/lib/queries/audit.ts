@@ -42,7 +42,7 @@ import {
 } from "@/lib/audit/read";
 import { queryKeys } from "./keys";
 import { POLL_MS, useTabVisible } from "./notifications";
-import { onSessionEnd } from "./session-end";
+import { SessionEnded, onSessionEnd, sessionEpoch } from "./session-end";
 import { useStepUpCall } from "./step-up-call";
 
 /** While a check runs, its status is read this often. */
@@ -398,7 +398,10 @@ export function useDownloadExport() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const epoch = sessionEpoch();
       const blob = await getPlatformClient().downloadExport(id);
+      // Signed out meanwhile: the file is not handed to the next person.
+      if (sessionEpoch() !== epoch) throw new SessionEnded();
       downloadBlob(name, blob);
     },
     retry: false,

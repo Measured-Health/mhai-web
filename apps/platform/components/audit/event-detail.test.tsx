@@ -140,10 +140,10 @@ describe("the event detail", () => {
     const { u } = await openRow(/Opened a named patient list · 3 patients/);
     const d = await dialog();
     expect(await within(d).findByText("Patients: 3")).toBeInTheDocument();
-    expect(within(d).queryByText(/^p_ng_/)).toBeNull();
+    expect(within(d).queryByText(/^P-[0-9A-F]{6}$/)).toBeNull();
     expect(spy).not.toHaveBeenCalled();
     await u.click(within(d).getByRole("button", { name: "Show patient ids" }));
-    const ids = await within(d).findAllByText(/^p_[a-z]+_/);
+    const ids = await within(d).findAllByText(/^P-[0-9A-F]{6}$/);
     expect(ids).toHaveLength(3);
     expect(ids[0]).toBeVisible();
     expect(within(d).getByText("Shown to you and recorded.")).toBeVisible();
@@ -289,7 +289,7 @@ describe("the event detail", () => {
   });
 });
 
-const IDS = /^p_[a-z]+_/;
+const IDS = /^P-[0-9A-F]{6}$/;
 const flush = () =>
   act(async () => {
     await new Promise((r) => setTimeout(r, 30));
@@ -317,7 +317,9 @@ const noIdsCached = (qc: QueryClient) =>
     qc
       .getQueryCache()
       .findAll()
-      .some((q) => JSON.stringify(q.state.data)?.includes("p_ng_")),
+      .some(
+        (q) => JSON.stringify(q.state.data)?.match(/P-[0-9A-F]{6}/) != null,
+      ),
   ).toBe(false);
 
 describe("patient ids are recorded once and never kept", () => {
@@ -475,7 +477,7 @@ describe("patient ids are recorded once and never kept", () => {
     expect(sessionStorage).toHaveLength(0);
     expect(location.search).toBe("");
     for (const l of logs)
-      expect(JSON.stringify(l.mock.calls)).not.toMatch(/p_ng_/);
+      expect(JSON.stringify(l.mock.calls)).not.toMatch(/P-[0-9A-F]{6}/);
   });
 });
 
@@ -530,7 +532,7 @@ describe("what the detail will not show", () => {
     expect(
       within(d).getByText("Patients (ids shown on request)"),
     ).toBeVisible();
-    expect(screen.queryByText(/^p_[a-z]+_/)).toBeNull();
+    expect(screen.queryByText(/^P-[A-Z0-9]{4,12}$/)).toBeNull();
   });
 
   it("a pseudonym anywhere in the entry makes it undisplayable", async () => {
@@ -538,13 +540,13 @@ describe("what the detail will not show", () => {
       ...d,
       kind: "drilldown_deidentified",
       type: "analysis",
-      target: { kind: "patient", pseudonym: "p_zz_secret1" } as never,
+      target: { kind: "patient", pseudonym: "P-SECRET1" } as never,
       facts: { patient_count: 2 },
       patients: { count: 2 },
       letter: null,
       reason: null,
       refs: { clearance_id: null, export_id: null, request_id: null },
     }));
-    await cantShow(/p_zz_secret1/);
+    await cantShow(/P-SECRET1/);
   });
 });

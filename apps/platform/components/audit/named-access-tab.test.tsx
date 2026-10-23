@@ -124,7 +124,7 @@ describe("the Named access tab", () => {
     setup();
     const { container } = renderWithAuth(<NamedAccessTab />);
     await screen.findByRole("group", { name: new RegExp(LETTER) });
-    expect(container.textContent).not.toMatch(/p_[a-z]+_\d/);
+    expect(container.textContent).not.toMatch(/P-[0-9A-F]{6}/);
     expect(container.textContent).not.toContain(some);
   });
 

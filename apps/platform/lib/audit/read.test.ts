@@ -84,7 +84,7 @@ describe("readAuditEvent", () => {
           reason: null,
           target: {
             kind: "patient",
-            pseudonym: "p_ng_7f3a2c",
+            pseudonym: "P-7F3A2C",
             name: "Jane Doe",
           } as never,
         }),
@@ -142,7 +142,7 @@ describe("readAuditEvent", () => {
     ).toBe(false);
     // The value itself, or an id passed off as one, fails closed.
     expect(
-      bad(search({ searched: "p_ng_7f3a2c", searched_kind: "pseudonym" })),
+      bad(search({ searched: "P-7F3A2C", searched_kind: "pseudonym" })),
     ).toBe(true);
     expect(bad(search({ searched: "ev_1", searched_kind: "pseudonym" }))).toBe(
       true,
@@ -155,7 +155,7 @@ describe("readAuditEvent", () => {
   });
 
   it("a pseudonym anywhere outside the reveal is undisplayable", () => {
-    const p = "p_ng_7f3a2c";
+    const p = "P-7F3A2C";
     expect(bad(auditEvent({ note: `Looked at ${p}` }))).toBe(true);
     expect(
       bad(
@@ -179,18 +179,34 @@ describe("readAuditEvent", () => {
       readDetail({ ...auditEvent({ note: p }), patients: null, letter: null })
         .ok,
     ).toBe(false);
-    // Ids that merely contain "p_" read.
-    expect(
-      bad(
-        auditEvent({
-          refs: {
-            clearance_id: null,
-            export_id: null,
-            request_id: "step_up_1",
-          },
-        }),
-      ),
-    ).toBe(false);
+    // After "-" or "_" it is still one.
+    for (const request_id of ["req-P-7F3K2", "req_P-7F3K2"])
+      expect(
+        bad(
+          auditEvent({
+            refs: { clearance_id: null, export_id: null, request_id },
+          }),
+        ),
+      ).toBe(true);
+    // Ids and references that merely contain "P-" or "p_" read: a hold's
+    // reference (CMP-0193), lowercase, too short, or too long.
+    for (const request_id of [
+      "CMP-0193",
+      "REG-INSP-2291",
+      "step_up_1",
+      "p-7f3k2",
+      "P-7F3",
+      "P-7F3K2ABCDEFGH",
+    ])
+      expect(
+        bad(
+          auditEvent({
+            refs: { clearance_id: null, export_id: null, request_id },
+          }),
+        ),
+        request_id,
+      ).toBe(false);
+    expect(bad(auditEvent({ note: "Checked the p_values" }))).toBe(false);
   });
 
   it("a note on signed_in is undisplayable", () => {
@@ -224,7 +240,7 @@ describe("readAuditEvent", () => {
     expect(
       bad(
         auditEvent({
-          facts: { filters: { q: "p_1", search: "Jane" } as never },
+          facts: { filters: { q: "P-0001", search: "Jane" } as never },
         }),
       ),
     ).toBe(true);
@@ -420,9 +436,9 @@ describe("the other readers", () => {
   it("readDetail reads the patients count and the letter", () => {
     const d = { ...auditEvent(), patients: { count: 12 }, letter };
     expect(readDetail(d)).toEqual({ ok: true, event: d });
-    expect(readDetail({ ...d, patients: { count: 12, ids: ["p_1"] } }).ok).toBe(
-      false,
-    );
+    expect(
+      readDetail({ ...d, patients: { count: 12, ids: ["P-0001"] } }).ok,
+    ).toBe(false);
     expect(readDetail({ ...d, letter: { ...letter, status: "lost" } }).ok).toBe(
       false,
     );
@@ -494,12 +510,13 @@ describe("the other readers", () => {
       downloaded_at: null,
     };
     expect(readExportRecord(rec).ok).toBe(true);
-    expect(readExportRecord({ ...rec, filters: { q: "p_ng_7f3a2c" } })).toEqual(
-      { ok: false, id: "exp_1" },
+    expect(readExportRecord({ ...rec, filters: { q: "P-7F3A2C" } })).toEqual({
+      ok: false,
+      id: "exp_1",
+    });
+    expect(readExportRecord({ ...rec, reference: "about P-7F3A2C" }).ok).toBe(
+      false,
     );
-    expect(
-      readExportRecord({ ...rec, reference: "about p_ng_7f3a2c" }).ok,
-    ).toBe(false);
     expect(
       readExportRecord({ ...rec, filters: { q: { kind: "name" } } }).ok,
     ).toBe(false);

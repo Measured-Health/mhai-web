@@ -12,6 +12,7 @@ import {
   EXPORT_REFERENCE_MAX,
   OUTCOME_NOTE_MAX,
   TooManyRowsError,
+  isPseudonym,
   type AuditActor,
   type AuditClient,
   type AuditDetail,
@@ -257,7 +258,7 @@ export function createMockAudit(
     if (log.some((e) => e.refs.clearance_id === q)) return "clearance";
     if (Object.values(pseudonyms).some((p) => p.includes(q)))
       return "pseudonym";
-    if (q.startsWith("p_")) return "pseudonym";
+    if (isPseudonym(q)) return "pseudonym";
     if (q.startsWith("req_")) return "request";
     if (q.startsWith("exp_")) return "export";
     if (q.startsWith("cl_")) return "clearance";

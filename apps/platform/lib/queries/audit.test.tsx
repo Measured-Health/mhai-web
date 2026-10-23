@@ -14,6 +14,7 @@ import {
 import type { PlatformClient } from "@/lib/api/contract";
 import { ApiError } from "@mhai/api-client/errors";
 import type { AuditRow } from "@/lib/audit/read";
+import { endSessionRequests } from "./session-end";
 
 const auth = vi.hoisted(() => ({ updateUser: vi.fn() }));
 const saved = vi.hoisted(() => ({ downloadBlob: vi.fn() }));
@@ -219,5 +220,25 @@ describe("useDownloadExport", () => {
     expect(saved.downloadBlob).toHaveBeenCalledTimes(1);
     // The screen's own callback is gone with it; the file was saved anyway.
     expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("a file that arrives after sign-out is not saved", async () => {
+    saved.downloadBlob.mockClear();
+    let answer!: (b: Blob) => void;
+    __setPlatformClientForTests({
+      downloadExport: () => new Promise<Blob>((r) => (answer = r)),
+    } as unknown as PlatformClient);
+    const qc = new QueryClient();
+    const hook = renderHook(() => useDownloadExport(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+      ),
+    });
+    act(() => hook.result.current.mutate({ id: "exp_1", name: "a.csv" }));
+    await waitFor(() => expect(answer).toBeTypeOf("function"));
+    act(() => endSessionRequests(qc));
+    answer(new Blob(["Demo"]));
+    await waitFor(() => expect(hook.result.current.isError).toBe(true));
+    expect(saved.downloadBlob).not.toHaveBeenCalled();
   });
 });

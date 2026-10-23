@@ -135,7 +135,7 @@ describe("auditFile", () => {
     });
     expect(staff).not.toContain("Jane Doe");
     // Events files never carry the pseudonym either.
-    expect(csv).not.toContain("p_ng_7f3a2c");
+    expect(csv).not.toContain("P-7F3A2C");
     expect(lines(csv)[10].split(",")[9]).toBe("A patient");
   });
 
@@ -157,7 +157,7 @@ describe("auditFile", () => {
         ...base,
         kind: "named_access",
         rows: [
-          { ...e, pseudonyms: ["p_ng_7f3a2c", "p_ng_19be04", "p_ng_aa0001"] },
+          { ...e, pseudonyms: ["P-7F3A2C", "P-19BE04", "P-AA0001"] },
           { ...e, id: "ev_bad", seq: 5, pseudonyms: ["Jane Doe"] },
         ],
       }),
@@ -172,7 +172,7 @@ describe("auditFile", () => {
     const row = l[10].split(",");
     expect(row[9]).toBe("a patient list");
     expect(row[10]).toBe("3");
-    expect(row[11]).toBe("p_ng_7f3a2c;p_ng_19be04;p_ng_aa0001");
+    expect(row[11]).toBe("P-7F3A2C;P-19BE04;P-AA0001");
     expect(row[head.indexOf("Clearance")]).toBe("cl_northgate_2026");
     expect(l[11]).not.toContain("Jane");
     expect(l[11].split(",")[8]).toBe("Not displayable · ev_bad");

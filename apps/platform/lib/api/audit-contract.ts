@@ -55,11 +55,14 @@ export type AuditTarget =
   // sent by GET /platform/audit/{id}/patients, which is recorded.
   | { kind: "patient" };
 /**
- * A hospital's pseudonymous patient id starts `p_`, and no other id does.
- * Outside the recorded reveal, a pseudonym is never sent: where one was
- * searched or filtered on, the server sends this marker instead.
+ * A patient's pseudonymous id is the Analysis id (Plan 6's `pid`):
+ * `P-` and 4 to 12 capital letters or digits, e.g. `P-7F3K2`. No other id
+ * or reference may have that form. Outside the recorded reveal, a
+ * pseudonym is never sent: where one was searched or filtered on, the
+ * server sends the marker instead.
  */
-export const PSEUDONYM_PREFIX = "p_";
+export const PSEUDONYM = /^P-[A-Z0-9]{4,12}$/;
+export const isPseudonym = (v: string): boolean => PSEUDONYM.test(v);
 export type PatientIdMarker = { kind: "patient_id" };
 /** The list a read was of: Events or Named access. */
 export type AuditListName = "events" | "named_access";
