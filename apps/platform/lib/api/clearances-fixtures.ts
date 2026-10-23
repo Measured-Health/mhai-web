@@ -2,7 +2,8 @@
 // (Plan 11b). Every name is invented. Havana Hospital has the clinical demo's
 // letters, with the same ids, kept in this app's memory only: verifying one
 // here doesn't change the clinical demo. Dates are relative to the mock's
-// clock, except the global switch, which went On on 3 Feb.
+// clock; the global switch went On on the latest 3 Feb at least 60 days
+// back.
 import type { Person } from "./contract";
 import type {
   Clearance,
@@ -314,28 +315,36 @@ export function seedClearances(now: number, today: string): ClearanceRecord[] {
   ];
 }
 
-/** The sign-off references the global switch went On with. */
-export const GLOBAL_SIGNOFFS: Signoffs = {
-  clinical: { by: "Dr. A. Musa", at: "2026-02-01", ref: "CS-014" },
-  privacy: { by: "Ngozi Eke", at: "2026-02-02", ref: "PR-007" },
-  legal: { by: "Bayo Adeyemi", at: "2026-02-02", ref: "LG-021" },
-};
-const HAVANA_SIGNOFFS: Signoffs = {
-  clinical: { by: "Dr. A. Musa", at: "2026-02-08", ref: "CS-015" },
-  privacy: { by: "Ngozi Eke", at: "2026-02-08", ref: "PR-008" },
-  legal: { by: "Bayo Adeyemi", at: "2026-02-09", ref: "LG-022" },
-};
-const NORTHGATE_SIGNOFFS: Signoffs = {
-  clinical: { by: "Dr. A. Musa", at: "2026-02-15", ref: "CS-016" },
-  privacy: { by: "Ngozi Eke", at: "2026-02-15", ref: "PR-009" },
-  legal: { by: "Bayo Adeyemi", at: "2026-02-16", ref: "LG-023" },
-};
+/** The UTC day `days` before an instant, as YYYY-MM-DD. */
+const dayBefore = (at: number, days: number) =>
+  new Date(at - days * D).toISOString().slice(0, 10);
 
-/** The latest 3 Feb, 09:00 UTC, before `now`: when the global switch went On. */
+/**
+ * The three sign-offs for a raise at `at`, dated a day or two before it.
+ * `n` numbers the documents (CS-014, PR-007, LG-021 for the global switch).
+ */
+const ref = (prefix: string, n: number) =>
+  `${prefix}-${String(n).padStart(3, "0")}`;
+const signoffsFor = (at: number, n: number): Signoffs => ({
+  clinical: { by: "Dr. A. Musa", at: dayBefore(at, 2), ref: ref("CS", 14 + n) },
+  privacy: { by: "Ngozi Eke", at: dayBefore(at, 1), ref: ref("PR", 7 + n) },
+  legal: { by: "Bayo Adeyemi", at: dayBefore(at, 1), ref: ref("LG", 21 + n) },
+});
+
+/** How long before `now` the global switch went On, at the least. */
+const GLOBAL_ON_MIN_DAYS = 60;
+
+/**
+ * When the global switch went On: the latest 3 Feb, 09:00 UTC, at least 60
+ * days before `now`. Everything after it (Havana's and Northgate's raises,
+ * Northgate's lowering, Plan 9's named views from 40 days back) then falls
+ * in order and in the past on any date.
+ */
 export function globalOnSince(now: number): number {
-  const y = new Date(now).getUTCFullYear();
+  const latest = now - GLOBAL_ON_MIN_DAYS * D;
+  const y = new Date(latest).getUTCFullYear();
   const at = Date.UTC(y, 1, 3, 9, 0);
-  return at < now ? at : Date.UTC(y - 1, 1, 3, 9, 0);
+  return at <= latest ? at : Date.UTC(y - 1, 1, 3, 9, 0);
 }
 
 const raised = (at: number, signoffs: Signoffs): SwitchChange => ({
@@ -358,33 +367,34 @@ const off = (): SwitchState => ({
 });
 
 /**
- * The switch as the demo starts: global On since 3 Feb (or Off with no
- * history, for the `off` option), Havana On, Northgate On and then turned
- * Off 5 days ago, every other hospital Off. Hospitals not listed are Off.
+ * The switch as the demo starts: global On since 3 Feb (see
+ * `globalOnSince`), Havana On a week later, Northgate On a fortnight later
+ * and turned Off 5 days ago, every other hospital Off. With the `off`
+ * option, nothing was ever raised: global and every hospital are Off with
+ * no history (no hospital can be raised above global).
  */
 export function seedSwitch(
   now: number,
   globalOn: boolean,
 ): { global: SwitchState; hospitals: Record<string, SwitchState> } {
+  if (!globalOn) return { global: off(), hospitals: {} };
   const since = globalOnSince(now);
   const havanaAt = since + 7 * D;
   const northAt = since + 14 * D;
   const northOff = now - 5 * D;
   return {
-    global: globalOn
-      ? {
-          position: "on",
-          since: iso(since),
-          history: [raised(since, GLOBAL_SIGNOFFS)],
-          request: null,
-          version: 1,
-        }
-      : off(),
+    global: {
+      position: "on",
+      since: iso(since),
+      history: [raised(since, signoffsFor(since, 0))],
+      request: null,
+      version: 1,
+    },
     hospitals: {
       h_havana: {
         position: "on",
         since: iso(havanaAt),
-        history: [raised(havanaAt, HAVANA_SIGNOFFS)],
+        history: [raised(havanaAt, signoffsFor(havanaAt, 1))],
         request: null,
         version: 1,
       },
@@ -402,7 +412,7 @@ export function seedSwitch(
             reason: "Paused while Northgate checks who its letter covers",
             signoffs: null,
           },
-          raised(northAt, NORTHGATE_SIGNOFFS),
+          raised(northAt, signoffsFor(northAt, 2)),
         ],
         request: null,
         version: 1,

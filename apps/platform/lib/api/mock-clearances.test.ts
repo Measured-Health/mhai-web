@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
-import type { Signoffs } from "./clearances-contract";
+import { seedAudit } from "./audit-fixtures";
+import type { Signoffs, SwitchState } from "./clearances-contract";
 import { TEAM_EMAILS } from "./fixtures";
 import { createMockPlatform } from "./mock";
 import { MOCK_CODE, createStepUp } from "./step-up";
@@ -393,6 +394,104 @@ describe("mock clearances: the letters", () => {
   });
 });
 
+describe("mock clearances: same_person before same_side", () => {
+  it("a covered admin who is also on the hospital's side still gets same_person", async () => {
+    const { m, as } = setup();
+    // Havana now counts Measured Health's own domain as its own: everyone on
+    // the team is on its side, Tunde included.
+    const h = await m.getHospital("h_havana");
+    await m.updateHospital(
+      "h_havana",
+      {
+        email_domains: [...h.email_domains, "measured-health.example"],
+        version: h.version,
+      },
+      KEY(),
+    );
+    as(TEAM_EMAILS.ada);
+    const c = await m.getClearance("cl_wait");
+    expect(
+      await failure(
+        m.verifyClearance("cl_wait", { version: c.version, ...CODE }, KEY()),
+      ),
+    ).toEqual([409, "same_side"]);
+    as(TEAM_EMAILS.tunde);
+    expect(
+      await failure(
+        m.verifyClearance("cl_wait", { version: c.version, ...CODE }, KEY()),
+      ),
+    ).toEqual([409, "same_person"]);
+    expect(
+      await failure(
+        m.rejectClearance(
+          "cl_wait",
+          { reason: "unreadable", version: c.version, ...CODE },
+          KEY(),
+        ),
+      ),
+    ).toEqual([409, "same_person"]);
+    expect(
+      (await activity(m)).slice(0, 3).map((e) => [e.actor.id, e.reason]),
+    ).toEqual([
+      ["tm_tunde", "same_person"],
+      ["tm_tunde", "same_person"],
+      ["tm_ada", "same_side"],
+    ]);
+  });
+});
+
+describe("mock clearances: the seeded switch on any date", () => {
+  const DAYS = [
+    "2027-02-05T08:00:00.000Z",
+    "2027-03-15T12:00:00.000Z",
+    "2026-10-22T09:30:00.000Z",
+  ];
+  it.each(DAYS)(
+    "on %s every date is in the past and in order, and no named view predates its switch",
+    async (day) => {
+      const now = Date.parse(day);
+      const m = createMockPlatform({
+        now: () => now,
+        me: () => TEAM_EMAILS.ada,
+        delayMs: 0,
+      });
+      const s = await m.getNamedAccess();
+      const scopes: SwitchState[] = [s.global, ...s.hospitals];
+      for (const x of scopes) {
+        if (x.since) expect(Date.parse(x.since)).toBeLessThanOrEqual(now);
+        const at = x.history.map((c) => Date.parse(c.at));
+        for (const t of at) expect(t).toBeLessThanOrEqual(now);
+        // Newest first.
+        expect([...at].sort((a, b) => b - a)).toEqual(at);
+        if (x.since && x.history[0]) expect(x.history[0].at).toBe(x.since);
+        // Sign-offs are dated on or before the raise.
+        for (const c of x.history)
+          if (c.signoffs)
+            for (const o of Object.values(c.signoffs))
+              expect(o.at <= c.at.slice(0, 10)).toBe(true);
+      }
+      const globalOn = Date.parse(s.global.since!);
+      const north = s.hospitals.find((h) => h.hospital.id === "h_northgate")!;
+      const havana = s.hospitals.find((h) => h.hospital.id === "h_havana")!;
+      const [lowered, raisedNorth] = north.history;
+      expect([lowered!.to, raisedNorth!.to]).toEqual(["off", "on"]);
+      // No hospital went On before the global switch did.
+      expect(Date.parse(havana.since!)).toBeGreaterThan(globalOn);
+      expect(Date.parse(raisedNorth!.at)).toBeGreaterThan(globalOn);
+      // Plan 9's named views at Northgate all fall while it was On.
+      const views = seedAudit(now).events.filter(
+        (e) => e.kind === "drilldown_named" && e.hospital?.id === "h_northgate",
+      );
+      expect(views.length).toBeGreaterThan(0);
+      for (const v of views) {
+        const t = Date.parse(v.at);
+        expect(t).toBeGreaterThan(Date.parse(raisedNorth!.at));
+        expect(t).toBeLessThan(Date.parse(lowered!.at));
+      }
+    },
+  );
+});
+
 describe("mock clearances: the named-access switch", () => {
   it("seeds global On since 3 Feb, Havana On, Northgate turned Off 5 days ago", async () => {
     const { m } = setup();
@@ -616,6 +715,43 @@ describe("mock clearances: the named-access switch", () => {
     });
   });
 
+  it("approving a raise that is now above global is 409 above_global, and nothing changes", async () => {
+    const { m, as } = setup();
+    const river = await switchOf(m, "h_riverside");
+    let out = await m.requestNamedAccess(
+      {
+        hospital: "h_riverside",
+        position: "on",
+        signoffs: SIGNOFFS,
+        version: river.version,
+        ...CODE,
+      },
+      KEY(),
+    );
+    const req = out.hospitals.find(
+      (h) => h.hospital.id === "h_riverside",
+    )!.request!;
+    out = await m.lowerNamedAccess(
+      {
+        hospital: null,
+        position: "letters_only",
+        reason: "Review",
+        version: out.global.version,
+        ...CODE,
+      },
+      KEY(),
+    );
+    as(TEAM_EMAILS.tunde);
+    const seen = await switchOf(m, "h_riverside");
+    expect(
+      await failure(
+        m.approveNamedAccess(req.id, { version: seen.version, ...CODE }, KEY()),
+      ),
+    ).toEqual([409, "above_global"]);
+    const after = await switchOf(m, "h_riverside");
+    expect([after.position, after.request?.id]).toEqual(["off", req.id]);
+  });
+
   it("a hospital raised above global is 409 above_global", async () => {
     const { m } = setup();
     const g = await m.getNamedAccess();
@@ -821,5 +957,12 @@ describe("mock clearances: the named-access switch", () => {
     });
     const havana = s.hospitals.find((h) => h.hospital.id === "h_havana")!;
     expect(havana.effective).toBe("off");
+    // Nothing was ever raised: no hospital sits above global.
+    for (const h of s.hospitals)
+      expect([h.hospital.id, h.position, h.history]).toEqual([
+        h.hospital.id,
+        "off",
+        [],
+      ]);
   });
 });

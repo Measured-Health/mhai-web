@@ -138,6 +138,7 @@
     - `SwitchRequest = TwoPersonRequest & { kind: "named_access"; hospital: Person | null; position; signoffs }`, so it carries a server-set `reason` and `expires_at`. It lapses after 7 days (**409** `expired`), and `TwoPersonKind` gains `"named_access"`;
     - a request that isn't a raise is **422** `invalid`, and missing sign-offs are **409** `signoff_missing`;
     - one name per event: the audit kinds are the platform Activity actions' names (`clearance_*`, `named_access_*`). A refused verify is `clearance_verify_refused` with reason `same_side` or `same_person`, the 409 codes;
+    - a refused reject logs the same `clearance_verify_refused` (one action for both), and the refusal is checked and logged before the letter's status, so a refusal on a letter that isn't waiting is still logged, once per attempt. The backend should match;
   - the whole contract is **§14.10** in mhai-multiagent's frontend requirements.
 - **Narrowing to nobody is refused.** Removing everyone is a revocation. The server still ends a letter's access when its last covered person loses their role.
 - **Staff eligibility in the picker** is read from `StaffOut`: `status === "active"`, roles include `hospital_admin` or `analyst`, and `issues` doesn't include `mfa_not_set_up`. The server has the last word (**422** `not_eligible`, with the ids).
