@@ -6,3 +6,7 @@ d7ca6e1542231d2a045010a11a6b64a8ac4a276f:docs/plans/2026-10-15-plan-2-accounts-a
 359cbe49bea98ca4f96872167beab32503857d12:docs/plans/2026-10-15-plan-2-accounts-and-live-api.md:generic-api-key:926
 359cbe49bea98ca4f96872167beab32503857d12:docs/plans/2026-10-15-plan-2-accounts-and-live-api.md:generic-api-key:6214
 4b739ac62b1de5048960c9889414192b8c57dd65:apps/platform/app/api/auth/auth.test.ts:generic-api-key:307
+89aa737de37effc6408b14d5ab4a80798e2e66ac:apps/platform/tests/e2e/emr.spec.ts:generic-api-key:120
+6a6c9893517f2ab8eb3671c5bf3affe83adefbc1:apps/platform/components/emr/connection-form.test.tsx:generic-api-key:33
+f4371d4592148b8cd0955b3bf502e902f42588c2:apps/platform/lib/api/mock-emr.test.ts:generic-api-key:19
+f4371d4592148b8cd0955b3bf502e902f42588c2:apps/platform/lib/api/mock-emr.test.ts:generic-api-key:20
