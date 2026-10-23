@@ -160,6 +160,10 @@ describe("UsageAlerts", () => {
             median_ack_minutes_critical: hiddenWithChange,
             acknowledged_share: hiddenWithChange,
             dismissed_share: hiddenWithChange,
+            by_route: {
+              queue: a.by_route!.queue,
+              named: hiddenWithChange,
+            },
           },
         }}
         onRetry={vi.fn()}
@@ -464,7 +468,32 @@ describe("UsageAlerts", () => {
   });
 
   it("shows no Who received them block when the server sends none, or sends nonsense", async () => {
-    for (const by_route of [undefined, { queue: 5 }, "all", null]) {
+    // Control: the same data with a readable by_route shows the block.
+    const control = await withAlerts((a) => ({ by_route: a.by_route }));
+    const first = render(<UsageAlerts usage={control} onRetry={vi.fn()} />);
+    expect(
+      screen.getByRole("region", { name: "Who received them" }),
+    ).toBeVisible();
+    first.unmount();
+    for (const by_route of [
+      undefined,
+      { queue: 5 },
+      "all",
+      null,
+      // A count that is not a count, and one with an unreadable change.
+      {
+        queue: { value: "97", suppressed: false },
+        named: { value: 5, suppressed: true },
+      },
+      {
+        queue: {
+          value: 97,
+          suppressed: false,
+          change: { direction: "sideways" },
+        },
+        named: { value: 58, suppressed: false },
+      },
+    ]) {
       const u = await withAlerts(() => ({ by_route }));
       const { unmount } = render(<UsageAlerts usage={u} onRetry={vi.fn()} />);
       expect(

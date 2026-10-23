@@ -68,10 +68,7 @@ export function UnitsSection({
         setDraft(null);
         save.say("Changes discarded");
       }}
-      onReload={() => {
-        setDraft(null);
-        save.say("Latest settings loaded");
-      }}
+      onReload={() => void save.reload(() => setDraft(null))}
     >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <p id={summaryId} className="mr-auto text-[13px] text-ink-2">

@@ -65,10 +65,7 @@ export function RulesSection({
         setDraft({});
         save.say("Changes discarded");
       }}
-      onReload={() => {
-        setDraft({});
-        save.say("Latest settings loaded");
-      }}
+      onReload={() => void save.reload(() => setDraft({}))}
     >
       <ul>
         {data.categories.map((c) => (

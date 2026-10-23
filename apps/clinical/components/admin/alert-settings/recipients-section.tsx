@@ -95,7 +95,10 @@ function AddClinician({
         className="min-h-11 w-full rounded-xl border border-lilac-2 bg-white px-3 text-[14px] focus-visible:outline-2 focus-visible:outline-mint-deep disabled:opacity-40"
       />
       {expanded && matches.length === 0 && (
-        <p className="absolute z-20 mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-[13px] text-ink-3 shadow-lg">
+        <p
+          role="status"
+          className="absolute z-20 mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-[13px] text-ink-3 shadow-lg"
+        >
           No clinicians to add
         </p>
       )}
@@ -186,10 +189,7 @@ export function RecipientsSection({
         setDraft(null);
         save.say("Changes discarded");
       }}
-      onReload={() => {
-        setDraft(null);
-        save.say("Latest settings loaded");
-      }}
+      onReload={() => void save.reload(() => setDraft(null))}
     >
       <div className="flex flex-wrap items-center gap-x-4 border-b border-line pb-3">
         <div className="min-w-0 flex-1 basis-[240px]">

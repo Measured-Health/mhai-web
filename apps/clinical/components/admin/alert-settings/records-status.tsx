@@ -70,8 +70,8 @@ export function RecordsStatusSection({
       {connection.status !== "not_connected" &&
         connection.sources.length > 0 && (
           <ul className="mt-2 flex flex-col gap-1 text-[13px] text-ink-2">
-            {connection.sources.map((x) => (
-              <li key={x.label}>
+            {connection.sources.map((x, i) => (
+              <li key={`${i}-${x.label}`}>
                 {x.label} · {lastUpdate(x.last_update_at, now)}
               </li>
             ))}

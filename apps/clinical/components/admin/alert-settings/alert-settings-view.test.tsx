@@ -296,6 +296,58 @@ describe("AlertSettingsView", () => {
     expect(within(units).getByText("1 of 8 units covered")).toBeVisible();
   });
 
+  it("after a 409 the conflict stands: Save stays off and Reload stays through edits, until Reload", async () => {
+    show();
+    await ready();
+    await holder.emr.updateAlertSettings({
+      version: 1,
+      units: { covered: ["u-ward-3"] },
+    });
+    const units = section("Units covered");
+    const save = () => within(units).getByRole("button", { name: "Save" });
+    await userEvent.click(
+      within(units).getByRole("checkbox", { name: /Ward 7/ }),
+    );
+    await userEvent.click(save());
+    expect(
+      await within(units).findByText("Changed by someone else"),
+    ).toBeVisible();
+    // Their version has loaded underneath; your draft is kept.
+    await userEvent.click(
+      within(units).getByRole("checkbox", { name: /Ward 5/ }),
+    );
+    expect(within(units).getByText("Changed by someone else")).toBeVisible();
+    expect(within(units).getByRole("button", { name: "Reload" })).toBeVisible();
+    expect(save()).toBeDisabled();
+    expect(save()).toHaveAccessibleDescription(
+      "Reload to see the latest first.",
+    );
+    await userEvent.click(
+      within(units).getByRole("button", { name: "Discard" }),
+    );
+    expect(within(units).getByText("Changed by someone else")).toBeVisible();
+    expect(save()).toBeDisabled();
+    await userEvent.click(
+      within(units).getByRole("checkbox", { name: /Ward 7/ }),
+    );
+    await userEvent.click(
+      within(units).getByRole("button", { name: "Reload" }),
+    );
+    await waitFor(() =>
+      expect(within(units).queryByText("Changed by someone else")).toBeNull(),
+    );
+    // The server's version replaces the draft.
+    expect(within(units).getByText("1 of 8 units covered")).toBeVisible();
+    expect(
+      within(units).getByRole("checkbox", { name: /Ward 7/ }),
+    ).not.toBeChecked();
+    expect(save()).toBeDisabled();
+    await userEvent.click(
+      within(units).getByRole("checkbox", { name: /Ward 5/ }),
+    );
+    expect(save()).toBeEnabled();
+  });
+
   it("never shows an address, a connection type or an error code", async () => {
     const { container } = show();
     await ready();

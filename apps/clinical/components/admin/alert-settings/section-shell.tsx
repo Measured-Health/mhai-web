@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { adminError } from "@/lib/admin/errors";
 import type { AlertSettingsPatchIn } from "@/lib/api/emr-contract";
 import { ApiError } from "@/lib/api/errors";
-import { useUpdateAlertSettings } from "@/lib/emr-queries";
+import { EMR_KEYS, useUpdateAlertSettings } from "@/lib/emr-queries";
 import { useOnline } from "@mhai/ui/hooks/use-online";
 import { Button } from "@mhai/ui/button";
 import { useToast } from "@mhai/ui/toast";
@@ -24,13 +25,29 @@ interface Status {
 export function useSectionSave() {
   const mutation = useUpdateAlertSettings();
   const toast = useToast();
+  const qc = useQueryClient();
   const [status, setStatus] = useState<Status | null>(null);
 
   return {
     status,
     pending: mutation.isPending,
-    say: (text: string) => setStatus({ text, conflict: false }),
-    clear: () => setStatus(null),
+    /** A conflict stands until Reload: other words and edits never drop it. */
+    say: (text: string) =>
+      setStatus((s) => (s?.conflict ? s : { text, conflict: false })),
+    clear: () => setStatus((s) => (s?.conflict ? s : null)),
+    /** Reload: read the server's version, then let the caller drop the draft. */
+    async reload(onLoaded: () => void) {
+      await qc.refetchQueries({ queryKey: EMR_KEYS.settings });
+      if (qc.getQueryState(EMR_KEYS.settings)?.status === "error")
+        setStatus({
+          text: "Couldn't load the latest settings",
+          conflict: true,
+        });
+      else {
+        onLoaded();
+        setStatus({ text: "Latest settings loaded", conflict: false });
+      }
+    },
     send(patch: AlertSettingsPatchIn, onSaved: () => void) {
       setStatus(null);
       mutation.mutate(patch, {
@@ -82,11 +99,14 @@ export function SectionCard({
   const id = useId();
   const hintId = useId();
   const online = useOnline();
+  const conflict = save.status?.conflict === true;
   const hint = !online
     ? "You're offline. This needs a connection."
-    : dirty
-      ? blocked
-      : null;
+    : conflict
+      ? "Reload to see the latest first."
+      : dirty
+        ? blocked
+        : null;
   return (
     <section aria-labelledby={id} className="card-v3 px-[22px] py-4">
       <h3
@@ -99,7 +119,7 @@ export function SectionCard({
       {children}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Button
-          disabled={!dirty || !!blocked || !online || save.pending}
+          disabled={!dirty || !!blocked || conflict || !online || save.pending}
           aria-describedby={hint ? hintId : undefined}
           onClick={onSave}
         >
