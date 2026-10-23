@@ -91,9 +91,12 @@ describe("mock record connections", () => {
     ]);
     expect(out.not_connected.map((h) => h.name)).toEqual([
       "Eastbrook Medical Centre",
+      "Fairhaven General Hospital",
       "Harbour View Hospital",
       "Hilltop Cottage Hospital",
       "Lakeside Community Clinic",
+      "Marlow District Hospital",
+      "Ridgeway General Hospital",
       "Southpoint Hospital",
     ]);
     const hv1 = out.connections[0]!;

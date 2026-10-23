@@ -451,9 +451,36 @@ describe("Plan 8's Activity actions", () => {
       named_access_approved: true,
       named_access_cancelled: true,
       named_access_lowered: true,
+      analysis_switched: true,
+      patient_views_switched: true,
     };
     for (const action of Object.keys(ACTIONS))
       expect(KINDS[action], action).toBeDefined();
+  });
+
+  it("the two Analysis switches are Platform kinds with no target and no note, and say which way", () => {
+    for (const [kind, on, off] of [
+      ["analysis_switched", "Turned Analysis on", "Turned Analysis off"],
+      [
+        "patient_views_switched",
+        "Turned patient lists in Analysis on",
+        "Turned patient lists in Analysis off",
+      ],
+    ] as const) {
+      expect(KINDS[kind].type, kind).toBe("platform");
+      expect(KINDS[kind].note, kind).toBe(false);
+      expect(KINDS[kind].targets, kind).toEqual([]);
+      const e = (switched?: "on" | "off") =>
+        auditEvent({
+          type: "platform",
+          kind,
+          target: null,
+          facts: switched ? { switched } : {},
+        });
+      expect(KINDS[kind].words(e("on"))).toBe(on);
+      expect(KINDS[kind].words(e("off"))).toBe(off);
+      expect(KINDS[kind].words(e())).toMatch(/on or off$/);
+    }
   });
 
   it("the settings actions are Platform kinds, with a setting target and no note", () => {

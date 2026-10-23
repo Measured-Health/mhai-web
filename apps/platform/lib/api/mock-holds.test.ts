@@ -713,6 +713,9 @@ describe("mock legal holds", () => {
       h_southpoint: 0,
       h_lakeside: 1,
       h_hilltop: 0,
+      h_ridgeway: 0,
+      h_marlow: 0,
+      h_fairhaven: 0,
     });
     const hv = await m.getHospital("h_harbour");
     expect(hv.legal_holds_active).toBe(1);

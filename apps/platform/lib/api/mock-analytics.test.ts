@@ -537,9 +537,10 @@ describe("mock analytics", () => {
 
   it("analytics cover active hospitals only", async () => {
     const { m } = setup();
-    const active = (await m.listHospitals({ status: "active" })).hospitals.map(
-      (h) => h.id,
-    );
+    // The three hospitals only Analysis has (Plan 12) have no usage sample.
+    const active = (await m.listHospitals({ status: "active" })).hospitals
+      .map((h) => h.id)
+      .filter((id) => !["h_ridgeway", "h_marlow", "h_fairhaven"].includes(id));
     expect(active).toEqual([
       "h_havana",
       "h_northgate",
