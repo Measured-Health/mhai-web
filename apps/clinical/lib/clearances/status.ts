@@ -1,5 +1,6 @@
 import {
   activeWords,
+  dayLabel,
   daysBetween,
   endedWords,
   ENDING_SOON_DAYS,
@@ -100,5 +101,28 @@ function line(c: ClearanceOut, today: string): StatusLine {
         detail: null,
       };
     }
+  }
+}
+
+/**
+ * An instant from the server (an upload, a verification) as the viewer's
+ * day, "12 Mar 2027"; null if it isn't a time.
+ */
+export function instantLabel(iso: string): string | null {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return null;
+  const d = new Date(ms);
+  const two = (n: number) => String(n).padStart(2, "0");
+  return dayLabel(
+    `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`,
+  );
+}
+
+/** A day from the server as "12 Mar 2027", or null if it isn't one. */
+export function safeDayLabel(ymd: string): string | null {
+  try {
+    return dayLabel(ymd);
+  } catch {
+    return null;
   }
 }

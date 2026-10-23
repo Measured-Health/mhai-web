@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ClearanceOut } from "../api/clearances-contract";
-import { statusLine } from "./status";
+import { instantLabel, safeDayLabel, statusLine } from "./status";
 
 const TODAY = "2026-10-23";
 const letter = (over: Partial<ClearanceOut>): ClearanceOut => ({
@@ -180,5 +180,14 @@ describe("statusLine", () => {
       detail: null,
     });
     expect(statusLine(letter({}), "bad").words).toBe("Ended");
+  });
+});
+
+describe("instantLabel and safeDayLabel", () => {
+  it("write a day as d MMM yyyy, and nothing for a bad one", () => {
+    expect(instantLabel("2026-10-01T12:00:00Z")).toBe("1 Oct 2026");
+    expect(instantLabel("yesterday")).toBeNull();
+    expect(safeDayLabel("2027-03-12")).toBe("12 Mar 2027");
+    expect(safeDayLabel("2027-02-30")).toBeNull();
   });
 });

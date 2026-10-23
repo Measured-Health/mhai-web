@@ -23,7 +23,11 @@ function Probe({ queryKey }: { queryKey: string[] }) {
 }
 
 describe("TwoStepRequired", () => {
-  it.each([[["analysis", "prevalence"]], [["admin", "staff"]]])(
+  it.each([
+    [["analysis", "prevalence"]],
+    [["admin", "staff"]],
+    [["clearances", "list"]],
+  ])(
     "marks the person as without two-step when %j needs it",
     async (queryKey) => {
       renderWithAuth(
