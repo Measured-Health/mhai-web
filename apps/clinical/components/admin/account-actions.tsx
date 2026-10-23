@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { StaffAction } from "@/lib/api/admin";
 import type { StaffOut, StaffRemoveAuth } from "@/lib/api/admin-contract";
@@ -14,17 +13,12 @@ import { INVITE_DAYS } from "@/lib/admin/invite";
 import { guardFor } from "@/lib/admin/staff";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useNetwork } from "@mhai/api-client/network";
-import {
-  BACKUP_FAILED_BODY,
-  BackupCodeInput,
-  BackupCodeToggle,
-  useCodeOrBackup,
-} from "@mhai/ui/auth/backup-code-toggle";
-import { CodeInput } from "@mhai/ui/auth/code-input";
+import { BACKUP_FAILED_BODY } from "@mhai/ui/auth/backup-code-toggle";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { useToast } from "@mhai/ui/toast";
 import { ConfirmDialog } from "./confirm-dialog";
+import { StepUpFields, useStepUp } from "./step-up-fields";
 
 export type Confirmable =
   "password-reset" | "reset-mfa" | "deactivate" | "remove";
@@ -170,22 +164,14 @@ function RemoveDialog({
   onConfirm(auth: StaffRemoveAuth, onWrong: () => void): void;
 }) {
   const { user } = useAuth();
-  const id = useId();
-  const c = useCodeOrBackup();
-  const [focusKey, setFocusKey] = useState(0);
-  const backupRef = useRef<HTMLInputElement>(null);
+  const step = useStepUp();
   const copy = copyFor("remove", row, hospital);
   // Every admin has two-step (amendment 3), so this is only ever stale state.
   const blocked = required || user?.mfaEnabled === false;
 
   function confirm() {
-    if (!c.ready || blocked) return;
-    const backup = c.backup;
-    onConfirm(backup ? { backupCode: c.value } : { mfaCode: c.value }, () => {
-      c.setCode("");
-      if (backup) backupRef.current?.focus();
-      else setFocusKey((k) => k + 1);
-    });
+    if (!step.ready || blocked) return;
+    onConfirm(step.auth(), step.wrong);
   }
 
   return (
@@ -199,58 +185,17 @@ function RemoveDialog({
       busy={busy}
       error={error}
       offline={offline}
-      ready={c.ready && !blocked}
+      ready={step.ready && !blocked}
     >
       <p>{copy.body}</p>
-      {blocked ? (
-        <div className="mt-3">
-          <Banner
-            tone="warn"
-            title="Turn on two-step verification in Profile & security to remove staff."
-          >
-            Then come back and try again.{" "}
-            <Link href="/account" className="font-semibold underline">
-              Profile &amp; security
-            </Link>
-          </Banner>
-        </div>
-      ) : (
-        <div className="mt-4">
-          <p className="mb-2 text-[13px]">
-            {c.backup
-              ? "Enter one of your backup codes to confirm."
-              : "Enter the 6-digit code from your authenticator app to confirm."}
-          </p>
-          {c.backup ? (
-            <BackupCodeInput
-              id={`${id}-backup`}
-              inputRef={backupRef}
-              value={c.code}
-              onChange={c.setCode}
-              disabled={busy}
-            />
-          ) : (
-            <CodeInput
-              autoSubmit
-              value={c.code}
-              onChange={c.setCode}
-              label="Your two-step code"
-              disabled={busy}
-              invalid={error !== null}
-              focusKey={focusKey}
-            />
-          )}
-          <p className="mt-1 text-[13px] text-ink-3">
-            <BackupCodeToggle
-              backup={c.backup}
-              onChange={(b) => {
-                c.setBackup(b);
-                onClearError();
-              }}
-            />
-          </p>
-        </div>
-      )}
+      <StepUpFields
+        step={step}
+        busy={busy}
+        invalid={error !== null}
+        blocked={blocked}
+        blockedTitle="Turn on two-step verification in Profile & security to remove staff."
+        onToggle={onClearError}
+      />
     </ConfirmDialog>
   );
 }
