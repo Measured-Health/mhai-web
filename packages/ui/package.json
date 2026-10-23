@@ -4,6 +4,7 @@
   "private": true,
   "exports": {
     "./base.css": "./src/base.css",
+    "./clearances": "./src/clearances.ts",
     "./cn": "./src/cn.ts",
     "./csv": "./src/csv.ts",
     "./small-groups": "./src/small-groups.ts",
