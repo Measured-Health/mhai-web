@@ -44,6 +44,13 @@ describe("the periods and the empty query", () => {
     });
   });
 
+  it("one hospital needs a hospital", () => {
+    expect(() => emptyQuery("hospital", null)).toThrow();
+    expect(() =>
+      switchScope(emptyQuery("all", null), "hospital", null),
+    ).toThrow();
+  });
+
   it("20-year bands across hospitals, the Plan 6 bands for one", () => {
     expect(AGE_BANDS.all).toEqual(["0-19", "20-39", "40-59", "60-79", "80+"]);
     expect(AGE_BANDS.hospital).toEqual([

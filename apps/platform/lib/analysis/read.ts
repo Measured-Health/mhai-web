@@ -61,6 +61,8 @@ const PATIENT_KEYS = new Set([
   "address",
   "patient_name",
 ]);
+/** Across hospitals a condition is coded at the 3-character ICD-10 level. */
+const ICD3 = /^[A-Z][0-9]{2}$/;
 const MONTHS: Record<AnalysisPeriod, number> = { "3m": 3, "6m": 6, "12m": 12 };
 /** At most this many pairs, the hidden ones last. */
 export const PAIRS_MAX = 20;
@@ -226,11 +228,15 @@ function rate(v: unknown, where: string, c: Ctx) {
   const p = guarded(r.per_1000, "rate", `${where}.per_1000`, c, {
     loose: true,
   });
-  if (shown(n) && shown(b)) need(val(n) <= val(b), where, "count over base");
+  // Shown together, count and base publish their complement (base − count)
+  // by subtraction, whatever the per 1,000 is.
+  if (shown(n) && shown(b)) {
+    need(val(n) <= val(b), where, "count over base");
+    need(!isSmallCount(val(b) - val(n)), where, "a rate leaving 1–4");
+  }
   if (shown(p)) {
     need(shown(n) && shown(b), where, "a rate over a hidden count or base");
     need(val(b) > 0, where, "a rate over nothing");
-    need(!isSmallCount(val(b) - val(n)), where, "a rate leaving 1–4");
     need(
       Math.abs(val(p) - (val(n) / val(b)) * 1000) <= 0.5 + 1e-9,
       where,
@@ -397,6 +403,8 @@ function prevalenceOk(d: unknown, c: ViewCtx) {
     const r = exact(x, ["condition", "cases", "rate", "new"], w);
     c.conditions.push(conditionOk(r.condition, `${w}.condition`));
     const cases = drillable(r.cases, `${w}.cases`, c);
+    if ((r.condition as Obj).id === c.q.condition)
+      same(cases, c.patients, `${w}.cases`, "the filtered group");
     const rt = rate(r.rate, `${w}.rate`, c);
     same(cases, rt.count, `${w}.cases`, "its rate's count");
     same(rt.base, c.headline.base, `${w}.rate.base`, "the patients seen");
@@ -746,6 +754,14 @@ function hospitalRowsOk(v: unknown, view: ViewId, c: ViewCtx) {
       "hospitals",
       "a remainder of the sizes that gives a hospital away",
     );
+  // With no condition filter the group is everyone seen: the sizes add up
+  // to it, in every view (Quality too).
+  if (c.q.condition === null)
+    need(
+      !remainderLeaks(c.patients, parts.size),
+      "hospitals",
+      "a remainder of patients over the sizes that gives a hospital away",
+    );
   enoughHospitals(H.count, parts.count, "headline.count");
   enoughHospitals(H.base, parts.base, "headline.base");
 }
@@ -859,6 +875,15 @@ function check(view: ViewId, raw: unknown, q: AnalysisQuery, now: number) {
   need(isTime(v.updated_at), "updated_at", "not a time");
   const patients = count(v.patients, "patients", c);
   const headline = rate(v.headline, "headline", c);
+  // The group under its other names: everyone seen with no condition
+  // filter (every headline but Quality's is over patients seen), else the
+  // condition's patients (the headline count of the views about conditions
+  // in scope; Findings counts flagged patients, Quality ratings).
+  if (q.condition === null) {
+    if (view !== "quality")
+      same(patients, headline.base, "patients", "the patients seen");
+  } else if (view !== "quality" && view !== "findings")
+    same(patients, headline.count, "patients", "the headline's count");
 
   let comparison: Obj | null = null;
   if (q.scope === "all") {
@@ -886,6 +911,14 @@ function check(view: ViewId, raw: unknown, q: AnalysisQuery, now: number) {
   DATA_OK[view](v.data, vc);
 
   if (q.scope === "all") {
+    for (const x of vc.conditions)
+      need(
+        x.name === null
+          ? x.icd10 === null
+          : isStr(x.icd10) && ICD3.test(x.icd10),
+        "data",
+        "a condition across hospitals that isn't a 3-character code or Not standardised",
+      );
     const unnamed = new Set(
       vc.conditions.filter((x) => x.name === null).map((x) => x.id),
     );
@@ -897,7 +930,10 @@ function check(view: ViewId, raw: unknown, q: AnalysisQuery, now: number) {
   }
 }
 
-/** Why a view fails closed, in a sentence, or null when it reads. */
+/**
+ * Why a view fails closed, in a sentence, or null when it reads. For tests
+ * and local debugging only: never log it, and never beside a query.
+ */
 export function viewProblem(
   view: ViewId,
   raw: unknown,
@@ -913,20 +949,28 @@ export function viewProblem(
   }
 }
 
+/** A view that reads, with a copy of the query it was read against. */
+export type ViewRead<V extends ViewId> =
+  | { status: "ok"; data: Meta & { data: DataOf[V] }; query: AnalysisQuery }
+  | { status: "failed" };
+
 /**
  * One view's reply, read on its own against the query it answers; see the
- * file comment. A view that reads is copied, so nothing else can change it.
+ * file comment. A view that reads is copied, so nothing else can change it,
+ * and keeps its query: the CSV labels the figures with the filters they
+ * answer, not whatever the screen has moved on to.
  */
 export function readView<V extends ViewId>(
   view: V,
   raw: unknown,
   q: AnalysisQuery,
   now: number = Date.now(),
-): ViewState<Meta & { data: DataOf[V] }> {
+): ViewRead<V> {
   if (viewProblem(view, raw, q, now) !== null) return FAILED;
   return {
     status: "ok",
     data: JSON.parse(JSON.stringify(raw)) as Meta & { data: DataOf[V] },
+    query: { ...q },
   };
 }
 
@@ -994,9 +1038,6 @@ export function readStatus(raw: unknown): ViewState<AnalysisStatus> {
 }
 
 // ---- The filter options --------------------------------------------------------------
-
-/** Across hospitals a condition is coded at the 3-character ICD-10 level. */
-const ICD3 = /^[A-Z][0-9]{2}$/;
 
 function optionsCheck(raw: unknown, scope: ScopeKind) {
   patientKey(raw, "options");

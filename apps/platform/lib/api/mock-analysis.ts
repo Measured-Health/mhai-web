@@ -518,6 +518,34 @@ const pairKey = (a: string, b: string, map: ScopeKind) => {
  * The sums inside one reply's figures (one hospital's, or all hospitals'),
  * keys in that scope's names. `condition` is the filter, if any.
  */
+/**
+ * A rate's complement: `r:{count}~{base}`, base − count. Count and base
+ * both shown publish it by subtraction, so it is a derived cell like
+ * existing cases (see closeSums), worked out from its parents, never stored.
+ */
+const restKey = (count: string, base: string) => `r:${count}~${base}`;
+function restOf(k: string): { count: string; base: string } | null {
+  if (!k.startsWith("r:")) return null;
+  const at = k.lastIndexOf("~");
+  return { count: k.slice(2, at), base: k.slice(at + 1) };
+}
+/** Every rate a reply can send, as [count, base]. */
+function rateKeys(v: Rec): [string, string][] {
+  const out: [string, string][] = [
+    ["head", "seen"],
+    ["fhead", "seen"],
+    ["qagreed", "qrated"],
+  ];
+  for (const k of Object.keys(v)) {
+    if (k.startsWith("c:") || k.startsWith("f:")) out.push([k, "seen"]);
+    if (k.startsWith("ms:")) out.push([`mh:${k.slice(3)}`, k]);
+  }
+  return out;
+}
+/** Each rate's base is its count and its complement. */
+const rateSums = (pairs: [string, string][]): Sum[] =>
+  pairs.map(([count, base]) => [base, [count, restKey(count, base)]]);
+
 function sumsOf(v: Rec, map: ScopeKind, condition: string | null): Sum[] {
   const bands = map === "all" ? ALL_BANDS : HOSPITAL_BANDS;
   const out: Sum[] = [
@@ -557,6 +585,7 @@ function sumsOf(v: Rec, map: ScopeKind, condition: string | null): Sum[] {
     const p = `q:${id}:`;
     out.push([`${p}cons`, [`${p}rated`, `${p}unrated`]]);
   }
+  out.push(...rateSums(rateKeys(v)));
   // The same figure under two names.
   const pa = Object.keys(v).filter((k) => k.startsWith("pa:"));
   if (condition === null) {
@@ -580,6 +609,12 @@ const HOSPITAL_ID = new Map(CONDITIONS.map((c) => [allId(c.id), c.id]));
  * has no such figure (the 20-year age bands but the last).
  */
 function hospitalKey(k: string): string | null {
+  const rest = restOf(k);
+  if (rest) {
+    const count = hospitalKey(rest.count);
+    const base = hospitalKey(rest.base);
+    return count === null || base === null ? null : restKey(count, base);
+  }
   const [head, a = "", b = ""] = k.split(":");
   const id = (x: string) => HOSPITAL_ID.get(x) ?? x;
   switch (head) {
@@ -627,10 +662,14 @@ function hideTogether(owners: Owner[], sums: Sum[]): Map<string, Ctx> {
   };
   const raw = (c: string) => {
     const [o, k] = split(c);
+    const rest = restOf(k);
+    if (rest) return (o.v[rest.base] ?? 0) - (o.v[rest.count] ?? 0);
     return o.v[k] ?? 0;
   };
+  // A complement is hidden through its parents, never for itself.
   const few = (c: string) => {
     const [o, k] = split(c);
+    if (restOf(k)) return false;
     return o.hosp !== null && (o.hosp[k] ?? 0) < MIN_HOSPITALS;
   };
   for (const [total, parts] of sums)
@@ -659,6 +698,8 @@ function hideTogether(owners: Owner[], sums: Sum[]): Map<string, Ctx> {
       const p = k.slice(0, -"unrated".length);
       return [`${owner}${p}cons`, `${owner}${p}rated`];
     }
+    const rest = restOf(k);
+    if (rest) return [`${owner}${rest.base}`, `${owner}${rest.count}`];
     return null;
   };
   for (;;) {
@@ -733,9 +774,24 @@ function familyOf(f: Filters, win: Win): Family {
           ),
         ),
       );
+  // Without a twin a hospital's only figures are its row's: its headline
+  // rate's complement is still published.
+  const rowRates = rateKeys({}).filter(
+    ([c, b]) => ROW_KEYS.has(c) && ROW_KEYS.has(b),
+  );
+  if (!twin)
+    for (const p of PROFILES) sums.push(...inCells(p.id, rateSums(rowRates)));
   // Each all-hospitals figure is the sum of the hospitals' own.
-  for (const k of Object.keys(sum.v)) {
-    const hk = twin ? hospitalKey(k) : ROW_KEYS.has(k) ? k : null;
+  const across = [
+    ...Object.keys(sum.v),
+    ...rateKeys(sum.v).map(([c, b]) => restKey(c, b)),
+  ];
+  for (const k of across) {
+    const rest = restOf(k);
+    const row = rest
+      ? ROW_KEYS.has(rest.count) && ROW_KEYS.has(rest.base)
+      : ROW_KEYS.has(k);
+    const hk = twin ? hospitalKey(k) : row ? k : null;
     if (hk === null) continue;
     sums.push([cellOf("*", k), PROFILES.map((p) => cellOf(p.id, hk)), true]);
   }

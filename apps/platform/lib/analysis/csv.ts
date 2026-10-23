@@ -41,7 +41,14 @@ import {
 export type CsvContext = {
   status: AnalysisStatus;
   options: FilterOptionsOut | null;
-  /** The query the view answers: its filters go in the header, by label. */
+};
+/**
+ * A view as read: the reply and the query it answers (from `readView`). The
+ * header's filters come from that query, never from the screen's current
+ * one, so a file made while a view refetches labels its figures truly.
+ */
+export type CsvView<V extends ViewId> = {
+  data: Meta & { data: DataOf[V] };
   query: AnalysisQuery;
 };
 
@@ -340,9 +347,10 @@ function comparisonRows<V extends ViewId>(view: V, d: Read<V>): Row[] {
 /** The file for one read view; see the file comment. */
 export function analysisCsv<V extends ViewId>(
   view: V,
-  data: Read<V>,
+  read: CsvView<V>,
   ctx: CsvContext,
 ): string {
+  const { data, query } = read;
   const [countLabel, baseLabel, rateLabel] = HEADLINE[view];
   const head: Row[] = [
     ["Scope", SCOPE_LABEL[data.scope]],
@@ -350,8 +358,8 @@ export function analysisCsv<V extends ViewId>(
       ? [["Hospital", data.hospital.name]]
       : []),
     ["Months", monthsText(data.period)],
-    ["Period", periodLabel(ctx.query.period)],
-    ...filterRows(ctx.query, ctx.options),
+    ["Period", periodLabel(query.period)],
+    ...filterRows(query, ctx.options),
     ["Hospitals", includedText(ctx.status)],
     ...(ctx.status.sample ? [[SAMPLE_DATA]] : []),
     [],

@@ -30,7 +30,7 @@ async function context(m: Mock, q: AnalysisQuery) {
 async function csvOf(m: Mock, view: ViewId, q: AnalysisQuery) {
   const v = readView(view, await m.getAnalysisView(view, q), q, NOW);
   if (v.status !== "ok") throw new Error(`${view} failed`);
-  return analysisCsv(view, v.data, { ...(await context(m, q)), query: q });
+  return analysisCsv(view, v, await context(m, q));
 }
 /** The cells, row by row (RFC 4180: a quoted cell may hold a comma). */
 function cells(csv: string): string[][] {
@@ -95,6 +95,21 @@ describe("analysisCsv", () => {
     expect(across).toContainEqual(["Scope", "All hospitals"]);
     expect(across.some((r) => r[0] === "Hospital")).toBe(true); // the rows' header
     expect(across.slice(0, 8).some((r) => r[0] === "Hospital")).toBe(false);
+  });
+
+  it("the header's filters are the ones the reply was read against (I1)", async () => {
+    const m = mock();
+    const asked: AnalysisQuery = { ...ALL, sex: "female" };
+    const v = readView(
+      "prevalence",
+      await m.getAnalysisView("prevalence", asked),
+      asked,
+      NOW,
+    );
+    if (v.status !== "ok") throw new Error("failed");
+    // The screen has moved on to other filters; the file still says Female.
+    const rows = cells(analysisCsv("prevalence", v, await context(m, ALL)));
+    expect(rows).toContainEqual(["Sex", "Female"]);
   });
 
   it("hidden values read Fewer than 5 or Too few hospitals to show", async () => {

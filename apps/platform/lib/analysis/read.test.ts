@@ -159,7 +159,10 @@ const prevalence = fresh(function prevalence(scope: ScopeKind): Raw {
   };
 });
 
-/** 215 patients in the group; every breakdown adds up to it. */
+/**
+ * 215 patients seen, 200 with a condition in scope; every breakdown adds up
+ * to the group (with no condition filter, the group is everyone seen).
+ */
 const affected = fresh(function affected(scope: ScopeKind): Raw {
   const set = <K extends string>(key: K, pairs: [unknown, number][]) =>
     pairs.map(([v, n]) => ({
@@ -174,6 +177,15 @@ const affected = fresh(function affected(scope: ScopeKind): Raw {
   return {
     ...meta("affected", scope),
     patients: g(215),
+    headline: rate(200, 215),
+    hospitals:
+      scope === "all"
+        ? [
+            row("h_a", "Alder", 100, 90),
+            row("h_b", "Birch", 65, 60),
+            row("h_c", "Cedar", 50, 50),
+          ]
+        : null,
     data: {
       by_age: set("band", [
         [bands[0], 15],
@@ -253,7 +265,7 @@ const quality = fresh(function quality(scope: ScopeKind): Raw {
         ? [
             { ...row("h_a", "Alder", 800, 0), headline: rate(30, 40) },
             { ...row("h_b", "Birch", 600, 0), headline: rate(25, 35) },
-            { ...row("h_c", "Cedar", 400, 0), headline: rate(20, 25) },
+            { ...row("h_c", "Cedar", 600, 0), headline: rate(20, 25) },
           ]
         : null,
     comparison:
@@ -297,6 +309,15 @@ describe("readView: the hand-made replies", () => {
         expect(problem(view, MADE[view](s), queryFor(s))).toBeNull();
         expect(read(view, MADE[view](s), queryFor(s)).status).toBe("ok");
       }
+  });
+
+  it("a read view carries the query it was read against (I1)", () => {
+    const q = one("h_havana", { sex: "female" });
+    const out = read("prevalence", prevalence("hospital"), q);
+    expect(out.status).toBe("ok");
+    if (out.status !== "ok") return;
+    expect(out.query).toEqual(q);
+    expect(out.query).not.toBe(q);
   });
 
   it("keeps too_few_hospitals on a hidden value", () => {
@@ -367,10 +388,16 @@ describe("readView: fails closed", () => {
     expect(problem("prevalence", r, all())).toMatch(/rate/);
   });
 
-  it("a rate whose base − count is 2 reads when its per 1,000 is hidden", () => {
-    const r = prevalence("all");
-    r.data.series[0].rate = { ...rate(498, 500), per_1000: HID };
-    expect(problem("prevalence", r, all())).toBeNull();
+  it("a rate whose base − count is 2 fails even with its per 1,000 hidden", () => {
+    // The complement is published by subtraction: 500 − 498 = 2.
+    for (const s of ["all", "hospital"] as const) {
+      const r = prevalence(s);
+      r.data.series[0].rate = { ...rate(498, 500), per_1000: HID };
+      expect(problem("prevalence", r, queryFor(s))).toMatch(/leaving 1–4/);
+      const q = quality(s);
+      q.headline = { ...rate(97, 100), per_1000: HID };
+      expect(problem("quality", q, queryFor(s))).toMatch(/leaving 1–4/);
+    }
   });
 
   it("a rate that doesn't match its count and base fails", () => {
@@ -446,6 +473,87 @@ describe("readView: fails closed", () => {
       q.data.by_condition[0].confidence.high = g(63);
       expect(problem("quality", q, queryFor(s))).toBeNull();
     }
+  });
+
+  it("patients must be the patients seen with no condition filter (C2)", () => {
+    // Patients hidden, its twin shown 215: female 212 gives male away.
+    const r = affected("hospital");
+    r.patients = HID;
+    for (const k of [
+      "by_age",
+      "by_sex",
+      "by_setting",
+      "by_specialty",
+      "by_location",
+    ])
+      for (const x of r.data[k]) x.share = HID;
+    r.data.by_sex = [
+      { sex: "female", patients: dr(g(212)), share: HID },
+      { sex: "male", patients: dr(HID), share: HID },
+      { sex: "other", patients: dr(g(0)), share: HID },
+      { sex: "not_recorded", patients: dr(g(0)), share: HID },
+    ];
+    expect(problem("affected", r, one("h_havana"))).toMatch(/patients/);
+
+    // A shown group beside a hidden headline base fails too.
+    const p = prevalence("all");
+    p.headline = { count: g(200), base: HID, per_1000: HID };
+    p.hospitals[3].size = HID;
+    p.hospitals[3].headline = { count: g(20), base: HID, per_1000: HID };
+    expect(problem("prevalence", p, all())).toMatch(/patients|size/);
+  });
+
+  it("across hospitals, patients against the sizes, Quality included (C2)", () => {
+    const q = quality("all");
+    q.patients = g(2003);
+    q.hospitals[2].size = HID;
+    expect(problem("quality", q, all())).toMatch(/sizes/);
+    const ok = quality("all");
+    expect(problem("quality", ok, all())).toBeNull();
+  });
+
+  it("with a condition filter, patients is the headline count and that condition's cases (C2)", () => {
+    const f = all({ condition: "e11" });
+    const r = prevalence("all");
+    r.patients = g(200);
+    r.data.by_condition[0].cases = dr(g(200));
+    r.data.by_condition[0].rate = rate(200, 2000);
+    expect(problem("prevalence", r, f)).toBeNull();
+
+    // The filtered condition's cases hidden while its twins show 200.
+    r.data.by_condition[0].cases = dr(HID);
+    r.data.by_condition[0].rate = { count: HID, base: g(2000), per_1000: HID };
+    expect(problem("prevalence", r, f)).toMatch(/cases/);
+
+    const w = prevalence("all");
+    w.patients = g(150);
+    expect(problem("prevalence", w, f)).toMatch(/patients/);
+  });
+
+  it("across hospitals a condition is a 3-character code or Not standardised (I2)", () => {
+    const local = prevalence("all");
+    local.data.by_condition[1].condition = {
+      id: "sugar",
+      name: "Sugar sickness",
+      icd10: null,
+    };
+    expect(problem("prevalence", local, all())).toMatch(/3-character/);
+
+    const fine = prevalence("all");
+    fine.data.by_condition[1].condition = {
+      id: "e11_9",
+      name: "Type 2 diabetes",
+      icd10: "E11.9",
+    };
+    expect(problem("prevalence", fine, all())).toMatch(/3-character/);
+    // For one hospital, the finer code reads.
+    const own = prevalence("hospital");
+    own.data.by_condition[1].condition = fine.data.by_condition[1].condition;
+    expect(problem("prevalence", own, one("h_havana"))).toBeNull();
+
+    const pair = coOccurring("all");
+    pair.data.pairs[0].b = { id: "x1", name: "Local term", icd10: null };
+    expect(problem("co-occurring", pair, all())).toMatch(/3-character/);
   });
 
   it("a hidden total beside shown members reads, unless every member shows", () => {
@@ -849,6 +957,7 @@ describe("the mock's replies all read, over a grid", () => {
     { condition: "a15" },
     { condition: "n18" },
     { condition: "e11", sex: "female", setting: "admitted" },
+    { specialty: "General medicine" },
   ];
   const ONE_FILTERS = (id: string): Partial<AnalysisQuery>[] => [
     {},
@@ -866,6 +975,14 @@ describe("the mock's replies all read, over a grid", () => {
     { condition: "n18" },
     { condition: "unmapped" },
     { location: LOCATIONS[0].id },
+    { specialty: "General medicine" },
+    { sex: "female", setting: "admitted", age_band: "40-64" },
+    {
+      sex: "male",
+      setting: "outpatient",
+      age_band: "65-79",
+      specialty: "General medicine",
+    },
     ...(PROFILES.find((p) => p.id === id)!.sources.length > 1
       ? [{ source: "results_system" }]
       : []),
@@ -895,24 +1012,48 @@ describe("the mock's replies all read, over a grid", () => {
 
   /**
    * The remainders a reply publishes by subtraction: existing cases (cases −
-   * new) and unrated consultations (consultations − rated), per condition
-   * (keyed by its 3-character code), or null where a part is hidden.
+   * new), unrated consultations (consultations − rated), and every rate's
+   * complement (base − count), or null where a part is hidden. `map` keys
+   * them for the across-scopes sum (a condition by its 3-character code);
+   * `missing` is a hospital's value for a key its reply doesn't list;
+   * `within` also has the hospital rows' headlines.
    */
-  function remainders(view: ViewId, raw: unknown): Map<string, number | null> {
-    const out = new Map<string, number | null>();
-    const d = (raw as Raw).data;
+  function remainders(view: ViewId, raw: unknown) {
+    const map = new Map<string, number | null>();
+    const within: [string, number | null][] = [];
+    const r = raw as Raw;
+    const d = r.data;
     const key = (c: Raw) => (c.icd10 ? c.icd10.slice(0, 3) : c.id);
     const rest = (t: AGuarded, p: AGuarded) =>
       !t.suppressed && !p.suppressed && t.value !== null && p.value !== null
         ? t.value - p.value
         : null;
-    if (view === "prevalence")
-      for (const r of d.by_condition)
-        out.set(key(r.condition), rest(r.cases, r.new));
+    const put = (k: string, v: number | null) => {
+      map.set(k, v);
+      within.push([k, v]);
+    };
+    const rateRest = (x: Raw) => rest(x.base, x.count);
+    put("rate:headline", rateRest(r.headline));
+    for (const h of r.hospitals ?? [])
+      within.push([`row ${h.hospital.id}`, rateRest(h.headline)]);
+    if (view === "prevalence") {
+      for (const x of d.by_condition) {
+        put(`e:${key(x.condition)}`, rest(x.cases, x.new));
+        put(`rate:c:${key(x.condition)}`, rateRest(x.rate));
+      }
+      for (const x of d.series) put(`rate:m:${x.month}`, rateRest(x.rate));
+    }
+    if (view === "findings")
+      for (const x of d.findings)
+        put(`rate:f:${x.name}|${x.flag}`, rateRest(x.rate));
     if (view === "quality")
-      for (const r of d.by_condition)
-        out.set(key(r.condition), rest(r.consultations, r.rated));
-    return out;
+      for (const x of d.by_condition)
+        put(`u:${key(x.condition)}`, rest(x.consultations, x.rated));
+    const seen = rest(r.headline.base, { value: 0, suppressed: false });
+    /** Not listed: no cases, so all its patients seen are the rest. */
+    const missing = (k: string): number | null =>
+      k.startsWith("rate:c:") ? seen : k.startsWith("rate:f:") ? null : 0;
+    return { map, within, missing };
   }
   const small = (n: number) => n > 0 && n < 5;
   /** The one-hospital query that asks the same as an all-hospitals one. */
@@ -929,12 +1070,12 @@ describe("the mock's replies all read, over a grid", () => {
         };
 
   for (const period of PERIODS)
-    it(`no existing or unrated remainder of 1–4, in a reply or across scopes: ${period}`, async () => {
+    it(`no remainder of 1–4 (existing, unrated, base − count), in a reply or across scopes: ${period}`, async () => {
       const m = mock();
       const leaks: string[] = [];
       const get = async (view: ViewId, q: AnalysisQuery) =>
         remainders(view, await m.getAnalysisView(view, q));
-      for (const view of ["prevalence", "quality"] as const) {
+      for (const view of VIEW_IDS) {
         // Inside each reply.
         const queries = [
           ...ALL_FILTERS.map((f) => all({ period, ...f })),
@@ -943,7 +1084,7 @@ describe("the mock's replies all read, over a grid", () => {
           ),
         ];
         for (const q of queries)
-          for (const [k, v] of await get(view, q))
+          for (const [k, v] of (await get(view, q)).within)
             if (v !== null && small(v))
               leaks.push(
                 `${view} ${q.hospital ?? "all"} ${JSON.stringify(q)} ${k}: ${v}`,
@@ -957,12 +1098,12 @@ describe("the mock's replies all read, over a grid", () => {
           const each = await Promise.all(
             PROFILES.map((p) => get(view, one(p.id, twin))),
           );
-          for (const [k, v] of whole) {
+          for (const [k, v] of whole.map) {
             if (v === null) continue;
             let known = 0;
             let unknown = 0;
             for (const h of each) {
-              const x = h.has(k) ? h.get(k)! : 0;
+              const x = h.map.has(k) ? h.map.get(k)! : h.missing(k);
               if (x === null) unknown++;
               else known += x;
             }

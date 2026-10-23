@@ -52,6 +52,8 @@ export function emptyQuery(
   hospital: string | null,
   period: AnalysisPeriod = DEFAULT_PERIOD,
 ): AnalysisQuery {
+  if (scope === "hospital" && hospital === null)
+    throw new Error("one hospital needs a hospital");
   return {
     scope,
     hospital: scope === "all" ? null : hospital,
@@ -75,7 +77,9 @@ export const atLimit = (q: AnalysisQuery) =>
 /**
  * Sets one filter, or clears it with null. Throws on a filter the scope
  * doesn't allow, an age band of the other scope, or a new filter past the
- * limit (changing or clearing one at the limit is fine).
+ * limit (changing or clearing one at the limit is fine). The Source filter
+ * is offered only where `showSource` says so; the server refuses a source
+ * for a hospital with one.
  */
 export function setFilter(
   q: AnalysisQuery,
