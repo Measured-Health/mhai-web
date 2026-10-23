@@ -1058,3 +1058,407 @@ describe("analysis routes", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("clearance routes (Plan 11)", () => {
+  const as = (roles: Role[] = ["hospital_admin"]) =>
+    writeSession({
+      token: "tok",
+      expiresAt: Date.now() + 10 * 60_000,
+      user: {
+        ...TEST_USER,
+        roles,
+        mfaEnabled: true,
+        features: { analysis: true, named: true },
+      },
+      steps: [],
+    });
+  const BASE = "http://demo.test/api/v1";
+  const BOUNDARY = "----mhaiTestBoundary7MA4YWxk";
+  const MULTIPART = `multipart/form-data; boundary=${BOUNDARY}`;
+  /** A multipart body of about `size` bytes, built by hand so its bytes are known. */
+  const multipart = (size: number) => {
+    const head = new TextEncoder().encode(
+      `--${BOUNDARY}\r\nContent-Disposition: form-data; name="file"; filename="letter.pdf"\r\nContent-Type: application/pdf\r\n\r\n`,
+    );
+    const tail = new TextEncoder().encode(`\r\n--${BOUNDARY}--\r\n`);
+    const out = new Uint8Array(head.length + size + tail.length);
+    out.set(head, 0);
+    out.fill(0x25, head.length, head.length + size);
+    out.set(tail, head.length + size);
+    return out;
+  };
+  const upload = (
+    body: BodyInit | null,
+    type: string | null = MULTIPART,
+    extra: Record<string, string> = {},
+  ) =>
+    new Request(`${BASE}/hospital/clearances`, {
+      method: "POST",
+      headers: {
+        host: "demo.test",
+        origin: "http://demo.test",
+        ...(type ? { "content-type": type } : {}),
+        ...extra,
+      },
+      body,
+    });
+  const write = (path: string[], body = "{}") =>
+    new Request(`${BASE}/${path.join("/")}`, {
+      method: "POST",
+      headers: {
+        host: "demo.test",
+        origin: "http://demo.test",
+        "content-type": "application/json",
+      },
+      body,
+    });
+  const png = () =>
+    new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), {
+      headers: { "Content-Type": "image/png" },
+    });
+  const SHAPES: [string, string[]][] = [
+    ["GET", ["hospital", "clearances"]],
+    ["POST", ["hospital", "clearances"]],
+    ["GET", ["hospital", "clearances", "cl_act"]],
+    ["GET", ["hospital", "clearances", "cl_act", "pages", "1"]],
+    ["POST", ["hospital", "clearances", "cl_act", "revoke"]],
+    ["POST", ["hospital", "clearances", "cl_act", "narrow"]],
+    ["GET", ["analysis", "named-access"]],
+    ["GET", ["analysis", "clearance", "me"]],
+  ];
+  const run = (method: string, path: string[]) => {
+    const c = ctx(...path);
+    if (method === "GET") return GET(get(`${BASE}/${path.join("/")}`), c);
+    if (path.length === 2) return POST(upload(multipart(16)), c);
+    return POST(write(path), c);
+  };
+  beforeEach(() => {
+    vi.stubEnv("ANALYSIS_SIGNED_OFF", "true");
+    vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "true");
+  });
+
+  it("the eight clearance shapes are accepted", async () => {
+    await as();
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes("/pages/") ? png() : Response.json({}),
+    );
+    for (const [method, path] of SHAPES) {
+      const res = await run(method, path);
+      expect([method, path, res.status]).toEqual([method, path, 200]);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(
+      fetchMock.mock.calls.map(([url, init]) => [
+        (init as RequestInit).method,
+        url,
+      ]),
+    ).toEqual(
+      SHAPES.map(([m, p]) => [m, `http://api.test/api/v1/${p.join("/")}`]),
+    );
+  });
+
+  it("hospital/clearances/x/download and analysis/clearance/other are 404", async () => {
+    await as();
+    const refused: [string, string[]][] = [
+      ["GET", ["hospital", "clearances", "x", "download"]],
+      ["GET", ["analysis", "clearance", "other"]],
+      ["GET", ["analysis", "clearance"]],
+      ["GET", ["analysis", "clearances"]],
+      ["GET", ["analysis", "named-access", "x"]],
+      ["POST", ["analysis", "named-access"]],
+      ["POST", ["analysis", "clearance", "me"]],
+      ["GET", ["hospital", "clearances", "x", "pages"]],
+      ["GET", ["hospital", "clearances", "x", "pages", "one"]],
+      ["GET", ["hospital", "clearances", "x", "pages", "0"]],
+      ["GET", ["hospital", "clearances", "x", "pages", "1", "y"]],
+      ["GET", ["hospital", "clearances", "x", "revoke"]],
+      ["POST", ["hospital", "clearances", "x"]],
+      ["POST", ["hospital", "clearances", "x", "verify"]],
+      ["POST", ["hospital", "clearances", "x", "pages", "1"]],
+    ];
+    for (const [method, path] of refused) {
+      const res = await run(method, path);
+      expect([method, path, res.status]).toEqual([method, path, 404]);
+    }
+    for (const fn of [PATCH, DELETE]) {
+      const req = new Request(`${BASE}/hospital/clearances/x`, {
+        method: fn === PATCH ? "PATCH" : "DELETE",
+        headers: {
+          host: "demo.test",
+          origin: "http://demo.test",
+          "content-type": "application/json",
+        },
+        body: "{}",
+      });
+      expect((await fn(req, ctx("hospital", "clearances", "x"))).status).toBe(
+        404,
+      );
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("the key off gives 404 before upstream for every clearance shape", async () => {
+    vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "");
+    await as();
+    for (const [method, path] of SHAPES) {
+      const res = await run(method, path);
+      expect([method, path, res.status]).toEqual([method, path, 404]);
+      expect(await res.json()).toEqual({ code: "not_found" });
+    }
+    // Before the session: no session reads as 404 too, not 401.
+    jar.values.clear();
+    for (const [method, path] of SHAPES)
+      expect((await run(method, path)).status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+    // The rest of Analysis is unaffected.
+    await as();
+    fetchMock.mockResolvedValueOnce(Response.json({}));
+    expect(
+      (await GET(get(`${BASE}/analysis/filters`), ctx("analysis", "filters")))
+        .status,
+    ).toBe(200);
+  });
+
+  it("level=named with the key off is 403 named_access_off before upstream", async () => {
+    vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "false");
+    await as(["clinician", "analyst"]);
+    const patients = (search: string) =>
+      GET(
+        get(`${BASE}/analysis/patients${search}`),
+        ctx("analysis", "patients"),
+      );
+    for (const search of [
+      "?level=named",
+      "?level=NAMED",
+      "?level=",
+      "?level=deidentified&level=named",
+      "?from=2026-01&level=named",
+    ]) {
+      const res = await patients(search);
+      expect([search, res.status]).toEqual([search, 403]);
+      expect(await res.json()).toEqual({ code: "named_access_off" });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockImplementation(async () => Response.json({}));
+    expect((await patients("?level=deidentified")).status).toBe(200);
+    expect((await patients("?from=2026-01")).status).toBe(200);
+    // With the key on, the server decides.
+    vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "true");
+    expect((await patients("?level=named")).status).toBe(200);
+    expect((fetchMock.mock.calls[2] as [string])[0]).toBe(
+      "http://api.test/api/v1/analysis/patients?level=named",
+    );
+  });
+
+  it("an upload that isn't multipart is 415", async () => {
+    await as();
+    const c = ctx("hospital", "clearances");
+    for (const type of [
+      "application/json",
+      "application/pdf",
+      "text/plain",
+      "multipart/form-data",
+      "multipart/form-data; boundary=",
+      "multipart/mixed; boundary=abc",
+      null,
+    ]) {
+      const res = await POST(upload(multipart(16), type), c);
+      expect([type, res.status]).toEqual([type, 415]);
+      expect(await res.json()).toEqual({ code: "file_type" });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("an 11 MB upload is 413 before upstream", async () => {
+    await as();
+    const c = ctx("hospital", "clearances");
+    const res = await POST(upload(multipart(11 * 1024 * 1024)), c);
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ code: "file_too_large" });
+    // Just over the limit, by its length while reading.
+    const over = await POST(upload(multipart(10 * 1024 * 1024 + 64 * 1024)), c);
+    expect(over.status).toBe(413);
+    // A declared length over the limit is refused without reading.
+    const said = await POST(
+      upload(multipart(16), MULTIPART, {
+        "content-length": String(11 * 1024 * 1024),
+      }),
+      c,
+    );
+    expect(said.status).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
+    // A JSON write elsewhere keeps its 64 KB limit.
+    const big = await POST(
+      write(
+        ["hospital", "clearances", "x", "narrow"],
+        "x".repeat(64 * 1024 + 1),
+      ),
+      ctx("hospital", "clearances", "x", "narrow"),
+    );
+    expect(big.status).toBe(413);
+    expect(await big.json()).toEqual({ code: "too_large" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("a 2 MB upload is forwarded with its boundary", async () => {
+    await as();
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ id: "cl_new" }, { status: 201 }),
+    );
+    const bytes = multipart(2 * 1024 * 1024);
+    const res = await POST(
+      upload(bytes, MULTIPART, { "Idempotency-Key": "k-1" }),
+      ctx("hospital", "clearances"),
+    );
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({ id: "cl_new" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://api.test/api/v1/hospital/clearances");
+    expect(init.headers).toEqual({
+      Accept: "application/json",
+      Authorization: "Bearer tok",
+      "Content-Type": MULTIPART,
+      "Idempotency-Key": "k-1",
+    });
+    expect(new Uint8Array(init.body as Uint8Array)).toEqual(bytes);
+  });
+
+  it("an upload from another site is refused", async () => {
+    await as();
+    const res = await POST(
+      upload(multipart(16), MULTIPART, { origin: "https://evil.test" }),
+      ctx("hospital", "clearances"),
+    );
+    expect(res.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("a page reply of text/html is 502 bad_gateway", async () => {
+    await as();
+    const path = ["hospital", "clearances", "cl_act", "pages", "2"];
+    for (const type of [
+      "text/html",
+      "image/svg+xml",
+      "application/octet-stream",
+      "application/json",
+      null,
+    ]) {
+      fetchMock.mockResolvedValueOnce(
+        new Response("<script>alert(1)</script>", {
+          headers: type ? { "Content-Type": type } : {},
+        }),
+      );
+      const res = await GET(get(`${BASE}/${path.join("/")}`), ctx(...path));
+      expect([type, res.status]).toEqual([type, 502]);
+      expect(await res.json()).toEqual({ code: "bad_gateway" });
+    }
+  });
+
+  it("a PNG page passes with no-store and nosniff", async () => {
+    await as();
+    const path = ["hospital", "clearances", "cl_act", "pages", "1"];
+    fetchMock.mockResolvedValueOnce(png());
+    const res = await GET(get(`${BASE}/${path.join("/")}`), ctx(...path));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/png");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(res.headers.get("Content-Disposition")).toBe("inline");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    );
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`http://api.test/api/v1/${path.join("/")}`);
+    expect(init.headers).toEqual({
+      Accept: "image/png, image/jpeg",
+      Authorization: "Bearer tok",
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(new Uint8Array([0xff, 0xd8]), {
+        headers: { "Content-Type": "Image/JPEG; foo=bar" },
+      }),
+    );
+    const jpeg = await GET(get(`${BASE}/${path.join("/")}`), ctx(...path));
+    expect(jpeg.status).toBe(200);
+    expect(jpeg.headers.get("Content-Type")).toBe("image/jpeg");
+  });
+
+  it("a 422 refusal keeps only checked ids or emails (Ruling 12)", async () => {
+    await as();
+    const refuse = async (body: object) => {
+      fetchMock.mockResolvedValueOnce(Response.json(body, { status: 422 }));
+      const res = await POST(
+        upload(multipart(16)),
+        ctx("hospital", "clearances"),
+      );
+      expect(res.status).toBe(422);
+      return res.json();
+    };
+    expect(
+      await refuse({ code: "not_eligible", ids: ["s-1", "s_2"], detail: "x" }),
+    ).toEqual({ code: "not_eligible", ids: ["s-1", "s_2"] });
+    expect(
+      await refuse({
+        code: "not_eligible_platform",
+        emails: ["a.b@measured-health.example"],
+        ids: ["s-1"],
+      }),
+    ).toEqual({
+      code: "not_eligible_platform",
+      emails: ["a.b@measured-health.example"],
+    });
+    // Anything malformed reads as the code alone.
+    for (const body of [
+      { code: "not_eligible", ids: ["../x"] },
+      { code: "not_eligible", ids: "s-1" },
+      { code: "not_eligible", ids: [] },
+      {
+        code: "not_eligible",
+        ids: Array.from({ length: 21 }, (_, i) => `s${i}`),
+      },
+      { code: "not_eligible", emails: ["a@b.org"] },
+      { code: "not_eligible_platform", emails: ["not an email"] },
+      { code: "not_eligible_platform", emails: ["<a@b.org>"] },
+      { code: "file_type", ids: ["s-1"] },
+    ])
+      expect(await refuse(body)).toEqual({ code: body.code });
+    // Elsewhere, ids never pass.
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ code: "not_eligible", ids: ["s-1"] }, { status: 422 }),
+    );
+    const other = await POST(
+      write(["hospital", "staff", "invites"]),
+      ctx("hospital", "staff", "invites"),
+    );
+    expect(await other.json()).toEqual({ code: "not_eligible" });
+  });
+
+  it("the hospital admin rules apply to clearances", async () => {
+    for (const roles of [["clinician", "analyst"], ["clinician"]] as Role[][]) {
+      await as(roles);
+      const res = await GET(
+        get(`${BASE}/hospital/clearances`),
+        ctx("hospital", "clearances"),
+      );
+      expect(res.status).toBe(403);
+    }
+    await writeSession({
+      token: "tok",
+      expiresAt: Date.now() + 10 * 60_000,
+      user: {
+        ...TEST_USER,
+        roles: ["hospital_admin"],
+        mfaEnabled: false,
+        features: { analysis: true, named: true },
+      },
+      steps: [],
+    });
+    const res = await POST(
+      upload(multipart(16)),
+      ctx("hospital", "clearances"),
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ code: "mfa_required" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

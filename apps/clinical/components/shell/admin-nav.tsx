@@ -1,5 +1,12 @@
 "use client";
-import { Activity, ChartColumn, ChartPie, Settings, Users } from "lucide-react";
+import {
+  Activity,
+  ChartColumn,
+  ChartPie,
+  FileKey,
+  Settings,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useId } from "react";
@@ -32,6 +39,9 @@ export const ADMIN_LINKS = [
   },
 ] as const;
 
+/** The Named access page: clearance letters for named drill-down (Plan 11). */
+export const NAMED_ACCESS_HREF = "/admin/named-access";
+
 /**
  * "12 members · 1 invite pending", as the mockup's sidebar shows. An expired
  * invite isn't pending: it needs attention (a new invite).
@@ -47,10 +57,13 @@ function staffLine(list: StaffOut[] | undefined, now: number): string | null {
 export function AdminNav({
   rail,
   analysis = false,
+  named = false,
 }: {
   rail: boolean;
   /** Adds Analysis after Usage (one place for an admin who is also an analyst). */
   analysis?: boolean;
+  /** Adds Named access after Analysis (`canOpenNamedAccess`). */
+  named?: boolean;
 }) {
   const path = usePathname();
   // The staff count only on the admin side: a medical director's clinical
@@ -65,17 +78,29 @@ export function AdminNav({
     label: string;
     sub: string | null;
     Icon: typeof Users;
-  }[] = analysis
-    ? [
-        ...ADMIN_LINKS,
-        {
-          href: ANALYSIS_HREF,
-          label: "Analysis",
-          sub: "Conditions and trends",
-          Icon: ChartPie,
-        },
-      ]
-    : ADMIN_LINKS;
+  }[] = [
+    ...ADMIN_LINKS,
+    ...(analysis
+      ? [
+          {
+            href: ANALYSIS_HREF,
+            label: "Analysis",
+            sub: "Conditions and trends",
+            Icon: ChartPie,
+          },
+        ]
+      : []),
+    ...(named
+      ? [
+          {
+            href: NAMED_ACCESS_HREF,
+            label: "Named access",
+            sub: "Clearance letters",
+            Icon: FileKey,
+          },
+        ]
+      : []),
+  ];
   return (
     <section aria-labelledby={heading} className="mt-3">
       <h3

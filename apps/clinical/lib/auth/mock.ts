@@ -250,8 +250,9 @@ function userFor(login: string, roles: Role[], mfaEnabled: boolean): User {
     hospital: "Havana Hospital",
     mfaEnabled,
     backupCodesLeft: mfaEnabled ? 8 : null,
-    // The demo has Analysis on for everyone (live mode is gated on the server).
-    features: { analysis: true },
+    // The demo has Analysis and named access on for everyone (live mode is
+    // gated on the server).
+    features: { analysis: true, named: true },
   };
 }
 

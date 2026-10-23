@@ -1,7 +1,8 @@
+import { LETTER_MAX_BYTES } from "@mhai/ui/clearances";
 import { handledFields } from "@/lib/api/alert-handled";
 import { canUse } from "@/lib/auth/types";
 import { apiBase } from "@/lib/server/api";
-import { analysisSignedOff } from "@/lib/server/features";
+import { analysisSignedOff, namedSignedOff } from "@/lib/server/features";
 import { forbidden, json, sameOrigin } from "@/lib/server/http";
 import { refreshOnce } from "@/lib/server/refresh";
 import {
@@ -27,6 +28,8 @@ const REFRESH_WITHIN_MS = 5 * 60_000;
 const MAX_BODY = 64 * 1024;
 const SEGMENT = /^[A-Za-z0-9_-]+$/; // ids are opaque; no dots, slashes or escapes
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9-]{1,64}$/;
+// A letter upload: the file plus the form's fields (Plan 11).
+const UPLOAD_MAX = LETTER_MAX_BYTES + 64 * 1024;
 
 const DECISIONS = new Set(["approve", "reject", "withdraw"]);
 const MY_LISTS = new Set(["mine", "reviewed"]);
@@ -61,12 +64,156 @@ function hospitalShape(method: string, path: string[]): boolean {
   }
   if (area === "settings")
     return n === 2 && (method === "GET" || method === "PATCH");
+  if (area === "clearances") return clearanceShape(method, path);
   if (READ_ONLY.has(area ?? "")) return n === 2 && method === "GET";
   if (area === "corrections" && n === 4)
     return action === "eligible-reviewers"
       ? method === "GET"
       : method === "POST" && OVERSIGHT_ACTIONS.has(action ?? "");
   return false;
+}
+
+const CLEARANCE_ACTIONS = new Set(["revoke", "narrow"]);
+const PAGE_NUMBER = /^[1-9][0-9]{0,2}$/;
+
+/**
+ * Clearance letters, hospital side (Plan 11): list and upload, one letter,
+ * one page image, revoke and narrow. Anything else is refused.
+ */
+function clearanceShape(method: string, path: string[]): boolean {
+  const [, , , action, page] = path;
+  switch (path.length) {
+    case 2:
+      return method === "GET" || method === "POST";
+    case 3:
+      return method === "GET";
+    case 4:
+      return method === "POST" && CLEARANCE_ACTIONS.has(action ?? "");
+    case 5:
+      return (
+        method === "GET" && action === "pages" && PAGE_NUMBER.test(page ?? "")
+      );
+    default:
+      return false;
+  }
+}
+
+/** Every path about named access: all 404 while the sign-off key is off. */
+const isClearancePath = ([first, second]: string[]) =>
+  (first === "hospital" && second === "clearances") ||
+  (first === "analysis" &&
+    (second === "named-access" || second === "clearance"));
+
+/** Only `POST hospital/clearances` carries a file (multipart). */
+const isUpload = (method: string, path: string[]) =>
+  method === "POST" &&
+  path.length === 2 &&
+  path[0] === "hospital" &&
+  path[1] === "clearances";
+
+/**
+ * Replies that are files, not JSON (Plan 11): the shape, and the only types
+ * it may carry. Anything else from upstream is 502 `bad_gateway`.
+ */
+const FILE_REPLIES: readonly {
+  is: (method: string, path: string[]) => boolean;
+  types: readonly string[];
+}[] = [
+  {
+    // A letter's page, drawn by the server: never the file itself.
+    is: (method, path) =>
+      method === "GET" &&
+      path[0] === "hospital" &&
+      path[1] === "clearances" &&
+      path[3] === "pages",
+    types: ["image/png", "image/jpeg"],
+  },
+];
+
+const fileTypes = (method: string, path: string[]) =>
+  FILE_REPLIES.find((f) => f.is(method, path))?.types ?? null;
+
+// RFC 2046 boundary characters; quoted, a boundary may hold a few more.
+const MULTIPART =
+  /^multipart\/form-data;\s*boundary=(?:"([0-9A-Za-z'()+_,./:=? -]{0,69}[0-9A-Za-z'()+_,./:=?-])"|([0-9A-Za-z'+_.-]{1,70}))\s*$/i;
+
+/** The upload's Content-Type, rebuilt from its boundary, or null if it isn't multipart. */
+function multipartType(header: string | null): string | null {
+  const m = MULTIPART.exec(header ?? "");
+  if (!m) return null;
+  return `multipart/form-data; boundary=${m[1] !== undefined ? `"${m[1]}"` : m[2]}`;
+}
+
+/**
+ * The body as bytes, or null when it's over `max`: by its declared length
+ * first, then while reading, so an oversized body is never held whole.
+ */
+async function readCapped(req: Request, max: number) {
+  if (Number(req.headers.get("content-length")) > max) return null;
+  if (!req.body) return new Uint8Array();
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.byteLength;
+  }
+  return out;
+}
+
+const MAX_LISTED = 20;
+const OPAQUE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const EMAIL =
+  /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(\.[A-Za-z0-9-]{1,63})+$/;
+
+/** A non-empty list of at most 20 strings, each passing `ok`; else null. */
+const checkedList = (v: unknown, ok: (s: string) => boolean) =>
+  Array.isArray(v) &&
+  v.length > 0 &&
+  v.length <= MAX_LISTED &&
+  v.every((x) => typeof x === "string" && x.length <= 254 && ok(x))
+    ? (v as string[])
+    : null;
+
+/**
+ * A refusal's body: the problem code only, except where the live clients
+ * need more, each checked: an alert's who and when on a 409
+ * `already_handled`, and a letter upload's refused people on a 422 (ids for
+ * `not_eligible`, emails for `not_eligible_platform`).
+ */
+function refusal(
+  status: number,
+  path: string[],
+  p: Record<string, unknown> | null,
+): object {
+  const code = typeof p?.code === "string" ? p.code : "error";
+  if (status === 409 && code === "already_handled" && path[0] === "alerts")
+    return { code, ...handledFields(p) };
+  if (status === 422 && path[0] === "hospital" && path[1] === "clearances") {
+    const ids =
+      code === "not_eligible"
+        ? checkedList(p?.ids, (x) => OPAQUE_ID.test(x))
+        : null;
+    if (ids) return { code, ids };
+    const emails =
+      code === "not_eligible_platform"
+        ? checkedList(p?.emails, (x) => EMAIL.test(x))
+        : null;
+    if (emails) return { code, emails };
+  }
+  return { code };
 }
 
 const ANALYSIS_VIEWS = new Set([
@@ -79,9 +226,16 @@ const ANALYSIS_VIEWS = new Set([
   "patients",
 ]);
 
-/** Analysis reads only: the seven views the analysis client uses (Plan 6). */
-const analysisShape = (method: string, path: string[]) =>
-  method === "GET" && path.length === 2 && ANALYSIS_VIEWS.has(path[1] ?? "");
+/**
+ * Analysis reads only: the seven views the analysis client uses (Plan 6),
+ * plus the named-access position and your clearance (Plan 11).
+ */
+const analysisShape = (method: string, [, second, third, ...rest]: string[]) =>
+  method === "GET" &&
+  rest.length === 0 &&
+  (third === undefined
+    ? ANALYSIS_VIEWS.has(second ?? "") || second === "named-access"
+    : second === "clearance" && third === "me");
 
 const ALERT_ACTIONS = new Set(["acknowledge", "dismiss"]);
 
@@ -154,6 +308,19 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   // Off in live mode until signed off: nothing is checked or forwarded.
   if (path[0] === "analysis" && !analysisSignedOff())
     return json(404, { code: "not_found" });
+  // Named access is off until it is signed off (Plan 11): everything about
+  // it is 404, and a patient list may only be de-identified.
+  if (!namedSignedOff()) {
+    if (isClearancePath(path)) return json(404, { code: "not_found" });
+    if (
+      path[0] === "analysis" &&
+      path[1] === "patients" &&
+      new URL(req.url).searchParams
+        .getAll("level")
+        .some((l) => l !== "deidentified")
+    )
+      return json(403, { code: "named_access_off" });
+  }
   if (req.method !== "GET" && !sameOrigin(req)) return forbidden();
 
   let s = await readSession();
@@ -177,9 +344,26 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     return json(403, { code: "mfa_required" });
   if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
 
-  const body = req.method === "GET" ? undefined : await req.text();
-  if (body && Buffer.byteLength(body) > MAX_BODY)
-    return json(413, { code: "too_large" });
+  let body: string | Uint8Array<ArrayBuffer> | undefined;
+  let type: string | undefined;
+  if (isUpload(req.method, path)) {
+    // A letter: forwarded as bytes, with its own boundary.
+    const multipart = multipartType(req.headers.get("content-type"));
+    if (!multipart) return json(415, { code: "file_type" });
+    const bytes = await readCapped(req, UPLOAD_MAX);
+    if (!bytes) return json(413, { code: "file_too_large" });
+    body = bytes;
+    type = multipart;
+  } else if (req.method !== "GET") {
+    const text = await req.text();
+    if (Buffer.byteLength(text) > MAX_BODY)
+      return json(413, { code: "too_large" });
+    if (text) {
+      body = text;
+      type = "application/json";
+    }
+  }
+  const files = fileTypes(req.method, path);
 
   const key = req.headers.get("idempotency-key");
   // Only reads carry filters; a write's query string is never forwarded.
@@ -190,12 +374,12 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     res = await fetch(url, {
       method: req.method,
       headers: {
-        Accept: "application/json",
+        Accept: files ? files.join(", ") : "application/json",
         Authorization: `Bearer ${s.token}`,
-        ...(body ? { "Content-Type": "application/json" } : {}),
+        ...(type ? { "Content-Type": type } : {}),
         ...(key && IDEMPOTENCY_KEY.test(key) ? { "Idempotency-Key": key } : {}),
       },
-      body: body || undefined,
+      body,
       signal: AbortSignal.timeout(30_000),
       cache: "no-store",
     });
@@ -207,20 +391,34 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     return json(401, { code: "session_expired" });
   }
   if (!res.ok) {
-    // Never echo upstream error text: keep only the problem code (and, for a
-    // 409 already_handled on an alert, who and when, through the same helper
-    // the live client uses).
+    // Never echo upstream error text: keep only the problem code, and the
+    // few checked details `refusal` allows.
     const p = (await res.json().catch(() => null)) as Record<
       string,
       unknown
     > | null;
-    const code = typeof p?.code === "string" ? p.code : "error";
-    return json(
-      res.status,
-      res.status === 409 && code === "already_handled" && path[0] === "alerts"
-        ? { code, ...handledFields(p) }
-        : { code },
-    );
+    return json(res.status, refusal(res.status, path, p));
+  }
+  if (files) {
+    // A file passes only as a type its shape allows, inline, never sniffed
+    // or cached.
+    const got = (res.headers.get("Content-Type") ?? "")
+      .split(";")[0]!
+      .trim()
+      .toLowerCase();
+    if (!files.includes(got)) {
+      await res.body?.cancel().catch(() => {});
+      return json(502, { code: "bad_gateway" });
+    }
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": got,
+        "Cache-Control": "no-store",
+        "Content-Disposition": "inline",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   }
   return new Response(res.body, {
     status: res.status,
