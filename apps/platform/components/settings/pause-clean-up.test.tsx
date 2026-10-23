@@ -1,5 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import { QueryClient } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
+import { ApiError } from "@mhai/api-client/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetPlatformClientForTests,
@@ -9,6 +11,7 @@ import type { PlatformClient } from "@/lib/api/contract";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp, MOCK_CODE } from "@/lib/api/step-up";
 import { dateLabel } from "@/lib/format";
+import { healthKey } from "@/lib/queries/ops";
 import { useSettings } from "@/lib/queries/settings";
 import { ADA, AMARA, renderWithAuth } from "@/tests/render";
 import type { User } from "@/lib/auth/types";
@@ -125,5 +128,47 @@ describe("pausing the records clean-up", () => {
     expect(
       screen.getByRole("button", { name: "Pause clean-up" }),
     ).toBeDisabled();
+  });
+
+  it("a clash (409 conflict) says Changed by someone else, closes and reloads", async () => {
+    await open();
+    const reads = vi.spyOn(api, "getSettings");
+    vi.spyOn(api, "setCleanUpPaused").mockRejectedValueOnce(
+      new ApiError(409, "conflict"),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Pause clean-up" }),
+    );
+    const d = await screen.findByRole("dialog", { name: /Pause/ });
+    await userEvent.type(within(d).getByLabelText(/^Reason/), "Audit");
+    await typeCode(d);
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Pause clean-up" }),
+    );
+    expect(
+      await screen.findByText("Changed by someone else"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(reads).toHaveBeenCalled();
+  });
+
+  it("pausing makes Health look again (its reading is invalidated)", async () => {
+    const qc = new QueryClient();
+    const spy = vi.spyOn(qc, "invalidateQueries");
+    renderWithAuth(<Page />, { user: ADA, queryClient: qc });
+    await screen.findByRole("button", { name: "Pause clean-up" });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Pause clean-up" }),
+    );
+    const d = await screen.findByRole("dialog", { name: /Pause/ });
+    await userEvent.type(within(d).getByLabelText(/^Reason/), "Audit");
+    await typeCode(d);
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Pause clean-up" }),
+    );
+    await screen.findByText(LINE);
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: healthKey }),
+    );
   });
 });

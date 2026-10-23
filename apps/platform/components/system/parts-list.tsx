@@ -1,4 +1,4 @@
-import { pausedLine } from "@/lib/settings/rules";
+import { pausedLine } from "@/lib/settings/labels";
 import { TRIAGE_LABEL, partLabel, statusWords } from "@/lib/ops/labels";
 import { timeLabel, type PartsValue } from "@/lib/ops/health";
 import { StatusMark } from "./overall-status";

@@ -37,6 +37,11 @@ All notable changes to this project are documented here. The format follows
   section on each hospital's page, and a View holds link in the removal
   panel. Lifting a hold needs two platform admins. Auditors read it all.
   End-to-end tests cover it on desktop and phone.
+- Settings in the platform admin app, on sample data: how long records are
+  kept (longer at once, shorter with a preview and a second platform admin),
+  triage on and off with a clinical sign-off, clearing unapproved learning
+  data, pausing the clean-up, and the changes waiting for approval. Auditors
+  read it all. End-to-end tests cover it on desktop and phone.
 - The platform admin app (`apps/platform`, `npm run dev:platform`) for
   Measured Health's platform admins and auditors, on sample data. Sign in
   with a password and two-step (no skip, no "trust this device"); a new

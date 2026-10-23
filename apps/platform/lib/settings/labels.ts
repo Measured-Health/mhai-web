@@ -8,6 +8,7 @@ import {
   type RetentionType,
   type SettingsRequest,
 } from "@/lib/api/settings-contract";
+import { dateLabel } from "@/lib/format";
 import { daysLabel } from "./rules";
 
 const RETENTION_TYPE: Record<RetentionType, string> = {
@@ -52,3 +53,13 @@ export const requestIsKnown = (r: SettingsRequest) =>
 /** Whether this app has words for triage's not-ready reason (if any). */
 export const notReadyIsKnown = (r: NotReadyReason | null) =>
   r === null || NOT_READY_REASONS.includes(r);
+
+/** The words Settings and Health share while the clean-up is paused. */
+export function pausedLine(
+  by: { name: string } | null,
+  at: string | null,
+): string {
+  return `Records clean-up paused by ${by?.name ?? "a platform admin"}${
+    at ? ` since ${dateLabel(at)}` : ""
+  }`;
+}

@@ -85,6 +85,7 @@ export function RetentionSection({ settings }: { settings: SettingsOut }) {
       <Button
         size="sm"
         variant="ghost"
+        aria-label={`Change ${retentionTypeLabel(i.type)}`}
         {...net.props}
         onClick={() => {
           setRefusal(null);
