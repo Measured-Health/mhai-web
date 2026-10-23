@@ -35,8 +35,34 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
-      - name: Test
-        run: npm test --if-present
+  # Unit tests run per app, alongside lint and typecheck.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [clinical, platform, shared]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Test (${{ matrix.part }})
+        run: |
+          case "${{ matrix.part }}" in
+            clinical) npm test -w @mhai/clinical ;;
+            platform) npm test -w @mhai/platform ;;
+            shared)
+              npm test -w packages --if-present
+              node --test "scripts/**/*.test.mjs"
+              ;;
+          esac
 
   build:
     runs-on: ubuntu-latest
