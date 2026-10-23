@@ -27,7 +27,7 @@ const shell = () =>
   );
 
 describe("the platform shell", () => {
-  it("the sidebar shows Platform and the seven links in order", () => {
+  it("the sidebar shows Platform and the eight links in order", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     expect(within(nav).getByText("Platform")).toBeInTheDocument();
@@ -39,6 +39,7 @@ describe("the platform shell", () => {
       ["Analytics", "/analytics"],
       ["Legal holds", "/legal-holds"],
       ["System", "/system"],
+      ["Settings", "/settings"],
       ["Team", "/team"],
       ["Activity", "/activity"],
       ["Account", "/account"],
@@ -73,7 +74,7 @@ describe("the platform shell", () => {
     ).toHaveAttribute("href", "/analytics");
   });
 
-  it("System sits after Legal holds, before Team; active on /system/jobs", () => {
+  it("System sits after Legal holds, before Settings; active on /system/jobs", () => {
     pathname.value = "/system/jobs";
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
@@ -82,11 +83,26 @@ describe("the platform shell", () => {
       .map((l) => l.textContent);
     const at = names.indexOf("System");
     expect(names[at - 1]).toBe("Legal holds");
-    expect(names[at + 1]).toBe("Team");
+    expect(names[at + 1]).toBe("Settings");
     expect(within(nav).getByRole("link", { name: "System" })).toHaveAttribute(
       "aria-current",
       "page",
     );
+  });
+
+  it("Settings after System, before Team; active on /settings", () => {
+    pathname.value = "/settings";
+    shell();
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    const names = within(nav)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
+    const at = names.indexOf("Settings");
+    expect(names[at - 1]).toBe("System");
+    expect(names[at + 1]).toBe("Team");
+    const link = within(nav).getByRole("link", { name: "Settings" });
+    expect(link).toHaveAttribute("href", "/settings");
+    expect(link).toHaveAttribute("aria-current", "page");
   });
 
   it("the current page link has aria-current", () => {
