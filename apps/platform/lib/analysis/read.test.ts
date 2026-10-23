@@ -420,6 +420,34 @@ describe("readView: fails closed", () => {
     expect(problem("quality", c, all())).toMatch(/corrections/);
   });
 
+  it("existing cases of 1–4 (cases − new) fail, in both scopes", () => {
+    for (const s of ["all", "hospital"] as const) {
+      const r = prevalence(s);
+      r.data.by_condition[0].new = g(147); // 150 − 147 = 3 existing
+      expect(problem("prevalence", r, queryFor(s))).toMatch(/existing/);
+      r.data.by_condition[0].new = g(145); // 5 existing reads
+      expect(problem("prevalence", r, queryFor(s))).toBeNull();
+      r.data.by_condition[0].new = HID; // hidden: nothing to subtract
+      expect(problem("prevalence", r, queryFor(s))).toBeNull();
+    }
+  });
+
+  it("unrated consultations of 1–4 (consultations − rated) fail, in both scopes", () => {
+    for (const s of ["all", "hospital"] as const) {
+      const q = quality(s);
+      q.data.by_condition[0].consultations = g(102);
+      q.data.by_condition[0].confidence = {
+        high: g(60),
+        medium: g(22),
+        low: g(20),
+      };
+      expect(problem("quality", q, queryFor(s))).toMatch(/unrated/);
+      q.data.by_condition[0].consultations = g(105);
+      q.data.by_condition[0].confidence.high = g(63);
+      expect(problem("quality", q, queryFor(s))).toBeNull();
+    }
+  });
+
   it("a hidden total beside shown members reads, unless every member shows", () => {
     // Second hiding: 13 or more, hidden so a hospital reads the same in
     // both scopes; the two hidden values give neither away.
@@ -863,6 +891,91 @@ describe("the mock's replies all read, over a grid", () => {
         }
       expect(bad.slice(0, 20).join("\n")).toBe("");
       expect(read).toBe(queries.length * VIEW_IDS.length);
+    });
+
+  /**
+   * The remainders a reply publishes by subtraction: existing cases (cases −
+   * new) and unrated consultations (consultations − rated), per condition
+   * (keyed by its 3-character code), or null where a part is hidden.
+   */
+  function remainders(view: ViewId, raw: unknown): Map<string, number | null> {
+    const out = new Map<string, number | null>();
+    const d = (raw as Raw).data;
+    const key = (c: Raw) => (c.icd10 ? c.icd10.slice(0, 3) : c.id);
+    const rest = (t: AGuarded, p: AGuarded) =>
+      !t.suppressed && !p.suppressed && t.value !== null && p.value !== null
+        ? t.value - p.value
+        : null;
+    if (view === "prevalence")
+      for (const r of d.by_condition)
+        out.set(key(r.condition), rest(r.cases, r.new));
+    if (view === "quality")
+      for (const r of d.by_condition)
+        out.set(key(r.condition), rest(r.consultations, r.rated));
+    return out;
+  }
+  const small = (n: number) => n > 0 && n < 5;
+  /** The one-hospital query that asks the same as an all-hospitals one. */
+  const twinOf = (q: AnalysisQuery): Partial<AnalysisQuery> | null =>
+    q.age_band !== null && q.age_band !== "80+"
+      ? null
+      : {
+          period: q.period,
+          condition: q.condition,
+          age_band: q.age_band,
+          sex: q.sex,
+          setting: q.setting,
+          specialty: q.specialty,
+        };
+
+  for (const period of PERIODS)
+    it(`no existing or unrated remainder of 1–4, in a reply or across scopes: ${period}`, async () => {
+      const m = mock();
+      const leaks: string[] = [];
+      const get = async (view: ViewId, q: AnalysisQuery) =>
+        remainders(view, await m.getAnalysisView(view, q));
+      for (const view of ["prevalence", "quality"] as const) {
+        // Inside each reply.
+        const queries = [
+          ...ALL_FILTERS.map((f) => all({ period, ...f })),
+          ...PROFILES.flatMap((p) =>
+            ONE_FILTERS(p.id).map((f) => one(p.id, { period, ...f })),
+          ),
+        ];
+        for (const q of queries)
+          for (const [k, v] of await get(view, q))
+            if (v !== null && small(v))
+              leaks.push(
+                `${view} ${q.hospital ?? "all"} ${JSON.stringify(q)} ${k}: ${v}`,
+              );
+        // Across scopes: the all-hospitals remainder less every hospital's own.
+        for (const f of ALL_FILTERS) {
+          const q = all({ period, ...f });
+          const twin = twinOf(q);
+          if (!twin) continue;
+          const whole = await get(view, q);
+          const each = await Promise.all(
+            PROFILES.map((p) => get(view, one(p.id, twin))),
+          );
+          for (const [k, v] of whole) {
+            if (v === null) continue;
+            let known = 0;
+            let unknown = 0;
+            for (const h of each) {
+              const x = h.has(k) ? h.get(k)! : 0;
+              if (x === null) unknown++;
+              else known += x;
+            }
+            if (unknown > 0 && small(v - known))
+              leaks.push(
+                `${view} across ${JSON.stringify(f)} ${k}: ${v - known} over ${unknown} hospitals`,
+              );
+          }
+        }
+      }
+      expect(`${leaks.length} leaks\n${leaks.slice(0, 15).join("\n")}`).toBe(
+        "0 leaks\n",
+      );
     });
 
   it("the planted cases read as planted", async () => {

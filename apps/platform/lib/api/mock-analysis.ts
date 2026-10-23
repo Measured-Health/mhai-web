@@ -217,23 +217,38 @@ type Sum = readonly [total: string, parts: readonly string[], across?: true];
  * figure, so that total is never secret, and the hospitals are protected as
  * if it were known. Inside one reply it counts as hidden, so the rest of a
  * set can't give it away.
+ *
+ * A derived cell (`parents` gives its total and part) is never sent, but is
+ * published by subtraction while both of them show: existing cases (cases −
+ * new) and unrated consultations (consultations − rated). It is hidden
+ * whenever either parent is, and hiding it hides its part (or, when the part
+ * is 0, its total), so the loop closes it like any other cell.
  */
 function closeSums(
   raw: (cell: string) => number,
   few: (cell: string) => boolean,
   sums: readonly Sum[],
   off: Set<string>,
+  parents: (cell: string) => readonly [string, string] | null = () => null,
 ) {
+  const hiddenAt = (c: string, across: boolean | undefined): boolean => {
+    const from = parents(c);
+    if (from && (hiddenAt(from[0], across) || hiddenAt(from[1], across)))
+      return true;
+    const n = raw(c);
+    return n !== 0 && (off.has(c) || isSmallCount(n) || (!across && few(c)));
+  };
+  /** The sent cell to hide for a cell: itself, or a derived cell's parent. */
+  const target = (c: string) => {
+    const from = parents(c);
+    if (!from) return c;
+    return raw(from[1]) > 0 ? from[1] : from[0];
+  };
   let changed = true;
   while (changed) {
     changed = false;
     for (const [total, parts, across] of sums) {
-      const hidden = (c: string) => {
-        const n = raw(c);
-        return (
-          n !== 0 && (off.has(c) || isSmallCount(n) || (!across && few(c)))
-        );
-      };
+      const hidden = (c: string) => hiddenAt(c, across);
       const hid = parts.filter(hidden);
       if (hidden(total)) {
         if (hid.length > 0) continue;
@@ -247,7 +262,7 @@ function closeSums(
         if (!hidden(c) && raw(c) > 0 && (next === null || raw(c) < raw(next)))
           next = c;
       if (next === null && hidden(total)) continue;
-      off.add(next ?? total);
+      off.add(target(next ?? total));
       changed = true;
     }
   }
@@ -378,6 +393,17 @@ function tally(h: string, map: ScopeKind, f: Filters, win: Win): Rec {
     }
   }
   for (const [id, s] of reviewers) v[`q:${id}:rev`] = s.size;
+  // What subtraction publishes: existing cases and unrated consultations.
+  for (const k of Object.keys(v)) {
+    if (k.startsWith("c:")) {
+      const e = v[k]! - (v[`n:${k.slice(2)}`] ?? 0);
+      if (e > 0) v[`e:${k.slice(2)}`] = e;
+    } else if (k.startsWith("q:") && k.endsWith(":cons")) {
+      const p = k.slice(0, -4);
+      const u = v[k]! - (v[`${p}rated`] ?? 0);
+      if (u > 0) v[`${p}unrated`] = u;
+    }
+  }
   tallies.set(key, v);
   return v;
 }
@@ -520,6 +546,17 @@ function sumsOf(v: Rec, map: ScopeKind, condition: string | null): Sum[] {
     ["qrated", ids.map((id) => `q:${id}:rated`)],
     ["qagreed", ids.map((id) => `q:${id}:agreed`)],
   );
+  // Sent beside their part, a total publishes the rest by subtraction:
+  // existing cases, and unrated consultations (derived cells, see closeSums).
+  for (const k of Object.keys(v))
+    if (k.startsWith("c:")) {
+      const id = k.slice(2);
+      out.push([k, [`n:${id}`, `e:${id}`]]);
+    }
+  for (const id of ids) {
+    const p = `q:${id}:`;
+    out.push([`${p}cons`, [`${p}rated`, `${p}unrated`]]);
+  }
   // The same figure under two names.
   const pa = Object.keys(v).filter((k) => k.startsWith("pa:"));
   if (condition === null) {
@@ -548,6 +585,7 @@ function hospitalKey(k: string): string | null {
   switch (head) {
     case "c":
     case "n":
+    case "e":
     case "pa":
       return `${head}:${id(a)}`;
     case "p": {
@@ -608,8 +646,23 @@ function hideTogether(owners: Owner[], sums: Sum[]): Map<string, Ctx> {
         return [o.id, new Ctx(o.v, mine, o.hosp)] as const;
       }),
     );
+  /** A derived cell's total and part, in the same owner. */
+  const parents = (c: string): readonly [string, string] | null => {
+    const at = c.indexOf("#");
+    const owner = c.slice(0, at + 1);
+    const k = c.slice(at + 1);
+    if (k.startsWith("e:")) {
+      const id = k.slice(2);
+      return [`${owner}c:${id}`, `${owner}n:${id}`];
+    }
+    if (k.startsWith("q:") && k.endsWith(":unrated")) {
+      const p = k.slice(0, -"unrated".length);
+      return [`${owner}${p}cons`, `${owner}${p}rated`];
+    }
+    return null;
+  };
   for (;;) {
-    closeSums(raw, few, sums, off);
+    closeSums(raw, few, sums, off, parents);
     const now = ctxs();
     let cut = false;
     for (const o of owners) {

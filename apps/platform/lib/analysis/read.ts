@@ -11,7 +11,9 @@
 //  - a value the small-group rule should have hidden (a shown 1–4, a hidden
 //    value with its number, a rate, share or median over a hidden or 1–4
 //    numerator, base or complement), a share that gives its numerator away,
-//    and a set whose hidden member the rest give away;
+//    a set whose hidden member the rest give away, and a remainder of 1–4
+//    published by subtraction (existing cases: cases − new; unrated
+//    consultations: consultations − rated);
 //  - `why` on a shown value, in One hospital scope, or in a hospital row;
 //  - across hospitals: a remainder of 1–4 or exactly one hidden row (the
 //    count, the base and the sizes), a shown figure from fewer than 3
@@ -399,8 +401,15 @@ function prevalenceOk(d: unknown, c: ViewCtx) {
     same(cases, rt.count, `${w}.cases`, "its rate's count");
     same(rt.base, c.headline.base, `${w}.rate.base`, "the patients seen");
     const fresh = count(r.new, `${w}.new`, c);
-    if (shown(cases) && shown(fresh))
+    // Existing cases (cases − new) are published by subtraction.
+    if (shown(cases) && shown(fresh)) {
       need(val(fresh) <= val(cases), `${w}.new`, "more new than cases");
+      need(
+        !isSmallCount(val(cases) - val(fresh)),
+        `${w}.new`,
+        "existing cases of 1–4",
+      );
+    }
   });
   unique(
     rows.map((r) => ((r as Obj).condition as Obj).id),
@@ -589,8 +598,15 @@ function qualityOk(d: unknown, c: ViewCtx) {
       `${w}.confidence`,
     );
     const rated = count(r.rated, `${w}.rated`, c);
-    if (shown(cons) && shown(rated))
+    // Unrated consultations (consultations − rated) are published by subtraction.
+    if (shown(cons) && shown(rated)) {
       need(val(rated) <= val(cons), `${w}.rated`, "more rated than seen");
+      need(
+        !isSmallCount(val(cons) - val(rated)),
+        `${w}.rated`,
+        "unrated consultations of 1–4",
+      );
+    }
     const agree = guarded(r.agreement_rate, "share", `${w}.agreement_rate`, c, {
       loose: true,
     });
