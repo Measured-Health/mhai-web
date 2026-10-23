@@ -57,7 +57,7 @@ jobs:
       - name: Platform marker check
         run: npm run check:platform-marker
 
-  # Each app's e2e suite runs in its own job, alongside the checks job.
+  # Each app's e2e suite runs in two shards, each in its own job, alongside the checks job.
   # Playwright's webServer builds the app, so no separate build step here.
   e2e:
     runs-on: ubuntu-latest
@@ -65,6 +65,7 @@ jobs:
       fail-fast: false
       matrix:
         app: [clinical, platform]
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v7
 
@@ -100,7 +101,7 @@ jobs:
             next-e2e-${{ matrix.app }}-${{ hashFiles('package-lock.json') }}-
 
       - name: E2E (mock mode)
-        run: npm run e2e -w @mhai/${{ matrix.app }}
+        run: npm run e2e -w @mhai/${{ matrix.app }} -- --shard=${{ matrix.shard }}/2
         env:
           NEXT_PUBLIC_USE_MOCK: "true"
 
@@ -108,7 +109,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.app }}
+          name: playwright-report-${{ matrix.app }}-${{ matrix.shard }}
           path: |
             apps/${{ matrix.app }}/playwright-report/
             apps/${{ matrix.app }}/test-results/
