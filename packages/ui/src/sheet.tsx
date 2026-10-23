@@ -1,6 +1,7 @@
 "use client";
 import { X } from "lucide-react";
-import { useRef, type ReactNode } from "react";
+import { useRef, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useEscape } from "./hooks/use-escape";
 import { useFocusTrap } from "./hooks/use-focus-trap";
 import { modalDialogOpen } from "./hooks/modal-dialog";
@@ -9,6 +10,10 @@ import { cn } from "./cn";
 /**
  * A bottom sheet. With `side="right"` it is a side panel from `md` (a bottom
  * sheet below it), mounted only while open, with a visible Close button.
+ *
+ * Portaled to `document.body` so no ancestor (a `backdrop-filter` card, an
+ * `overflow` scroller) can become its containing block. It renders nothing on
+ * the server and during hydration; `className` goes on the portaled root.
  */
 export function Sheet({
   open,
@@ -16,13 +21,16 @@ export function Sheet({
   title,
   children,
   side = "bottom",
+  className,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
   side?: "bottom" | "right";
+  className?: string;
 }) {
+  const mounted = useMounted();
   const panel = useRef<HTMLElement>(null);
   const right = side === "right";
   // Esc belongs to a modal dialog opened on top of a side panel, if any.
@@ -31,15 +39,20 @@ export function Sheet({
     onClose();
   });
 
-  useFocusTrap(open, panel);
+  // Only once the portaled panel exists can focus move into it.
+  useFocusTrap(open && mounted, panel);
 
-  if (right && !open) return null;
+  if (!mounted || (right && !open)) return null;
 
-  return (
+  return createPortal(
     <div
       inert={!open}
       aria-hidden={!open}
-      className={cn("fixed inset-0 z-40", !open && "pointer-events-none")}
+      className={cn(
+        "fixed inset-0 z-40",
+        !open && "pointer-events-none",
+        className,
+      )}
     >
       <div
         onClick={onClose}
@@ -85,6 +98,18 @@ export function Sheet({
         )}
         {children}
       </section>
-    </div>
+    </div>,
+    document.body,
+  );
+}
+
+const noop = () => () => {};
+
+/** False on the server and during hydration, true on the client after that. */
+function useMounted() {
+  return useSyncExternalStore(
+    noop,
+    () => true,
+    () => false,
   );
 }

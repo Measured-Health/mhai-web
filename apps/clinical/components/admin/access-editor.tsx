@@ -8,12 +8,18 @@ import type {
 import { useUpdateStaff } from "@/lib/admin-queries";
 import { adminError, type AdminError } from "@/lib/admin/errors";
 import { ROLE_LABEL, guardFor } from "@/lib/admin/staff";
+import { useAuth } from "@/lib/auth/auth-context";
+import { analysisOn } from "@/lib/auth/types";
 import { useNetwork } from "@mhai/api-client/network";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { useToast } from "@mhai/ui/toast";
 
-const ROLES: readonly StaffRole[] = ["clinician", "hospital_admin"];
+const ROLES: readonly StaffRole[] = ["clinician", "analyst", "hospital_admin"];
+const ROLE_HINT: Partial<Record<StaffRole, string>> = {
+  analyst:
+    "Sees Analysis for this hospital: counts and de-identified patients.",
+};
 
 export interface AccessDraft {
   roles: StaffRole[];
@@ -33,11 +39,18 @@ const same = (a: string[], b: string[]) =>
 const toggle = <T extends string>(xs: T[], x: T): T[] =>
   xs.includes(x) ? xs.filter((y) => y !== x) : [...xs, x];
 
+/** Analyst needs Clinician: without it the role is dropped, not sent. */
+const effectiveRoles = (d: AccessDraft): StaffRole[] =>
+  ROLES.filter(
+    (r) =>
+      d.roles.includes(r) && (r !== "analyst" || d.roles.includes("clinician")),
+  );
+
 /** Only what changed, with the row's version (R7); null when nothing did. */
 export function patchFor(row: StaffOut, d: AccessDraft): StaffPatchIn | null {
   const p: StaffPatchIn = { version: row.version };
-  if (!same(d.roles, row.roles))
-    p.roles = ROLES.filter((r) => d.roles.includes(r));
+  const roles = effectiveRoles(d);
+  if (!same(roles, row.roles)) p.roles = roles;
   if (d.specialty !== row.specialty) p.specialty = d.specialty;
   const canReview = d.canReview && d.roles.includes("clinician");
   if (canReview !== row.can_review) p.can_review = canReview;
@@ -47,7 +60,7 @@ export function patchFor(row: StaffOut, d: AccessDraft): StaffPatchIn | null {
 }
 
 function problemOf(d: AccessDraft): string | null {
-  if (!d.roles.length) return "Choose at least one role.";
+  if (!effectiveRoles(d).length) return "Choose at least one role.";
   if (d.canReview && d.roles.includes("clinician") && !d.reviewIn.length)
     return "Choose at least one specialty they can review in.";
   return null;
@@ -66,6 +79,7 @@ export function AccessEditor({
   const update = useUpdateStaff();
   const toast = useToast();
   const { online } = useNetwork();
+  const { user } = useAuth();
   const heading = useId();
   const lockId = useId();
   const offlineId = useId();
@@ -120,26 +134,35 @@ export function AccessEditor({
           Roles
         </legend>
         <div className="flex flex-wrap gap-x-5">
-          {ROLES.map((r) => {
-            const locked =
+          {ROLES.filter((r) => r !== "analyst" || analysisOn(user)).map((r) => {
+            const lockedAdmin =
               r === "hospital_admin" && !lock.ok && draft.roles.includes(r);
+            const needsClinician = r === "analyst" && !clinician;
+            const hintId = `${lockId}-${r}`;
             return (
-              <label
-                key={r}
-                className="flex min-h-11 items-center gap-2 text-[14px]"
-              >
-                <input
-                  type="checkbox"
-                  className="size-4 accent-mint"
-                  checked={draft.roles.includes(r)}
-                  disabled={locked}
-                  aria-describedby={locked ? lockId : undefined}
-                  onChange={() =>
-                    setDraft((d) => ({ ...d, roles: toggle(d.roles, r) }))
-                  }
-                />
-                {ROLE_LABEL[r]}
-              </label>
+              <div key={r} className="flex flex-col">
+                <label className="flex min-h-11 items-center gap-2 text-[14px]">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-mint"
+                    checked={draft.roles.includes(r) && !needsClinician}
+                    disabled={lockedAdmin || needsClinician}
+                    aria-describedby={
+                      lockedAdmin ? lockId : ROLE_HINT[r] ? hintId : undefined
+                    }
+                    onChange={() =>
+                      setDraft((d) => ({ ...d, roles: toggle(d.roles, r) }))
+                    }
+                  />
+                  {ROLE_LABEL[r]}
+                </label>
+                {ROLE_HINT[r] && (
+                  <p id={hintId} className="max-w-56 text-[12px] text-ink-3">
+                    {ROLE_HINT[r]}
+                    {needsClinician && " Needs the Clinician role."}
+                  </p>
+                )}
+              </div>
             );
           })}
         </div>

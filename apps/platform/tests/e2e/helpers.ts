@@ -57,6 +57,7 @@ export async function openNav(
     | "Settings"
     | "Team"
     | "Activity"
+    | "Audit log"
     | "Account",
 ) {
   if (isMobile(page))

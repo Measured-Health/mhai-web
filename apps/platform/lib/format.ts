@@ -1,5 +1,5 @@
 /** Fixed English month names: the same everywhere, never "Sept". */
-const MONTHS = [
+export const MONTHS = [
   "Jan",
   "Feb",
   "Mar",
@@ -36,3 +36,7 @@ export function timeLabel(value: string) {
   const two = (n: number) => String(n).padStart(2, "0");
   return `${two(t.getHours())}:${two(t.getMinutes())}`;
 }
+
+const NUMBER = new Intl.NumberFormat("en-GB");
+/** "1,204,331". */
+export const num = (n: number) => NUMBER.format(n);

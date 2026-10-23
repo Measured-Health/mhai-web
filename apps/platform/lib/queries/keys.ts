@@ -11,6 +11,7 @@ export const queryKeys = {
   activity: ["activity"] as const,
   analytics: ["analytics"] as const,
   notifications: ["notifications"] as const,
+  audit: ["audit"] as const,
   ops: ["ops"] as const,
   holds: ["holds"] as const,
   settings: ["settings"] as const,

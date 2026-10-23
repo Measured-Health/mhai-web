@@ -14,6 +14,7 @@ import { createMockAdmin } from "./mock-admin";
 import { totp } from "@mhai/api-client/totp";
 import { ADMIN_NOW, mockAdminAs, mockAdminWith } from "@/tests/admin";
 import { ApiError } from "./errors";
+import { recordAudit, resetAudit } from "./mock-audit";
 import type { GuardedOut, UsageAlertsOut } from "./admin-contract";
 import { PERIODS } from "@/lib/admin/report";
 import { readAlerts, whatChanged } from "@/lib/admin/alert-usage";
@@ -35,10 +36,10 @@ const row = async (a: ReturnType<typeof director>, id: string) =>
   (await a.listStaff()).find((s) => s.id === id)!;
 
 describe("the sample hospital", () => {
-  it("lists 13 synthetic staff and marks who you are", async () => {
+  it("lists 14 synthetic staff and marks who you are", async () => {
     const a = director();
     const staff = await a.listStaff();
-    expect(staff).toHaveLength(13);
+    expect(staff).toHaveLength(14);
     expect(staff.filter((s) => s.is_you).map((s) => s.id)).toEqual(["s-obi"]);
     expect(
       (await mockAdminAs(DEMO_EMAILS.hospitalAdmin).listStaff()).find(
@@ -122,6 +123,78 @@ describe("the sample hospital", () => {
     });
     const [other] = (await a.listActivity({})).events;
     expect(other).toMatchObject({ kind: "roles_changed", flag: null });
+  });
+
+  it("giving yourself Analyst logs the flagged self change and the Analyst kind", async () => {
+    const a = mockAdminAs(DEMO_EMAILS.hospitalAdmin);
+    const me = await row(a, "s-nwosu");
+    await a.updateStaff("s-nwosu", {
+      version: me.version,
+      roles: ["clinician", "analyst", "hospital_admin"],
+    });
+    const { events } = await a.listActivity({});
+    expect(events.slice(0, 2)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "self_role_change", flag: "alert" }),
+        expect.objectContaining({ kind: "analyst_granted" }),
+      ]),
+    );
+  });
+
+  it("analyst without clinician is 422", async () => {
+    const a = director();
+    const okafor = await row(a, "s-okafor");
+    expect(
+      await code(
+        a.updateStaff("s-okafor", {
+          version: okafor.version,
+          roles: ["analyst"],
+        }),
+      ),
+    ).toBe("422 invalid");
+  });
+
+  it("logs granting and removing Analyst as their own kinds", async () => {
+    const a = director();
+    const okafor = await row(a, "s-okafor");
+    const granted = await a.updateStaff("s-okafor", {
+      version: okafor.version,
+      roles: ["clinician", "analyst"],
+    });
+    expect((await a.listActivity({})).events[0]).toMatchObject({
+      kind: "analyst_granted",
+      target: { display_name: "Dr. Okafor" },
+      flag: null,
+    });
+    await a.updateStaff("s-okafor", {
+      version: granted.version,
+      roles: ["clinician"],
+    });
+    expect((await a.listActivity({})).events[0]).toMatchObject({
+      kind: "analyst_removed",
+    });
+  });
+
+  it("audit events appear in Activity, in time order", async () => {
+    resetAudit();
+    recordAudit({
+      at: new Date(ADMIN_NOW - 60_000).toISOString(),
+      type: "security",
+      kind: "analysis_patients_viewed",
+      actor: { display_name: "Dr. Kemi Adeyemi" },
+      target: null,
+      specialty: null,
+      confidence: null,
+      device: null,
+      count: 7,
+      flag: null,
+    });
+    const { events } = await director().listActivity({});
+    const i = events.findIndex((e) => e.kind === "analysis_patients_viewed");
+    expect(i).toBeGreaterThanOrEqual(0);
+    const times = events.map((e) => Date.parse(e.at));
+    expect(times).toEqual([...times].sort((x, y) => y - x));
+    resetAudit();
   });
 
   it("keeps at least one active hospital admin (409 last_admin)", async () => {

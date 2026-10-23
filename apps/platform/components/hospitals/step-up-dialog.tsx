@@ -50,6 +50,8 @@ export type StepUpDialogProps = {
   /** A choice of reasons (radios)... */
   reasons?: { code: string; label: string }[];
   reasonLabel?: string;
+  /** The reason chosen when it opens (e.g. one a caller suggests). */
+  initialReason?: string;
   /** ...or a reason in the person's own words. */
   freeReason?: boolean;
   /** The reason code that needs a note (e.g. "other"). */
@@ -136,6 +138,7 @@ function StepUpForm({
   intro,
   reasons,
   reasonLabel = "Reason",
+  initialReason = "",
   freeReason,
   noteFor,
   noteMax = NOTE_MAX,
@@ -152,7 +155,10 @@ function StepUpForm({
   const id = useId();
   const c = useCodeOrBackup();
   const net = useNeedsConnection(`${id}-offline`);
-  const [reason, setReason] = useState("");
+  // Only a reason on offer may start chosen.
+  const [reason, setReason] = useState(() =>
+    reasons?.some((r) => r.code === initialReason) ? initialReason : "",
+  );
   const [note, setNote] = useState("");
   const [extraText, setExtraText] = useState("");
   const [missing, setMissing] = useState<Missing>({});

@@ -111,8 +111,7 @@ Any group of fewer than 5 shows "Fewer than 5", in the CSV export too. In
 the sample, This month has a busy day, a rising finding and ward, and slower
 Critical handling; Last month has nothing unusual; Last 90 days has no
 earlier period to compare with. The sample numbers are written for 16
-October; on other dates the columns are a cut of the same sample. Deeper
-trends and drill-down come with Plan 6 Analysis.
+October; on other dates the columns are a cut of the same sample. Deeper trends and a de-identified patient list are in Analysis, below.
 
 **Notifications and patient alerts.** Sign in as the clinician sample (any
 clinician sees the same sample alerts). The bell in the top bar counts new
@@ -130,6 +129,23 @@ has two connected systems, "Main record" and "Results system", so each alert
 says which one it came from. Every name and MRN is synthetic, and like the
 rest of the demo it is all in memory only: the sample alerts and pop-up
 settings start afresh at each sign-in.
+
+**Analysis.** Sign in as the analyst sample (Dr. Kemi Adeyemi,
+`analyst.adeyemi@havanahospital.org`, a clinician with the Analyst role), or
+as the hospital admin or the medical director, and open **Analysis**. It
+shows how conditions and findings are spread across the hospital, in five
+views: Prevalence and trends, Who is affected, Co-occurring conditions,
+Findings and alerts, and MHAI quality. Filter by period, condition, age band,
+sex, ward or clinic, location type, specialty and (when there is more than
+one) source. Every chart has a **Table** view, and **Download CSV** saves the
+view on screen. **See patients** opens a de-identified list (a pseudonymous
+ID, age band, sex, location type, findings and conditions; never a name or
+record number) for any count of 5 or more; each opening is recorded in
+**Activity**. The numbers come from a made-up sample cohort of about 600
+patients. As everywhere, any group of fewer than 5 shows "Fewer than 5" (on
+screen, in tables and in the CSV), and a figure that would give one away is
+hidden too. A hospital admin gives the Analyst role to a clinician in Staff.
+Like the rest of the demo, nothing is kept in browser storage.
 
 ### Platform admin app
 
@@ -264,6 +280,23 @@ problems, a warning with **View health** shows on every page except Health
 itself. The retention periods are
 placeholders until Measured Health's compliance lead confirms them.
 
+**Audit log.** **Audit log** in the sidebar is the record of what people and
+the system did across Measured Health, newest first: filters (hospital,
+person, action type, dates, outcome, flagged only), an exact-id search (a
+patient's pseudonym too) and each entry in full. It shows no patient names,
+questions or answers; a patient appears only as a pseudonymous id, behind
+**Show patient ids**. Reading the log is recorded: each new set of filters,
+a search, an opened entry and shown patient ids make an entry of their own.
+**Named access** groups the named patient lists by clearance letter,
+**Exports** lists the files made, and **Integrity** runs and explains the
+log's tamper check (**Run check now**). **Export CSV** and **Export for a
+legal request** need a reason and the two-step code `123456`; the file shows
+an export id and a checksum, downloads once, and its first line says Demo.
+The sample has a Northgate General clearance letter with three named patient
+lists (search `P-6DC445` to find one), two earlier exports and an Intact
+check. Auditors and platform admins both read; the demo does not mirror the
+session's other platform actions into the log.
+
 **The auditor** (Amara Eze) sees every hospital, the team and the activity,
 with no buttons to change anything; the server refuses an auditor's changes
 too. On Team, nobody can change their own role or remove themselves: another
@@ -359,6 +392,18 @@ sign-off before live use, and it has not been given:
   don't pop up but are counted on the bell.
 
 Until it is given, alerts run on sample data only; see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Analysis
+
+Analysis shows hospital-wide counts of conditions, findings, alerts and
+corrections, and a de-identified patient list behind each count of 5 or more.
+It needs clinical, privacy and legal sign-off before live use, and it has not
+been given. It stays off in live mode until `ANALYSIS_SIGNED_OFF=true` is set
+on the server and the backend switches it on for the hospital; with either
+missing there is no page, no sidebar entry, no Analyst box and no API route
+(the proxy answers 404). Until then it runs on sample data only. Named
+drill-down and clearance letters are a later plan; see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Tests

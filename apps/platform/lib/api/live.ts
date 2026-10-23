@@ -1,6 +1,8 @@
 import { ApiError } from "@mhai/api-client/errors";
 import { createApiRequest, keyHeader } from "@mhai/api-client/request";
 import { reportUnauthorized } from "@/lib/auth/events";
+import { TooManyRowsError } from "./audit-contract";
+import { liveAudit } from "./live-audit";
 import {
   BlockedError,
   type PlatformClient,
@@ -120,6 +122,14 @@ export function createLivePlatformClient({
           ),
         );
       }
+      if (
+        res.status === 422 &&
+        code === "too_many_rows" &&
+        typeof data?.rows === "number" &&
+        Number.isSafeInteger(data.rows) &&
+        data.rows >= 0
+      )
+        throw new TooManyRowsError(data.rows);
       throw new ApiError(res.status, code);
     }
     return data as T;
@@ -170,6 +180,7 @@ export function createLivePlatformClient({
     markSeen: (b, o) => ok("/notifications/seen", "POST", b, o),
     getEmailPref: () => ok("/me/analytics-email"),
     setEmailPref: (b, o) => ok("/me/analytics-email", "PUT", b, o),
+    ...liveAudit(ok, fetchImpl),
     // The health poll is background too: it must not keep a session alive.
     getHealth: (o) =>
       ok(

@@ -1,5 +1,10 @@
 export type Role =
-  "clinician" | "hospital_admin" | "admin" | "auditor" | "researcher";
+  | "clinician"
+  | "hospital_admin"
+  | "admin"
+  | "auditor"
+  | "researcher"
+  | "analyst";
 
 /** The signed-in person, as the UI shows them. Fields the API doesn't have yet are null. */
 export interface User {
@@ -17,6 +22,8 @@ export interface User {
   mfaEnabled: boolean;
   /** Unused backup codes, or null when unknown. */
   backupCodesLeft: number | null;
+  /** Switches the API turned on for this person. Absent means off. */
+  features?: { analysis: boolean };
 }
 
 /** First sign-in steps still to do, in this order. */
@@ -137,10 +144,26 @@ export const isHospitalAdmin = (u: User | null) =>
 export const isAdminOnly = (u: User | null) =>
   isHospitalAdmin(u) && !isClinical(u);
 
-export type Area = "clinical" | "admin";
+/** Whether the Analysis switch is on for this person (absent means off). */
+export const analysisOn = (u: User | null) => u?.features?.analysis === true;
+
+/**
+ * Analysis: a hospital admin, or a clinician who holds the analyst role,
+ * when the switch is on. Never a platform account.
+ */
+export const canUseAnalysis = (u: User | null) =>
+  !isPlatformAccount(u) &&
+  analysisOn(u) &&
+  (isHospitalAdmin(u) || (isClinical(u) && rolesOf(u).includes("analyst")));
+
+export type Area = "clinical" | "admin" | "analysis";
 
 export const canUse = (u: User | null, area: Area) =>
-  area === "clinical" ? isClinical(u) : isHospitalAdmin(u);
+  area === "clinical"
+    ? isClinical(u)
+    : area === "admin"
+      ? isHospitalAdmin(u)
+      : canUseAnalysis(u);
 
 /** The hospital admin side's first screen (R2). */
 export const ADMIN_HOME = "/admin/staff";

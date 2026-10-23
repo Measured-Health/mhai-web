@@ -38,7 +38,7 @@ describe("StaffView", () => {
       screen.getByRole("heading", { name: "Staff", level: 2 }),
     ).toBeInTheDocument();
     const t = await table();
-    expect(names(t)).toHaveLength(13);
+    expect(names(t)).toHaveLength(14);
     expect(
       within(t)
         .getAllByRole("columnheader")
@@ -68,6 +68,15 @@ describe("StaffView", () => {
     expect(obi).toHaveTextContent("Hospital admin");
   });
 
+  it("the staff list shows an Analyst chip", async () => {
+    renderAdmin(<StaffView />);
+    const kemi = within(await table())
+      .getByRole("button", { name: "Manage Dr. Kemi Adeyemi" })
+      .closest("tr")!;
+    expect(within(kemi).getByText("Analyst")).toBeInTheDocument();
+    expect(within(kemi).getByText("Clinician")).toBeInTheDocument();
+  });
+
   it("counts each filter and filters", async () => {
     renderAdmin(<StaffView />);
     await table();
@@ -77,8 +86,8 @@ describe("StaffView", () => {
         .getAllByRole("button")
         .map((b) => b.textContent),
     ).toEqual([
-      "All · 13",
-      "Active · 9",
+      "All · 14",
+      "Active · 10",
       "Invited · 1",
       "Needs attention · 2",
       "Deactivated · 1",
@@ -115,7 +124,7 @@ describe("StaffView", () => {
     );
     expect(screen.getByText('No one matches "zzz".')).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Clear search" }));
-    expect(names(await table())).toHaveLength(13);
+    expect(names(await table())).toHaveLength(14);
   });
 
   it("opens the panel from Manage and gives the focus back on close", async () => {
@@ -233,7 +242,7 @@ describe("StaffView", () => {
       expect(
         screen.getByText("You're offline. Reconnect to invite people."),
       ).toBeInTheDocument();
-      expect(names(await table())).toHaveLength(13);
+      expect(names(await table())).toHaveLength(14);
     } finally {
       vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
       act(() => {
@@ -254,7 +263,7 @@ describe("StaffView", () => {
       name: "Staff at the hospital",
     });
     const items = within(cards).getAllByRole("listitem");
-    expect(items).toHaveLength(13);
+    expect(items).toHaveLength(14);
     expect(within(items[0]).getAllByRole("button")).toHaveLength(1);
     expect(within(cards).getByText("Two-step not set up")).toBeInTheDocument();
   });
@@ -294,7 +303,7 @@ describe("StaffView", () => {
       act(() => onlineManager.setOnline(false));
       act(() => onlineManager.setOnline(true));
       expect(await screen.findByRole("alert")).toHaveTextContent("Try again");
-      expect(names(await table())).toHaveLength(13);
+      expect(names(await table())).toHaveLength(14);
       expect(screen.getByRole("searchbox")).toBeInTheDocument();
     } finally {
       onlineManager.setOnline(true);

@@ -8,10 +8,12 @@ import {
   __setPlatformClientForTests,
 } from "@/lib/api/client";
 import type { PlatformClient } from "@/lib/api/contract";
+import type { Notification } from "@/lib/api/notifications-contract";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp } from "@/lib/api/step-up";
 import { notificationOk } from "@/lib/analytics/read";
 import { ADA, AMARA, renderWithAuth } from "@/tests/render";
+import { takeAuditTab } from "@/lib/audit/nav";
 import { NotificationBell } from "./bell";
 
 const env = vi.hoisted(() => ({
@@ -39,6 +41,15 @@ function install(notifications: "normal" | "unavailable" = "normal") {
   });
   __setPlatformClientForTests(api);
 }
+function installBroken(integrity: "broken" | "intact" = "broken") {
+  api = createMockPlatform({
+    delayMs: 0,
+    me: () => who,
+    stepUp: createStepUp(),
+    audit: { integrity },
+  });
+  __setPlatformClientForTests(api);
+}
 function setVisible(v: "visible" | "hidden") {
   Object.defineProperty(document, "visibilityState", {
     configurable: true,
@@ -61,7 +72,7 @@ afterEach(() => {
 
 const bell = (name: string | RegExp = /^Notifications/) =>
   screen.findByRole("button", { name });
-const list = () => screen.getByRole("list", { name: "New analytics changes" });
+const list = () => screen.getByRole("list", { name: "Notifications" });
 
 describe("the analytics bell", () => {
   it("the bell shows the count and its label", async () => {
@@ -346,9 +357,7 @@ describe("the analytics bell", () => {
     expect(sheet).toContainElement(list());
     await userEvent.keyboard("{Escape}");
     await waitFor(() =>
-      expect(
-        screen.queryByRole("list", { name: "New analytics changes" }),
-      ).toBeNull(),
+      expect(screen.queryByRole("list", { name: "Notifications" })).toBeNull(),
     );
     expect(await bell()).toHaveFocus();
   });
@@ -357,7 +366,7 @@ describe("the analytics bell", () => {
     who = AMARA.email;
     const view = renderWithAuth(<NotificationBell />, { user: AMARA });
     await userEvent.click(await bell("Notifications, 6 new"));
-    await screen.findByRole("list", { name: "New analytics changes" });
+    await screen.findByRole("list", { name: "Notifications" });
     expect(await bell("Notifications")).toBeInTheDocument();
     view.unmount();
     who = ADA.email;
@@ -397,8 +406,93 @@ describe("the analytics bell", () => {
     await api.markSeen({}, { idempotencyKey: "k-none" });
     renderWithAuth(<NotificationBell />);
     await userEvent.click(await bell("Notifications"));
-    await screen.findByRole("list", { name: "New analytics changes" });
+    await screen.findByRole("list", { name: "Notifications" });
     expect(screen.queryByRole("button", { name: "Mark all seen" })).toBeNull();
+  });
+});
+
+describe("the bell's integrity item", () => {
+  const WORDS = "⚠ The audit log failed its integrity check";
+
+  it("a broken mock shows the integrity item first, with its words", async () => {
+    installBroken();
+    renderWithAuth(<NotificationBell />);
+    await userEvent.click(await bell("Notifications, 7 new"));
+    const items = within(list()).getAllByRole("button");
+    expect(items).toHaveLength(7);
+    expect(items[0]).toHaveTextContent(WORDS);
+    expect(items[0]).toHaveTextContent(
+      /^⚠ The audit log failed its integrity checkPlatform · \d{1,2} \w{3}, \d\d:\d\d · Security · New$/,
+    );
+    expect(items[1]).not.toHaveTextContent("integrity");
+  });
+
+  it("opening it goes to /audit with the Integrity tab handed off, and no query string", async () => {
+    installBroken();
+    takeAuditTab();
+    renderWithAuth(<NotificationBell />);
+    await userEvent.click(await bell("Notifications, 7 new"));
+    await userEvent.click(
+      within(list()).getByRole("button", { name: /failed its integrity/ }),
+    );
+    expect(env.push).toHaveBeenCalledTimes(1);
+    expect(env.push).toHaveBeenCalledWith("/audit");
+    expect(takeAuditTab()).toEqual({ tab: "integrity" });
+  });
+
+  it("a malformed integrity item fails the whole list closed", async () => {
+    installBroken();
+    const base = await api.listNotifications();
+    vi.spyOn(api, "listNotifications").mockResolvedValue({
+      ...base,
+      items: [
+        { ...(base.items[0]! as object), first_broken_seq: 0 } as Notification,
+        ...base.items.slice(1),
+      ],
+    });
+    renderWithAuth(<NotificationBell />);
+    await userEvent.click(await bell(/^Notifications/));
+    expect(
+      await screen.findByText(/Couldn't load notifications/),
+    ).toBeInTheDocument();
+  });
+
+  it("an item without kind still reads as an analytics change", async () => {
+    renderWithAuth(<NotificationBell />);
+    await userEvent.click(await bell("Notifications, 6 new"));
+    const base = await api.listNotifications();
+    expect(base.items[0]).not.toHaveProperty("kind");
+    expect(notificationOk(base.items[0])).toBe(true);
+    expect(within(list()).getAllByRole("button")[0]).toHaveAccessibleName(
+      /Critical alerts acknowledged/,
+    );
+  });
+
+  it("Mark all seen clears the integrity item too", async () => {
+    installBroken();
+    const mark = vi.spyOn(api, "markSeen");
+    mark.mockRejectedValueOnce(new ApiError(400, "invalid"));
+    renderWithAuth(<NotificationBell />);
+    await userEvent.click(await bell("Notifications, 7 new"));
+    await waitFor(() => expect(mark).toHaveBeenCalledTimes(1));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Mark all seen" }),
+    );
+    expect(await bell("Notifications")).toBeInTheDocument();
+    expect((await api.listNotifications()).unseen).toBe(0);
+  });
+
+  it("an auditor sees it, and seen is per person", async () => {
+    installBroken();
+    who = AMARA.email;
+    const view = renderWithAuth(<NotificationBell />, { user: AMARA });
+    await userEvent.click(await bell("Notifications, 7 new"));
+    expect(within(list()).getAllByRole("button")[0]).toHaveTextContent(WORDS);
+    expect(await bell("Notifications")).toBeInTheDocument();
+    view.unmount();
+    who = ADA.email;
+    renderWithAuth(<NotificationBell />);
+    expect(await bell("Notifications, 7 new")).toBeInTheDocument();
   });
 });
 

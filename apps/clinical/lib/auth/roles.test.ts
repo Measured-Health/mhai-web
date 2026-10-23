@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { TEST_USER } from "@/tests/auth-wrapper";
 import {
   ADMIN_HOME,
+  analysisOn,
   canUse,
+  canUseAnalysis,
   isAdminOnly,
   isClinical,
   isHospitalAdmin,
@@ -11,6 +13,42 @@ import {
 } from "./types";
 
 const as = (...roles: Role[]) => ({ ...TEST_USER, roles });
+
+describe("analysis access", () => {
+  const on = (...roles: Role[]) => ({
+    ...as(...roles),
+    features: { analysis: true },
+  });
+  it("a clinician with analyst and the feature can use analysis", () => {
+    const u = on("clinician", "analyst");
+    expect(analysisOn(u)).toBe(true);
+    expect(canUseAnalysis(u)).toBe(true);
+    expect(canUse(u, "analysis")).toBe(true);
+  });
+  it("without the feature nobody can", () => {
+    for (const u of [
+      as("clinician", "analyst"),
+      as("hospital_admin"),
+      { ...as("hospital_admin"), features: { analysis: false } },
+    ]) {
+      expect(canUseAnalysis(u)).toBe(false);
+      expect(canUse(u, "analysis")).toBe(false);
+    }
+    expect(analysisOn(null)).toBe(false);
+  });
+  it("a hospital admin can", () => {
+    expect(canUseAnalysis(on("hospital_admin"))).toBe(true);
+    expect(canUseAnalysis(on("clinician", "hospital_admin"))).toBe(true);
+  });
+  it("analyst without clinician can't", () => {
+    expect(canUseAnalysis(on("analyst"))).toBe(false);
+    expect(canUseAnalysis(on("clinician"))).toBe(false);
+  });
+  it("a platform account can't", () => {
+    expect(canUseAnalysis(on("admin", "hospital_admin"))).toBe(false);
+    expect(canUseAnalysis(on("auditor", "clinician", "analyst"))).toBe(false);
+  });
+});
 
 describe("roles", () => {
   it("a clinician uses the clinical side only", () => {

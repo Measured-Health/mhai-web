@@ -43,6 +43,15 @@ All notable changes to this project are documented here. The format follows
   data, pausing the clean-up, and the changes waiting for approval. A warning
   with a link to Health shows on every page when the service has problems.
   Auditors read it all. End-to-end tests cover it on desktop and phone.
+- Analysis, on sample data: for hospital admins and clinicians with the new
+  Analyst role (given in Staff), five views of conditions, who is affected,
+  co-occurring conditions, findings and alerts, and MHAI quality, with
+  filters, a Table view and Download CSV for each, and a de-identified
+  patient list behind every count of 5 or more (each opening is logged in
+  Activity). Groups of fewer than 5 show "Fewer than 5". It needs clinical,
+  privacy and legal sign-off before live use, and stays off in live mode
+  until `ANALYSIS_SIGNED_OFF=true` is set. End-to-end tests cover it on
+  desktop and phone.
 - The platform admin app (`apps/platform`, `npm run dev:platform`) for
   Measured Health's platform admins and auditors, on sample data. Sign in
   with a password and two-step (no skip, no "trust this device"); a new
@@ -81,6 +90,21 @@ All notable changes to this project are documented here. The format follows
   retry (with a warning for old questions) or cancel jobs with a reason and
   their two-step code, and auditors read. End-to-end tests cover it on
   desktop and phone.
+- The audit log in the platform admin app, on sample data. **Audit log**
+  in the sidebar lists every entry newest first, with filters (hospital,
+  person, action type, dates, outcome, flagged only), an exact-id search
+  (also for a patient's pseudonym, which ignores the other filters) and the
+  entry in full, with **Show patient ids** behind a recorded click. **Named
+  access** groups the named patient lists by hospital and clearance letter.
+  **Exports** lists the files made; **Export CSV** and the legal-request
+  export need a reason and your two-step code, give an export id and a
+  checksum, and can be downloaded once, within 15 minutes, by the person who
+  made them. **Integrity** shows the daily and on-demand check, says
+  Intact only with proof, shows a stale check as not checked, and guides an
+  auditor through a failure. A failed check puts a banner on the home page
+  and an item in the bell. Reading the log is itself recorded. No patient
+  names or clinical text ever show. End-to-end tests cover it on desktop
+  and phone.
 - Shared packages `@mhai/ui` (components) and `@mhai/api-client` (API,
   session and two-step helpers), used by both apps.
 

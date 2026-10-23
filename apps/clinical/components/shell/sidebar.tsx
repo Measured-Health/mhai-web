@@ -6,10 +6,12 @@ import {
   Plus,
   Search,
   Stethoscope,
+  ChartPie,
   CircleHelp,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-context";
-import { isAdminOnly, isHospitalAdmin } from "@/lib/auth/types";
+import { canUseAnalysis, isAdminOnly, isHospitalAdmin } from "@/lib/auth/types";
+import { ANALYSIS_HREF } from "@/lib/analysis-queries";
 import { useReviewBadge } from "@/lib/correction-queries";
 import { historyStatus, type SessionItem } from "@/lib/session-store";
 import { useNow } from "@mhai/ui/hooks/use-now";
@@ -74,6 +76,35 @@ function ReviewLink({ rail, on }: { rail: boolean; on: boolean }) {
   );
 }
 
+/** Analysis for a clinician who holds the analyst role, under Review. */
+function AnalysisLink({ rail, on }: { rail: boolean; on: boolean }) {
+  return (
+    <Link
+      href={ANALYSIS_HREF}
+      title="Analysis"
+      aria-current={on ? "page" : undefined}
+      className={cn(
+        "mt-1 flex min-h-11 items-center gap-2.5 rounded-xl text-[13.5px] font-semibold focus-visible:outline-2 focus-visible:outline-mint-deep",
+        rail ? "w-11 justify-center" : "px-2.5",
+        on
+          ? "bg-mint-wash text-mint-deep shadow-[inset_3px_0_0_var(--color-mint)]"
+          : "text-ink-2 hover:bg-bg",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "grid size-7 shrink-0 place-items-center rounded-lg",
+          on ? "bg-white" : "bg-lilac text-bloom",
+        )}
+      >
+        <ChartPie className="size-3.5" />
+      </span>
+      <span className={rail ? "sr-only" : ""}>Analysis</span>
+    </Link>
+  );
+}
+
 /** `rail` hides labels (tablet). Labels stay in the accessibility tree via sr-only. */
 export function Sidebar({
   items,
@@ -91,6 +122,7 @@ export function Sidebar({
   // A hospital admin who isn't a clinician sees no clinical parts (R3).
   const adminOnly = isAdminOnly(user);
   const admin = isHospitalAdmin(user);
+  const analysis = canUseAnalysis(user);
   return (
     <nav
       aria-label={adminOnly ? "Hospital admin side" : "Consultations"}
@@ -144,9 +176,17 @@ export function Sidebar({
             )}
           </button>
           <ReviewLink rail={rail} on={path === "/review"} />
+          {analysis && !admin && (
+            <AnalysisLink
+              rail={rail}
+              on={
+                path === ANALYSIS_HREF || path.startsWith(`${ANALYSIS_HREF}/`)
+              }
+            />
+          )}
         </>
       )}
-      {admin && <AdminNav rail={rail} />}
+      {admin && <AdminNav rail={rail} analysis={analysis} />}
       {adminOnly ? (
         // Keeps the account menu at the bottom.
         <div className="flex-1" />

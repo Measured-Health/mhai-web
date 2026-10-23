@@ -143,6 +143,15 @@ flowchart TB
   admin side here; a clinician or hospital admin signing in to the
   platform admin app is told "This account can't use the platform admin
   app." and signed out.
+- **Analysis is gated, and is for two kinds of person:** hospital
+  admins, and clinicians with the **Analyst** role (a hospital admin
+  grants it in Staff; it needs Clinician), each for their own hospital
+  only, and both need two-step. The page, its sidebar entries and its API
+  paths exist only when `canUseAnalysis(user)` is true: always in the
+  demo; in live mode only when the API's user says `features.analysis` and
+  the server's `ANALYSIS_SIGNED_OFF` is exactly `true` (the proxy checks it
+  on every call and answers 404 `not_found` otherwise). Platform accounts
+  never see it.
 - **Researcher** has no endpoints yet, so it has no app.
 
 ## 3. Repository layout
@@ -218,6 +227,7 @@ flowchart TD
     home -->|hospital admin role| hset[Hospital settings]
     home -->|hospital admin role| huse[Usage]
     home -->|hospital admin role| hact[Activity & review oversight]
+    home -->|hospital admin or Analyst| ana[Analysis]
 ```
 
 Wireframe of the desktop layout:
@@ -444,6 +454,22 @@ Spec: `docs/specs/2026-10-17-notifications-design.md`. Clinicians only.
   state, pop-ups), never in storage or the URL, and clear on sign-out. "Ask
   MHAI about it" copies no identifiers into the consultation.
 
+### 4.9 Analysis
+
+Route: `/analysis`, outside `/admin` because analysts are not admins.
+Sidebar: a hospital admin sees it once, in the "Hospital admin" group after
+Usage ("Conditions and trends"); an analyst who is not an admin sees it under
+Review. The calls go through the same-origin proxy to `/api/v1/analysis/*`
+(GET only, the exact shapes the client uses). Five views (Prevalence and
+trends, Who is affected, Co-occurring conditions, Findings and alerts, MHAI
+quality) share one set of filters held in React state; nothing goes in the
+URL, the title or storage. Every count is read under the small-group rule
+(`lib/analysis/guards.ts`): a value the server should have hidden fails that
+view closed. **See patients** opens a de-identified list (level 1) that is
+never exported or kept, and each opening is logged in the hospital's
+activity. Sample data only; it needs clinical, privacy and legal sign-off
+before live use (see the README).
+
 ## 5. Platform admin app
 
 `apps/platform` (`@mhai/platform`) is for Measured Health staff: platform
@@ -461,6 +487,7 @@ platform endpoints; the contract it assumes is in
 | Settings    | Retention periods (longer at once, shorter with a preview and a second admin), triage on and off, clearing unapproved learning data, pause clean-up, and the changes waiting for approval | platform admin (auditors read) |
 | Team        | Invite, change role, remove (never your own row)                                                                                                                                          | platform admin (auditors read) |
 | Activity    | Every platform action, newest first, by hospital                                                                                                                                          | both                           |
+| Audit log   | Every entry in the log newest first, named access, exports, and the integrity check; reads are recorded                                                                                   | both                           |
 | Account     | Password, backup codes, signed-in devices                                                                                                                                                 | both                           |
 
 When the service is having problems, a warning with **View health** shows on every page except Health itself.

@@ -247,6 +247,24 @@ describe("homeFor", () => {
     );
     expect(homeFor({ user: as("researcher"), steps: [] })).toBe("/no-access");
   });
+  it("an analyst without two-step owes the setup step", () => {
+    const analyst = {
+      ...as("clinician", "analyst"),
+      features: { analysis: true },
+      mfaEnabled: false,
+    };
+    expect(stepsOwed(analyst, [])).toEqual(["mfa"]);
+    expect(homeFor({ user: analyst, steps: [] })).toBe("/welcome");
+    // Without the feature there is no Analysis, so nothing extra is owed.
+    expect(stepsOwed({ ...analyst, features: undefined }, [])).toEqual([]);
+  });
+  it("an analyst's home is /", () => {
+    const analyst = {
+      ...as("clinician", "analyst"),
+      features: { analysis: true },
+    };
+    expect(homeFor({ user: analyst, steps: [] })).toBe("/");
+  });
   it("first sign-in comes first for a hospital admin too", () => {
     expect(homeFor({ user: as("hospital_admin"), steps: ["mfa"] })).toBe(
       "/welcome",
