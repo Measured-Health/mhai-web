@@ -1,5 +1,11 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { SMALL_GROUP_MIN } from "@mhai/ui/small-groups";
 import { beforeEach, describe, expect, it } from "vitest";
+import { ADMIN_NOW, mockAdminAs } from "@/tests/admin";
+import { DEMO_EMAILS, MOCK_CODE, createStepUp } from "@/lib/auth/mock";
+import { readPatients } from "../analysis/read";
+import type { AdminClient } from "./admin";
 import type { GuardedOut } from "./admin-contract";
 import type {
   AgeBand,
@@ -7,13 +13,20 @@ import type {
   Drillable,
   Setting,
   Sex,
+  NamedPatientsIn,
   ViewId,
   ViewOut,
 } from "./analysis-contract";
 import { buildCohort, COHORT, FILTER_OPTIONS } from "./analysis-fixtures";
 import { ApiError } from "./errors";
+import { PLATFORM_ADMINS } from "./clearances-fixtures";
 import { createMockAnalysis, share } from "./mock-analysis";
 import { auditEvents, resetAudit } from "./mock-audit";
+import {
+  createMockClearances,
+  endOfHospitalDay,
+  resetClearances,
+} from "./mock-clearances";
 
 const VENDORS = [
   "epic",
@@ -619,5 +632,405 @@ describe("row order", () => {
           );
         }
     expect(seen).toBeGreaterThan(20);
+  });
+});
+
+// --- named patients (Plan 11c) ---
+
+describe("named patients", () => {
+  let clock = ADMIN_NOW;
+  let admin: AdminClient;
+  beforeEach(() => {
+    resetClearances();
+    resetAudit();
+    clock = ADMIN_NOW;
+    admin = mockAdminAs(DEMO_EMAILS.hospitalAdmin);
+  });
+  const as = (
+    email: string,
+    namedAccess: "off" | "letters_only" | "on" = "on",
+  ) =>
+    createMockAnalysis({
+      delayMs: 0,
+      now: () => clock,
+      me: async () => email,
+      staff: () => admin.listStaff(),
+      namedAccess,
+    });
+  const named = (
+    email: string,
+    over: Record<string, unknown> = {},
+    namedAccess: "off" | "letters_only" | "on" = "on",
+  ) =>
+    as(email, namedAccess).listNamedPatients(
+      {
+        drill: "sex-female",
+        filters: F,
+        purpose: "clinical_follow_up",
+        ...over,
+      } as NamedPatientsIn,
+      { idempotencyKey: `k-${keyN++}` },
+    );
+  let keyN = 0;
+  const code = async (p: Promise<unknown>) => {
+    try {
+      await p;
+    } catch (e) {
+      if (e instanceof ApiError) return `${e.status} ${e.code}`;
+      throw e;
+    }
+    return "ok";
+  };
+  const GRACE = DEMO_EMAILS.hospitalAdmin;
+  const KEMI = DEMO_EMAILS.analyst;
+  const HOUR = 3_600_000;
+
+  it("Grace Nwosu gets named rows with a purpose", async () => {
+    const out = await named(GRACE);
+    if (out.level !== "named") throw new Error("not named");
+    expect(out.patients).toHaveLength(200);
+    expect(out.count).toBeGreaterThan(200);
+    for (const row of out.patients) {
+      expect(Object.keys(row).sort()).toEqual([
+        "age_band",
+        "conditions",
+        "findings",
+        "mrn",
+        "name",
+        "pid",
+        "setting",
+        "sex",
+      ]);
+      expect(row.name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+      expect(row.mrn).toMatch(/^HH-\d{6}$/);
+    }
+    // The letter ends months away, so an hour from now is sooner.
+    expect(out.named_until).toBe(new Date(clock + HOUR).toISOString());
+    expect(out.clearance.id).toBe("cl_act");
+    const letter = await createMockClearances({
+      now: () => clock,
+      me: async () => GRACE,
+      delayMs: 0,
+      staff: () => admin.listStaff(),
+    }).getClearance("cl_act");
+    expect(out.clearance.end_date).toBe(letter.end_date);
+    expect(readPatients(out, "named", clock).status).toBe("ok");
+    // The de-identified list of the same people still has no names.
+    const plain = await as(GRACE).listPatients({
+      drill: "sex-female",
+      level: "deidentified",
+      filters: F,
+    });
+    for (const row of plain.patients) {
+      expect(row).not.toHaveProperty("name");
+      expect(row).not.toHaveProperty("mrn");
+    }
+    expect(JSON.stringify(plain)).not.toMatch(/"mrn"|HH-/);
+  });
+
+  it("named_until is the end of the letter's day when that is sooner", async () => {
+    const letter = await createMockClearances({
+      now: () => clock,
+      me: async () => GRACE,
+      delayMs: 0,
+      staff: () => admin.listStaff(),
+    }).getClearance("cl_soon");
+    const end = endOfHospitalDay(letter.end_date);
+    clock = Date.parse(end) - 20 * 60_000;
+    const out = await named(KEMI);
+    if (out.level !== "named") throw new Error("not named");
+    expect(out.named_until).toBe(end);
+    expect(out.clearance).toEqual({ id: "cl_soon", end_date: letter.end_date });
+  });
+
+  it("a clinician without a letter is 403 not_cleared", async () => {
+    expect(await code(named(DEMO_EMAILS.clinician))).toBe("403 not_cleared");
+    // Dr. Obi is a hospital admin with only a waiting letter.
+    expect(await code(named(DEMO_EMAILS.director))).toBe("403 not_cleared");
+    expect(await as(DEMO_EMAILS.director).getClearanceMe()).toEqual({
+      named: false,
+      until: null,
+      clearance_id: null,
+      version: 0,
+      reason: "none",
+    });
+    expect(auditEvents()).toHaveLength(0);
+  });
+
+  it("me reads the cover live", async () => {
+    const me = await as(GRACE).getClearanceMe();
+    expect(me).toMatchObject({
+      named: true,
+      clearance_id: "cl_act",
+      reason: null,
+    });
+    expect(Number.isInteger(me.version)).toBe(true);
+    expect(Date.parse(me.until!)).toBeGreaterThan(clock);
+  });
+
+  it("after cl_act is revoked, Grace gets 403 not_cleared and me says named false, revoked", async () => {
+    const m = as(GRACE);
+    const before = await m.getClearanceMe();
+    expect(before.named).toBe(true);
+    await createMockClearances({
+      now: () => clock,
+      me: async () => GRACE,
+      delayMs: 0,
+      stepUp: createStepUp(() => clock),
+      staff: () => admin.listStaff(),
+    }).revokeClearance(
+      "cl_act",
+      { reason: "no_longer_needed", mfaCode: MOCK_CODE },
+      { idempotencyKey: "k-revoke" },
+    );
+    expect(await code(named(GRACE))).toBe("403 not_cleared");
+    expect(await m.getClearanceMe()).toEqual({
+      named: false,
+      until: null,
+      clearance_id: null,
+      version: 0,
+      reason: "revoked",
+    });
+  });
+
+  it("after Analyst is removed, Kemi gets 403", async () => {
+    expect(await code(named(KEMI))).toBe("ok");
+    const kemi = (await admin.listStaff()).find((s) => s.id === "s-kemi")!;
+    await admin.updateStaff("s-kemi", {
+      version: kemi.version,
+      roles: ["clinician"],
+    });
+    expect(await code(named(KEMI))).toBe("403 not_cleared");
+    expect(await as(KEMI).getClearanceMe()).toMatchObject({
+      named: false,
+      reason: "role_or_account",
+    });
+  });
+
+  it("after the letter's end date, it is 403 clearance_ended", async () => {
+    const letter = await createMockClearances({
+      now: () => clock,
+      me: async () => GRACE,
+      delayMs: 0,
+      staff: () => admin.listStaff(),
+    }).getClearance("cl_soon");
+    clock = Date.parse(endOfHospitalDay(letter.end_date)) + HOUR;
+    expect(await code(named(KEMI))).toBe("403 clearance_ended");
+    expect(await as(KEMI).getClearanceMe()).toMatchObject({
+      named: false,
+      reason: "ended",
+    });
+  });
+
+  it("with the switch off it is 403 named_access_off", async () => {
+    for (const position of ["off", "letters_only"] as const) {
+      expect(await code(named(GRACE, {}, position)), position).toBe(
+        "403 named_access_off",
+      );
+      expect(await as(GRACE, position).getClearanceMe()).toMatchObject({
+        named: false,
+        reason: "switched_off",
+      });
+      expect(await as(GRACE, position).getNamedAccess()).toMatchObject({
+        position,
+      });
+    }
+    expect(auditEvents()).toHaveLength(0);
+  });
+
+  it("Other without a note is 422", async () => {
+    expect(await code(named(GRACE, { purpose: "other" }))).toBe("422 invalid");
+    expect(await code(named(GRACE, { purpose: "other", note: "  " }))).toBe(
+      "422 invalid",
+    );
+    expect(await code(named(GRACE, { purpose: undefined }))).toBe(
+      "422 invalid",
+    );
+    expect(await code(named(GRACE, { purpose: "curiosity" }))).toBe(
+      "422 invalid",
+    );
+    expect(
+      await code(named(GRACE, { purpose: "audit", note: "x".repeat(201) })),
+    ).toBe("422 invalid");
+    expect(auditEvents()).toHaveLength(0);
+    expect(
+      await code(named(GRACE, { purpose: "other", note: "Ward round list" })),
+    ).toBe("ok");
+    expect(
+      await code(named(GRACE, { purpose: "audit", note: "x".repeat(200) })),
+    ).toBe("ok");
+  });
+
+  it("each named view records one flagged event with the count and purpose and no name", async () => {
+    const out = await named(GRACE, { purpose: "quality_improvement" });
+    if (out.level !== "named") throw new Error("not named");
+    const ev = auditEvents();
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({
+      kind: "analysis_named_viewed",
+      type: "security",
+      flag: "alert",
+      count: 200,
+      purpose: "quality_improvement",
+      actor: { display_name: "Grace Nwosu" },
+      target: null,
+    });
+    const text = JSON.stringify(ev);
+    for (const row of out.patients) {
+      expect(text).not.toContain(row.name);
+      expect(text).not.toContain(row.mrn);
+      expect(text).not.toContain(row.pid);
+    }
+    await named(GRACE, { purpose: "audit" });
+    expect(auditEvents()).toHaveLength(2);
+    // The free-text note is never recorded.
+    await named(GRACE, { purpose: "other", note: "Ward 4 recall" });
+    expect(auditEvents()).toHaveLength(3);
+    expect(auditEvents()[2]).toMatchObject({ purpose: "other" });
+    const all = JSON.stringify(auditEvents());
+    expect(all).not.toContain("Ward 4 recall");
+    expect(all).not.toContain("note");
+  });
+
+  it("names are never a GET: level named there is 422 level_not_supported", async () => {
+    const e = await as(GRACE)
+      .listPatients({
+        drill: "sex-female",
+        // Only a de-identified level type-checks; a caller that forces one is refused.
+        level: "named" as unknown as "deidentified",
+        filters: F,
+      })
+      .catch((x) => x);
+    expect(e).toMatchObject({ status: 422, code: "level_not_supported" });
+    expect(auditEvents()).toHaveLength(0);
+  });
+
+  it("a retry with the same Idempotency-Key is one view, still checked afresh", async () => {
+    const m = as(GRACE);
+    const q: NamedPatientsIn = {
+      drill: "sex-female",
+      filters: F,
+      purpose: "audit",
+    };
+    const key = { idempotencyKey: "k-same" };
+    const a = await m.listNamedPatients(q, key);
+    const b = await m.listNamedPatients(q, key);
+    expect(b.patients).toEqual(a.patients);
+    expect(auditEvents()).toHaveLength(1);
+    await m.listNamedPatients(q, { idempotencyKey: "k-other" });
+    expect(auditEvents()).toHaveLength(2);
+    // The same key after the cover is gone is refused, not replayed.
+    await createMockClearances({
+      now: () => clock,
+      me: async () => GRACE,
+      delayMs: 0,
+      stepUp: createStepUp(() => clock),
+      staff: () => admin.listStaff(),
+    }).revokeClearance(
+      "cl_act",
+      { reason: "no_longer_needed", mfaCode: MOCK_CODE },
+      { idempotencyKey: "k-revoke" },
+    );
+    expect(await code(m.listNamedPatients(q, key))).toBe("403 not_cleared");
+  });
+
+  it("a key is bound to the person and the request, and keeps its named_until", async () => {
+    const m = as(GRACE);
+    const q: NamedPatientsIn = {
+      drill: "sex-female",
+      filters: F,
+      purpose: "audit",
+    };
+    const key = { idempotencyKey: "k-bound" };
+    const first = await m.listNamedPatients(q, key);
+    expect(auditEvents()).toHaveLength(1);
+    // Another request under the same key: refused, and nothing recorded.
+    for (const other of [
+      { ...q, drill: "sex-male" },
+      { ...q, purpose: "clinical_follow_up" as const },
+      { ...q, filters: { ...F, sex: "female" as const } },
+      { ...q, purpose: "other" as const, note: "Ward 4 recall" },
+    ])
+      expect(
+        await code(m.listNamedPatients(other, key)),
+        JSON.stringify(other),
+      ).toBe("422 idempotency_mismatch");
+    // Another person under the same key, on the same client: refused.
+    const kemi = createMockAnalysis({
+      delayMs: 0,
+      now: () => clock,
+      me: async () => KEMI,
+      staff: () => admin.listStaff(),
+    });
+    expect(await code(kemi.listNamedPatients(q, key))).toBe("ok");
+    const shared = { idempotencyKey: "k-shared" };
+    let who: string = GRACE;
+    const either = createMockAnalysis({
+      delayMs: 0,
+      now: () => clock,
+      me: async () => who,
+      staff: () => admin.listStaff(),
+    });
+    await either.listNamedPatients(q, shared);
+    who = KEMI;
+    expect(await code(either.listNamedPatients(q, shared))).toBe(
+      "422 idempotency_mismatch",
+    );
+    expect(auditEvents()).toHaveLength(3);
+    // A replay later keeps the original named_until, and records nothing.
+    clock += 30 * 60_000;
+    const replay = await m.listNamedPatients(q, key);
+    expect(replay.named_until).toBe(first.named_until);
+    expect(auditEvents()).toHaveLength(3);
+    // Once named_until has passed, the key is spent: never renewed.
+    clock = Date.parse(first.named_until);
+    expect(await code(m.listNamedPatients(q, key))).toBe("409 expired");
+    clock += HOUR;
+    expect(await code(m.listNamedPatients(q, key))).toBe("409 expired");
+    expect(auditEvents()).toHaveLength(3);
+  });
+
+  it("no invented name matches a real-person list", async () => {
+    const readme = readFileSync(
+      path.join(import.meta.dirname, "../../../../README.md"),
+      "utf8",
+    );
+    // The demo's own people: the README's samples, every staff member in the
+    // fixtures, and the platform admins.
+    const readmeSamples = [
+      "Dr. Reyes",
+      "Dr. Okafor",
+      "Nurse Bello",
+      "Grace Nwosu",
+      "Dr. Ngozi Obi",
+      "Chike Okoro",
+      "Dr. Kemi Adeyemi",
+      "Amara Eze",
+      "Chidi Nwosu",
+    ];
+    for (const p of readmeSamples) expect(readme).toContain(p);
+    const staff = await admin.listStaff();
+    expect(staff.length).toBeGreaterThan(10);
+    const people = [
+      ...readmeSamples,
+      ...staff.flatMap((s) => [s.display_name, s.full_name]),
+      ...Object.values(PLATFORM_ADMINS).map((p) => p.display_name),
+    ];
+    const words = new Set(
+      people
+        .flatMap((p) => p.replace(/^(Dr|Nurse)\. /, "").split(/[ -]/))
+        .map((w) => w.toLowerCase()),
+    );
+    const names = COHORT.map((p) => p.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const name of new Set(names)) {
+      expect(readme, name).not.toContain(name);
+      for (const w of name.toLowerCase().split(" "))
+        expect(words.has(w), `${name}: ${w}`).toBe(false);
+      for (const v of VENDORS) expect(name.toLowerCase()).not.toContain(v);
+    }
+    const mrns = COHORT.map((p) => p.mrn);
+    expect(new Set(mrns).size).toBe(mrns.length);
+    for (const m of mrns) expect(m).toMatch(/^HH-\d{6}$/);
   });
 });

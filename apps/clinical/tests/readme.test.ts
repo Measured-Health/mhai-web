@@ -186,4 +186,29 @@ describe("README demo instructions", () => {
     expect(section).toMatch(/clinical,\s+privacy\s+and\s+legal\s+sign-off/);
     expect(section).toMatch(/two\s+platform\s+admins/);
   });
+
+  it("documents Show names in Analysis: who, the purpose, the banner, how it ends and the sign-off", () => {
+    const para = readme.slice(
+      readme.indexOf("**Analysis.**"),
+      readme.indexOf("**Named access.**"),
+    );
+    expect(para).not.toMatch(/hour/i);
+    expect(para).toMatch(/every\s+30\s+seconds/);
+    expect(readme).toMatch(/\*\*Show\s+names\*\*/);
+    expect(readme).toMatch(/Clinical\s+follow-up,\s+Quality\s+improvement/);
+    expect(readme).toMatch(
+      /Named\s+view\s+·\s+letter\s+until\s+\{date\}\s+·\s+this\s+view\s+is\s+recorded/,
+    );
+    expect(readme).toMatch(
+      /viewed\s+\{n\}\s+patients\s+by\s+name\s+in\s+Analysis/,
+    );
+    expect(readme).toMatch(/Named\s+access\s+has\s+ended/);
+    expect(readme).toMatch(
+      /Named access needs a clearance letter\. Ask your hospital admin\./,
+    );
+    const from = readme.indexOf("### Analysis");
+    expect(readme.slice(from)).toMatch(
+      /Names\s+in\s+Analysis\s+\(Show\s+names\)\s+are\s+part\s+of\s+the\s+same\s+sign-off/,
+    );
+  });
 });

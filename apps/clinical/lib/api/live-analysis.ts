@@ -1,6 +1,7 @@
 import type { AnalysisClient } from "./analysis";
 import type { AnalysisFilters } from "./analysis-contract";
-import { apiOk } from "./request";
+import { createLiveClearances } from "./live-clearances";
+import { apiOk, keyHeader } from "./request";
 
 /** Nulls are dropped; `source` goes only when set. */
 export function filterParams(f: AnalysisFilters): URLSearchParams {
@@ -22,6 +23,7 @@ export function createLiveAnalysisClient({
   fetchImpl = (...a: Parameters<typeof fetch>) => fetch(...a),
 }: { fetchImpl?: typeof fetch } = {}): AnalysisClient {
   const get = <T>(path: string) => apiOk<T>(fetchImpl, path, { method: "GET" });
+  const clearances = createLiveClearances({ fetchImpl });
   return {
     getFilterOptions: () => get("/analysis/filters"),
     getView: (view, f) =>
@@ -31,5 +33,13 @@ export function createLiveAnalysisClient({
       for (const [k, v] of filterParams(filters)) p.set(k, v);
       return get(`/analysis/patients?${p}`);
     },
+    listNamedPatients: ({ drill, purpose, note, filters }, opts) =>
+      apiOk(fetchImpl, "/analysis/patients/named", {
+        method: "POST",
+        body: { drill, purpose, ...(note ? { note } : {}), filters },
+        headers: keyHeader(opts),
+      }),
+    getClearanceMe: () => get("/analysis/clearance/me"),
+    getNamedAccess: () => clearances.getNamedAccess(),
   };
 }
