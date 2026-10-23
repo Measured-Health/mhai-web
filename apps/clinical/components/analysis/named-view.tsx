@@ -30,7 +30,10 @@ import { Button } from "@mhai/ui/button";
 import { dayLabel } from "@mhai/ui/clearances";
 import { Skeleton } from "@mhai/ui/skeleton";
 
-/** setTimeout's longest wait; named_until is never near it (an hour at most). */
+/**
+ * setTimeout's longest wait (about 24.8 days). named_until may be months away,
+ * so the timer is clamped and the 1 s check carries the rest.
+ */
 const LONGEST_WAIT = 2 ** 31 - 1;
 /** How often the real clock is held against named_until. */
 const CHECK_EVERY_MS = 1_000;

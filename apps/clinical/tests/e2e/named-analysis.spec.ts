@@ -15,6 +15,10 @@ const MRN = /HH-\d{6}/;
 
 // A failed test must not keep the sample names in a trace, screenshot or video.
 test.use({ trace: "off", screenshot: "off", video: "off" });
+// Playwright also writes error-context.md (an ARIA snapshot of the page, rows
+// included) for every failed test. This switch, read in the worker when the
+// context closes (playwright/lib/index.js, _takePageSnapshot), turns it off.
+process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1";
 
 type Seen = { urls: string[]; console: string[]; names: Set<string> };
 const seen = new WeakMap<Page, Seen>();
@@ -34,34 +38,39 @@ test.afterEach(async ({ page }) => {
   // A skipped test never opened the app.
   if (page.url() === "about:blank") return;
   const s = seen.get(page)!;
-  // Nothing in browser storage, and nothing in a cache.
-  await expectNoStorage(page);
-  const caches = await page.evaluate(async () =>
-    typeof window.caches === "undefined" ? [] : await window.caches.keys(),
-  );
-  expect(caches).toEqual([]);
-  // No name or MRN in an address or the title.
-  const title = await page.title();
-  for (const text of [...s.urls, page.url(), title]) {
-    let plain = text;
-    try {
-      plain = decodeURIComponent(text);
-    } catch {
-      // keep the raw text
+  try {
+    // Nothing in browser storage, and nothing in a cache.
+    await expectNoStorage(page);
+    const caches = await page.evaluate(async () =>
+      typeof window.caches === "undefined" ? [] : await window.caches.keys(),
+    );
+    expect(caches).toEqual([]);
+    // No name or MRN in an address or the title.
+    const title = await page.title();
+    for (const text of [...s.urls, page.url(), title]) {
+      let plain = text;
+      try {
+        plain = decodeURIComponent(text);
+      } catch {
+        // keep the raw text
+      }
+      expect(MRN.test(plain), "a record number reached an address").toBe(false);
+      for (const name of s.names)
+        expect(plain.includes(name), "a patient name reached an address").toBe(
+          false,
+        );
     }
-    expect(MRN.test(plain), "a record number reached an address").toBe(false);
-    for (const name of s.names)
-      expect(plain.includes(name), "a patient name reached an address").toBe(
-        false,
-      );
-  }
-  // None in console output either.
-  for (const line of s.console) {
-    expect(MRN.test(line), "a record number reached the console").toBe(false);
-    for (const name of s.names)
-      expect(line.includes(name), "a patient name reached the console").toBe(
-        false,
-      );
+    // None in console output either.
+    for (const line of s.console) {
+      expect(MRN.test(line), "a record number reached the console").toBe(false);
+      for (const name of s.names)
+        expect(line.includes(name), "a patient name reached the console").toBe(
+          false,
+        );
+    }
+  } finally {
+    // Leave no named page open when the context closes.
+    await page.goto("about:blank").catch(() => {});
   }
 });
 
@@ -138,7 +147,8 @@ async function rememberNames(page: Page, panel: Locator) {
   const mrns = await rows.locator("td").first().allInnerTexts();
   expect(names.length).toBeGreaterThan(0);
   for (const n of names) s.names.add(n.trim());
-  for (const m of mrns) expect(m.trim()).toMatch(MRN);
+  for (const m of mrns)
+    expect(MRN.test(m.trim()), "MRN column holds a record number").toBe(true);
   return names.map((n) => n.trim());
 }
 
@@ -174,7 +184,10 @@ test("Grace opens a group, shows names for Quality improvement, and sees the ban
   await rememberNames(page, panel);
   // The purpose and the names are not in the address.
   expect(page.url()).toMatch(/\/analysis$/);
-  expect(page.url()).not.toMatch(/quality|purpose|name|HH-/i);
+  expect(
+    /quality|purpose|name|HH-/i.test(page.url()),
+    "purpose or name in the address",
+  ).toBe(false);
   // No copy, export, download or print control.
   await expect(
     panel.getByRole("button", { name: /copy|export|download|print|save/i }),

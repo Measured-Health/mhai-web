@@ -153,12 +153,13 @@ follow-up, Quality improvement, Audit or Other, with a note for Other), then
 adds Name and MRN under the banner "Named view · letter until {date} · this
 view is recorded", with your name and the time marked across the list. The
 view is recorded in **Activity** as "viewed {n} patients by name in
-Analysis", flagged. Names end at the end of the letter's end date, and an
+Analysis", flagged. Names end at the end of the letter's end date (the demo ends each
+view sooner; Show names again to continue), and an
 open screen rechecks every 30 seconds and drops names, with "Named access has
 ended" and the reason, when access ends: the letter is revoked, you are
 removed from it or lose your role, or the switch is turned off. They also end
-when the filters or group change, or you sign out. Like the rest of the demo, nothing is kept in
-browser storage.
+when the filters or group change, or you sign out. Like the rest of the demo,
+nothing is kept in browser storage.
 
 **Named access.** Sign in as the hospital admin sample (Grace Nwosu) and
 open **Named access** (clearance letters) in the Hospital admin group. A
@@ -445,8 +446,8 @@ before live use, and it has not been given. In live mode it stays off until
 switch is raised by two platform admins (Off, Letters only, On). With either
 missing the Named access page, its sidebar entry and its API routes do not
 exist (the proxy answers 404), and names are never shown. Names in Analysis
-(Show names) are part of the same sign-off, and the proxy refuses a named
-patient list with 403 until it is given. Until then it runs on sample data
+(Show names) are part of the same sign-off, and the proxy answers 404 to the
+named patient list until it is given, and never serves names on a GET. Until then it runs on sample data
 only.
 
 ### Tests

@@ -351,11 +351,13 @@ reason, mfa_code}`.
 
 **Named drill-down** (extends Plan 6 §9)
 
-- `GET /analysis/patients?filters…&level=named&purpose&note?` → the list plus `named_until` and
-  `clearance` (`{id, end_date}`). The server picks the letter; the app never sends one. It
+- `POST /analysis/patients/named` with an `Idempotency-Key` and the body
+  `{drill, purpose, note?, filters}` → the list plus `named_until` and `clearance`
+  (`{id, end_date}`). The purpose and note are never in a URL. `GET /analysis/patients` stays
+  de-identified only. The server picks the letter; the app never sends one. It
   refuses with **403** `named_access_off`, `not_cleared` or `clearance_ended`, checked on every
   call with no cached decision.
-- `GET /analysis/clearance/me` → `{named: boolean, until, clearance_id, version}`, cheap enough to
+- `GET /analysis/clearance/me` → `{named: boolean, until, clearance_id, version, reason}`, cheap enough to
   poll every 30 seconds.
 
 **Server duties**
