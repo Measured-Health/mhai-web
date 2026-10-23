@@ -18,6 +18,7 @@ import { useIsDesktop } from "@mhai/ui/hooks/use-media";
 import { Section } from "../hospitals/section";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { ChangedLine } from "./changed-line";
+import { PauseCleanUp } from "./pause-clean-up";
 import { RetentionChangeDialog } from "./retention-change-dialog";
 import { SectionFailed } from "./section-failed";
 
@@ -101,6 +102,7 @@ export function RetentionSection({ settings }: { settings: SettingsOut }) {
       {!r.confirmed && (
         <p className="mb-3 text-[13.5px] text-ink-2">{NOT_CONFIRMED}</p>
       )}
+      <PauseCleanUp settings={settings} />
       {refusal && (
         <div className="mb-3">
           <Banner tone="bad" title={refusal} />

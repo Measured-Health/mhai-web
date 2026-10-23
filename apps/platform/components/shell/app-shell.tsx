@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState, type ReactNode } from "react";
 import { OfflineStrip } from "../states/offline-strip";
+import { HealthBanner } from "./health-banner";
 import { MobileDrawer } from "./mobile-drawer";
 import { ShellContext, type ShellCtx } from "./shell-context";
 import { Sidebar } from "./sidebar";
@@ -28,6 +29,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <main className="canvas-v3 relative flex min-w-0 flex-col overflow-hidden">
           <OfflineStrip />
+          {/* IntegrityBanner (Plan 9) goes here, before HealthBanner. */}
+          <HealthBanner />
           {children}
         </main>
       </div>
