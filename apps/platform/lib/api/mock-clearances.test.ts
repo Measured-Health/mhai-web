@@ -1002,3 +1002,35 @@ describe("mock clearances: the named-access switch", () => {
       ]);
   });
 });
+
+describe("mock clearances: revoke refusals", () => {
+  it("Tunde revoking cl_wait, which covers him, is 409 same_person", async () => {
+    const { m } = setup({ email: TEAM_EMAILS.tunde });
+    const c = await m.getClearance("cl_wait");
+    expect(
+      await failure(
+        m.revokeClearance(
+          "cl_wait",
+          { reason: "no_longer_needed", version: c.version, ...CODE },
+          KEY(),
+        ),
+      ),
+    ).toEqual([409, "same_person"]);
+    expect((await m.getClearance("cl_wait")).status).toBe("waiting");
+  });
+
+  it("Bola revoking Havana's cl_act is 409 same_side", async () => {
+    const { m } = setup({ email: TEAM_EMAILS.bola });
+    const c = await m.getClearance("cl_act");
+    expect(
+      await failure(
+        m.revokeClearance(
+          "cl_act",
+          { reason: "no_longer_needed", version: c.version, ...CODE },
+          KEY(),
+        ),
+      ),
+    ).toEqual([409, "same_side"]);
+    expect((await m.getClearance("cl_act")).status).toBe("active");
+  });
+});

@@ -192,7 +192,12 @@ export interface ClearancesClient {
     body: { reason: RejectReason; note?: string; version: number } & StepUp,
     opts: WriteOpts,
   ): Promise<Clearance>;
-  /** A waiting or active letter only (409 `conflict`); Other needs a note. */
+  /**
+   * A waiting or active letter only (409 `conflict`); Other needs a note.
+   * Also 409 `same_person` when the letter covers the caller (checked first)
+   * and `same_side` when the caller is linked to the hospital; both are
+   * checked before the status and are not logged.
+   */
   revokeClearance(
     id: string,
     body: { reason: RevokeReason; note?: string; version: number } & StepUp,

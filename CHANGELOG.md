@@ -46,8 +46,8 @@ All notable changes to this project are documented here. The format follows
   linked to the hospital, or covered by the letter, is told why they can't
   verify it. The named-access switch (global and per hospital: Off, Letters
   only, On) is raised with three sign-offs and a different platform admin's
-  approval, and lowered at once by one admin. Auditors read it all. A fifth
-  sample team member, Bola Hassan, is linked to Havana Hospital. End-to-end
+  approval, and lowered at once by one admin. Auditors read it all. A new
+  sample platform admin, Bola Hassan, is linked to Havana Hospital. End-to-end
   tests cover it on desktop and phone.
 - Legal holds in the platform admin app, on sample data: a Legal holds page
   with filters, a hold on a hospital's records (all of them or a date range)

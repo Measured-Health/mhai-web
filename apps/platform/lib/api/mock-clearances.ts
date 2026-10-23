@@ -438,6 +438,13 @@ export function createClearanceMock(
     revokeClearance: (id, body, opts) =>
       core.write(opts, async (m) => {
         const c = find(id);
+        // Same refusals as verify (same_person first), before the status.
+        const code = coversYou(c, m)
+          ? "same_person"
+          : onTheirSide(c, m)
+            ? "same_side"
+            : null;
+        if (code) fail(409, code);
         const version = versionOf(body);
         if (c.status !== "waiting" && c.status !== "active")
           fail(409, "conflict");

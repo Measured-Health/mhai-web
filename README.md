@@ -181,6 +181,7 @@ codes work too):
 
 - Ada Bakare, platform admin: `ada.bakare@measured-health.example`;
 - Tunde Okafor, platform admin: `tunde.okafor@measured-health.example`;
+- Bola Hassan, platform admin linked to Havana Hospital: `bola.hassan@measured-health.example`;
 - Amara Eze, auditor: `amara.eze@measured-health.example`;
 - Chidi Nwosu, a new platform admin: `new.admin@measured-health.example`.
   He sets a password, accepts the terms and sets up two-step (code
