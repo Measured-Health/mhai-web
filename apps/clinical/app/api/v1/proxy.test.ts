@@ -18,7 +18,7 @@ import {
   writeSession,
 } from "@/lib/server/session";
 import { __resetRefreshCacheForTests } from "@/lib/server/refresh";
-import type { Role } from "@/lib/auth/types";
+import type { Role, User } from "@/lib/auth/types";
 import { TEST_USER } from "@/tests/auth-wrapper";
 import { DELETE, GET, PATCH, POST } from "./[...path]/route";
 
@@ -1459,6 +1459,100 @@ describe("clearance routes (Plan 11)", () => {
     );
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ code: "mfa_required" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("the person's named gate is checked too, before upstream", async () => {
+    const user = (roles: Role[], features?: User["features"]) =>
+      writeSession({
+        token: "tok",
+        expiresAt: Date.now() + 10 * 60_000,
+        user: { ...TEST_USER, roles, mfaEnabled: true, features },
+        steps: [],
+      });
+    const named = (search = "?level=named") =>
+      GET(
+        get(`${BASE}/analysis/patients${search}`),
+        ctx("analysis", "patients"),
+      );
+    // Named off for this person (the API's flag off): 403 named_access_off on
+    // every clearance shape and on a named list, for an admin or an analyst.
+    for (const roles of [
+      ["hospital_admin"],
+      ["clinician", "hospital_admin"],
+    ] as Role[][]) {
+      await user(roles, { analysis: true });
+      for (const [method, path] of SHAPES) {
+        const res = await run(method, path);
+        expect([method, path, res.status]).toEqual([method, path, 403]);
+        expect(await res.json()).toEqual({ code: "named_access_off" });
+      }
+      const res = await named();
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ code: "named_access_off" });
+    }
+    await user(["clinician", "analyst"], { analysis: true });
+    for (const path of [
+      ["analysis", "named-access"],
+      ["analysis", "clearance", "me"],
+    ]) {
+      const res = await GET(get(`${BASE}/${path.join("/")}`), ctx(...path));
+      expect(await res.json()).toEqual({ code: "named_access_off" });
+    }
+    expect((await named()).status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+    // A de-identified list still passes without named access.
+    fetchMock.mockImplementation(async () => Response.json({}));
+    expect((await named("?level=deidentified")).status).toBe(200);
+    expect((await named("")).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("an analyst reaches their own clearance but no letters; a platform account reaches nothing", async () => {
+    const both = { analysis: true, named: true };
+    await writeSession({
+      token: "tok",
+      expiresAt: Date.now() + 10 * 60_000,
+      user: {
+        ...TEST_USER,
+        roles: ["clinician", "analyst"],
+        mfaEnabled: true,
+        features: both,
+      },
+      steps: [],
+    });
+    fetchMock.mockImplementation(async () => Response.json({}));
+    for (const [method, path] of SHAPES) {
+      const res = await run(method, path);
+      expect([method, path, res.status]).toEqual([
+        method,
+        path,
+        path[0] === "analysis" ? 200 : 403,
+      ]);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockClear();
+    for (const roles of [
+      ["admin", "hospital_admin"],
+      ["auditor", "clinician", "analyst"],
+    ] as Role[][]) {
+      await writeSession({
+        token: "tok",
+        expiresAt: Date.now() + 10 * 60_000,
+        user: { ...TEST_USER, roles, mfaEnabled: true, features: both },
+        steps: [],
+      });
+      for (const [method, path] of SHAPES) {
+        const res = await run(method, path);
+        expect([roles, method, path, res.status]).toEqual([
+          roles,
+          method,
+          path,
+          403,
+        ]);
+        expect(await res.json()).toEqual({ code: "forbidden" });
+      }
+    }
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

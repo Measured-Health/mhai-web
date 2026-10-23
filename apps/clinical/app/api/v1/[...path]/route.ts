@@ -1,6 +1,11 @@
 import { LETTER_MAX_BYTES } from "@mhai/ui/clearances";
 import { handledFields } from "@/lib/api/alert-handled";
-import { canUse } from "@/lib/auth/types";
+import {
+  canOpenNamedAccess,
+  canUse,
+  canUseNamedAccess,
+  type User,
+} from "@/lib/auth/types";
 import { apiBase } from "@/lib/server/api";
 import { analysisSignedOff, namedSignedOff } from "@/lib/server/features";
 import { forbidden, json, sameOrigin } from "@/lib/server/http";
@@ -103,6 +108,26 @@ const isClearancePath = ([first, second]: string[]) =>
   (first === "hospital" && second === "clearances") ||
   (first === "analysis" &&
     (second === "named-access" || second === "clearance"));
+
+/** A patient list asking for anything but the de-identified level. */
+const asksForNames = (req: Request, [first, second]: string[]) =>
+  first === "analysis" &&
+  second === "patients" &&
+  new URL(req.url).searchParams
+    .getAll("level")
+    .some((l) => l !== "deidentified");
+
+/**
+ * The person's own named gate, behind the key (defence in depth): letters
+ * are for hospital admins with named access; the position, your clearance
+ * and a named list for anyone with named access.
+ */
+const namedGateHolds = (req: Request, path: string[], user: User) =>
+  path[0] === "hospital" && path[1] === "clearances"
+    ? canOpenNamedAccess(user)
+    : isClearancePath(path) || asksForNames(req, path)
+      ? canUseNamedAccess(user)
+      : true;
 
 /** Only `POST hospital/clearances` carries a file (multipart). */
 const isUpload = (method: string, path: string[]) =>
@@ -312,14 +337,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   // it is 404, and a patient list may only be de-identified.
   if (!namedSignedOff()) {
     if (isClearancePath(path)) return json(404, { code: "not_found" });
-    if (
-      path[0] === "analysis" &&
-      path[1] === "patients" &&
-      new URL(req.url).searchParams
-        .getAll("level")
-        .some((l) => l !== "deidentified")
-    )
-      return json(403, { code: "named_access_off" });
+    if (asksForNames(req, path)) return json(403, { code: "named_access_off" });
   }
   if (req.method !== "GET" && !sameOrigin(req)) return forbidden();
 
@@ -342,6 +360,9 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   // Every hospital admin, and anyone using Analysis, must have two-step on (amendment 3).
   if (area !== "clinical" && s.user.mfaEnabled !== true)
     return json(403, { code: "mfa_required" });
+  // The key is on, but this person's named access may not be.
+  if (!namedGateHolds(req, path, s.user))
+    return json(403, { code: "named_access_off" });
   if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
 
   let body: string | Uint8Array<ArrayBuffer> | undefined;
