@@ -8,7 +8,7 @@ import { Button } from "@mhai/ui/button";
 import { useToast } from "@mhai/ui/toast";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { Section } from "./section";
-import { StepUpDialog, type StepUpInput } from "./step-up-dialog";
+import { codeOf, StepUpDialog, type StepUpInput } from "./step-up-dialog";
 
 export const REMOVAL_WARNING =
   "Removal is permanent. After it's done only the audit trail remains.";
@@ -36,10 +36,7 @@ export function DangerZone({ hospital: h }: { hospital: Hospital }) {
     request.reset();
   };
   const confirm = ({ reason = "", ...rest }: StepUpInput) => {
-    const code =
-      "backup_code" in rest
-        ? { backup_code: rest.backup_code }
-        : { mfa_code: rest.mfa_code };
+    const code = codeOf(rest);
     request.mutate(
       { reason, ...code },
       {

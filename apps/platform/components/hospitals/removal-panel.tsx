@@ -25,7 +25,7 @@ import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { REMOVAL_WARNING } from "./danger-zone";
 import { dateLabel } from "./format";
 import { Section } from "./section";
-import { StepUpDialog, type StepUpInput } from "./step-up-dialog";
+import { codeOf, StepUpDialog, type StepUpInput } from "./step-up-dialog";
 
 const BLOCKED_NOTE =
   "Removal can't go ahead until the checks above are cleared.";
@@ -151,10 +151,7 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
   };
 
   const confirmApprove = (input: StepUpInput) => {
-    const code =
-      "backup_code" in input
-        ? { backup_code: input.backup_code }
-        : { mfa_code: input.mfa_code };
+    const code = codeOf(input);
     approve.mutate(code, {
       onSuccess: () => {
         toast.show({

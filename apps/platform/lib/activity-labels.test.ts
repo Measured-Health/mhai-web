@@ -40,7 +40,7 @@ const WITH: Record<ActivityAction, string> = {
   clean_up_paused: "paused the records clean-up",
   clean_up_resumed: "resumed the records clean-up",
   triage_switched_off: "switched triage off",
-  feedback_buffer_cleared: "cleared Kemi of unapproved learning data",
+  feedback_buffer_cleared: "cleared unapproved learning data: Kemi",
 };
 const WITHOUT: Partial<Record<ActivityAction, string>> = {
   admin_invited: "invited the first hospital admin",

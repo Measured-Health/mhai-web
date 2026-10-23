@@ -259,6 +259,27 @@ own two-step code; a cancelled job reads "Cancelled by" the person. Try
 Northgate General Hospital's old question, or cancel the guideline search.
 On a phone the jobs are cards. Auditors see both tabs and no buttons.
 
+**Settings.** **Settings** in the sidebar shows how long records are kept,
+whether triage is on, and the learning data no one has approved yet. Each
+**Change** to a retention period (Questions and answers, Documents, Waiting
+corrections, the Audit log) asks for a reason and the person's two-step code,
+and offers nothing below the least the server allows. A longer period applies
+at once; a shorter one first shows about how many records the next clean-up
+would delete, then waits for a different platform admin to approve it (the
+approver sees the count read again). **Triage** can be switched off at once;
+switching it on needs the validation to be ready, a clinical sign-off and a
+different platform admin's approval. **Clear unapproved learning data**
+removes the feedback waiting to teach the system (approved corrections and
+guidelines are not touched), asks for a reason and a code, and says
+"Cleared 37 items" when it finishes; a failed reset points to Failed jobs.
+**Changes waiting for approval** lists the requests, which lapse after 7
+days; either admin can cancel one, and the person who asked can never approve
+it. A platform admin can also **Pause clean-up**, which Health then shows.
+Auditors see all of it and change nothing. When the service is having
+problems, a warning with **View health** shows on every page except Health
+itself. The retention periods are
+placeholders until Measured Health's compliance lead confirms them.
+
 **Audit log.** **Audit log** in the sidebar is the record of what people and
 the system did across Measured Health, newest first: filters (hospital,
 person, action type, dates, outcome, flagged only), an exact-id search (a

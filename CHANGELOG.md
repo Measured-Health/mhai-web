@@ -37,6 +37,12 @@ All notable changes to this project are documented here. The format follows
   section on each hospital's page, and a View holds link in the removal
   panel. Lifting a hold needs two platform admins. Auditors read it all.
   End-to-end tests cover it on desktop and phone.
+- Settings in the platform admin app, on sample data: how long records are
+  kept (longer at once, shorter with a preview and a second platform admin),
+  triage on and off with a clinical sign-off, clearing unapproved learning
+  data, pausing the clean-up, and the changes waiting for approval. A warning
+  with a link to Health shows on every page when the service has problems.
+  Auditors read it all. End-to-end tests cover it on desktop and phone.
 - Analysis, on sample data: for hospital admins and clinicians with the new
   Analyst role (given in Staff), five views of conditions, who is affected,
   co-occurring conditions, findings and alerts, and MHAI quality, with

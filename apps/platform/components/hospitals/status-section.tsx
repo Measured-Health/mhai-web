@@ -11,7 +11,7 @@ import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { dateLabel } from "./format";
 import { Section } from "./section";
 import { StatusChip } from "./status-chip";
-import { StepUpDialog, type StepUpInput } from "./step-up-dialog";
+import { codeOf, StepUpDialog, type StepUpInput } from "./step-up-dialog";
 
 const DEACTIVATE_EFFECT =
   "All staff are signed out at once and can't sign in. Pending invites stop working. No data is deleted.";
@@ -80,10 +80,7 @@ export function StatusSection({
   });
   const confirm = (input: StepUpInput) => {
     const { reason = "", note, ...rest } = input;
-    const code =
-      "backup_code" in rest
-        ? { backup_code: rest.backup_code }
-        : { mfa_code: rest.mfa_code };
+    const code = codeOf(rest);
     const backup = "backup_code" in code;
     if (asking === "deactivate")
       deactivate.mutate(

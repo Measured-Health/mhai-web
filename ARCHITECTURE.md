@@ -4,10 +4,10 @@ MHAI has **two frontend apps** and **three kinds of user**. Both apps talk
 only to the MHAI API (`Measured-Health/mhai-multiagent`, base path
 `/api/v1`).
 
-| App                    | Who uses it                                         | What it does                                                                                                                                                                                                      | Status                                                                                    |
-| ---------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| **Clinical app**       | Clinicians, and hospital admins                     | **Clinical side:** ask questions, read evidence-checked results, give feedback, review corrections. **Hospital admin side:** manage the hospital's own staff, settings and usage                                  | This repo, Phase 1                                                                        |
-| **Platform admin app** | Measured Health staff: platform admins and auditors | Run the service: hospitals (add, deactivate, two-person removal, single sign-on), the platform team and its activity, analytics across hospitals, legal holds, and system health and failed jobs. Later: settings | This repo, on sample data ([ADR 0002](docs/adr/0002-separate-clinical-and-admin-apps.md)) |
+| App                    | Who uses it                                         | What it does                                                                                                                                                                                               | Status                                                                                    |
+| ---------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Clinical app**       | Clinicians, and hospital admins                     | **Clinical side:** ask questions, read evidence-checked results, give feedback, review corrections. **Hospital admin side:** manage the hospital's own staff, settings and usage                           | This repo, Phase 1                                                                        |
+| **Platform admin app** | Measured Health staff: platform admins and auditors | Run the service: hospitals (add, deactivate, two-person removal, single sign-on), the platform team and its activity, analytics across hospitals, legal holds, system health and failed jobs, and settings | This repo, on sample data ([ADR 0002](docs/adr/0002-separate-clinical-and-admin-apps.md)) |
 
 The three kinds of user:
 
@@ -477,17 +477,20 @@ admins and auditors. It runs on sample data until the backend has the
 platform endpoints; the contract it assumes is in
 [the platform admin spec, §13](docs/specs/2026-10-17-platform-admin-design.md).
 
-| Page        | What it does                                                                                                                           | Who                            |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| Hospitals   | List, search, add a hospital and invite its first admin                                                                                | platform admin (auditors read) |
-| Hospital    | Details, deactivate and reactivate, single sign-on, two-person removal with retention and legal-hold checks, recent actions            | platform admin (auditors read) |
-| Analytics   | What changed, the tabs and a CSV, in counts only; follow-ups                                                                           | platform admin (auditors read) |
-| Legal holds | The holds list and filters, place a hold, a hold's page with edit and two-person lift and undo; also a section on each hospital's page | platform admin (auditors read) |
-| System      | Health (overall, parts, times, errors; refreshes every 30 s) and Failed jobs (retry, cancel with a code), in counts only               | platform admin (auditors read) |
-| Team        | Invite, change role, remove (never your own row)                                                                                       | platform admin (auditors read) |
-| Activity    | Every platform action, newest first, by hospital                                                                                       | both                           |
-| Audit log   | Every entry in the log newest first, named access, exports, and the integrity check; reads are recorded                                | both                           |
-| Account     | Password, backup codes, signed-in devices                                                                                              | both                           |
+| Page        | What it does                                                                                                                                                                              | Who                            |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Hospitals   | List, search, add a hospital and invite its first admin                                                                                                                                   | platform admin (auditors read) |
+| Hospital    | Details, deactivate and reactivate, single sign-on, two-person removal with retention and legal-hold checks, recent actions                                                               | platform admin (auditors read) |
+| Analytics   | What changed, the tabs and a CSV, in counts only; follow-ups                                                                                                                              | platform admin (auditors read) |
+| Legal holds | The holds list and filters, place a hold, a hold's page with edit and two-person lift and undo; also a section on each hospital's page                                                    | platform admin (auditors read) |
+| System      | Health (overall, parts, times, errors; refreshes every 30 s) and Failed jobs (retry, cancel with a code), in counts only                                                                  | platform admin (auditors read) |
+| Settings    | Retention periods (longer at once, shorter with a preview and a second admin), triage on and off, clearing unapproved learning data, pause clean-up, and the changes waiting for approval | platform admin (auditors read) |
+| Team        | Invite, change role, remove (never your own row)                                                                                                                                          | platform admin (auditors read) |
+| Activity    | Every platform action, newest first, by hospital                                                                                                                                          | both                           |
+| Audit log   | Every entry in the log newest first, named access, exports, and the integrity check; reads are recorded                                                                                   | both                           |
+| Account     | Password, backup codes, signed-in devices                                                                                                                                                 | both                           |
+
+When the service is having problems, a warning with **View health** shows on every page except Health itself.
 
 ```text
 browser ──> platforms.<domain> (IP allow list)

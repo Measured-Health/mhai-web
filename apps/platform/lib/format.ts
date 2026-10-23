@@ -30,6 +30,13 @@ export function dateLabel(value: string) {
 export const dayMonthLabel = (value: string) =>
   dateLabel(value).replace(/ \d{4}$/, "");
 
+/** "14:05": the viewer's local time of day, 24-hour. */
+export function timeLabel(value: string) {
+  const t = new Date(value);
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${two(t.getHours())}:${two(t.getMinutes())}`;
+}
+
 const NUMBER = new Intl.NumberFormat("en-GB");
 /** "1,204,331". */
 export const num = (n: number) => NUMBER.format(n);

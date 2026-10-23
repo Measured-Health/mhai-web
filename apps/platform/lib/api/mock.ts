@@ -43,6 +43,7 @@ import {
 } from "./analytics-fixtures";
 import { createMockOps } from "./mock-ops";
 import type { HealthMode } from "./ops-fixtures";
+import { settingsMock, type SettingsMockOptions } from "./mock-settings";
 import {
   EMAIL_MODES,
   NOTIFICATIONS_MAX,
@@ -214,6 +215,8 @@ export function createMockPlatform({
   audit,
   health = "normal",
   removalStarted,
+  triage,
+  resetFails,
   onCore,
 }: {
   now?: () => number;
@@ -237,6 +240,10 @@ export function createMockPlatform({
    * there is refused with 409 `removal_started`.
    */
   removalStarted?: string[];
+  /** Whether triage can be switched on (see `SettingsMockOptions`). */
+  triage?: SettingsMockOptions["triage"];
+  /** The learning-data reset fails (see `SettingsMockOptions`). */
+  resetFails?: boolean | (() => boolean);
   /** For tests: the core the areas are built on, once it exists. */
   onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
@@ -1072,5 +1079,6 @@ export function createMockPlatform({
     ...auditPart,
     ...createMockOps(core, { health }),
     ...holdsMock(core, { removalStarted }),
+    ...settingsMock(core, { triage, resetFails }),
   };
 }

@@ -30,7 +30,11 @@ import { useStepUpCall } from "@/lib/queries/step-up-call";
 import { inputClass } from "@mhai/ui/auth/password-fields";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
-import { StepUpDialog, type StepUpInput } from "../hospitals/step-up-dialog";
+import {
+  codeOf,
+  StepUpDialog,
+  type StepUpInput,
+} from "../hospitals/step-up-dialog";
 import { Modal } from "../team/modal";
 import { HospitalPicker } from "./hospital-picker";
 
@@ -98,10 +102,7 @@ function PlaceFlow({
   });
 
   const confirm = (input: StepUpInput) => {
-    const code =
-      "backup_code" in input
-        ? { backup_code: input.backup_code }
-        : { mfa_code: input.mfa_code };
+    const code = codeOf(input);
     const note = f.note.trim();
     place.run(
       {

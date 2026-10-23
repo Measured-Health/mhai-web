@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ActivityAction } from "@/lib/api/contract";
 import { AUDIT_TYPES } from "@/lib/api/audit-contract";
 import { auditEvent } from "@/tests/audit-event";
 import { KINDS, REASON_WORDS, TYPE_WORDS } from "./kinds";
@@ -242,5 +243,75 @@ describe("Plan 8's Activity actions", () => {
     const holds = Object.keys(KINDS).filter((k) => k.startsWith("hold_"));
     expect(holds).toHaveLength(8);
     for (const kind of holds) expect(KINDS[kind].note, kind).toBe(false);
+  });
+
+  it("every Activity action has a kind, so its audit entry can be shown", () => {
+    // A Record, so a new ActivityAction fails typecheck until it is listed.
+    const ACTIONS: Record<ActivityAction, true> = {
+      hospital_added: true,
+      hospital_updated: true,
+      hospital_deactivated: true,
+      hospital_reactivated: true,
+      removal_requested: true,
+      removal_blocked: true,
+      removal_approved: true,
+      removal_cancelled: true,
+      hospital_removed: true,
+      sso_updated: true,
+      sso_tested: true,
+      admin_invited: true,
+      admin_invite_resent: true,
+      team_invited: true,
+      team_role_changed: true,
+      team_removed: true,
+      change_followed_up: true,
+      change_note_edited: true,
+      change_follow_up_undone: true,
+      hold_placed: true,
+      hold_edited: true,
+      hold_lift_requested: true,
+      hold_lift_cancelled: true,
+      hold_lift_lapsed: true,
+      hold_lifted: true,
+      hold_lift_undone: true,
+      hold_released: true,
+      jobs_retried: true,
+      jobs_cancelled: true,
+      retention_changed: true,
+      setting_change_requested: true,
+      setting_change_approved: true,
+      setting_change_cancelled: true,
+      setting_change_lapsed: true,
+      clean_up_paused: true,
+      clean_up_resumed: true,
+      triage_switched_off: true,
+      feedback_buffer_cleared: true,
+    };
+    for (const action of Object.keys(ACTIONS))
+      expect(KINDS[action], action).toBeDefined();
+  });
+
+  it("the settings actions are Platform kinds, with a setting target and no note", () => {
+    for (const kind of [
+      "retention_changed",
+      "setting_change_requested",
+      "setting_change_approved",
+      "setting_change_cancelled",
+      "setting_change_lapsed",
+    ]) {
+      expect(KINDS[kind].type, kind).toBe("platform");
+      expect(KINDS[kind].note, kind).toBe(false);
+      expect(KINDS[kind].targets, kind).toEqual(["setting"]);
+    }
+    for (const kind of [
+      "clean_up_paused",
+      "clean_up_resumed",
+      "triage_switched_off",
+      "feedback_buffer_cleared",
+    ]) {
+      expect(KINDS[kind].type, kind).toBe("platform");
+      expect(KINDS[kind].note, kind).toBe(false);
+      expect(KINDS[kind].targets, kind).toEqual([]);
+    }
   });
 });

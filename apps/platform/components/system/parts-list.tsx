@@ -1,6 +1,6 @@
+import { pausedLine } from "@/lib/settings/labels";
 import { TRIAGE_LABEL, partLabel, statusWords } from "@/lib/ops/labels";
 import { timeLabel, type PartsValue } from "@/lib/ops/health";
-import { dateLabel } from "@/lib/format";
 import { StatusMark } from "./overall-status";
 
 /** One row per part: the words, with an icon, and since when. */
@@ -32,13 +32,7 @@ export function PartsList({ value, now }: { value: PartsValue; now: number }) {
                   : "Hasn't run yet"}
               </p>
               {cleanUp.paused && (
-                <p>
-                  {`Records clean-up paused by ${cleanUp.paused_by?.name ?? "a platform admin"}${
-                    cleanUp.paused_at
-                      ? ` since ${dateLabel(cleanUp.paused_at)}`
-                      : ""
-                  }`}
-                </p>
+                <p>{pausedLine(cleanUp.paused_by, cleanUp.paused_at)}</p>
               )}
             </div>
           )}
