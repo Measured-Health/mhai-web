@@ -979,6 +979,138 @@ describe("patient alert and notification settings routes", () => {
   });
 });
 
+describe("alert settings and the alerts sent_to filter (Plan 13)", () => {
+  const as = (roles: Role[], mfaEnabled = true) =>
+    writeSession({
+      token: "tok",
+      expiresAt: Date.now() + 10 * 60_000,
+      user: { ...TEST_USER, roles, mfaEnabled },
+      steps: [],
+    });
+  const write = (method: string, body?: string) =>
+    new Request("http://demo.test/api/v1/hospital/alert-settings", {
+      method,
+      headers: {
+        host: "demo.test",
+        origin: "http://demo.test",
+        "content-type": "application/json",
+        "Idempotency-Key": "k-1",
+      },
+      body,
+    });
+  const PATCH_BODY = JSON.stringify({ version: 2, units: { covered: [] } });
+
+  it("passes GET and PATCH hospital/alert-settings for a hospital admin with two-step", async () => {
+    await as(["hospital_admin"]);
+    fetchMock.mockImplementation(async () => Response.json({ version: 2 }));
+    const read = await GET(get(), ctx("hospital", "alert-settings"));
+    expect(read.status).toBe(200);
+    const saved = await PATCH(
+      write("PATCH", PATCH_BODY),
+      ctx("hospital", "alert-settings"),
+    );
+    expect(saved.status).toBe(200);
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls.map(([u, i]) => [i.method, u])).toEqual([
+      ["GET", "http://api.test/api/v1/hospital/alert-settings"],
+      ["PATCH", "http://api.test/api/v1/hospital/alert-settings"],
+    ]);
+    expect(calls[1]![1].body).toBe(PATCH_BODY);
+    expect(calls[1]![1].headers).toMatchObject({
+      Authorization: "Bearer tok",
+      "Idempotency-Key": "k-1",
+    });
+    // No two-step code is asked for (D8): the body passes as it is.
+    expect(JSON.parse(calls[1]![1].body as string)).not.toHaveProperty(
+      "mfa_code",
+    );
+  });
+
+  it("lets a medical director with two-step save them too", async () => {
+    await as(["clinician", "hospital_admin"]);
+    fetchMock.mockResolvedValueOnce(Response.json({}));
+    const res = await PATCH(
+      write("PATCH", PATCH_BODY),
+      ctx("hospital", "alert-settings"),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses a clinician, a platform account and an admin without two-step", async () => {
+    for (const [roles, mfa, code] of [
+      [["clinician"], true, "forbidden"],
+      [["admin"], true, "forbidden"],
+      [["auditor"], true, "forbidden"],
+      [["hospital_admin"], false, "mfa_required"],
+    ] as [Role[], boolean, string][]) {
+      await as(roles, mfa);
+      for (const res of [
+        await GET(get(), ctx("hospital", "alert-settings")),
+        await PATCH(
+          write("PATCH", PATCH_BODY),
+          ctx("hospital", "alert-settings"),
+        ),
+      ]) {
+        expect(res.status, roles.join()).toBe(403);
+        expect(await res.json()).toEqual({ code });
+      }
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses any other shape with 404, without calling the API", async () => {
+    await as(["hospital_admin"]);
+    for (const res of [
+      await GET(get(), ctx("hospital", "alert-settings", "x")),
+      await PATCH(
+        write("PATCH", PATCH_BODY),
+        ctx("hospital", "alert-settings", "x"),
+      ),
+      await POST(write("PUT", PATCH_BODY), ctx("hospital", "alert-settings")),
+      await POST(write("POST", PATCH_BODY), ctx("hospital", "alert-settings")),
+      await DELETE(write("DELETE"), ctx("hospital", "alert-settings")),
+    ])
+      expect(res.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("passes sent_to=you and sent_to=queue on the alerts list", async () => {
+    await session();
+    fetchMock.mockImplementation(async () =>
+      Response.json({ alerts: [], next_cursor: null, sources: [] }),
+    );
+    for (const v of ["you", "queue"]) {
+      const res = await GET(
+        get(`http://demo.test/api/v1/alerts?status=new&sent_to=${v}`),
+        ctx("alerts"),
+      );
+      expect(res.status).toBe(200);
+    }
+    expect(fetchMock.mock.calls.map((c) => (c as [string])[0])).toEqual([
+      "http://api.test/api/v1/alerts?status=new&sent_to=you",
+      "http://api.test/api/v1/alerts?status=new&sent_to=queue",
+    ]);
+  });
+
+  it("refuses any other sent_to with 400 invalid, without calling the API", async () => {
+    await session();
+    for (const q of [
+      "sent_to=other",
+      "sent_to=",
+      "sent_to=YOU",
+      "sent_to=you&sent_to=queue",
+    ]) {
+      const res = await GET(
+        get(`http://demo.test/api/v1/alerts?${q}`),
+        ctx("alerts"),
+      );
+      expect(res.status, q).toBe(400);
+      expect(await res.json()).toEqual({ code: "invalid" });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("analysis routes", () => {
   const as = (roles: Role[], mfaEnabled = true) =>
     writeSession({

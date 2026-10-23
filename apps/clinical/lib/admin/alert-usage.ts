@@ -270,10 +270,17 @@ export function readAlerts(u: Pick<UsageOut, "alerts">): AlertsState {
     a.rising.every(risingOk) &&
     worseningOk(a.worsening);
   if (!ok) return { state: "failed" };
-  const alerts = a as unknown as UsageAlertsOut;
+  // Who received them is optional: absent or unreadable means no block.
+  // A copy, so the server's object is never changed.
+  const alerts = { ...a } as unknown as UsageAlertsOut;
+  if (!routeOk(a.by_route)) delete alerts.by_route;
   return safeSets(alerts) && !overHidden(alerts) && flagsShowable(alerts)
     ? { state: "ready", alerts }
     : { state: "failed" };
+}
+
+function routeOk(r: unknown): boolean {
+  return isObj(r) && measureOk(r.queue, "count") && measureOk(r.named, "count");
 }
 
 /**

@@ -4,7 +4,7 @@ import type {
   NotificationSettingsOut,
 } from "../api/alerts-contract";
 import { parseTime } from "../corrections";
-import { SEVERITY, findingLine, severityOf } from "./alert-view";
+import { SEVERITY, findingLine, routingOf, severityOf } from "./alert-view";
 
 export const NOTIFICATIONS_HREF = "/notifications";
 export const CORRECTIONS_HREF = "/notifications/corrections";
@@ -82,8 +82,9 @@ export interface PopupPlan {
 }
 
 /**
- * Which new alerts pop up: Critical always, the others only when alert
- * pop-ups are on (spec §4). Most severe first, newest first within a level;
+ * Which new alerts pop up: Critical always, the others only when they were
+ * sent to you and alert pop-ups are on (spec §4; queue-only Urgent and Info
+ * alerts stay on the bell and the list). Most severe first, newest first within a level;
  * at most POPUP_MAX, and the rest are summarised (Review Focus 3).
  */
 export function planPopups(
@@ -91,7 +92,7 @@ export function planPopups(
   s: Pick<NotificationSettingsOut, "alert_popups">,
 ): PopupPlan {
   const eligible = [...new Map(fresh.map((a) => [a.id, a])).values()]
-    .filter((a) => s.alert_popups || isCritical(a))
+    .filter((a) => isCritical(a) || (routingOf(a).to_you && s.alert_popups))
     .sort(
       (x, y) =>
         SEVERITY[severityOf(x.severity)].rank -

@@ -41,6 +41,7 @@ describe("the platform shell", () => {
       .map((l) => [l.textContent, l.getAttribute("href")]);
     expect(links).toEqual([
       ["Hospitals", "/hospitals"],
+      ["Connections", "/connections"],
       ["Analytics", "/analytics"],
       ["Clearances", "/clearances"],
       ["Legal holds", "/legal-holds"],
@@ -82,14 +83,26 @@ describe("the platform shell", () => {
     ).toHaveAttribute("href", "/legal-holds");
   });
 
-  it("the sidebar shows Analytics after Hospitals", () => {
+  it("the sidebar shows Connections right after Hospitals", () => {
+    shell();
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    const names = within(nav)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
+    expect(names[names.indexOf("Hospitals") + 1]).toBe("Connections");
+    expect(
+      within(nav).getByRole("link", { name: "Connections" }),
+    ).toHaveAttribute("href", "/connections");
+  });
+
+  it("the sidebar shows Analytics after Connections", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     const names = within(nav)
       .getAllByRole("link")
       .map((l) => l.textContent);
     const at = names.indexOf("Analytics");
-    expect(names[at - 1]).toBe("Hospitals");
+    expect(names[at - 1]).toBe("Connections");
     expect(names[at + 1]).toBe("Clearances");
     expect(
       within(nav).getByRole("link", { name: "Analytics" }),

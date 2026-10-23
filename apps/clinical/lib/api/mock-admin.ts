@@ -386,6 +386,11 @@ const USAGE_ALERTS: Record<UsagePeriod, AlertsSeed> = {
     },
     // None was unhandled on the same days last month: no percentage from 0.
     unhandled: measure(9),
+    // One alert can go to both, so these needn't add up to the total.
+    by_route: {
+      queue: measure(97, up(31, 74)),
+      named: measure(58, up(29, 45)),
+    },
     median_ack_minutes: measure(22, up(6, 16)),
     median_ack_minutes_critical: measure(11, up(3, 8)),
     critical_within_target: measure(0.71, down(17, 0.88)),
@@ -438,6 +443,10 @@ const USAGE_ALERTS: Record<UsagePeriod, AlertsSeed> = {
       info: measure(90, up(14, 79)),
     },
     unhandled: measure(0),
+    by_route: {
+      queue: measure(139, up(6, 131)),
+      named: measure(76, up(9, 70)),
+    },
     median_ack_minutes: measure(16, down(2, 18)),
     median_ack_minutes_critical: measure(8, down(1, 9)),
     critical_within_target: measure(0.88, up(2, 0.86)),
@@ -484,6 +493,7 @@ const USAGE_ALERTS: Record<UsagePeriod, AlertsSeed> = {
       info: measure(273),
     },
     unhandled: measure(9),
+    by_route: { queue: measure(402), named: measure(221) },
     median_ack_minutes: measure(19),
     median_ack_minutes_critical: measure(10),
     critical_within_target: measure(0.8),
@@ -560,6 +570,8 @@ function alertsFor(
     // worsening flag ("down from 88%" would be a share of fewer than 5).
     rest.critical_within_target = { ...hiddenCount(), change: null };
     rest.worsening = null;
+    // Few were sent to named clinicians: hidden, like any small group.
+    if (rest.by_route) rest.by_route.named = { ...hiddenCount(), change: null };
     if (series.bucket === "week") {
       // The weekly period gets a previous one, or its flagged week and What
       // changed line would never show.
@@ -687,6 +699,24 @@ function seedActivity(now: number): ActivityEventOut[] {
       ago: 3 * D,
       type: "admin",
       kind: "settings_changed",
+      actor: who("Grace Nwosu"),
+    },
+    {
+      ago: 4 * D,
+      type: "admin",
+      kind: "alert_recipients_changed",
+      actor: who("Grace Nwosu"),
+    },
+    {
+      ago: 4 * D + 5 * MIN,
+      type: "admin",
+      kind: "alert_rules_changed",
+      actor: who("Grace Nwosu"),
+    },
+    {
+      ago: 4 * D + 10 * MIN,
+      type: "admin",
+      kind: "alert_units_changed",
       actor: who("Grace Nwosu"),
     },
     {

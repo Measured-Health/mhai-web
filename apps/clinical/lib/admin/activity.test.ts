@@ -249,6 +249,9 @@ const KINDS = [
   "clearance_viewed",
   "clearance_reminder_sent",
   "analysis_named_viewed",
+  "alert_units_changed",
+  "alert_rules_changed",
+  "alert_recipients_changed",
 ];
 
 // Same matching rule as the e2e scan: upper-case terms are case-sensitive.
@@ -329,6 +332,21 @@ describe("the clearance and named-view sentences (Plan 11)", () => {
     ];
     for (const [over, text] of cases)
       expect(describeEvent(makeEvent(over)), over?.kind).toBe(text);
+  });
+});
+
+describe("the alert settings sentences (Plan 13)", () => {
+  it("says the three words of the plan", () => {
+    const grace = who("Grace Nwosu");
+    for (const [kind, text] of [
+      ["alert_units_changed", "Changed which units alerts cover"],
+      ["alert_rules_changed", "Changed what alerts flag"],
+      ["alert_recipients_changed", "Changed who gets alerts"],
+    ] as const)
+      expect(
+        describeEvent(makeEvent({ kind, type: "admin", actor: grace })),
+        kind,
+      ).toBe(text);
   });
 });
 

@@ -6,6 +6,7 @@ import type {
   CauseConfidence,
   DismissReason,
   FindingOut,
+  LikelyCauseOut,
 } from "../api/alerts-contract";
 import { RESULT_LABEL } from "../labels";
 import { eventClock } from "../time";
@@ -119,10 +120,46 @@ export interface CauseView {
   level: CauseConfidence;
   /** The result label (spec §6). */
   word: string;
+  /** "Label · value · time", at most EVIDENCE_MAX. */
+  evidence: string[];
 }
 
+/** Evidence lines shown under a cause, at most. */
+export const EVIDENCE_MAX = 3;
+
+/** Label, value and time, joined by " · "; blank labels dropped; at most three. */
+export function evidenceOf(c: LikelyCauseOut, now: number): string[] {
+  return (c.evidence ?? [])
+    .filter((e) => e.label?.trim())
+    .slice(0, EVIDENCE_MAX)
+    .map((e) =>
+      [
+        e.label.trim(),
+        e.value?.trim() || null,
+        e.recorded_at ? eventClock(e.recorded_at, now) || null : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    );
+}
+
+/** Missing routing reads as sent to you (today's behaviour). */
+export function routingOf(a: Pick<AlertOut, "routing">): {
+  to_you: boolean;
+  queue: boolean;
+} {
+  return a.routing
+    ? { to_you: !!a.routing.to_you, queue: !!a.routing.queue }
+    : { to_you: true, queue: false };
+}
+
+export const ROUTE_LABEL = { you: "For you", queue: "Hospital queue" };
+
 /** At most three, with the result labels' words; an unknown level reads "Needs review" (R9). */
-export function likelyCauses(a: Pick<AlertOut, "likely_causes">): CauseView[] {
+export function likelyCauses(
+  a: Pick<AlertOut, "likely_causes">,
+  now: number,
+): CauseView[] {
   return (a.likely_causes ?? [])
     .filter((c) => c.label?.trim())
     .slice(0, CAUSE_MAX)
@@ -130,7 +167,12 @@ export function likelyCauses(a: Pick<AlertOut, "likely_causes">): CauseView[] {
       const level: CauseConfidence = LEVELS.has(c.confidence)
         ? c.confidence
         : "review";
-      return { label: c.label.trim(), level, word: RESULT_LABEL[level] };
+      return {
+        label: c.label.trim(),
+        level,
+        word: RESULT_LABEL[level],
+        evidence: evidenceOf(c, now),
+      };
     });
 }
 

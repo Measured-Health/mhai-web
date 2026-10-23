@@ -452,6 +452,28 @@ sign-off before live use, and it has not been given:
 Until it is given, alerts run on sample data only; see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
+### EMR connections and alert settings
+
+Sample data only. Platform admin app: sign in as a platform admin and open
+**Connections** (right after Hospitals). Havana is connected, Northgate needs
+attention (its sign-in is refused: replace the key on its page, test, and it
+reads Connected), Riverside is switched off and Eastbrook is not connected.
+**Add a connection** takes a type, a name, an address, the type's fields and
+the admin's own two-step code (in the demo, `123456`). It is saved switched
+off; **Test connection**, then **Switch on**. Credentials are write-only:
+they read "Set · {date}" afterwards and never come back to the browser. An
+auditor sees everything and none of the controls.
+
+Hospital admin side: sign in as the hospital admin and open **Alert
+settings** to choose the units covered, what to flag and who gets alerts
+(the hospital queue and named clinicians). Clinicians then see a "For you" or
+"Hospital queue" tag on each alert, and the evidence under each likely cause.
+Alerts never go to patients.
+
+Live use needs the Plan 5a clinical and privacy sign-off first, and the
+backend contract for record connections and alert settings; see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ### Analysis
 
 Analysis shows hospital-wide counts of conditions, findings, alerts and

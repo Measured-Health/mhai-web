@@ -11,7 +11,7 @@ export function TopBar({
   actions,
 }: {
   title: string;
-  sub?: string;
+  sub?: ReactNode;
   actions?: ReactNode;
 }) {
   const { openDrawer } = useShell();

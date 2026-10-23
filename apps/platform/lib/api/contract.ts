@@ -10,6 +10,7 @@ import type {
   SeriesOut,
 } from "./analytics-contract";
 import type { AuditClient } from "./audit-contract";
+import type { EmrClient } from "./emr-contract";
 import type { ClearancesClient } from "./clearances-contract";
 import type { HoldShort, HoldsClient } from "./holds-contract";
 import type { EmailPref, NotificationsOut } from "./notifications-contract";
@@ -188,6 +189,13 @@ export type ActivityAction =
   | "clean_up_resumed"
   | "triage_switched_off"
   | "feedback_buffer_cleared"
+  // Record connections (Plan 13); the target is the source label, never a
+  // credential.
+  | "emr_connection_added"
+  | "emr_connection_changed"
+  | "emr_connection_switched_on"
+  | "emr_connection_switched_off"
+  | "emr_connection_tested"
   // Clearance letters and the named-access switch (Plan 11b). A letter's
   // target is "the clearance letter signed by {signed_by}"; a switch's is
   // "{position} for {hospital}" or "{position} for every hospital".
@@ -266,6 +274,7 @@ export interface PlatformClient
     OpsClient,
     AuditClient,
     SettingsClient,
+    EmrClient,
     ClearancesClient {
   listHospitals(
     q: HospitalQuery,

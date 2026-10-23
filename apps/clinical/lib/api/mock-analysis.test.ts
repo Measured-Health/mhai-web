@@ -19,6 +19,7 @@ import type {
 } from "./analysis-contract";
 import { buildCohort, COHORT, FILTER_OPTIONS } from "./analysis-fixtures";
 import { ApiError } from "./errors";
+import { VENDOR_NAMES } from "../../../../scripts/vendor-names.mjs";
 import { PLATFORM_ADMINS } from "./clearances-fixtures";
 import { createMockAnalysis, share } from "./mock-analysis";
 import { auditEvents, resetAudit } from "./mock-audit";
@@ -28,19 +29,6 @@ import {
   resetClearances,
 } from "./mock-clearances";
 
-const VENDORS = [
-  "epic",
-  "cerner",
-  "oracle",
-  "openmrs",
-  "meditech",
-  "athena",
-  "allscripts",
-  "nextgen",
-  "eclinicalworks",
-  "dhis",
-  "bahmni",
-];
 const F: AnalysisFilters = {
   from: "2025-10-22",
   to: "2026-10-21",
@@ -89,7 +77,7 @@ describe("sample cohort", () => {
 
   it("names no vendor anywhere in the fixtures", () => {
     const text = JSON.stringify({ COHORT, FILTER_OPTIONS }).toLowerCase();
-    for (const v of VENDORS) expect(text).not.toContain(v);
+    for (const v of VENDOR_NAMES) expect(text).not.toContain(v);
     expect(text).not.toMatch(/\blab\b/);
   });
 
@@ -1027,7 +1015,7 @@ describe("named patients", () => {
       expect(readme, name).not.toContain(name);
       for (const w of name.toLowerCase().split(" "))
         expect(words.has(w), `${name}: ${w}`).toBe(false);
-      for (const v of VENDORS) expect(name.toLowerCase()).not.toContain(v);
+      for (const v of VENDOR_NAMES) expect(name.toLowerCase()).not.toContain(v);
     }
     const mrns = COHORT.map((p) => p.mrn);
     expect(new Set(mrns).size).toBe(mrns.length);

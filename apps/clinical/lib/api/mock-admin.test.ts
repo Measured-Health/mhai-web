@@ -723,3 +723,44 @@ describe("usage alerts (sample, at 16 Oct)", () => {
     }
   });
 });
+
+describe("alert routing and settings in the sample (Plan 13)", () => {
+  it("says how many alerts went to the queue and to named clinicians, guarded", async () => {
+    for (const p of ["this_month", "last_month", "last_90_days"] as const) {
+      const a = (await director().getUsage(p)).alerts as UsageAlertsOut;
+      const r = a.by_route!;
+      for (const m of [r.queue, r.named]) {
+        expect(m.suppressed, p).toBe(false);
+        expect(m.value! >= SMALL_GROUP_MIN, p).toBe(true);
+        expect(m.value! <= a.total.value!, p).toBe(true);
+      }
+      expect(r.queue.change === null, p).toBe(!a.has_previous);
+    }
+    const edge = (await mockAdminWith("edge").getUsage("this_month"))
+      .alerts as UsageAlertsOut;
+    expect(edge.by_route!.named).toEqual({
+      value: null,
+      suppressed: true,
+      change: null,
+    });
+  });
+
+  it("lists the three alert settings changes in sample Activity", async () => {
+    const { events } = await mockAdminAs(
+      DEMO_EMAILS.hospitalAdmin,
+    ).listActivity({ type: "admin" });
+    const kinds = events.map((e) => e.kind);
+    for (const k of [
+      "alert_units_changed",
+      "alert_rules_changed",
+      "alert_recipients_changed",
+    ])
+      expect(kinds).toContain(k);
+    for (const e of events.filter((x) => String(x.kind).startsWith("alert_")))
+      expect(e).toMatchObject({
+        type: "admin",
+        actor: { display_name: "Grace Nwosu" },
+        target: null,
+      });
+  });
+});

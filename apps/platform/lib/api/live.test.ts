@@ -626,6 +626,84 @@ const ROWS: Row[] = [
     { reason: "Training data", mfa_code: "123456" },
   ],
   [
+    "listConnectorTypes",
+    (c) => c.listConnectorTypes(),
+    "GET",
+    "/api/v1/platform/emr/connector-types",
+    undefined,
+  ],
+  [
+    "listConnections",
+    (c) => c.listConnections({ hospital: "h_havana", state: "off" }),
+    "GET",
+    "/api/v1/platform/emr/connections?hospital=h_havana&state=off",
+    undefined,
+  ],
+  [
+    "getConnection",
+    (c) => c.getConnection("emr_hv1"),
+    "GET",
+    "/api/v1/platform/emr/connections/emr_hv1",
+    undefined,
+  ],
+  [
+    "addConnection",
+    (c) =>
+      c.addConnection(
+        "h_westfield",
+        {
+          type: "fhir_r4",
+          source_label: "Main record",
+          base_url: "https://records.westfield.example/fhir",
+          settings: { client_id: "a" },
+          credentials: { private_key: "k" },
+          ...CODE,
+        },
+        K,
+      ),
+    "POST",
+    "/api/v1/platform/hospitals/h_westfield/emr/connections",
+    {
+      type: "fhir_r4",
+      source_label: "Main record",
+      base_url: "https://records.westfield.example/fhir",
+      settings: { client_id: "a" },
+      credentials: { private_key: "k" },
+      mfa_code: "123456",
+    },
+  ],
+  [
+    "updateConnection",
+    (c) =>
+      c.updateConnection(
+        "emr_hv1",
+        { source_label: "Main", version: 2, ...CODE },
+        K,
+      ),
+    "PATCH",
+    "/api/v1/platform/emr/connections/emr_hv1",
+    { source_label: "Main", version: 2, mfa_code: "123456" },
+  ],
+  [
+    "setConnectionEnabled",
+    (c) =>
+      c.setConnectionEnabled(
+        "emr_hv1",
+        { enabled: false, version: 2, backup_code: "AAAA-BBBB" },
+        K,
+      ),
+    "PUT",
+    "/api/v1/platform/emr/connections/emr_hv1/enabled",
+    { enabled: false, version: 2, backup_code: "AAAA-BBBB" },
+  ],
+  [
+    "testConnection",
+    (c) => c.testConnection("emr_hv1", K),
+    "POST",
+    "/api/v1/platform/emr/connections/emr_hv1/test",
+    undefined,
+  ],
+  [
     "listClearances",
     (c) =>
       c.listClearances({
@@ -851,6 +929,19 @@ describe("live platform client", () => {
       "/api/v1/platform/jobs",
       "/api/v1/platform/jobs/retry",
       "/api/v1/platform/jobs/cancel",
+    ]);
+  });
+
+  it("the connections list sends hospital and state, and leaves out unset ones", async () => {
+    await client().listConnections({});
+    await client().listConnections({ state: "not_connected" });
+    await client().listConnections({ hospital: "h_a b", state: "all" });
+    await client().getConnection("emr/../x");
+    expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
+      "/api/v1/platform/emr/connections",
+      "/api/v1/platform/emr/connections?state=not_connected",
+      "/api/v1/platform/emr/connections?hospital=h_a+b&state=all",
+      "/api/v1/platform/emr/connections/emr%2F..%2Fx",
     ]);
   });
 

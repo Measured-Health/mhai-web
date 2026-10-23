@@ -61,6 +61,21 @@ describe("platformError", () => {
       expect(e(409, code).stale).toBe(false);
   });
 
+  it("gives plain words for the record connection codes", () => {
+    expect(e(409, "not_tested")).toEqual({
+      title: "Test the saved settings first.",
+      body: "",
+      stale: true,
+      gone: false,
+    });
+    expect(e(422, "no_type")).toEqual({
+      title: "Choose a connection type.",
+      body: "",
+      stale: false,
+      gone: false,
+    });
+  });
+
   it("treats a network failure, a 5xx and an unknown error as unreachable", () => {
     const down = "Couldn't reach the service. Try again.";
     expect(platformError(new ApiError(0, "network")).title).toBe(down);

@@ -109,9 +109,11 @@ flowchart TB
         h3[Hospital settings: review rules, 2-step, timeout]
         h4[Usage counts for the hospital]
         h5[Activity log & review oversight]
+        h6[Alert settings: units, what to flag, who hears]
     end
     subgraph A["Platform admin app"]
         a0[Hospitals & SSO setup]
+        a2[Record connections]
         a1[Platform users & roles]
         a3[Agent status & DLQ]
         a4[Legal holds]
@@ -119,10 +121,10 @@ flowchart TB
         a6[Audit log + verify]
     end
     clinician((clinician)) --> c1 & c2 & c3 & c4 & c5
-    hadmin((hospital admin · MFA)) --> h1 & h2 & h3 & h4 & h5
+    hadmin((hospital admin · MFA)) --> h1 & h2 & h3 & h4 & h5 & h6
     hadmin --> c5
-    admin((platform admin · MFA)) --> a0 & a1 & a3 & a4 & a5 & a6
-    auditor((auditor · MFA)) --> a6
+    admin((platform admin · MFA)) --> a0 & a2 & a1 & a3 & a4 & a5 & a6
+    auditor((auditor · MFA)) --> a2 & a6
 ```
 
 - **Roles combine in the clinical app:** a clinician who is also a
@@ -162,6 +164,11 @@ flowchart TB
   Letters only, On) stays the authority; the app only reads it. The Named
   access entry is in the Hospital admin group after Analysis and shows only
   to a hospital admin who passes the gate (`canOpenNamedAccess`).
+- **Two abilities were added with the EMR screens.** A platform admin
+  manages record connections (add, edit, test, switch on and off, each
+  change but testing with their own two-step code); an auditor reads them
+  and the proxy refuses their writes. A hospital admin edits the hospital's
+  alert settings (no extra code); a clinician sees the alerts sent to them and, when the hospital uses it, the hospital queue.
 - **Researcher** has no endpoints yet, so it has no app.
 
 ## 3. Repository layout
@@ -408,14 +415,15 @@ person sends the admin's own two-step code in the `DELETE` body. Until the
 backend defines them, the calls follow the assumed contract in the design
 spec §10 item 3.
 
-| Screen             | What it does                                                                                                                                                                                                                        |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Staff              | Everyone at the hospital: roles, specialty, status, sign-in method, last active. Filters surface problems such as "Two-step not set up"                                                                                             |
-| Invite staff       | One person or a pasted list, with a role and a specialty. With hospital single sign-on they just sign in; otherwise they get an email invite (7 days) and go through first sign-in                                                  |
-| Staff member panel | Change roles and specialty, set who can review corrections, send a password reset, reset two-step, deactivate, remove (needs the admin's own two-step code). You can't remove your own admin role                                   |
-| Hospital settings  | Review turnaround and reviewer rules, two-step policy for clinicians, idle timeout, "trust this device", and SSO status (read-only; Measured Health configures it)                                                                  |
-| Usage              | Counts only: consultations, active clinicians, the confidence mix, agreement rate, review time and specialty breakdown. CSV export                                                                                                  |
-| Activity           | A log of sign-ins, consultations (specialty and confidence only), feedback, review decisions, account changes and flagged security events; plus review oversight: overdue corrections, reviewer coverage, remind, assign a reviewer |
+| Screen             | What it does                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Staff              | Everyone at the hospital: roles, specialty, status, sign-in method, last active. Filters surface problems such as "Two-step not set up"                                                                                                                                                                                                                                                        |
+| Invite staff       | One person or a pasted list, with a role and a specialty. With hospital single sign-on they just sign in; otherwise they get an email invite (7 days) and go through first sign-in                                                                                                                                                                                                             |
+| Staff member panel | Change roles and specialty, set who can review corrections, send a password reset, reset two-step, deactivate, remove (needs the admin's own two-step code). You can't remove your own admin role                                                                                                                                                                                              |
+| Hospital settings  | Review turnaround and reviewer rules, two-step policy for clinicians, idle timeout, "trust this device", and SSO status (read-only; Measured Health configures it)                                                                                                                                                                                                                             |
+| Usage              | Counts only: consultations, active clinicians, the confidence mix, agreement rate, review time and specialty breakdown. CSV export                                                                                                                                                                                                                                                             |
+| Alert settings     | `/admin/alerts`: the records connection's status (state, source labels and last update only), then three sections saved one at a time: units covered, what to flag (a level per kind of result) and who gets alerts (the hospital queue, named clinicians). A stale version reads "Changed by someone else"; saving with no queue and nobody named is refused. Each save is one Activity event |
+| Activity           | A log of sign-ins, consultations (specialty and confidence only), feedback, review decisions, account changes and flagged security events; plus review oversight: overdue corrections, reviewer coverage, remind, assign a reviewer                                                                                                                                                            |
 
 ```text
 ┌────────────┬──────────────────────────────────────────────────────┐
@@ -456,6 +464,12 @@ Spec: `docs/specs/2026-10-17-notifications-design.md`. Clinicians only.
 - **Pop-ups:** the first check after sign-in is a baseline. Critical always
   pops up (assertive live region); Urgent, Info and decisions follow the two
   switches in Profile & security → Notifications.
+- **Routing and evidence:** each alert says who it was sent to (`routing`:
+  "For you" and/or "Hospital queue"; missing means for you) and can carry
+  up to three pieces of evidence under each likely cause. A queue-only
+  Urgent or Info alert counts on the bell and lists under Hospital queue but
+  does not pop up; a queue-only Critical one does. The alert list can filter
+  by "Sent to". Alerts never go to patients.
 - **EMR-agnostic** ([ADR 0003](docs/adr/0003-many-emr-systems.md)): the
   frontend never talks to an EMR, names a vendor or builds a record link; it
   follows the backend's `emr_link` ("Open patient record") and shows the
@@ -521,19 +535,20 @@ admins and auditors. It runs on sample data until the backend has the
 platform endpoints; the contract it assumes is in
 [the platform admin spec, §13](docs/specs/2026-10-17-platform-admin-design.md).
 
-| Page        | What it does                                                                                                                                                                              | Who                            |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| Hospitals   | List, search, add a hospital and invite its first admin                                                                                                                                   | platform admin (auditors read) |
-| Hospital    | Details, deactivate and reactivate, single sign-on, two-person removal with retention and legal-hold checks, recent actions                                                               | platform admin (auditors read) |
-| Analytics   | What changed, the tabs and a CSV, in counts only; follow-ups                                                                                                                              | platform admin (auditors read) |
-| Clearances  | Hospitals' clearance letters: the queue, a safe page viewer, verify, reject and revoke with a code, and the named-access switch (two-person raise, one-person lower)                      | platform admin (auditors read) |
-| Legal holds | The holds list and filters, place a hold, a hold's page with edit and two-person lift and undo; also a section on each hospital's page                                                    | platform admin (auditors read) |
-| System      | Health (overall, parts, times, errors; refreshes every 30 s) and Failed jobs (retry, cancel with a code), in counts only                                                                  | platform admin (auditors read) |
-| Settings    | Retention periods (longer at once, shorter with a preview and a second admin), triage on and off, clearing unapproved learning data, pause clean-up, and the changes waiting for approval | platform admin (auditors read) |
-| Team        | Invite, change role, remove (never your own row)                                                                                                                                          | platform admin (auditors read) |
-| Activity    | Every platform action, newest first, by hospital                                                                                                                                          | both                           |
-| Audit log   | Every entry in the log newest first, named access, exports, and the integrity check; reads are recorded                                                                                   | both                           |
-| Account     | Password, backup codes, signed-in devices                                                                                                                                                 | both                           |
+| Page        | What it does                                                                                                                                                                                                                                                                                               | Who                            |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Hospitals   | List, search, add a hospital and invite its first admin                                                                                                                                                                                                                                                    | platform admin (auditors read) |
+| Hospital    | Details, deactivate and reactivate, single sign-on, two-person removal with retention and legal-hold checks, recent actions                                                                                                                                                                                | platform admin (auditors read) |
+| Connections | Every hospital's patient record connections with state filters (`?state=`), a connection's page (status, test, switch on and off, settings, last day's problems), and Add a connection. Credentials are write-only: "Set · {date}" or "Not set", never shown again; also a section on each hospital's page | platform admin (auditors read) |
+| Analytics   | What changed, the tabs and a CSV, in counts only; follow-ups                                                                                                                                                                                                                                               | platform admin (auditors read) |
+| Clearances  | Hospitals' clearance letters: the queue, a safe page viewer, verify, reject and revoke with a code, and the named-access switch (two-person raise, one-person lower)                                                                                                                                       | platform admin (auditors read) |
+| Legal holds | The holds list and filters, place a hold, a hold's page with edit and two-person lift and undo; also a section on each hospital's page                                                                                                                                                                     | platform admin (auditors read) |
+| System      | Health (overall, parts, times, errors; refreshes every 30 s) and Failed jobs (retry, cancel with a code), in counts only                                                                                                                                                                                   | platform admin (auditors read) |
+| Settings    | Retention periods (longer at once, shorter with a preview and a second admin), triage on and off, clearing unapproved learning data, pause clean-up, and the changes waiting for approval                                                                                                                  | platform admin (auditors read) |
+| Team        | Invite, change role, remove (never your own row)                                                                                                                                                                                                                                                           | platform admin (auditors read) |
+| Activity    | Every platform action, newest first, by hospital                                                                                                                                                                                                                                                           | both                           |
+| Audit log   | Every entry in the log newest first, named access, exports, and the integrity check; reads are recorded                                                                                                                                                                                                    | both                           |
+| Account     | Password, backup codes, signed-in devices                                                                                                                                                                                                                                                                  | both                           |
 
 When the service is having problems, a warning with **View health** shows on every page except Health itself.
 

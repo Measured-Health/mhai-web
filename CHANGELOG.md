@@ -31,6 +31,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- EMR screens, on sample data: a Connections page in the platform admin app
+  (list by hospital, a connection's page, Add a connection, test, switch on
+  and off, write-only credentials, Activity and audit words), a Patient
+  record connections section on each hospital's page, Alert settings for
+  hospital admins (units covered, what to flag, who gets alerts), and
+  evidence, a category and a "For you" or "Hospital queue" tag on patient
+  alerts. A repo test now fails on any vendor or product name in the apps
+  and packages.
 - Named access in the hospital admin side, on sample data: a Named access
   page with the hospital's clearance letters in every status, uploading a
   PDF, PNG or JPEG letter (checked, then waiting for Measured Health),

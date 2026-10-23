@@ -389,3 +389,71 @@ describe("Notifications: Patient alerts", () => {
     expect(listSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("Notifications: Sent to filter", () => {
+  it("Sent to: Hospital queue lists only queue alerts", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(<NotificationsPage />);
+    await shows(6);
+    const group = screen.getByRole("group", { name: "Sent to" });
+    expect(
+      within(group).getByRole("button", { name: "All alerts" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(
+      within(group).getByRole("button", { name: "Hospital queue" }),
+    );
+    await waitFor(async () => {
+      const all = await cards();
+      expect(all.length).toBeGreaterThan(0);
+      expect(all.length).toBeLessThan(6);
+      for (const c of all) {
+        expect(within(c).getByText("Hospital queue")).toBeVisible();
+        expect(within(c).queryByText("For you")).toBeNull();
+      }
+    });
+    await user.click(within(group).getByRole("button", { name: "For you" }));
+    await waitFor(async () => {
+      for (const c of await cards())
+        expect(within(c).getByText("For you")).toBeVisible();
+    });
+  });
+
+  it("the Sent to filter is hidden when the hospital doesn't use the queue", async () => {
+    const real = holder.client;
+    holder.client = {
+      ...real,
+      listAlerts: async (q) => {
+        const { queue: _q, ...rest } = await real.listAlerts(q);
+        void _q;
+        return rest;
+      },
+    } as MockAlerts;
+    renderWithAuth(<NotificationsPage />);
+    await shows(6);
+    expect(screen.queryByRole("group", { name: "Sent to" })).toBeNull();
+  });
+
+  it("says what the page is for", async () => {
+    renderWithAuth(<NotificationsPage />);
+    await shows(6);
+    expect(
+      screen.getByText(
+        "Abnormal results MHAI spotted, with the evidence and likely causes to check. Clinicians decide what happens next.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("nothing about the filter reaches the URL or storage", async () => {
+    const user = userEvent.setup();
+    const before = window.location.href;
+    renderWithAuth(<NotificationsPage />);
+    await shows(6);
+    await user.click(screen.getByRole("button", { name: "Hospital queue" }));
+    await waitFor(async () => expect((await cards()).length).toBeLessThan(6));
+    expect(window.location.href).toBe(before);
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(localStorage.length).toBe(0);
+    expect(sessionStorage.length).toBe(0);
+  });
+});

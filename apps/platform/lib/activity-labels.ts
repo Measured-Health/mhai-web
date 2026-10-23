@@ -1,5 +1,9 @@
 import type { ActivityAction } from "@/lib/api/contract";
 
+/** "the record connection “Main record”", or without a name. */
+const connection = (t: string | null) =>
+  t ? `the record connection “${t}”` : "the record connection";
+
 /** Why a verify was refused, by its code. */
 const REFUSED: Record<string, string> = {
   same_side: "they're linked to the hospital",
@@ -117,6 +121,16 @@ export function actionLabel(
       return t
         ? `cleared unapproved learning data: ${t}`
         : "cleared unapproved learning data";
+    case "emr_connection_added":
+      return `added ${connection(t)}`;
+    case "emr_connection_changed":
+      return `changed ${connection(t)}`;
+    case "emr_connection_switched_on":
+      return `switched on ${connection(t)}`;
+    case "emr_connection_switched_off":
+      return `switched off ${connection(t)}`;
+    case "emr_connection_tested":
+      return `tested ${connection(t)}`;
     // Clearance letters: the target is "the clearance letter signed by …".
     case "clearance_viewed":
       return `viewed ${t ?? "a clearance letter"}`;

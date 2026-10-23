@@ -130,6 +130,17 @@ const AUDIT_SHAPES: [Method, string][] = [
   ["POST", "platform/audit/verify/runs/{id}/outcome"],
 ];
 
+/** The 7 record connection shapes (Plan 13). */
+const EMR_SHAPES: [Method, string][] = [
+  ["GET", "platform/emr/connector-types"],
+  ["GET", "platform/emr/connections"],
+  ["POST", "platform/hospitals/{id}/emr/connections"],
+  ["GET", "platform/emr/connections/{id}"],
+  ["PATCH", "platform/emr/connections/{id}"],
+  ["PUT", "platform/emr/connections/{id}/enabled"],
+  ["POST", "platform/emr/connections/{id}/test"],
+];
+
 /** The 11 clearance and switch shapes (Plan 11b). */
 const CLEARANCE_SHAPES: [Method, string][] = [
   ["GET", "platform/clearances"],
@@ -196,6 +207,7 @@ const SHAPES: [Method, string][] = [
   ["POST", "platform/settings/requests/{id}/cancel"],
   ["POST", "platform/settings/feedback-buffer/reset"],
   ...AUDIT_SHAPES,
+  ...EMR_SHAPES,
   ...CLEARANCE_SHAPES,
 ];
 /** The writes an auditor may make: their own read state, and the audit ones. */
@@ -713,6 +725,59 @@ describe("platform API proxy", () => {
         expect([type, res.status]).toEqual([type, 502]);
         expect(await res.json()).toEqual({ code: "bad_gateway" });
       }
+    });
+  });
+
+  describe("the record connection shapes", () => {
+    it("the 7 shapes pass for a platform admin", async () => {
+      expect(EMR_SHAPES).toHaveLength(7);
+      for (const [method, shape] of EMR_SHAPES) {
+        fetchMock.mockReset();
+        await session();
+        fetchMock.mockResolvedValueOnce(Response.json({ ok: 1 }));
+        const path = concrete(shape);
+        const res = await call(method, path, { body: "{}" });
+        expect([method, shape, res.status]).toEqual([method, shape, 200]);
+        expect(calls()[0]![0]).toBe(`http://api.test/api/v1/${path.join("/")}`);
+      }
+    });
+
+    it("an auditor reads them all, and the 4 writes are refused before upstream", async () => {
+      await session({ roles: ["auditor"] });
+      const writes = EMR_SHAPES.filter(([m]) => m !== "GET");
+      expect(writes).toHaveLength(4);
+      for (const [method, shape] of writes) {
+        const res = await call(method, concrete(shape), {
+          body: '{"enabled":true,"version":1,"mfa_code":"123456"}',
+        });
+        expect([method, shape, res.status]).toEqual([method, shape, 403]);
+        expect(await res.json()).toEqual({ code: "forbidden" });
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+      for (const [method, shape] of EMR_SHAPES.filter(([m]) => m === "GET")) {
+        fetchMock.mockResolvedValueOnce(Response.json({ ok: 1 }));
+        const res = await call(method, concrete(shape));
+        expect([shape, res.status]).toEqual([shape, 200]);
+      }
+      expect(calls()).toHaveLength(3);
+    });
+
+    it("anything else under emr is 404", async () => {
+      await session();
+      for (const [method, path] of [
+        ["POST", ["platform", "emr", "connections", "x", "test", "extra"]],
+        ["GET", ["platform", "emr", "connections", "x.y"]],
+        ["PATCH", ["platform", "emr", "connections", "x.y"]],
+        ["DELETE", ["platform", "emr", "connections", "x"]],
+        ["POST", ["platform", "emr", "connections"]],
+        ["GET", ["platform", "emr", "connector-types", "x"]],
+        ["GET", ["platform", "hospitals", "x", "emr", "connections"]],
+        ["PUT", ["platform", "emr", "connections", "x", "test"]],
+      ] as [Method, string[]][]) {
+        const res = await call(method, path);
+        expect([path.join("/"), res.status]).toEqual([path.join("/"), 404]);
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 

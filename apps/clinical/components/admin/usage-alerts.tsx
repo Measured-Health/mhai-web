@@ -177,6 +177,33 @@ function WhatChangedCard({ a }: { a: UsageAlertsOut }) {
   );
 }
 
+function WhoReceivedCard({
+  r,
+  common,
+}: {
+  r: NonNullable<UsageAlertsOut["by_route"]>;
+  common: { period: UsagePeriod; hasPrevious: boolean };
+}) {
+  return (
+    <Card title="Who received them" level={4}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <AlertTile
+          label="Hospital queue"
+          m={r.queue}
+          kind="count"
+          {...common}
+        />
+        <AlertTile
+          label="Named clinicians"
+          m={r.named}
+          kind="count"
+          {...common}
+        />
+      </div>
+    </Card>
+  );
+}
+
 function AlertsBody({ a, period }: { a: UsageAlertsOut; period: UsagePeriod }) {
   const common = { period, hasPrevious: a.has_previous };
   const outcome = (m: MeasureOut) => {
@@ -237,6 +264,7 @@ function AlertsBody({ a, period }: { a: UsageAlertsOut; period: UsagePeriod }) {
         headers={[a.series.bucket === "week" ? "Week" : "Day", "Alerts"]}
         markLegend={UNUSUALLY_BUSY}
       />
+      {a.by_route && <WhoReceivedCard r={a.by_route} common={common} />}
       <div className="grid gap-4 md:grid-cols-2">
         <Card title="Outcomes" level={4}>
           <BarList

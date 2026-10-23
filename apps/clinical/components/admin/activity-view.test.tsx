@@ -143,13 +143,13 @@ describe("ActivityView", () => {
     const before = list.mock.calls.length;
     await userEvent.click(screen.getByRole("button", { name: "Export CSV" }));
     await waitFor(() => expect(download).toHaveBeenCalled());
-    expect(list.mock.calls.length - before).toBe(3); // 134 events, 50 a page
+    expect(list.mock.calls.length - before).toBe(3); // 137 events, 50 a page
     const [name, csv] = download.mock.calls[0] as [string, string];
     expect(name).toMatch(/^havana-hospital-activity-\d{4}-\d{2}-\d{2}\.csv$/);
     expect(
       csv.startsWith("\uFEFFTime (UTC),Who,Type,What happened,Flag\r\n"),
     ).toBe(true);
-    expect(csv.trim().split("\r\n")).toHaveLength(135);
+    expect(csv.trim().split("\r\n")).toHaveLength(138);
     expect(await screen.findByText("Activity exported")).toBeInTheDocument();
   });
 

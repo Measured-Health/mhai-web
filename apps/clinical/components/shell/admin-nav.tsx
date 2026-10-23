@@ -1,6 +1,7 @@
 "use client";
 import {
   Activity,
+  BellRing,
   ChartColumn,
   ChartPie,
   FileKey,
@@ -24,6 +25,12 @@ export const ADMIN_LINKS = [
     label: "Hospital settings",
     sub: "Review rules, security, sign-in",
     Icon: Settings,
+  },
+  {
+    href: "/admin/alerts",
+    label: "Alert settings",
+    sub: "Units, what to flag, who hears",
+    Icon: BellRing,
   },
   {
     href: "/admin/activity",

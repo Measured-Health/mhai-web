@@ -218,6 +218,12 @@ export interface UsageAlertsOut {
   top_findings: FindingGroupOut[];
   top_locations: LocationGroupOut[];
   series: AlertSeriesOut;
+  /**
+   * Who received them (Plan 13): alerts on the hospital queue, and alerts
+   * sent to named clinicians. One alert can be both. Absent from an older
+   * backend.
+   */
+  by_route?: { queue: MeasureOut; named: MeasureOut };
   rising: RisingOut[];
   worsening: WorseningOut | null;
 }
@@ -274,6 +280,10 @@ export type ActivityKind =
   | "clearance_viewed"
   | "clearance_reminder_sent"
   | "analysis_named_viewed"
+  /** Alert settings (Plan 13): one event per section saved. */
+  | "alert_units_changed"
+  | "alert_rules_changed"
+  | "alert_recipients_changed"
   /** An admin changed their own roles: allowed, audited, flagged `alert`. */
   | "self_role_change";
 

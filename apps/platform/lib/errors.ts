@@ -73,6 +73,10 @@ export function platformError(
       return W("That's shorter than the minimum allowed.");
     case "too_many_rows":
       return W("Too many entries to export.");
+    case "not_tested":
+      return W("Test the saved settings first.", "", { stale: true });
+    case "no_type":
+      return W("Choose a connection type.");
   }
   if (e.status >= 500) return W(UNREACHABLE);
   return W("Something went wrong. Try again.");

@@ -118,6 +118,8 @@ Every PR must pass:
 - **Alerts are EMR-agnostic** ([ADR 0003](docs/adr/0003-many-emr-systems.md)):
   no vendor or product names anywhere, the record link comes from the API
   (`emr_link`), and only the hospital's own `source_label` is shown.
+  Credentials are write-only and never reach the browser after they are
+  typed. `scripts/no-vendor-names.test.mjs` fails on any vendor name.
 
 - **Use mock or synthetic data only** in code, tests, Storybook and
   screenshots.
