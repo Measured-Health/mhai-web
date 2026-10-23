@@ -32,12 +32,28 @@ import { createMockAnalysis } from "@/lib/api/mock-analysis";
 import { resetAudit } from "@/lib/api/mock-audit";
 import { describeEvent } from "@/lib/admin/activity";
 import { defaultFilters } from "@/lib/analysis/filters";
+import { resetClearances } from "@/lib/api/mock-clearances";
+import { DEMO_EMAILS } from "@/lib/auth/mock";
+import type { User } from "@/lib/auth/types";
+import { screenAdminAs } from "@/tests/admin";
+import {
+  GRACE,
+  NAMED_FILTERS,
+  OBI,
+  analysisAs,
+  renderSignedIn,
+  showNames,
+} from "@/tests/named";
 
 const holder = vi.hoisted(() => ({
   client: null as unknown as AnalysisClient,
 }));
 vi.mock("@/lib/api/analysis", () => ({
   getAnalysisClient: () => holder.client,
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/analysis",
 }));
 import { AffectedView } from "./affected-view";
 import { CoOccurringView } from "./co-occurring-view";
@@ -708,5 +724,153 @@ describe("See patients in the tables", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("Named access in the patients panel", () => {
+  const namedPanel = (
+    user: User,
+    namedAccess: "off" | "letters_only" | "on" = "on",
+    over: Partial<AnalysisClient> = {},
+  ) => {
+    resetClearances();
+    holder.client = {
+      ...analysisAs(user, screenAdminAs(DEMO_EMAILS.director), namedAccess),
+      ...over,
+    };
+    renderSignedIn(
+      <PatientsPanel
+        drill="sex-female"
+        label="Sex: Female"
+        filters={NAMED_FILTERS}
+        onClose={() => {}}
+      />,
+      user,
+      qc,
+    );
+    return screen.findByRole("list", { name: "Patients" });
+  };
+  const NEEDS_LETTER =
+    "Named access needs a clearance letter. Ask your hospital admin.";
+
+  it("Grace sees Show names; choosing Clinical follow-up shows Name and MRN under the named banner", async () => {
+    await namedPanel(GRACE);
+    const listNamed = vi.spyOn(holder.client, "listNamedPatients");
+    const table = await showNames("Clinical follow-up");
+    const heads = within(table)
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+    expect(heads.slice(0, 2)).toEqual(["Name", "MRN"]);
+    const first = within(table).getAllByRole("row")[1]!;
+    expect(within(first).getAllByRole("cell")[0]).toHaveTextContent(
+      /^HH-\d{6}$/,
+    );
+    expect(
+      screen.getByText(
+        /^Named view · letter until \d{1,2} \w{3} \d{4} · this view is recorded$/,
+      ),
+    ).toBeVisible();
+    // The purpose went in the body, with a key; no note for this purpose.
+    expect(listNamed).toHaveBeenCalledTimes(1);
+    const [body, opts] = listNamed.mock.calls[0]!;
+    expect(body).toEqual({
+      drill: "sex-female",
+      purpose: "clinical_follow_up",
+      filters: NAMED_FILTERS,
+    });
+    expect(opts.idempotencyKey).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(window.location.href).not.toMatch(/clinical_follow_up|purpose/);
+  });
+
+  it("Other needs a note, of at most 200 characters", async () => {
+    await namedPanel(GRACE);
+    const listNamed = vi.spyOn(holder.client, "listNamedPatients");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Show names" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Show names" });
+    const radios = within(dialog).getAllByRole("radio");
+    expect(radios.map((r) => r.closest("label")!.textContent)).toEqual([
+      "Clinical follow-up",
+      "Quality improvement",
+      "Audit",
+      "Other",
+    ]);
+    await userEvent.click(within(dialog).getByRole("radio", { name: "Other" }));
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Show names" }),
+    );
+    expect(within(dialog).getByText("✕ Add a note for Other.")).toBeVisible();
+    expect(listNamed).not.toHaveBeenCalled();
+    const note = within(dialog).getByRole("textbox");
+    expect(note).toHaveAttribute("maxlength", "200");
+    await userEvent.type(note, "Ward 4 recall");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Show names" }),
+    );
+    await screen.findByRole("table", { name: /^Named patients/ });
+    expect(listNamed.mock.calls[0]![0]).toMatchObject({
+      purpose: "other",
+      note: "Ward 4 recall",
+    });
+  });
+
+  it("a clinician-analyst without a letter sees Named access needs a clearance letter, and no button", async () => {
+    // Dr. Obi has only a waiting letter (ruling 9).
+    await namedPanel(OBI);
+    expect(await screen.findByText(NEEDS_LETTER)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Show names" })).toBeNull();
+  });
+
+  it("with the switch Letters only nothing about names shows", async () => {
+    const getMe = vi.fn();
+    await namedPanel(GRACE, "letters_only", { getClearanceMe: getMe });
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "Show names" })).toBeNull();
+    expect(screen.queryByText(NEEDS_LETTER)).toBeNull();
+    expect(screen.queryByText(/Named/)).toBeNull();
+    expect(getMe).not.toHaveBeenCalled();
+  });
+
+  it("without named access nothing about names shows, and nothing is asked", async () => {
+    const getAccess = vi.fn();
+    await namedPanel({ ...GRACE, features: { analysis: true } }, "on", {
+      getNamedAccess: getAccess,
+    });
+    expect(screen.queryByRole("button", { name: "Show names" })).toBeNull();
+    expect(getAccess).not.toHaveBeenCalled();
+  });
+
+  it("the panel is hidden in print and has no copy or export", async () => {
+    await namedPanel(GRACE);
+    await showNames("Audit");
+    const dialog = screen.getByRole("dialog", {
+      name: /patients · Sex: Female$/,
+    });
+    expect(dialog.closest(".print\\:hidden")).not.toBeNull();
+    const named = document.querySelector("[data-named-view]")!;
+    expect(named).toHaveClass("print:hidden");
+    expect(
+      within(dialog).queryByRole("button", {
+        name: /download|export|print|copy/i,
+      }),
+    ).toBeNull();
+    expect(within(dialog).queryByRole("link")).toBeNull();
+  });
+
+  it("Show names is disabled offline", async () => {
+    await namedPanel(GRACE);
+    const b = await screen.findByRole("button", { name: "Show names" });
+    goOffline();
+    try {
+      expect(b).toBeDisabled();
+      const reason = screen.getByText(
+        "You're offline. Reconnect to show names.",
+      );
+      expect(b).toHaveAttribute("aria-describedby", reason.id);
+    } finally {
+      goOnline();
+    }
+    expect(b).toBeEnabled();
   });
 });

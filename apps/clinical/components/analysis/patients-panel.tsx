@@ -3,6 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
+  Eye,
+  FileX2,
   OctagonAlert,
   TriangleAlert,
   Users,
@@ -20,14 +22,21 @@ import {
 import type { FindingFlag } from "@/lib/api/alerts-contract";
 import type {
   AnalysisFilters,
+  DeidentifiedPatientsOut,
   Drillable,
+  NamedPurpose,
   PatientLevel,
   PatientRowOut,
   Sex,
 } from "@/lib/api/analysis-contract";
 import { ApiError } from "@/lib/api/errors";
 import { countLabel } from "@/lib/admin/report";
-import { ANALYSIS_KEYS, usePatients } from "@/lib/analysis-queries";
+import {
+  ANALYSIS_KEYS,
+  useClearanceMe,
+  useNamedAccessOn,
+  usePatients,
+} from "@/lib/analysis-queries";
 import { shows } from "@/lib/analysis/guards";
 import {
   AGE_LABEL,
@@ -36,11 +45,16 @@ import {
   conditionText,
   settingText,
 } from "@/lib/analysis/labels";
+import { END_TEXT, namedNow, type EndReason } from "@/lib/analysis/named";
+import { useOptionalAuth } from "@/lib/auth/auth-context";
+import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { useOnline } from "@mhai/ui/hooks/use-online";
 import { SidePanel } from "@mhai/ui/side-panel";
 import { Skeleton } from "@mhai/ui/skeleton";
 import type { TableColumn } from "./data-table";
+import { NamedView } from "./named-view";
+import { PurposeDialog } from "./purpose-dialog";
 import { SMALL_GROUP_MIN } from "@mhai/ui/small-groups";
 
 /**
@@ -53,6 +67,9 @@ const LEVEL_NOTE: Record<PatientLevel, string> = {
 };
 
 const OFFLINE_REASON = "You're offline. Reconnect to see patients.";
+const NAMES_OFFLINE = "You're offline. Reconnect to show names.";
+const NEEDS_LETTER =
+  "Named access needs a clearance letter. Ask your hospital admin.";
 
 const FLAG_TEXT: Record<FindingFlag, { word: string; Icon: typeof ArrowUp }> = {
   high: { word: "High", Icon: ArrowUp },
@@ -139,8 +156,143 @@ export function PatientsPanel({
   const failed =
     q.data?.status === "failed" || (q.isError && !tooSmall(q.error));
 
+  const named = useNames();
+  const showing = named.view !== null;
+
   return (
     <SidePanel open onClose={onClose} title={title} className="print:hidden">
+      {named.ended && (
+        <div className="mb-3">
+          <Banner tone="warn" title="Named access has ended">
+            {END_TEXT[named.ended]}
+          </Banner>
+        </div>
+      )}
+      {d && !showing && <NamesOffer named={named} />}
+      {showing ? (
+        <NamedView
+          key={named.view!.n}
+          drill={drill}
+          filters={filters}
+          purpose={named.view!.purpose}
+          note={named.view!.note}
+          onEnd={named.end}
+        />
+      ) : (
+        <PlainList level={level} d={d} q={q} failed={failed} />
+      )}
+      <PurposeDialog
+        open={named.asking}
+        online={named.online}
+        onClose={() => named.setAsking(false)}
+        onSubmit={named.start}
+      />
+    </SidePanel>
+  );
+}
+
+/** One named view while it lasts: its purpose, and a number that makes it new. */
+type NamedChoice = { purpose: NamedPurpose; note?: string; n: number };
+
+/**
+ * Names in the panel (Plan 11c): offered only while the switch is On, to a
+ * person `clearance/me` says is covered now. A view ends by `end`, and its
+ * rows leave the cache; signing out ends it too.
+ */
+function useNames() {
+  const qc = useQueryClient();
+  const user = useOptionalAuth()?.user ?? null;
+  const on = useNamedAccessOn();
+  const me = useClearanceMe({ poll: false });
+  const online = useOnline();
+  const [asking, setAsking] = useState(false);
+  const [choice, setChoice] = useState<NamedChoice | null>(null);
+  const [ended, setEnded] = useState<EndReason | null>(null);
+  // Nothing named shows without a signed-in person and the switch On; a
+  // view lost that way is over, never picked up again without a purpose.
+  if (choice && !(on && user)) setChoice(null);
+  const view = choice && on && user ? choice : null;
+
+  useEffect(() => {
+    if (view) return;
+    // The view has gone (ended, switched, signed out): drop its rows now.
+    qc.removeQueries({ queryKey: ANALYSIS_KEYS.namedAll });
+  }, [view, qc]);
+
+  return {
+    on,
+    me,
+    online,
+    view,
+    ended,
+    asking: asking && on,
+    setAsking,
+    start(purpose: NamedPurpose, note: string | undefined) {
+      setAsking(false);
+      setEnded(null);
+      setChoice((c) => ({ purpose, note, n: (c?.n ?? 0) + 1 }));
+    },
+    end(reason: EndReason) {
+      setChoice(null);
+      setEnded(reason);
+    },
+  };
+}
+
+/**
+ * Show names, or why not: nothing below On; the needs-a-letter line when
+ * not covered; disabled offline, with the reason.
+ */
+function NamesOffer({ named }: { named: ReturnType<typeof useNames> }) {
+  const reasonId = useId();
+  if (!named.on || named.me.data === undefined) return null;
+  // An `until` already past when the reply was read: not covered.
+  if (!namedNow(named.me.data, named.me.dataUpdatedAt))
+    return (
+      <p className="mb-3 flex items-center gap-1.5 text-[13px] text-ink-2">
+        <FileX2 aria-hidden className="size-4 shrink-0" />
+        {NEEDS_LETTER}
+      </p>
+    );
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <Button
+        variant="ghost"
+        className="min-h-11"
+        disabled={!named.online}
+        aria-describedby={named.online ? undefined : reasonId}
+        onClick={() => named.setAsking(true)}
+      >
+        <Eye aria-hidden className="size-4" />
+        Show names
+      </Button>
+      {!named.online && (
+        <span
+          id={reasonId}
+          className="flex items-center gap-1.5 text-[12.5px] text-ink-3"
+        >
+          <WifiOff aria-hidden className="size-3.5 shrink-0" />
+          {NAMES_OFFLINE}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Plan 6's de-identified list, as it was. */
+function PlainList({
+  level,
+  d,
+  q,
+  failed,
+}: {
+  level: PatientLevel;
+  d: DeidentifiedPatientsOut | null;
+  q: ReturnType<typeof usePatients>;
+  failed: boolean;
+}) {
+  return (
+    <>
       <p className="mb-3 flex items-center gap-1.5 text-[13px] text-ink-2">
         <Users aria-hidden className="size-4 shrink-0" />
         {LEVEL_NOTE[level]}
@@ -190,7 +342,7 @@ export function PatientsPanel({
       ) : (
         <Skeleton className="h-40 rounded-2xl" />
       )}
-    </SidePanel>
+    </>
   );
 }
 

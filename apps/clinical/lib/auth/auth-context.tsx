@@ -242,3 +242,9 @@ export function useAuth(): AuthCtx {
   if (!c) throw new Error("useAuth outside AuthProvider");
   return c;
 }
+
+/**
+ * The auth state, or null outside an AuthProvider: for pieces that also
+ * render without a signed-in person, and then show nothing about them.
+ */
+export const useOptionalAuth = (): AuthCtx | null => useContext(Ctx);
