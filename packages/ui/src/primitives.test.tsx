@@ -54,6 +54,28 @@ describe("Dialog", () => {
     render(<Ask />);
     expect(screen.getByText("Keep account")).toHaveFocus();
   });
+
+  it("keeps its width unless a className is given, which replaces it", () => {
+    const { rerender } = render(
+      <Dialog open onClose={() => {}} title="Narrow">
+        <button>Ok</button>
+      </Dialog>,
+    );
+    expect(screen.getByRole("dialog")).toHaveClass("w-[min(440px,92vw)]");
+    rerender(
+      <Dialog
+        open
+        onClose={() => {}}
+        title="Narrow"
+        className="w-full print:hidden"
+      >
+        <button>Ok</button>
+      </Dialog>,
+    );
+    const d = screen.getByRole("dialog");
+    expect(d).toHaveClass("w-full", "print:hidden");
+    expect(d).not.toHaveClass("w-[min(440px,92vw)]");
+  });
 });
 
 describe("Toast", () => {

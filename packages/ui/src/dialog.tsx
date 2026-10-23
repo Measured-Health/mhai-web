@@ -7,6 +7,7 @@ import {
   type RefObject,
 } from "react";
 import { useEscape } from "./hooks/use-escape";
+import { cn } from "./cn";
 
 export function Dialog({
   open,
@@ -14,6 +15,7 @@ export function Dialog({
   title,
   children,
   initialFocus,
+  className,
 }: {
   open: boolean;
   onClose: () => void;
@@ -24,6 +26,11 @@ export function Dialog({
    * that has a field above it. Otherwise the first control does.
    */
   initialFocus?: RefObject<HTMLElement | null>;
+  /**
+   * Classes for the dialog, e.g. a wider frame and `print:hidden`. When
+   * given, they replace the default width, so they must set their own.
+   */
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -52,7 +59,10 @@ export function Dialog({
         e.preventDefault();
         onClose();
       }}
-      className="m-auto w-[min(440px,92vw)] rounded-3xl bg-white p-6 text-ink shadow-[0_40px_80px_-30px_#1c0d22aa] backdrop:bg-ink/40 backdrop:backdrop-blur-sm"
+      className={cn(
+        "m-auto rounded-3xl bg-white p-6 text-ink shadow-[0_40px_80px_-30px_#1c0d22aa] backdrop:bg-ink/40 backdrop:backdrop-blur-sm",
+        className || "w-[min(440px,92vw)]",
+      )}
     >
       <h2
         id={titleId}
