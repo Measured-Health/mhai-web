@@ -166,9 +166,9 @@ describe("UsageAlerts", () => {
       />,
     );
     const hidden = screen.getAllByText("Fewer than 5");
-    // Critical, Urgent, the Critical median and share tiles; two outcomes,
-    // two reasons, a finding and a location row.
-    expect(hidden).toHaveLength(10);
+    // Critical, Urgent, the Critical median and share tiles, Named
+    // clinicians; two outcomes, two reasons, a finding and a location row.
+    expect(hidden).toHaveLength(11);
     for (const el of hidden) {
       const box = (el.closest("li") ?? el.closest(".card-v3"))!;
       expect(box).not.toHaveTextContent(/ vs |\bup\b|\bdown\b|point/);
@@ -441,6 +441,39 @@ describe("UsageAlerts", () => {
     expect(
       within(changed()).getByText("Critical within 10 min: 71%, down from 88%"),
     ).toBeInTheDocument();
+  });
+
+  it("Who received them shows the queue and named counts, with Fewer than 5", async () => {
+    const { unmount } = render(
+      <UsageAlerts usage={await usage()} onRetry={vi.fn()} />,
+    );
+    const box = screen.getByRole("region", { name: "Who received them" });
+    expect(
+      within(box).getByText("Hospital queue").closest("div"),
+    ).toHaveTextContent("97");
+    expect(
+      within(box).getByText("Named clinicians").closest("div"),
+    ).toHaveTextContent("58");
+    unmount();
+    render(<UsageAlerts usage={await edge()} onRetry={vi.fn()} />);
+    const hidden = screen.getByRole("region", { name: "Who received them" });
+    expect(
+      within(hidden).getByText("Named clinicians").closest("div"),
+    ).toHaveTextContent(/^Fewer than 5Named clinicians$/);
+    expect(hidden).not.toHaveTextContent(/patient/i);
+  });
+
+  it("shows no Who received them block when the server sends none, or sends nonsense", async () => {
+    for (const by_route of [undefined, { queue: 5 }, "all", null]) {
+      const u = await withAlerts(() => ({ by_route }));
+      const { unmount } = render(<UsageAlerts usage={u} onRetry={vi.fn()} />);
+      expect(
+        screen.queryByRole("region", { name: "Who received them" }),
+      ).toBeNull();
+      // The rest of the group is untouched.
+      expect(tile("Alerts")).toHaveTextContent("128");
+      unmount();
+    }
   });
 
   it("uses no backend terms and no lab wording", async () => {
