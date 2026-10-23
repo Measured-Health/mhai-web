@@ -71,8 +71,8 @@ function PurposeForm({
       }}
     >
       <p className="text-[13.5px] text-ink-2">
-        Names and record numbers show for up to an hour. This view is recorded
-        with your purpose.
+        Names and record numbers show only while your letter is active. This
+        view is recorded.
       </p>
       <fieldset
         aria-describedby={problem === "purpose" ? `${id}-purpose` : undefined}

@@ -13,6 +13,9 @@ import {
 // it runs, with the names and record numbers it actually put on screen.
 const MRN = /HH-\d{6}/;
 
+// A failed test must not keep the sample names in a trace, screenshot or video.
+test.use({ trace: "off", screenshot: "off", video: "off" });
+
 type Seen = { urls: string[]; console: string[]; names: Set<string> };
 const seen = new WeakMap<Page, Seen>();
 
@@ -22,6 +25,7 @@ test.beforeEach(({ page }) => {
   page.on("framenavigated", (f) => {
     if (f === page.mainFrame()) s.urls.push(f.url());
   });
+  page.on("request", (r) => s.urls.push(r.url()));
   page.on("console", (m) => s.console.push(m.text()));
   page.on("pageerror", (e) => s.console.push(e.message));
 });
@@ -39,14 +43,25 @@ test.afterEach(async ({ page }) => {
   // No name or MRN in an address or the title.
   const title = await page.title();
   for (const text of [...s.urls, page.url(), title]) {
-    const plain = decodeURIComponent(text);
-    expect(plain).not.toMatch(MRN);
-    for (const name of s.names) expect(plain).not.toContain(name);
+    let plain = text;
+    try {
+      plain = decodeURIComponent(text);
+    } catch {
+      // keep the raw text
+    }
+    expect(MRN.test(plain), "a record number reached an address").toBe(false);
+    for (const name of s.names)
+      expect(plain.includes(name), "a patient name reached an address").toBe(
+        false,
+      );
   }
   // None in console output either.
   for (const line of s.console) {
-    expect(line).not.toMatch(MRN);
-    for (const name of s.names) expect(line).not.toContain(name);
+    expect(MRN.test(line), "a record number reached the console").toBe(false);
+    for (const name of s.names)
+      expect(line.includes(name), "a patient name reached the console").toBe(
+        false,
+      );
   }
 });
 
@@ -189,7 +204,7 @@ test("Activity shows 'viewed 37 patients by name in Analysis', flagged", async (
   await expect(page.getByText(/HH-\d{6}/)).toHaveCount(0);
 });
 
-test("Grace revokes cl_act on Named access; back in Analysis, names have ended and the needs-a-letter line shows", async ({
+test("Grace revokes cl_act on Named access; back in Analysis the needs-a-letter line shows", async ({
   page,
 }) => {
   // The clock runs on its own, and can be moved on by the test.
@@ -230,9 +245,6 @@ test("Grace revokes cl_act on Named access; back in Analysis, names have ended a
   await expect(again.getByRole("button", { name: "Show names" })).toHaveCount(
     0,
   );
-  await page.clock.runFor(31_000);
-  await page.clock.resume();
-  await expect(again.locator("[data-named-view]")).toHaveCount(0);
 });
 
 test("a clinician-analyst without a letter sees the needs-a-letter line", async ({

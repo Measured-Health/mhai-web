@@ -153,10 +153,11 @@ follow-up, Quality improvement, Audit or Other, with a note for Other), then
 adds Name and MRN under the banner "Named view · letter until {date} · this
 view is recorded", with your name and the time marked across the list. The
 view is recorded in **Activity** as "viewed {n} patients by name in
-Analysis", flagged. Names end at once, with "Named access has ended" and the
-reason, when the view's hour is up, the letter ends or is revoked, you are
-removed from it or lose your role, the switch is turned off, the filters or
-group change, or you sign out. Like the rest of the demo, nothing is kept in
+Analysis", flagged. Names end at the end of the letter's end date, and an
+open screen rechecks every 30 seconds and drops names, with "Named access has
+ended" and the reason, when access ends: the letter is revoked, you are
+removed from it or lose your role, or the switch is turned off. They also end
+when the filters or group change, or you sign out. Like the rest of the demo, nothing is kept in
 browser storage.
 
 **Named access.** Sign in as the hospital admin sample (Grace Nwosu) and

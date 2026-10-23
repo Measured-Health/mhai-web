@@ -188,6 +188,12 @@ describe("README demo instructions", () => {
   });
 
   it("documents Show names in Analysis: who, the purpose, the banner, how it ends and the sign-off", () => {
+    const para = readme.slice(
+      readme.indexOf("**Analysis.**"),
+      readme.indexOf("**Named access.**"),
+    );
+    expect(para).not.toMatch(/hour/i);
+    expect(para).toMatch(/every\s+30\s+seconds/);
     expect(readme).toMatch(/\*\*Show\s+names\*\*/);
     expect(readme).toMatch(/Clinical\s+follow-up,\s+Quality\s+improvement/);
     expect(readme).toMatch(
