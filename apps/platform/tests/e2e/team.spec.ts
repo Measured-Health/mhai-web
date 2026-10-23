@@ -25,7 +25,7 @@ test("team invite, change role and remove with a code; your own row can't be cha
 }) => {
   await signIn(page, ADA);
   await openNav(page, "Team");
-  await expect(page.getByText("5 team members shown")).toBeAttached();
+  await expect(page.getByText("6 team members shown")).toBeAttached();
 
   // Your own row: read-only, with the reason.
   const you = member(page, "Ada Bakare");
@@ -46,7 +46,7 @@ test("team invite, change role and remove with a code; your own row can't be cha
   const femi = member(page, "Femi Ojo");
   await expect(femi.getByText("Invite pending")).toBeVisible();
   await expect(femi.getByText("Auditor", { exact: true })).toBeVisible();
-  await expect(page.getByText("6 team members shown")).toBeAttached();
+  await expect(page.getByText("7 team members shown")).toBeAttached();
 
   // Change role.
   await page
@@ -80,7 +80,7 @@ test("team invite, change role and remove with a code; your own row can't be cha
   ).toBeVisible();
   await expect(toast(page, "Team member removed")).toBeVisible();
   await expect(member(page, "Kemi Lawal")).toHaveCount(0);
-  await expect(page.getByText("5 team members shown")).toBeAttached();
+  await expect(page.getByText("6 team members shown")).toBeAttached();
 
   // Still no way to change your own row.
   await expect(

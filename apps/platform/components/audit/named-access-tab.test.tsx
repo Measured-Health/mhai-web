@@ -115,7 +115,9 @@ describe("the Named access tab", () => {
     expect(row).toHaveTextContent(
       /Clinical follow-up|Quality improvement|Audit/,
     );
-    expect(row).toHaveTextContent(/Patients (with|due)/);
+    expect(row).toHaveTextContent(
+      /Prevalence and trends|Who is affected|Co-occurring conditions|Findings and alerts|MHAI quality/,
+    );
   });
 
   it("no pseudonym appears on the tab", async () => {

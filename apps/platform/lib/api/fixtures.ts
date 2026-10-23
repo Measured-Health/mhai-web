@@ -28,6 +28,8 @@ export const TEAM_EMAILS = {
   tunde: "tunde.okafor@measured-health.example",
   amara: "amara.eze@measured-health.example",
   kemi: "kemi.lawal@measured-health.example",
+  /** A platform admin linked to Havana Hospital by a past account there. */
+  bola: "bola.hassan@measured-health.example",
   /** A new platform admin: first sign-in steps, then two-step setup. */
   newAdmin: "new.admin@measured-health.example",
 } as const;
@@ -111,6 +113,14 @@ export function seedTeam(now: number): TeamMember[] {
       ),
       mfa_enabled: false,
     },
+    // Linked to Havana Hospital (clearances-fixtures `LINKED`): he can't
+    // verify its letters, and shows the same-side refusal.
+    m(
+      { id: "tm_bola", name: "Bola Hassan" },
+      TEAM_EMAILS.bola,
+      "platform_admin",
+      2 * D,
+    ),
   ];
 }
 

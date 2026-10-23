@@ -45,6 +45,10 @@ import { createMockOps } from "./mock-ops";
 import type { HealthMode } from "./ops-fixtures";
 import { settingsMock, type SettingsMockOptions } from "./mock-settings";
 import {
+  createClearanceMock,
+  type ClearanceMockOptions,
+} from "./mock-clearances";
+import {
   EMAIL_MODES,
   NOTIFICATIONS_MAX,
   type EmailMode,
@@ -185,6 +189,7 @@ export type MockCore = {
       hospital?: Person | null;
       target?: string | null;
       detail?: string | null;
+      reason?: string | null;
     },
   ): void;
   /** The person's own two-step or backup code in `body`, else refused. */
@@ -217,6 +222,7 @@ export function createMockPlatform({
   removalStarted,
   triage,
   resetFails,
+  clearances,
   onCore,
 }: {
   now?: () => number;
@@ -244,6 +250,8 @@ export function createMockPlatform({
   triage?: SettingsMockOptions["triage"];
   /** The learning-data reset fails (see `SettingsMockOptions`). */
   resetFails?: boolean | (() => boolean);
+  /** The sample letters and switch: normal, failing, or the switch Off. */
+  clearances?: ClearanceMockOptions["clearances"];
   /** For tests: the core the areas are built on, once it exists. */
   onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
@@ -290,10 +298,12 @@ export function createMockPlatform({
       hospital = null,
       target = null,
       detail = null,
+      reason,
     }: {
       hospital?: Person | null;
       target?: string | null;
       detail?: string | null;
+      reason?: string | null;
     } = {},
   ) {
     activity = [
@@ -305,6 +315,8 @@ export function createMockPlatform({
         hospital,
         target,
         detail,
+        // Only refusals carry a reason.
+        ...(reason ? { reason } : {}),
       },
       ...activity,
     ];
@@ -1080,5 +1092,6 @@ export function createMockPlatform({
     ...createMockOps(core, { health }),
     ...holdsMock(core, { removalStarted }),
     ...settingsMock(core, { triage, resetFails }),
+    ...createClearanceMock(core, { clearances }),
   };
 }

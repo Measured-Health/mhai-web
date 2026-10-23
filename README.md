@@ -198,6 +198,7 @@ codes work too):
 
 - Ada Bakare, platform admin: `ada.bakare@measured-health.example`;
 - Tunde Okafor, platform admin: `tunde.okafor@measured-health.example`;
+- Bola Hassan, platform admin linked to Havana Hospital: `bola.hassan@measured-health.example`;
 - Amara Eze, auditor: `amara.eze@measured-health.example`;
 - Chidi Nwosu, a new platform admin: `new.admin@measured-health.example`.
   He sets a password, accepts the terms and sets up two-step (code
@@ -330,6 +331,29 @@ The sample has a Northgate General clearance letter with three named patient
 lists (search `P-6DC445` to find one), two earlier exports and an Intact
 check. Auditors and platform admins both read; the demo does not mirror the
 session's other platform actions into the log.
+
+**Clearances.** **Clearances** in the sidebar (after Analytics) is where
+Measured Health checks the clearance letters hospitals upload, and where the
+named-access switch lives. The queue opens on **To verify** (oldest first),
+with Active, Ending soon and All; pick a letter to see what the hospital
+entered, who it covers and its history, then **View letter** to read it page
+by page (page images only: no download, no print, nothing kept). **Verify**,
+**Reject** (with a reason) and **Revoke** each take your two-step code
+(`123456`). Try Northgate General's waiting letter as Ada Bakare, who can
+verify it. Bola Hassan
+(`bola.hassan@measured-health.example`) is a platform admin linked to Havana
+Hospital by a past account, so Havana's letters read "You can't verify
+letters from a hospital you're linked to"; Tunde Okafor is covered by
+Havana's waiting letter, so it reads "You can't verify a letter that covers
+you". Auditors read the page and see no buttons. **Named access** at the top
+shows the global switch and each hospital's (Off, Letters only or On; the
+lower of the two is in effect). The demo runs On, with Northgate General
+Off. **Turn up** asks for a position with the clinical, privacy and legal
+sign-offs (name, date and reference) and a code, then waits for a different
+platform admin: sign in as Tunde in the same tab to approve. **Turn down**
+needs one admin, a reason and a code, and takes effect at once. This demo's
+letters are separate from the clinical demo's: verifying one here doesn't
+change that demo. Nothing is kept in browser storage.
 
 **The auditor** (Amara Eze) sees every hospital, the team and the activity,
 with no buttons to change anything; the server refuses an auditor's changes

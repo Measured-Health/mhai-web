@@ -70,8 +70,13 @@ describe("proxy", () => {
     const csp = proxy(request()).headers.get("content-security-policy") ?? "";
     const n = nonceOf(csp);
     expect(csp).toBe(
-      `default-src 'self'; script-src 'self' 'nonce-${n}' 'strict-dynamic'; style-src 'self' 'nonce-${n}'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'`,
+      `default-src 'self'; script-src 'self' 'nonce-${n}' 'strict-dynamic'; style-src 'self' 'nonce-${n}'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'`,
     );
+  });
+
+  it("img-src allows blob:", () => {
+    const csp = proxy(request()).headers.get("content-security-policy") ?? "";
+    expect(directive(csp, "img-src")).toBe("img-src 'self' data: blob:");
   });
 
   it("sets frame-ancestors 'none' and the other headers", () => {

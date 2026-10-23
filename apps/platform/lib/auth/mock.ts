@@ -49,6 +49,11 @@ function accounts(): Map<string, Account> {
 export const SAMPLE_ACCOUNTS = [
   { email: TEAM_EMAILS.ada, label: "Ada Bakare", note: "Platform admin" },
   { email: TEAM_EMAILS.tunde, label: "Tunde Okafor", note: "Platform admin" },
+  {
+    email: TEAM_EMAILS.bola,
+    label: "Bola Hassan",
+    note: "Platform admin, linked to Havana Hospital",
+  },
   { email: TEAM_EMAILS.amara, label: "Amara Eze", note: "Auditor (read-only)" },
   {
     email: NEW_ADMIN_EMAIL,

@@ -2,6 +2,7 @@
 // Hand-written; to be replaced by types generated from the backend OpenAPI
 // schema. Every id is opaque and matches /^[A-Za-z0-9_-]+$/.
 import { ApiError } from "@mhai/api-client/errors";
+import type { ClearanceStatus } from "@mhai/ui/clearances";
 import type { Person, StepUp, WriteOpts } from "./contract";
 
 export const AUDIT_TYPES = [
@@ -137,14 +138,8 @@ export type AuditEvent = {
   facts: AuditFacts;
   after_break: boolean;
 };
-export type LetterStatus =
-  | "checking"
-  | "refused"
-  | "waiting"
-  | "active"
-  | "rejected"
-  | "ended"
-  | "revoked";
+/** A letter's status: the shared Plan 11 type (ruling 4). */
+export type LetterStatus = ClearanceStatus;
 export type Letter = {
   id: string;
   status: LetterStatus;

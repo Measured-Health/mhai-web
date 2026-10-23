@@ -2,6 +2,7 @@
 // file is built here from structured fields, never from server text. A kind,
 // reason, role or letter status that isn't listed makes the entry "can't be
 // displayed" (see read.ts). Plans 8 and 11 add their kinds to KINDS.
+import { REJECT_LABEL, REVOKE_LABEL, STATUS_LABEL } from "@mhai/ui/clearances";
 import type {
   ActorRole,
   AuditEvent,
@@ -50,9 +51,32 @@ export const REASON_WORDS: Record<string, string> = {
   wrong_code: "Wrong code",
   locked: "Locked",
   not_covered: "Not covered by a clearance letter",
-  same_side: "Own hospital's letter",
+  // A verify refused (the 409 codes).
+  same_side: "Linked to the hospital",
+  same_person: "The letter names them",
   gone: "Already downloaded or expired",
   not_owner: "Made by someone else",
+  // Rejecting, revoking and narrowing a clearance letter (Plan 11), in the
+  // screens' words.
+  wrong_people: REJECT_LABEL.wrong_people,
+  end_date_mismatch: REJECT_LABEL.end_date_mismatch,
+  not_leadership: REJECT_LABEL.not_leadership,
+  unreadable: REJECT_LABEL.unreadable,
+  no_longer_needed: REVOKE_LABEL.no_longer_needed,
+  person_left: REVOKE_LABEL.person_left,
+  uploaded_in_error: REVOKE_LABEL.uploaded_in_error,
+  // A letter's file refused.
+  file_type: "File type not accepted",
+  file_too_large: "File larger than 10 MB",
+  too_many_pages: "More than 20 pages",
+  password_protected: "Password-protected file",
+  failed_safety_check: "Didn't pass the safety check",
+};
+
+/** Why a verify was refused, as the end of a sentence. */
+export const REFUSAL_WORDS: Record<string, string> = {
+  same_side: "they're linked to the hospital",
+  same_person: "the letter names them",
 };
 
 export const ROLE_WORDS: Record<ActorRole, string> = {
@@ -64,33 +88,29 @@ export const ROLE_WORDS: Record<ActorRole, string> = {
   system: "System",
 };
 
-export const LETTER_STATUS_WORDS: Record<LetterStatus, string> = {
-  checking: "Checking",
-  refused: "Refused",
-  waiting: "Waiting for verification",
-  active: "Active",
-  rejected: "Rejected",
-  ended: "Ended",
-  revoked: "Revoked",
-};
+/** The one set of letter status words, shared with the Clearances page. */
+export const LETTER_STATUS_WORDS: Record<LetterStatus, string> = STATUS_LABEL;
 
-/** Patient-list views (codes); anything else reads "a patient list". */
+/**
+ * The Analysis view a patient list came from (Plan 6's view ids); anything
+ * else reads "a patient list".
+ */
 export const VIEW_WORDS: Record<string, string> = {
-  condition: "Patients with a condition",
-  abnormal_results: "Patients with abnormal results",
-  open_alerts: "Patients with open alerts",
-  follow_up_due: "Patients due a follow-up",
+  prevalence: "Prevalence and trends",
+  affected: "Who is affected",
+  "co-occurring": "Co-occurring conditions",
+  findings: "Findings and alerts",
+  quality: "MHAI quality",
 };
 export const viewWords = (code: string | undefined) =>
   (code !== undefined && Object.hasOwn(VIEW_WORDS, code) && VIEW_WORDS[code]) ||
   "a patient list";
 
-/** Location types (codes); anything else reads "another setting". */
+/** Location types (Plan 6's settings); anything else reads "another setting". */
 export const LOCATION_WORDS: Record<string, string> = {
-  inpatient: "Inpatient ward",
-  outpatient: "Outpatient clinic",
-  emergency: "Emergency department",
-  community: "Community",
+  admitted: "Admitted",
+  outpatient: "Outpatient",
+  emergency: "Emergency",
 };
 export const locationWords = (code: string | undefined) =>
   (code !== undefined &&
@@ -343,7 +363,9 @@ export const KINDS: Record<string, Kind> = {
     (e) => join("Opened a named patient list", patients(e)),
     { targets: ["patient", "clearance"] },
   ),
-  letter_uploaded: k(
+  // One name per event: the same as the platform's Activity actions
+  // (clearance_*, named_access_*).
+  clearance_uploaded: k(
     "named_access",
     letter(
       (t) => `Uploaded clearance letter ${t}`,
@@ -351,10 +373,10 @@ export const KINDS: Record<string, Kind> = {
     ),
     { targets: ["clearance"], named: true },
   ),
-  letter_refused: k("named_access", "A clearance letter file was refused", {
+  clearance_refused: k("named_access", "A clearance letter file was refused", {
     targets: ["clearance"],
   }),
-  letter_verified: k(
+  clearance_verified: k(
     "named_access",
     letter(
       (t) => `Verified clearance letter ${t}`,
@@ -362,7 +384,7 @@ export const KINDS: Record<string, Kind> = {
     ),
     { targets: ["clearance"], named: true },
   ),
-  letter_rejected: k(
+  clearance_rejected: k(
     "named_access",
     letter(
       (t) => `Rejected clearance letter ${t}`,
@@ -370,7 +392,7 @@ export const KINDS: Record<string, Kind> = {
     ),
     { targets: ["clearance"], named: true },
   ),
-  letter_narrowed: k(
+  clearance_narrowed: k(
     "named_access",
     letter(
       (t) => `Narrowed clearance letter ${t}`,
@@ -378,7 +400,7 @@ export const KINDS: Record<string, Kind> = {
     ),
     { targets: ["clearance"], named: true },
   ),
-  letter_revoked: k(
+  clearance_revoked: k(
     "named_access",
     letter(
       (t) => `Revoked clearance letter ${t}`,
@@ -386,17 +408,17 @@ export const KINDS: Record<string, Kind> = {
     ),
     { targets: ["clearance"], named: true },
   ),
-  letter_ended: k(
+  clearance_ended: k(
     "named_access",
     letter((t) => `Clearance letter ${t} ended`, "A clearance letter ended"),
     { targets: ["clearance"], named: true },
   ),
-  letter_viewed: k(
+  clearance_viewed: k(
     "named_access",
     letter((t) => `Viewed clearance letter ${t}`, "Viewed a clearance letter"),
     { targets: ["clearance"], named: true },
   ),
-  letter_reminder_sent: k(
+  clearance_reminder_sent: k(
     "named_access",
     letter(
       (t) => `Sent a reminder about clearance letter ${t}`,
@@ -404,13 +426,51 @@ export const KINDS: Record<string, Kind> = {
     ),
     { targets: ["clearance"], named: true },
   ),
-  named_switch_changed: k("named_access", "Changed the named access switch", {
-    targets: ["setting"],
-  }),
-  verify_refused: k(
+  // One refusal with a reason: same_side or same_person (the 409 codes).
+  clearance_verify_refused: k(
     "named_access",
-    "Tried to verify their own hospital's letter",
-    { targets: ["clearance"] },
+    (e) => {
+      const r = e.reason ?? "";
+      const why = Object.hasOwn(REFUSAL_WORDS, r) ? REFUSAL_WORDS[r] : null;
+      const what = letter(
+        (t) => `Couldn't verify clearance letter ${t}`,
+        "Couldn't verify a clearance letter",
+      )(e);
+      return why ? `${what}: ${why}` : what;
+    },
+    { targets: ["clearance"], named: true },
+  ),
+  named_access_requested: k(
+    "named_access",
+    named(
+      (t) => `Asked to turn named access to ${t}`,
+      "Asked to raise the named access switch",
+    ),
+    { targets: ["setting"], named: true },
+  ),
+  named_access_approved: k(
+    "named_access",
+    named(
+      (t) => `Approved turning named access to ${t}`,
+      "Approved raising the named access switch",
+    ),
+    { targets: ["setting"], named: true },
+  ),
+  named_access_cancelled: k(
+    "named_access",
+    named(
+      (t) => `Cancelled turning named access to ${t}`,
+      "Cancelled a request to raise the named access switch",
+    ),
+    { targets: ["setting"], named: true },
+  ),
+  named_access_lowered: k(
+    "named_access",
+    named(
+      (t) => `Turned named access down to ${t}`,
+      "Turned the named access switch down",
+    ),
+    { targets: ["setting"], named: true },
   ),
   // Platform.
   change_followed_up: k(
