@@ -1,15 +1,26 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { dayLabel } from "@mhai/ui/clearances";
 import type { AdminClient } from "@/lib/api/admin";
+import type { ClearanceClient } from "@/lib/api/clearances";
+import { resetClearances } from "@/lib/api/mock-clearances";
+import { ENDS_NAMED } from "@/lib/clearances/summary";
+import { dayAfter, sampleClients } from "@/tests/clearances";
 import { DEMO_EMAILS, MOCK_CODE } from "@/lib/auth/mock";
 import { ApiError } from "@/lib/api/errors";
 import { LAST_ADMIN } from "@/lib/admin/staff";
 import { screenAdminAs } from "@/tests/admin";
 import { DIRECTOR, HOSPITAL_ADMIN, renderAdmin } from "@/tests/admin-render";
 
-const holder = vi.hoisted(() => ({ client: null as unknown as AdminClient }));
+const holder = vi.hoisted(() => ({
+  client: null as unknown as AdminClient,
+  clearances: null as unknown as ClearanceClient,
+}));
 vi.mock("@/lib/api/admin", () => ({ getAdminClient: () => holder.client }));
+vi.mock("@/lib/api/clearances", () => ({
+  getClearanceClient: () => holder.clearances,
+}));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => "/admin/staff",
@@ -19,6 +30,8 @@ import { StaffPanel } from "./staff-panel";
 const onClose = vi.fn();
 beforeEach(() => {
   holder.client = screenAdminAs(DEMO_EMAILS.director);
+  resetClearances();
+  holder.clearances = sampleClients({ admin: holder.client }).clearances;
   onClose.mockReset();
 });
 afterEach(() => vi.restoreAllMocks());
@@ -360,5 +373,284 @@ describe("StaffPanel", () => {
       await within(panel).findByText("Dr. Kofi Mensah"),
     ).toBeInTheDocument();
     expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  describe("named access (Plan 11)", () => {
+    const named = {
+      ...DIRECTOR,
+      features: { analysis: true, named: true },
+    };
+    const openNamed = async (id: string) => {
+      renderAdmin(<StaffPanel staffId={id} onClose={onClose} />, named);
+      return screen.findByRole("dialog", { name: "Staff member" });
+    };
+    const today = async () => (await holder.clearances.listClearances()).today;
+    /** Dr. Bello (password sign-in) as an analyst whom cl_act also covers. */
+    async function coverBello() {
+      await holder.client.updateStaff("s-bello", {
+        version: 1,
+        roles: ["clinician", "analyst"],
+      });
+      const list = holder.clearances.listClearances.bind(holder.clearances);
+      vi.spyOn(holder.clearances, "listClearances").mockImplementation(
+        async () => {
+          const d = await list();
+          return {
+            ...d,
+            clearances: d.clearances.map((c) =>
+              c.id === "cl_act"
+                ? {
+                    ...c,
+                    covered: [
+                      ...c.covered,
+                      { id: "s-bello", display_name: "Dr. Bello" },
+                    ],
+                  }
+                : c,
+            ),
+          };
+        },
+      );
+    }
+
+    it("the staff panel shows Named access until … for Grace Nwosu and No named access for a clinician", async () => {
+      const t = await today();
+      const grace = await openNamed("s-nwosu");
+      expect(
+        await within(grace).findByText(
+          `Named access until ${dayLabel(dayAfter(t, 137))} · letter on file`,
+        ),
+      ).toBeInTheDocument();
+      cleanup();
+      const bello = await openNamed("s-bello");
+      expect(
+        await within(bello).findByText("No named access"),
+      ).toBeInTheDocument();
+      expect(within(bello).queryByText(/Named access until/)).toBeNull();
+    });
+
+    it("removing Kemi Adeyemi's Analyst role says it also ends their named access", async () => {
+      const panel = await openNamed("s-kemi");
+      await within(panel).findByText(/^Named access until/);
+      expect(within(panel).queryByText(ENDS_NAMED)).toBeNull();
+      await userEvent.click(
+        await within(panel).findByRole("checkbox", { name: "Analyst" }),
+      );
+      const warning = within(panel).getByText(ENDS_NAMED);
+      const save = within(panel).getByRole("button", { name: "Save changes" });
+      expect(save).toHaveAccessibleDescription(ENDS_NAMED);
+      // A warning line above Save, not a new confirmation (ruling 8).
+      expect(
+        warning.compareDocumentPosition(save) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      await userEvent.click(save);
+      expect(await screen.findByText("Changes saved")).toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: /\?$/ })).toBeNull();
+    });
+
+    it("no warning when the person keeps a role a letter can cover", async () => {
+      // Grace Nwosu (cl_act) becomes Clinician and Analyst, then drops Hospital admin.
+      const panel = await openNamed("s-nwosu");
+      await within(panel).findByText(/^Named access until/);
+      await userEvent.click(
+        within(panel).getByRole("checkbox", { name: "Clinician" }),
+      );
+      await userEvent.click(
+        within(panel).getByRole("checkbox", { name: "Analyst" }),
+      );
+      await userEvent.click(
+        within(panel).getByRole("checkbox", { name: "Hospital admin" }),
+      );
+      expect(
+        within(panel).getByRole("button", { name: "Save changes" }),
+      ).toBeEnabled();
+      expect(within(panel).queryByText(ENDS_NAMED)).toBeNull();
+      // Dropping Analyst as well leaves nothing a letter covers.
+      await userEvent.click(
+        within(panel).getByRole("checkbox", { name: "Analyst" }),
+      );
+      expect(within(panel).getByText(ENDS_NAMED)).toBeInTheDocument();
+    });
+
+    it("no warning when the person has no named access", async () => {
+      // Dr. Okafor has no letter: giving and taking roles says nothing.
+      const panel = await openNamed("s-okafor");
+      await within(panel).findByText("No named access");
+      await userEvent.click(
+        within(panel).getByRole("checkbox", { name: "Hospital admin" }),
+      );
+      expect(within(panel).queryByText(ENDS_NAMED)).toBeNull();
+    });
+
+    it("deactivating someone with named access says it also ends it", async () => {
+      const panel = await openNamed("s-nwosu");
+      await within(panel).findByText(/^Named access until/);
+      await userEvent.click(
+        within(panel).getByRole("button", { name: "Deactivate" }),
+      );
+      const dialog = screen.getByRole("dialog", {
+        name: "Deactivate this account?",
+      });
+      expect(dialog).toHaveTextContent(ENDS_NAMED);
+    });
+
+    it("removing someone with named access says it also ends it", async () => {
+      const panel = await openNamed("s-nwosu");
+      await within(panel).findByText(/^Named access until/);
+      const account = within(panel).getByRole("region", { name: "Account" });
+      await userEvent.click(
+        within(account).getByRole("button", { name: "Remove" }),
+      );
+      expect(
+        screen.getByRole("dialog", { name: "Remove this account?" }),
+      ).toHaveTextContent(ENDS_NAMED);
+    });
+
+    it("after Deactivate the line reads No named access", async () => {
+      const panel = await openNamed("s-nwosu");
+      await within(panel).findByText(/^Named access until/);
+      await userEvent.click(
+        within(panel).getByRole("button", { name: "Deactivate" }),
+      );
+      const dialog = screen.getByRole("dialog", {
+        name: "Deactivate this account?",
+      });
+      await userEvent.click(
+        within(dialog).getByRole("button", { name: "Deactivate" }),
+      );
+      expect(
+        await within(panel).findByText("No named access"),
+      ).toBeInTheDocument();
+      expect(within(panel).queryByText(/^Named access until/)).toBeNull();
+    });
+
+    it("after Reset two-step the line reads No named access", async () => {
+      await coverBello();
+      const panel = await openNamed("s-bello");
+      await within(panel).findByText(/^Named access until/);
+      await userEvent.click(
+        within(panel).getByRole("button", { name: "Reset two-step" }),
+      );
+      const dialog = screen.getByRole("dialog", {
+        name: "Reset two-step verification?",
+      });
+      await userEvent.click(
+        within(dialog).getByRole("button", { name: "Reset two-step" }),
+      );
+      expect(
+        await within(panel).findByText("No named access"),
+      ).toBeInTheDocument();
+    });
+
+    it("after losing both covering roles the line reads No named access", async () => {
+      const panel = await openNamed("s-kemi");
+      await within(panel).findByText(/^Named access until/);
+      await userEvent.click(
+        within(panel).getByRole("checkbox", { name: "Analyst" }),
+      );
+      await userEvent.click(
+        within(panel).getByRole("button", { name: "Save changes" }),
+      );
+      expect(await screen.findByText("Changes saved")).toBeInTheDocument();
+      expect(
+        await within(panel).findByText("No named access"),
+      ).toBeInTheDocument();
+    });
+
+    it("resetting two-step for someone with named access says it also ends it", async () => {
+      await coverBello();
+      const panel = await openNamed("s-bello");
+      await within(panel).findByText(/^Named access until/);
+      await userEvent.click(
+        within(panel).getByRole("button", { name: "Reset two-step" }),
+      );
+      expect(
+        screen.getByRole("dialog", { name: "Reset two-step verification?" }),
+      ).toHaveTextContent(ENDS_NAMED);
+    });
+
+    it("no sentence on the confirms for someone without named access", async () => {
+      const panel = await openNamed("s-bello");
+      await within(panel).findByText("No named access");
+      await userEvent.click(
+        within(panel).getByRole("button", { name: "Reset two-step" }),
+      );
+      expect(
+        screen.getByRole("dialog", { name: "Reset two-step verification?" }),
+      ).not.toHaveTextContent(ENDS_NAMED);
+    });
+
+    it("with the switch Letters only the staff panel shows no named-access line", async () => {
+      holder.clearances = sampleClients({
+        admin: holder.client,
+        namedAccess: "letters_only",
+      }).clearances;
+      const list = vi.spyOn(holder.clearances, "listClearances");
+      const position = vi.spyOn(holder.clearances, "getNamedAccess");
+      const panel = await openNamed("s-nwosu");
+      await within(panel).findByText("Grace Nwosu", { selector: "b" });
+      // The position has loaded (Letters only) before anything is asserted.
+      await waitFor(() => expect(position).toHaveBeenCalled());
+      await act(async () => {});
+      await waitFor(() =>
+        expect(
+          within(panel).getByRole("button", { name: "Deactivate" }),
+        ).toBeInTheDocument(),
+      );
+      expect(within(panel).queryByText(/Named access until/)).toBeNull();
+      expect(within(panel).queryByText("No named access")).toBeNull();
+      expect(list).not.toHaveBeenCalled();
+      await userEvent.click(
+        within(panel).getByRole("button", { name: "Deactivate" }),
+      );
+      expect(
+        screen.getByRole("dialog", { name: "Deactivate this account?" }),
+      ).not.toHaveTextContent(ENDS_NAMED);
+    });
+
+    it("says Couldn't load named access when the letters fail, and Try again brings the line back", async () => {
+      vi.spyOn(holder.clearances, "listClearances").mockRejectedValueOnce(
+        new ApiError(403, "forbidden"),
+      );
+      const panel = await openNamed("s-nwosu");
+      expect(
+        await within(panel).findByText("Couldn't load named access"),
+      ).toBeInTheDocument();
+      expect(within(panel).queryByText("No named access")).toBeNull();
+      await userEvent.click(
+        within(panel).getByRole("button", { name: "Try again" }),
+      );
+      expect(
+        await within(panel).findByText(/^Named access until/),
+      ).toBeInTheDocument();
+      expect(
+        within(panel).queryByText("Couldn't load named access"),
+      ).toBeNull();
+    });
+
+    it("says Couldn't load named access when the switch's position fails", async () => {
+      vi.spyOn(holder.clearances, "getNamedAccess").mockRejectedValueOnce(
+        new ApiError(403, "forbidden"),
+      );
+      const panel = await openNamed("s-nwosu");
+      expect(
+        await within(panel).findByText("Couldn't load named access"),
+      ).toBeInTheDocument();
+      await userEvent.click(
+        within(panel).getByRole("button", { name: "Try again" }),
+      );
+      expect(
+        await within(panel).findByText(/^Named access until/),
+      ).toBeInTheDocument();
+    });
+
+    it("without named access on the account, nothing is asked of the letters", async () => {
+      const position = vi.spyOn(holder.clearances, "getNamedAccess");
+      const panel = await open("s-nwosu");
+      await within(panel).findByRole("button", { name: "Deactivate" });
+      expect(within(panel).queryByText("No named access")).toBeNull();
+      expect(position).not.toHaveBeenCalled();
+    });
   });
 });

@@ -342,4 +342,53 @@ describe("Sidebar", () => {
       }
     });
   });
+
+  describe("Named access link", () => {
+    const names = () =>
+      within(screen.getByRole("region", { name: "Hospital admin" }))
+        .getAllByRole("link")
+        .map((l) => l.getAttribute("aria-label"));
+    it("a hospital admin sees Named access after Analysis", () => {
+      for (const roles of [
+        ["hospital_admin"],
+        ["clinician", "hospital_admin"],
+      ] as Role[][]) {
+        const { unmount } = renderWithAuth(<Sidebar items={[]} />, {
+          ...TEST_USER,
+          roles,
+          features: { analysis: true, named: true },
+        });
+        expect(names()).toEqual([
+          "Staff",
+          "Hospital settings",
+          "Activity",
+          "Usage",
+          "Analysis",
+          "Named access",
+        ]);
+        const link = screen.getByRole("link", { name: "Named access" });
+        expect(link).toHaveAttribute("href", "/admin/named-access");
+        expect(link).toHaveAccessibleDescription("Clearance letters");
+        unmount();
+      }
+    });
+    it("with the key off nobody sees it", () => {
+      for (const [roles, features] of [
+        [["hospital_admin"], { analysis: true }],
+        [["clinician", "hospital_admin"], { analysis: true }],
+        [["hospital_admin"], undefined],
+        // An analyst who isn't an admin never sees it, key on or off.
+        [["clinician", "analyst"], { analysis: true, named: true }],
+        [["clinician", "analyst"], { analysis: true }],
+      ] as [Role[], { analysis: boolean; named?: boolean } | undefined][]) {
+        const { unmount } = renderWithAuth(<Sidebar items={[]} />, {
+          ...TEST_USER,
+          roles,
+          features,
+        });
+        expect(screen.queryByRole("link", { name: "Named access" })).toBeNull();
+        unmount();
+      }
+    });
+  });
 });

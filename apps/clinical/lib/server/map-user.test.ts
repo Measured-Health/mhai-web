@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { analysisOn } from "../auth/types";
+import { analysisOn, canUseNamedAccess } from "../auth/types";
 import { stepsFor, toDevice, toUser, type ApiUser } from "./map-user";
 
 describe("toUser", () => {
@@ -70,6 +70,43 @@ describe("toUser analysis switch", () => {
       expect(
         analysisOn(toUser({ ...base, features } as unknown as ApiUser)),
       ).toBe(false);
+  });
+  it("named is on only with analysis on and the key set", () => {
+    const on = { ...base, features: { analysis: true, named_access: true } };
+    vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "true");
+    // Analysis not signed off: neither switch.
+    expect(toUser(on).features).toBeUndefined();
+    vi.stubEnv("ANALYSIS_SIGNED_OFF", "true");
+    expect(toUser(on).features).toEqual({ analysis: true, named: true });
+    // The API doesn't turn analysis on: named stays off too.
+    expect(toUser(base).features).toBeUndefined();
+    // The API's flag absent, false or a string: off.
+    for (const named_access of [undefined, false, "true"])
+      expect(
+        toUser({
+          ...base,
+          features: { analysis: true, named_access },
+        } as unknown as ApiUser).features,
+      ).toEqual({ analysis: true });
+    vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "TRUE");
+    expect(toUser(on).features).toEqual({ analysis: true });
+    vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "");
+    expect(toUser(on).features).toEqual({ analysis: true });
+  });
+  it("the API's named_access alone doesn't turn it on", () => {
+    vi.stubEnv("ANALYSIS_SIGNED_OFF", "true");
+    const named = {
+      ...base,
+      roles: ["clinician", "analyst"],
+      features: { analysis: true, named_access: true },
+    };
+    expect(toUser(named).features).toEqual({ analysis: true });
+    expect(canUseNamedAccess(toUser(named))).toBe(false);
+    vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "true");
+    expect(
+      toUser({ ...named, features: { named_access: true } }).features,
+    ).toBeUndefined();
+    expect(canUseNamedAccess(toUser(named))).toBe(true);
   });
   it("analyst is a known role", () => {
     expect(toUser({ ...base, roles: ["clinician", "analyst"] }).roles).toEqual([

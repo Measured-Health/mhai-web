@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { StaffAction } from "@/lib/api/admin";
 import type { StaffOut, StaffRemoveAuth } from "@/lib/api/admin-contract";
@@ -13,25 +12,28 @@ import { adminError, type AdminError } from "@/lib/admin/errors";
 import { INVITE_DAYS } from "@/lib/admin/invite";
 import { guardFor } from "@/lib/admin/staff";
 import { useAuth } from "@/lib/auth/auth-context";
+import { ENDS_NAMED } from "@/lib/clearances/summary";
 import { useNetwork } from "@mhai/api-client/network";
-import {
-  BACKUP_FAILED_BODY,
-  BackupCodeInput,
-  BackupCodeToggle,
-  useCodeOrBackup,
-} from "@mhai/ui/auth/backup-code-toggle";
-import { CodeInput } from "@mhai/ui/auth/code-input";
+import { BACKUP_FAILED_BODY } from "@mhai/ui/auth/backup-code-toggle";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { useToast } from "@mhai/ui/toast";
 import { ConfirmDialog } from "./confirm-dialog";
+import { StepUpFields, useStepUp } from "./step-up-fields";
 
 export type Confirmable =
   "password-reset" | "reset-mfa" | "deactivate" | "remove";
 
 type Copy = { title: string; body: string; keep: string; confirm: string };
 
-function copyFor(c: Confirmable, s: StaffOut, hospital: string): Copy {
+/** With named access, deactivating, resetting two-step and removing also end it (Plan 11). */
+function copyFor(
+  c: Confirmable,
+  s: StaffOut,
+  hospital: string,
+  named = false,
+): Copy {
+  const ends = named ? ` ${ENDS_NAMED}` : "";
   switch (c) {
     case "password-reset":
       return {
@@ -43,14 +45,14 @@ function copyFor(c: Confirmable, s: StaffOut, hospital: string): Copy {
     case "reset-mfa":
       return {
         title: "Reset two-step verification?",
-        body: `Use this when ${s.full_name} has lost their phone. They're signed out now and set up two-step again at their next sign-in.`,
+        body: `Use this when ${s.full_name} has lost their phone. They're signed out now and set up two-step again at their next sign-in.${ends}`,
         keep: "Cancel",
         confirm: "Reset two-step",
       };
     case "deactivate":
       return {
         title: "Deactivate this account?",
-        body: `${s.full_name} can't sign in from now on. Their feedback, corrections and the activity log are kept, and you can reactivate them later.`,
+        body: `${s.full_name} can't sign in from now on. Their feedback, corrections and the activity log are kept, and you can reactivate them later.${ends}`,
         keep: "Keep account",
         confirm: "Deactivate",
       };
@@ -64,7 +66,7 @@ function copyFor(c: Confirmable, s: StaffOut, hospital: string): Copy {
           }
         : {
             title: "Remove this account?",
-            body: `${s.full_name} (${s.email}) is removed from ${hospital}. This can't be undone. Past consultations, feedback and the activity log are kept.`,
+            body: `${s.full_name} (${s.email}) is removed from ${hospital}. This can't be undone. Past consultations, feedback and the activity log are kept.${ends}`,
             keep: "Keep account",
             confirm: "Remove account",
           };
@@ -149,6 +151,7 @@ export function RemindButton({ row }: { row: StaffOut }) {
 function RemoveDialog({
   row,
   hospital,
+  named,
   offline,
   busy,
   error,
@@ -159,6 +162,8 @@ function RemoveDialog({
 }: {
   row: StaffOut;
   hospital: string;
+  /** A letter gives this person named access now (Plan 11). */
+  named: boolean;
   offline: boolean;
   busy: boolean;
   error: AdminError | null;
@@ -170,22 +175,14 @@ function RemoveDialog({
   onConfirm(auth: StaffRemoveAuth, onWrong: () => void): void;
 }) {
   const { user } = useAuth();
-  const id = useId();
-  const c = useCodeOrBackup();
-  const [focusKey, setFocusKey] = useState(0);
-  const backupRef = useRef<HTMLInputElement>(null);
-  const copy = copyFor("remove", row, hospital);
+  const step = useStepUp();
+  const copy = copyFor("remove", row, hospital, named);
   // Every admin has two-step (amendment 3), so this is only ever stale state.
   const blocked = required || user?.mfaEnabled === false;
 
   function confirm() {
-    if (!c.ready || blocked) return;
-    const backup = c.backup;
-    onConfirm(backup ? { backupCode: c.value } : { mfaCode: c.value }, () => {
-      c.setCode("");
-      if (backup) backupRef.current?.focus();
-      else setFocusKey((k) => k + 1);
-    });
+    if (!step.ready || blocked) return;
+    onConfirm(step.auth(), step.wrong);
   }
 
   return (
@@ -199,58 +196,17 @@ function RemoveDialog({
       busy={busy}
       error={error}
       offline={offline}
-      ready={c.ready && !blocked}
+      ready={step.ready && !blocked}
     >
       <p>{copy.body}</p>
-      {blocked ? (
-        <div className="mt-3">
-          <Banner
-            tone="warn"
-            title="Turn on two-step verification in Profile & security to remove staff."
-          >
-            Then come back and try again.{" "}
-            <Link href="/account" className="font-semibold underline">
-              Profile &amp; security
-            </Link>
-          </Banner>
-        </div>
-      ) : (
-        <div className="mt-4">
-          <p className="mb-2 text-[13px]">
-            {c.backup
-              ? "Enter one of your backup codes to confirm."
-              : "Enter the 6-digit code from your authenticator app to confirm."}
-          </p>
-          {c.backup ? (
-            <BackupCodeInput
-              id={`${id}-backup`}
-              inputRef={backupRef}
-              value={c.code}
-              onChange={c.setCode}
-              disabled={busy}
-            />
-          ) : (
-            <CodeInput
-              autoSubmit
-              value={c.code}
-              onChange={c.setCode}
-              label="Your two-step code"
-              disabled={busy}
-              invalid={error !== null}
-              focusKey={focusKey}
-            />
-          )}
-          <p className="mt-1 text-[13px] text-ink-3">
-            <BackupCodeToggle
-              backup={c.backup}
-              onChange={(b) => {
-                c.setBackup(b);
-                onClearError();
-              }}
-            />
-          </p>
-        </div>
-      )}
+      <StepUpFields
+        step={step}
+        busy={busy}
+        invalid={error !== null}
+        blocked={blocked}
+        blockedTitle="Turn on two-step verification in Profile & security to remove staff."
+        onToggle={onClearError}
+      />
     </ConfirmDialog>
   );
 }
@@ -260,10 +216,13 @@ export function AccountActions({
   row,
   list,
   onRemoved,
+  named = false,
 }: {
   row: StaffOut;
   list: StaffOut[];
   onRemoved(): void;
+  /** A letter gives this person named access now (Plan 11). */
+  named?: boolean;
 }) {
   const act = useStaffAction();
   const remove = useRemoveStaff();
@@ -383,7 +342,9 @@ export function AccountActions({
     setPending(c);
   };
   const copy =
-    pending && pending !== "remove" ? copyFor(pending, row, hospital) : null;
+    pending && pending !== "remove"
+      ? copyFor(pending, row, hospital, named)
+      : null;
 
   return (
     <section aria-labelledby={heading}>
@@ -515,6 +476,7 @@ export function AccountActions({
         <RemoveDialog
           row={row}
           hospital={hospital}
+          named={named}
           offline={!online}
           busy={remove.isPending}
           error={removeError}

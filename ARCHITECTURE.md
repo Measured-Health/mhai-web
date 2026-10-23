@@ -152,6 +152,16 @@ flowchart TB
   the server's `ANALYSIS_SIGNED_OFF` is exactly `true` (the proxy checks it
   on every call and answers 404 `not_found` otherwise). Platform accounts
   never see it.
+- **Named access is gated twice.** `canUseNamedAccess(user)` is
+  `canUseAnalysis(user)` and `features.named`: always in the demo; in live
+  mode only when the API's `named_access` flag is on and the server's
+  `NAMED_ACCESS_SIGNED_OFF` is exactly `true`. With the key off the proxy
+  answers `hospital/clearances*`, `analysis/named-access` and
+  `analysis/clearance/me` with 404 before reading the session, and refuses a
+  named patient list with 403 `named_access_off`. The backend switch (Off,
+  Letters only, On) stays the authority; the app only reads it. The Named
+  access entry is in the Hospital admin group after Analysis and shows only
+  to a hospital admin who passes the gate (`canOpenNamedAccess`).
 - **Researcher** has no endpoints yet, so it has no app.
 
 ## 3. Repository layout
@@ -469,6 +479,23 @@ view closed. **See patients** opens a de-identified list (level 1) that is
 never exported or kept, and each opening is logged in the hospital's
 activity. Sample data only; it needs clinical, privacy and legal sign-off
 before live use (see the README).
+
+### 4.10 Named access
+
+Route: `/admin/named-access`, in the Hospital admin group after Analysis
+("Clearance letters"). It lists the hospital's clearance letters (a table
+from `md`, cards below), with the server's `today` and `max_end_date`, and
+opens one in a side panel (a sheet on a phone) to view, revoke, remove a
+person or renew; **Upload a letter** is a dialog (a sheet on a phone). The
+open letter is held in React state, never the URL. Writes take the admin's
+two-step code and an `Idempotency-Key`; a revoke sends the letter's
+`version`. A letter's pages are fetched one at a time through the proxy
+(`image/png` or `image/jpeg` only, `no-store`), held as a Blob in component
+state and shown through an object URL that is revoked when the page changes
+or the viewer closes. Nothing about a letter reaches storage, a cache or the
+URL. A person's Staff panel shows their named access, worked out from the
+letter list, and warns before a change that would end it; when the letters
+fail to load it says "Couldn't load named access" with **Try again**.
 
 ## 5. Platform admin app
 

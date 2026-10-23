@@ -147,6 +147,23 @@ screen, in tables and in the CSV), and a figure that would give one away is
 hidden too. A hospital admin gives the Analyst role to a clinician in Staff.
 Like the rest of the demo, nothing is kept in browser storage.
 
+**Named access.** Sign in as the hospital admin sample (Grace Nwosu) and
+open **Named access** (clearance letters) in the Hospital admin group. A
+clearance letter, signed by hospital leadership, is what lets an Analyst see
+patient names; Measured Health verifies it first. Eight sample letters show
+every status: Checking the file, Couldn't accept the file, Waiting for
+Measured Health, Active until a date, Ends in 12 days, Rejected, Ended and
+Revoked. **Upload a letter** takes a PDF, PNG or JPEG (up to 10 MB and 20
+pages; only its name and size show, never a preview), who signed it, its
+dates, the people it covers and your two-step code (in the demo, `123456`);
+it shows Checking the file and then Waiting for Measured Health. Open a
+letter to **View letter** page by page (no download or print), **Revoke** it
+(with a code), **Remove a person** or **Renew** it. A person's Staff panel
+shows their named access line. Verifying a waiting letter happens in the
+platform admin app's demo, whose store is separate: a letter verified there
+doesn't change this demo, and the other way round. Like the rest of the demo,
+nothing is kept in browser storage.
+
 ### Platform admin app
 
 **Platform admin app.** Measured Health's own staff use it to add and run
@@ -402,9 +419,17 @@ It needs clinical, privacy and legal sign-off before live use, and it has not
 been given. It stays off in live mode until `ANALYSIS_SIGNED_OFF=true` is set
 on the server and the backend switches it on for the hospital; with either
 missing there is no page, no sidebar entry, no Analyst box and no API route
-(the proxy answers 404). Until then it runs on sample data only. Named
-drill-down and clearance letters are a later plan; see
+(the proxy answers 404). Until then it runs on sample data only. See
 [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Named drill-down, which shows patient names to a person covered by a
+verified clearance letter, needs **clinical, privacy and legal sign-off**
+before live use, and it has not been given. In live mode it stays off until
+`NAMED_ACCESS_SIGNED_OFF=true` is set on the server **and** the backend
+switch is raised by two platform admins (Off, Letters only, On). With either
+missing the Named access page, its sidebar entry and its API routes do not
+exist (the proxy answers 404), and names are never shown. Until then it runs
+on sample data only.
 
 ### Tests
 

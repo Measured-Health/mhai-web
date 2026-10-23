@@ -35,7 +35,7 @@ describe("mock auth client", () => {
               backup: false,
               trustDevice: false,
             })) && (await c.getSession())!.user;
-      expect(user.features).toEqual({ analysis: true });
+      expect(user.features).toEqual({ analysis: true, named: true });
     }
     expect(DEMO_EMAILS.analyst).toBe("analyst.adeyemi@havanahospital.org");
     expect(SAMPLE_ACCOUNTS).toContainEqual({

@@ -18,7 +18,7 @@ async function newUserClient() {
   await client.signIn("new@h.org", "pw");
   return client;
 }
-const gated = (need?: Area | "any") => (
+const gated = (need?: Area | "any" | "named-admin") => (
   <AuthGate need={need}>
     <Clinical />
   </AuthGate>
@@ -143,6 +143,46 @@ describe("AuthGate", () => {
       features: { analysis: true },
     });
     expect(screen.getByText("clinical screen")).toBeInTheDocument();
+  });
+  it("/admin/named-access sends a clinician home; the key off sends everyone home", async () => {
+    const named = { analysis: true, named: true };
+    for (const roles of [
+      ["hospital_admin"],
+      ["clinician", "hospital_admin"],
+    ] as Role[][]) {
+      const { unmount } = renderWithAuth(gated("named-admin"), {
+        ...as(...roles),
+        features: named,
+      });
+      expect(screen.getByText("clinical screen")).toBeInTheDocument();
+      unmount();
+    }
+    expect(replace).not.toHaveBeenCalled();
+    for (const [user, home] of [
+      // A clinician, even an analyst with named access, isn't an admin.
+      [{ ...as("clinician"), features: named }, "/"],
+      [{ ...as("clinician", "analyst"), features: named }, "/"],
+      // The key off: features.named is absent.
+      [
+        { ...as("hospital_admin"), features: { analysis: true } },
+        "/admin/staff",
+      ],
+      [
+        { ...as("clinician", "hospital_admin"), features: { analysis: true } },
+        "/",
+      ],
+      [as("hospital_admin"), "/admin/staff"],
+    ] as const) {
+      Clinical.mockClear();
+      replace.mockClear();
+      const { unmount } = renderWithAuth(gated("named-admin"), {
+        ...user,
+        roles: [...user.roles],
+      });
+      await waitFor(() => expect(replace).toHaveBeenCalledWith(home));
+      expect(Clinical).not.toHaveBeenCalled();
+      unmount();
+    }
   });
   it("the feature off sends everyone home (Review Focus 5)", async () => {
     for (const [roles, home] of [

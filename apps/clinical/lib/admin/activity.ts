@@ -68,6 +68,26 @@ export function describeEvent(e: ActivityEventOut): string {
       return `${actorName(e)} removed Analyst access from ${t}`;
     case "analysis_patients_viewed":
       return `${actorName(e)} opened ${e.count ?? "several"} de-identified patients in Analysis`;
+    case "analysis_named_viewed":
+      return `${actorName(e)} viewed ${e.count ?? "several"} patients by name in Analysis`;
+    case "clearance_uploaded":
+      return `${actorName(e)} uploaded a clearance letter`;
+    case "clearance_refused":
+      return "A clearance letter's file was refused";
+    case "clearance_verified":
+      return `${actorName(e)} at Measured Health verified a clearance letter`;
+    case "clearance_rejected":
+      return `${actorName(e)} at Measured Health rejected a clearance letter`;
+    case "clearance_narrowed":
+      return `${actorName(e)} removed ${t} from a clearance letter`;
+    case "clearance_revoked":
+      return `${actorName(e)} revoked a clearance letter`;
+    case "clearance_ended":
+      return "A clearance letter ended";
+    case "clearance_viewed":
+      return `${actorName(e)} viewed a clearance letter`;
+    case "clearance_reminder_sent":
+      return `A reminder was sent to ${t} about a letter ending`;
     case "specialty_changed":
       return e.specialty
         ? `Changed ${t}'s specialty to ${e.specialty}`
