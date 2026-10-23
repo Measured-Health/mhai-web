@@ -109,8 +109,9 @@ export type ComparisonReason =
   | "small_group";
 /**
  * One hospital, on Prevalence, Findings and Quality only. The measure is the
- * view's headline rate per 1,000 (Quality: corrections per 1,000
- * consultations). `previous` is the hospital's own last period of the same
+ * view's headline rate per 1,000. For Quality that is the agreement rate:
+ * agreements per 1,000 rated, shown as a percentage (`per_1000 / 10`).
+ * `previous` is the hospital's own last period of the same
  * length: not suppressed but `null` when there is no data that far back.
  * `peers` is a count, never names.
  */
@@ -136,8 +137,10 @@ export type Meta = {
   /**
    * The view's headline: Prevalence, Who is affected and Co-occurring: seen
    * patients with a condition in scope, per 1,000 seen; Findings: seen
-   * patients with a flagged finding; Quality: corrections per 1,000
-   * consultations.
+   * patients with a flagged finding, per 1,000 seen; Quality: the agreement
+   * rate, ratings the reviewers agreed with (`count`) over ratings (`base`),
+   * per 1,000 rated. Tasks 6 and 7 show Quality's as a percentage
+   * (`per_1000 / 10`), in the words "Reviewers agreed …".
    */
   headline: Rate;
   /** Across hospitals only. */

@@ -1,9 +1,11 @@
 // The demo's platform Analysis (Plan 12), built on the mock core. Memory
 // only. Every figure is counted from the synthetic cohorts and then hidden
-// the way the server must hide it (spec §5): 1 to 4 hidden, sets hidden until
-// nothing is given away, a second hospital hidden when the shown rows would
-// give the first away, too few hospitals, and comparisons only over 5 or more
-// fair peers. It refuses what the backend refuses, with the same codes. No
+// the way the server must hide it (spec §5): 1 to 4 hidden; then, over one
+// all-hospitals query and the same query for each hospital, every sum (a set
+// and its total, or the hospitals and the all-hospitals figure) hides more
+// until no subtraction gives a hidden figure away, so a hospital's figure
+// reads the same in both scopes; too few hospitals; and comparisons only over
+// 5 or more fair peers. It refuses what the backend refuses, with the same codes. No
 // reply carries a patient: the cohorts are only ever counted.
 import { ApiError } from "@mhai/api-client/errors";
 import { toCsv } from "@mhai/ui/csv";
@@ -136,40 +138,18 @@ const hospitalBand = (age: number): HospitalAgeBand =>
 
 // --- hiding, the way the server must ---
 
-/**
- * Hides the next-smallest shown member, again and again, while the hidden
- * ones could be worked out: only one is hidden, or the hidden ones together
- * are 1 to 4. `hidden` is changed in place.
- */
-function closeSet(raw: number[], hidden: boolean[]) {
-  const count = () => hidden.filter(Boolean).length;
-  const sum = () => raw.reduce((s, v, i) => (hidden[i] ? s + v : s), 0);
-  while (count() > 0 && (count() < 2 || sum() < SMALL_GROUP_MIN)) {
-    let next = -1;
-    raw.forEach((v, i) => {
-      if (!hidden[i] && v > 0 && (next < 0 || v < raw[next]!)) next = i;
-    });
-    if (next < 0) break;
-    hidden[next] = true;
-  }
-}
-
 type Rec = Record<string, number>;
-/** What the second hiding took from one hospital, on top of the plain rule. */
-type Forced = { head: boolean; seen: boolean };
-const NOT_FORCED: Forced = { head: false, seen: false };
-/** The patients-seen counts: a figure's base. */
-const isBase = (k: string) => k === "seen" || k.startsWith("ms:");
 
 /**
- * Counted figures, and how each is hidden. `hosp` is, across hospitals, how
- * many hospitals have any cases for each key.
+ * Counted figures, and how each is hidden: 1 to 4, too few hospitals, or
+ * taken by the hiding below (`off`). `hosp` is, across hospitals, how many
+ * hospitals have any cases for each key.
  */
 class Ctx {
   constructor(
     readonly v: Rec,
+    readonly off: ReadonlySet<string> = new Set(),
     readonly hosp: Rec | null = null,
-    readonly forced: Forced = NOT_FORCED,
   ) {}
   n(k: string) {
     return this.v[k] ?? 0;
@@ -182,11 +162,7 @@ class Ctx {
   hidden(k: string) {
     const n = this.n(k);
     if (n === 0) return false;
-    return (
-      (isBase(k) ? this.forced.seen : this.forced.head) ||
-      isSmallCount(n) ||
-      this.few(k)
-    );
+    return this.off.has(k) || isSmallCount(n) || this.few(k);
   }
   g(k: string): AGuarded {
     if (!this.hidden(k)) return { value: this.n(k), suppressed: false };
@@ -219,14 +195,61 @@ class Ctx {
     if (isSmallCount(den.value! - num.value!)) return hide();
     return { value: round(num.value! / den.value!, 2), suppressed: false };
   }
-  /** A set that adds up: a hidden member can't be worked out from the rest. */
-  set(keys: string[]): AGuarded[] {
-    const raw = keys.map((k) => this.n(k));
-    const hidden = keys.map((k) => this.hidden(k));
-    closeSet(raw, hidden);
-    return keys.map((k, i) =>
-      !hidden[i] ? this.g(k) : this.hidden(k) ? this.g(k) : hide(),
-    );
+}
+
+/**
+ * A total and the parts that add up to it, as cells: `{owner}#{key}`, where
+ * the owner is `*` for all hospitals or a hospital's id. A one-part sum says
+ * two cells are the same figure. `across` marks the sum of the hospitals'
+ * own figures that makes an all-hospitals figure.
+ */
+type Sum = readonly [total: string, parts: readonly string[], across?: true];
+
+/**
+ * Hides cells until no sum gives a hidden one away. In every sum either
+ * nothing is hidden, or at least two cells are and, while the total shows,
+ * the hidden parts add up to 5 or more. A sum that breaks this hides its
+ * next-smallest shown part (with none left, its total), and the loop runs
+ * again over every sum until nothing changes. `off` only grows, so it ends.
+ *
+ * A figure hidden only because too few hospitals have cases (`few`) counts
+ * as shown in a sum across hospitals: each of those hospitals shows its own
+ * figure, so that total is never secret, and the hospitals are protected as
+ * if it were known. Inside one reply it counts as hidden, so the rest of a
+ * set can't give it away.
+ */
+function closeSums(
+  raw: (cell: string) => number,
+  few: (cell: string) => boolean,
+  sums: readonly Sum[],
+  off: Set<string>,
+) {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [total, parts, across] of sums) {
+      const hidden = (c: string) => {
+        const n = raw(c);
+        return (
+          n !== 0 && (off.has(c) || isSmallCount(n) || (!across && few(c)))
+        );
+      };
+      const hid = parts.filter(hidden);
+      if (hidden(total)) {
+        if (hid.length > 0) continue;
+      } else {
+        if (hid.length === 0) continue;
+        const sum = hid.reduce((s, c) => s + raw(c), 0);
+        if (hid.length >= 2 && sum >= SMALL_GROUP_MIN) continue;
+      }
+      let next: string | null = null;
+      for (const c of parts)
+        if (!hidden(c) && raw(c) > 0 && (next === null || raw(c) < raw(next)))
+          next = c;
+      if (next === null && hidden(total)) continue;
+      off.add(next ?? total);
+      changed = true;
+    }
   }
 }
 
@@ -335,11 +358,14 @@ function tally(h: string, map: ScopeKind, f: Filters, win: Win): Rec {
       if (!within(c.month) || (f.condition !== null && id !== f.condition))
         continue;
       add(`q:${id}:cons`);
-      add("qcons");
       add(`q:${id}:${c.confidence}`);
       if (c.agreed !== null) {
         add(`q:${id}:rated`);
-        if (c.agreed) add(`q:${id}:agreed`);
+        add("qrated");
+        if (c.agreed) {
+          add(`q:${id}:agreed`);
+          add("qagreed");
+        }
         if (c.reviewer) {
           if (!reviewers.has(id)) reviewers.set(id, new Set());
           reviewers.get(id)!.add(c.reviewer);
@@ -347,7 +373,6 @@ function tally(h: string, map: ScopeKind, f: Filters, win: Win): Rec {
       }
       if (c.correction) {
         add(`q:${id}:corr`);
-        add("qcorr");
         add(`q:${id}:${c.correction}`);
       }
     }
@@ -399,44 +424,293 @@ function combine(list: Rec[]): { v: Rec; hosp: Rec } {
   return { v, hosp };
 }
 
-/** The view's headline: a count over a base. */
+/**
+ * The view's headline: a count over a base. Quality's is the agreement
+ * rate: ratings the reviewers agreed with, over ratings.
+ */
 const HEADLINE: Record<ViewId, readonly [string, string]> = {
   prevalence: ["head", "seen"],
   affected: ["head", "seen"],
   "co-occurring": ["head", "seen"],
   findings: ["fhead", "seen"],
-  quality: ["qcorr", "qcons"],
+  quality: ["qagreed", "qrated"],
+};
+/** What an all-hospitals row shows for its hospital, in any view. */
+const ROW_KEYS = new Set(["seen", ...Object.values(HEADLINE).flat()]);
+
+const keysWith = (ctx: Ctx, prefix: string) =>
+  Object.keys(ctx.v).filter((k) => k.startsWith(prefix));
+
+/** Shown rows first, largest first; the hidden ones after. */
+function ranked<T>(
+  items: T[],
+  key: (t: T) => string,
+  ctx: Ctx,
+  tie: (t: T) => number,
+): T[] {
+  return [...items].sort((a, b) => {
+    const ha = ctx.hidden(key(a));
+    const hb = ctx.hidden(key(b));
+    if (ha !== hb) return ha ? 1 : -1;
+    return ctx.n(key(b)) - ctx.n(key(a)) || tie(a) - tie(b);
+  });
+}
+/** The pairs a reply lists: at most 20, the hidden ones last. */
+function topPairs(ctx: Ctx, map: ScopeKind) {
+  const order = ORDER[map] as readonly string[];
+  const pairs = keysWith(ctx, "p:").map((k) => {
+    const [a, b] = k.slice(2).split("|") as [string, string];
+    return { k, a, b };
+  });
+  return ranked(
+    pairs,
+    (p) => p.k,
+    ctx,
+    (p) => order.indexOf(p.a) * 100 + order.indexOf(p.b),
+  ).slice(0, TOP);
+}
+/** The findings a reply lists: at most 20, the hidden ones last. */
+function topFindings(ctx: Ctx) {
+  const list = keysWith(ctx, "f:").map((k) => {
+    const [name, flag] = k.slice(2).split("|") as [string, string];
+    return { k, name: name === "-" ? null : name, flag };
+  });
+  return ranked(
+    list,
+    (x) => x.k,
+    ctx,
+    () => 0,
+  ).slice(0, TOP);
+}
+
+const pairKey = (a: string, b: string, map: ScopeKind) => {
+  const order = ORDER[map] as readonly string[];
+  return order.indexOf(a) < order.indexOf(b) ? `p:${a}|${b}` : `p:${b}|${a}`;
 };
 
-type RowInfo = { profile: Profile; ctx: Ctx };
 /**
- * One entry per included hospital, hidden as the server hides them. With
- * `second`, a hospital whose shown figure would give a hidden one away is
- * hidden too; its answer is the same wherever it is read.
+ * The sums inside one reply's figures (one hospital's, or all hospitals'),
+ * keys in that scope's names. `condition` is the filter, if any.
  */
-function rowsFor(
-  view: ViewId,
-  f: Filters,
-  map: ScopeKind,
-  win: Win,
-  second: boolean,
-): RowInfo[] {
-  const list = PROFILES.map((p) => ({ p, v: tally(p.id, map, f, win) }));
-  const [head] = HEADLINE[view];
-  const closed = (key: string) => {
-    const raw = list.map((x) => x.v[key] ?? 0);
-    const plain = raw.map(isSmallCount);
-    const hidden = plain.slice();
-    if (second) closeSet(raw, hidden);
-    return hidden.map((h, i) => h && !plain[i]!);
-  };
-  const forcedHead = closed(head);
-  const forcedSeen = closed("seen");
-  return list.map((x, i) => ({
-    profile: x.p,
-    ctx: new Ctx(x.v, null, { head: forcedHead[i]!, seen: forcedSeen[i]! }),
-  }));
+function sumsOf(v: Rec, map: ScopeKind, condition: string | null): Sum[] {
+  const bands = map === "all" ? ALL_BANDS : HOSPITAL_BANDS;
+  const out: Sum[] = [
+    ["group", bands.map((b) => `age:${b}`)],
+    ["group", SEXES.map((s) => `sex:${s}`)],
+    ["group", [...SETTINGS, "-"].map((s) => `set:${s}`)],
+    ["group", [...SPECIALTIES, "-"].map((s) => `spec:${s}`)],
+    ["al:total", ["al:critical", "al:urgent", "al:info"]],
+  ];
+  if (map === "hospital")
+    out.push([
+      "group",
+      [...LOCATIONS.map((l) => l.id), "-"].map((l) => `loc:${l}`),
+    ]);
+  const ids = Object.keys(v)
+    .filter((k) => k.startsWith("q:") && k.endsWith(":cons"))
+    .map((k) => k.slice(2, -5));
+  for (const id of ids) {
+    const p = `q:${id}:`;
+    out.push(
+      [`${p}cons`, [`${p}high`, `${p}medium`, `${p}low`]],
+      [`${p}corr`, [`${p}approved`, `${p}rejected`, `${p}waiting`]],
+    );
+  }
+  out.push(
+    ["qrated", ids.map((id) => `q:${id}:rated`)],
+    ["qagreed", ids.map((id) => `q:${id}:agreed`)],
+  );
+  // The same figure under two names.
+  const pa = Object.keys(v).filter((k) => k.startsWith("pa:"));
+  if (condition === null) {
+    out.push(["seen", ["group"]]);
+    for (const k of pa) out.push([k, [`c:${k.slice(3)}`]]);
+  } else {
+    out.push(["group", ["head"]], ["group", [`c:${condition}`]]);
+    if (condition !== UNMAPPED)
+      for (const k of pa) {
+        const a = k.slice(3);
+        out.push([k, [a === condition ? "group" : pairKey(a, condition, map)]]);
+      }
+  }
+  return out;
 }
+
+/** A hospital's own condition id for an all-hospitals one. */
+const HOSPITAL_ID = new Map(CONDITIONS.map((c) => [allId(c.id), c.id]));
+/**
+ * The one-hospital key for an all-hospitals key, or null when One hospital
+ * has no such figure (the 20-year age bands but the last).
+ */
+function hospitalKey(k: string): string | null {
+  const [head, a = "", b = ""] = k.split(":");
+  const id = (x: string) => HOSPITAL_ID.get(x) ?? x;
+  switch (head) {
+    case "c":
+    case "n":
+    case "pa":
+      return `${head}:${id(a)}`;
+    case "p": {
+      const [x, y] = a.split("|") as [string, string];
+      return `p:${id(x)}|${id(y)}`;
+    }
+    case "q":
+      return `q:${id(a)}:${b}`;
+    case "age":
+      return k === "age:80+" ? k : null;
+    case "loc":
+      return null;
+    default:
+      return k;
+  }
+}
+
+type Owner = {
+  id: string;
+  v: Rec;
+  map: ScopeKind;
+  hosp: Rec | null;
+  /** Whether it has a reply of its own, with lists cut at 20. */
+  lists: boolean;
+};
+const cellOf = (owner: string, key: string) => `${owner}#${key}`;
+
+/**
+ * Hides every owner's figures together, until no sum (inside one reply, or
+ * across hospitals) gives a hidden figure away. A pair or finding cut from a
+ * list of 20 is not shown either, so it counts as hidden, and the sums run
+ * again until the lists stop changing.
+ */
+function hideTogether(owners: Owner[], sums: Sum[]): Map<string, Ctx> {
+  const byId = new Map(owners.map((o) => [o.id, o]));
+  const split = (c: string) => {
+    const at = c.indexOf("#");
+    return [byId.get(c.slice(0, at))!, c.slice(at + 1)] as const;
+  };
+  const raw = (c: string) => {
+    const [o, k] = split(c);
+    return o.v[k] ?? 0;
+  };
+  const few = (c: string) => {
+    const [o, k] = split(c);
+    return o.hosp !== null && (o.hosp[k] ?? 0) < MIN_HOSPITALS;
+  };
+  for (const [total, parts] of sums)
+    if (parts.reduce((s, c) => s + raw(c), 0) !== raw(total))
+      throw new Error(`analysis sample: ${total} doesn't add up`);
+  const off = new Set<string>();
+  const ctxs = () =>
+    new Map(
+      owners.map((o) => {
+        const mine = new Set<string>();
+        for (const c of off)
+          if (c.startsWith(`${o.id}#`)) mine.add(c.slice(o.id.length + 1));
+        return [o.id, new Ctx(o.v, mine, o.hosp)] as const;
+      }),
+    );
+  for (;;) {
+    closeSums(raw, few, sums, off);
+    const now = ctxs();
+    let cut = false;
+    for (const o of owners) {
+      if (!o.lists) continue;
+      const ctx = now.get(o.id)!;
+      const listed = new Set([
+        ...topPairs(ctx, o.map).map((p) => p.k),
+        ...topFindings(ctx).map((x) => x.k),
+      ]);
+      for (const k of [...keysWith(ctx, "p:"), ...keysWith(ctx, "f:")])
+        if (!listed.has(k) && !off.has(cellOf(o.id, k))) {
+          off.add(cellOf(o.id, k));
+          cut = true;
+        }
+    }
+    if (!cut) return now;
+  }
+}
+const inCells = (owner: string, sums: Sum[]): Sum[] =>
+  sums.map(([t, parts]) => [
+    cellOf(owner, t),
+    parts.map((p) => cellOf(owner, p)),
+  ]);
+
+/** The one-hospital filters that ask the same as all-hospitals ones. */
+function twinOf(f: Filters): Filters | null {
+  if (f.age_band !== null && f.age_band !== "80+") return null;
+  if (f.condition === null) return f;
+  const id = HOSPITAL_ID.get(f.condition);
+  return id === undefined ? null : { ...f, condition: id };
+}
+
+type Family = { all: Ctx; hospitals: Map<string, Ctx> };
+const families = new Map<string, Family>();
+/**
+ * One all-hospitals query and, where they exist, the same query for each
+ * hospital in One hospital scope, hidden together. A hospital's figure is
+ * one cell, read the same in both scopes and in every view; the all-
+ * hospitals figure is the sum of those cells. Without a one-hospital twin
+ * (a 20-year age band), a hospital's only figures are its row's.
+ */
+function familyOf(f: Filters, win: Win): Family {
+  const key = `${JSON.stringify(f)}|${win.from}-${win.to}`;
+  const hit = families.get(key);
+  if (hit) return hit;
+  const twin = twinOf(f);
+  const sum = combine(PROFILES.map((p) => tally(p.id, "all", f, win)));
+  const owners: Owner[] = [
+    { id: "*", v: sum.v, map: "all", hosp: sum.hosp, lists: true },
+    ...PROFILES.map((p) => ({
+      id: p.id,
+      v: twin ? tally(p.id, "hospital", twin, win) : tally(p.id, "all", f, win),
+      map: (twin ? "hospital" : "all") as ScopeKind,
+      hosp: null,
+      lists: twin !== null,
+    })),
+  ];
+  const sums = inCells("*", sumsOf(sum.v, "all", f.condition));
+  if (twin)
+    for (const p of PROFILES)
+      sums.push(
+        ...inCells(
+          p.id,
+          sumsOf(
+            tally(p.id, "hospital", twin, win),
+            "hospital",
+            twin.condition,
+          ),
+        ),
+      );
+  // Each all-hospitals figure is the sum of the hospitals' own.
+  for (const k of Object.keys(sum.v)) {
+    const hk = twin ? hospitalKey(k) : ROW_KEYS.has(k) ? k : null;
+    if (hk === null) continue;
+    sums.push([cellOf("*", k), PROFILES.map((p) => cellOf(p.id, hk)), true]);
+  }
+  const ctxs = hideTogether(owners, sums);
+  const out: Family = {
+    all: ctxs.get("*")!,
+    hospitals: new Map(PROFILES.map((p) => [p.id, ctxs.get(p.id)!])),
+  };
+  families.set(key, out);
+  return out;
+}
+
+const alone = new Map<string, Ctx>();
+/** A one-hospital query with no all-hospitals twin: its own sums only. */
+function aloneOf(h: string, f: Filters, win: Win): Ctx {
+  const key = `${h}|${JSON.stringify(f)}|${win.from}-${win.to}`;
+  const hit = alone.get(key);
+  if (hit) return hit;
+  const v = tally(h, "hospital", f, win);
+  const ctx = hideTogether(
+    [{ id: h, v, map: "hospital", hosp: null, lists: true }],
+    inCells(h, sumsOf(v, "hospital", f.condition)),
+  ).get(h)!;
+  alone.set(key, ctx);
+  return ctx;
+}
+
+type RowInfo = { profile: Profile; ctx: Ctx };
 
 const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);
@@ -573,37 +847,25 @@ export function analysisMock(
     location: q.location,
     source: q.source,
   });
-  /** A one-hospital query that an all-hospitals query could also have asked. */
-  const alsoAcrossHospitals = (q: AnalysisQuery) =>
-    FILTER_KEYS.filter((k) => q[k] !== null).length <= MAX_FILTERS.all &&
-    q.age_band === null &&
-    q.location === null &&
-    q.source === null &&
-    (q.condition === null ||
-      (ALL_CONDITIONS.some((c) => c.id === q.condition) &&
-        CONDITIONS.some((c) => c.id === q.condition)));
+  /** The all-hospitals filters that ask the same as a one-hospital query. */
+  const acrossOf = (q: AnalysisQuery): Filters | null => {
+    const set = FILTER_KEYS.filter((k) => q[k] !== null).length;
+    if (set > MAX_FILTERS.all || q.location !== null || q.source !== null)
+      return null;
+    if (q.age_band !== null && q.age_band !== "80+") return null;
+    const f = filtersOf(q);
+    if (q.condition === null) return f;
+    const id = allId(q.condition);
+    return ALL_CONDITIONS.some((c) => c.id === id) &&
+      HOSPITAL_ID.get(id) === q.condition
+      ? { ...f, condition: id }
+      : null;
+  };
 
   const refOf = (id: string, map: ScopeKind): ConditionRef =>
     (map === "all" ? ALL_CONDITIONS : CONDITIONS).find((c) => c.id === id) ??
     CONDITIONS.find((c) => c.id === UNMAPPED)!;
   const drill = (g: AGuarded) => ({ ...g, drill: null });
-
-  /** Shown rows first, largest first; the hidden ones after. */
-  function ranked<T>(
-    items: T[],
-    key: (t: T) => string,
-    ctx: Ctx,
-    tie: (t: T) => number,
-  ): T[] {
-    return [...items].sort((a, b) => {
-      const ha = ctx.hidden(key(a));
-      const hb = ctx.hidden(key(b));
-      if (ha !== hb) return ha ? 1 : -1;
-      return ctx.n(key(b)) - ctx.n(key(a)) || tie(a) - tie(b);
-    });
-  }
-  const keysWith = (ctx: Ctx, prefix: string) =>
-    Object.keys(ctx.v).filter((k) => k.startsWith(prefix));
 
   function prevalence(
     ctx: Ctx,
@@ -639,7 +901,7 @@ export function analysisMock(
   function affected(ctx: Ctx, q: AnalysisQuery): AffectedData {
     /** A set of keys that adds up to the group; empty members can be left out. */
     const rows = (keys: string[], keepEmpty: boolean) => {
-      const set = ctx.set(keys);
+      const set = keys.map((k) => ctx.g(k));
       return keys.flatMap((k, i) =>
         keepEmpty || ctx.n(k) > 0
           ? [
@@ -692,19 +954,8 @@ export function analysisMock(
   }
 
   function coOccurring(ctx: Ctx, q: AnalysisQuery): CoOccurringData {
-    const order = ORDER[q.scope] as readonly string[];
-    const pairs = keysWith(ctx, "p:").map((k) => {
-      const [a, b] = k.slice(2).split("|") as [string, string];
-      return { k, a, b };
-    });
-    const top = ranked(
-      pairs,
-      (p) => p.k,
-      ctx,
-      (p) => order.indexOf(p.a) * 100 + order.indexOf(p.b),
-    ).slice(0, TOP);
     return {
-      pairs: top.map((p) => ({
+      pairs: topPairs(ctx, q.scope).map((p) => ({
         a: refOf(p.a, q.scope),
         b: refOf(p.b, q.scope),
         patients: drill(ctx.g(p.k)),
@@ -714,19 +965,9 @@ export function analysisMock(
   }
 
   function findings(ctx: Ctx): FindingsData {
-    const list = keysWith(ctx, "f:").map((k) => {
-      const [name, flag] = k.slice(2).split("|") as [string, string];
-      return { k, name: name === "-" ? null : name, flag };
-    });
-    const top = ranked(
-      list,
-      (x) => x.k,
-      ctx,
-      () => 0,
-    ).slice(0, TOP);
-    const sev = ctx.set(["al:critical", "al:urgent", "al:info"]);
+    const sev = ["al:critical", "al:urgent", "al:info"].map((k) => ctx.g(k));
     return {
-      findings: top.map((x) => ({
+      findings: topFindings(ctx).map((x) => ({
         name: x.name,
         flag: x.flag === "-" ? null : (x.flag as "high" | "low" | "abnormal"),
         patients: drill(ctx.g(x.k)),
@@ -751,8 +992,8 @@ export function analysisMock(
       (id) => order.indexOf(id),
     ).map((id) => {
       const p = `q:${id}:`;
-      const conf = ctx.set([`${p}high`, `${p}medium`, `${p}low`]);
-      const corr = ctx.set([`${p}approved`, `${p}rejected`, `${p}waiting`]);
+      const conf = ["high", "medium", "low"].map((k) => ctx.g(p + k));
+      const corr = ["approved", "rejected", "waiting"].map((k) => ctx.g(p + k));
       return {
         condition: refOf(id, q.scope),
         consultations: ctx.g(`${p}cons`),
@@ -890,23 +1131,21 @@ export function analysisMock(
     const f = filtersOf(q);
     const base = { view, scope: q.scope, updated_at: iso(now()) };
     if (q.scope === "all") {
-      const rows = rowsFor(view, f, "all", m.win, true);
-      const sum = combine(rows.map((r) => r.ctx.v));
-      const ctx = new Ctx(sum.v, sum.hosp);
-      const hospitals: HospitalRow[] = rows
-        .map((r) => {
-          const std = notStdShare(r.profile.id, m.win);
-          return {
-            hospital: ref(r.profile.id),
-            size: r.ctx.g("seen"),
-            kind: r.profile.kind,
-            coverage: r.profile.coverage,
-            not_standardised_share: std.share,
-            partly_standardised: std.partly,
-            headline: headlineOf(view, r.ctx),
-          };
-        })
-        .sort((a, b) => a.hospital.name.localeCompare(b.hospital.name));
+      const fam = familyOf(f, m.win);
+      const ctx = fam.all;
+      const hospitals: HospitalRow[] = PROFILES.map((p) => {
+        const own = fam.hospitals.get(p.id)!;
+        const std = notStdShare(p.id, m.win);
+        return {
+          hospital: ref(p.id),
+          size: own.g("seen"),
+          kind: p.kind,
+          coverage: p.coverage,
+          not_standardised_share: std.share,
+          partly_standardised: std.partly,
+          headline: headlineOf(view, own),
+        };
+      }).sort((a, b) => a.hospital.name.localeCompare(b.hospital.name));
       const meta: Meta = {
         ...base,
         hospital: null,
@@ -919,19 +1158,16 @@ export function analysisMock(
       return { ...meta, data: dataOf(view, ctx, q, m.win, m.label) };
     }
     const h = q.hospital!;
-    // The same cell as the all-hospitals row, when that query exists.
-    const together = alsoAcrossHospitals(q);
-    const peers = rowsFor(
-      view,
-      f,
-      together ? "all" : "hospital",
-      m.win,
-      together,
-    );
-    const forced = together
-      ? peers.find((x) => x.profile.id === h)!.ctx.forced
-      : NOT_FORCED;
-    const ctx = new Ctx(tally(h, "hospital", f, m.win), null, forced);
+    // The same cells as the all-hospitals query that asks the same, if any.
+    const across = acrossOf(q);
+    const fam = across ? familyOf(across, m.win) : null;
+    const ctxOf = (id: string) =>
+      fam ? fam.hospitals.get(id)! : aloneOf(id, f, m.win);
+    const peers: RowInfo[] = PROFILES.map((p) => ({
+      profile: p,
+      ctx: ctxOf(p.id),
+    }));
+    const ctx = ctxOf(h);
     const data = dataOf(view, ctx, q, m.win, m.label);
     let comparison: Comparison | null = null;
     if (view === "prevalence" || view === "findings" || view === "quality") {

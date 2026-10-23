@@ -4,12 +4,27 @@ import { VENDOR_NAMES } from "../../../../scripts/vendor-names.mjs";
 import {
   VIEW_IDS,
   type AGuarded,
+  type AffectedData,
+  type AnalysisPeriod,
   type AnalysisQuery,
+  type CoOccurringData,
+  type FindingsData,
   type Meta,
+  type PrevalenceData,
+  type QualityData,
   type ViewId,
   type ViewOut,
 } from "./analysis-contract";
-import { PROFILES, buildCohort, cohortOf } from "./analysis-fixtures";
+import {
+  ALL_CONDITIONS,
+  CONDITIONS,
+  LOCATIONS,
+  PROFILES,
+  SPECIALTIES,
+  allId,
+  buildCohort,
+  cohortOf,
+} from "./analysis-fixtures";
 import { TEAM_EMAILS } from "./fixtures";
 import { createMockPlatform } from "./mock";
 
@@ -261,44 +276,6 @@ describe("hiding small groups", () => {
     expect(zero.headline.count).toEqual({ value: 0, suppressed: false });
   });
 
-  it("shows no count of 1 to 4 anywhere, in any view, either scope, and every hidden value is empty", async () => {
-    const { m } = setup();
-    const queries = [
-      all(),
-      all({ condition: "d57" }),
-      all({ condition: "a15" }),
-      all({ sex: "other" }),
-      all({ period: "3m", setting: "emergency" }),
-      one("h_lakeside"),
-      one("h_lakeside", { condition: "d57" }),
-      one("h_harbour", { condition: "d57" }),
-      one("h_havana", { sex: "other", period: "3m" }),
-      one("h_fairhaven", { period: "3m", age_band: "80+" }),
-      one("h_riverside", { condition: "n18" }),
-    ];
-    let hidden = 0;
-    for (const v of VIEW_IDS)
-      for (const q of queries) {
-        const out = await view(m, v, q);
-        for (const [key, g] of guarded(out)) {
-          const where = `${v} ${JSON.stringify(q)} ${key}`;
-          if (g.suppressed) {
-            hidden++;
-            expect(g.value, where).toBeNull();
-          } else if (COUNTS.has(key) && g.value !== null)
-            expect(g.value >= 1 && g.value <= 4, `${where}: ${g.value}`).toBe(
-              false,
-            );
-          if (g.why !== undefined) {
-            expect(g.suppressed, where).toBe(true);
-            expect(g.why).toBe("too_few_hospitals");
-            expect(q.scope, where).toBe("all");
-          }
-        }
-      }
-    expect(hidden).toBeGreaterThan(50);
-  });
-
   it("hides a rate or share over a hidden or near-total group", async () => {
     const { m } = setup();
     const out = await view(m, "affected", one("h_lakeside", { period: "3m" }));
@@ -348,40 +325,6 @@ describe("hiding small groups", () => {
     expect(out.headline.count.value! - shown).toBe(9);
     // The per-1,000 of a hidden row is hidden too.
     expect(rowOf(out, "h_harbour").headline.per_1000.suppressed).toBe(true);
-  });
-
-  it("never leaves a remainder of 1 to 4 or exactly one hidden row over the rows", async () => {
-    const { m } = setup();
-    const queries = [
-      all({ condition: "d57" }),
-      all({ condition: "a15" }),
-      all({ condition: "n18", period: "3m" }),
-      all({ condition: "b54", sex: "other" }),
-      all({ condition: "j45", period: "6m", setting: "emergency" }),
-      all({ sex: "other", period: "3m" }),
-    ];
-    for (const v of VIEW_IDS)
-      for (const q of queries) {
-        const out = await view(m, v, q);
-        const total = out.headline.count;
-        if (total.suppressed) continue;
-        const hiddenRows = out.hospitals!.filter(
-          (r) => r.headline.count.suppressed,
-        );
-        const shown = out.hospitals!.reduce(
-          (s, r) => s + (r.headline.count.value ?? 0),
-          0,
-        );
-        const rest = total.value! - shown;
-        expect(
-          rest === 0 || rest >= 5,
-          `${v} ${JSON.stringify(q)} remainder ${rest}`,
-        ).toBe(true);
-        expect(
-          hiddenRows.length,
-          `${v} ${JSON.stringify(q)} hidden rows`,
-        ).not.toBe(1);
-      }
   });
 
   it("Sickle cell disease is hidden for Harbour View in one hospital too: the same answer in both scopes", async () => {
@@ -489,37 +432,365 @@ describe("hiding small groups", () => {
   });
 });
 
-describe("one hospital and all hospitals", () => {
-  it("a hospital's value is the same in both scopes", async () => {
-    const { m } = setup();
-    const filters: Partial<AnalysisQuery>[] = [
-      {},
-      { sex: "female" },
-      { condition: "e11" },
-      { condition: "d57" },
-      { condition: "a15" },
-      { setting: "admitted", specialty: "Cardiology" },
-      { period: "3m", sex: "male" },
-    ];
-    for (const v of ["prevalence", "findings", "quality"] as const)
-      for (const f of filters) {
-        const across = await view(m, v, all(f));
-        for (const p of PROFILES) {
-          const own = await view(m, v, one(p.id, f));
-          const row = rowOf(across, p.id);
-          expect(own.headline, `${v} ${p.id} ${JSON.stringify(f)}`).toEqual(
-            row.headline,
-          );
-        }
-      }
-    // The size is the same too, where no condition narrows the group.
-    const across = await view(m, "prevalence", all({ sex: "female" }));
-    for (const p of PROFILES) {
-      const own = await view(m, "prevalence", one(p.id, { sex: "female" }));
-      expect(own.patients).toEqual(rowOf(across, p.id).size);
-    }
-  });
+// --- the grid: nothing small can be read, or worked out by subtraction ---
 
+const SEXES = ["female", "male", "other", "not_recorded"] as const;
+const SETTINGS = ["admitted", "outpatient", "emergency"] as const;
+const ALL_BANDS = ["0-19", "20-39", "40-59", "60-79", "80+"] as const;
+const HOSPITAL_BANDS = ["0-17", "18-39", "40-64", "65-79", "80+"] as const;
+const PERIOD_IDS: readonly AnalysisPeriod[] = ["3m", "6m", "12m"];
+const ZERO: AGuarded = { value: 0, suppressed: false };
+
+/**
+ * Every filter the page can set across hospitals: each value alone, and the
+ * pairs and triples someone would try. Each runs in every period.
+ */
+const ACROSS: Partial<AnalysisQuery>[] = [
+  {},
+  ...ALL_CONDITIONS.map((c) => ({ condition: c.id })),
+  ...ALL_BANDS.map((age_band) => ({ age_band })),
+  ...SEXES.map((sex) => ({ sex })),
+  ...SETTINGS.map((setting) => ({ setting })),
+  ...SPECIALTIES.map((specialty) => ({ specialty })),
+  ...SEXES.flatMap((sex) => SETTINGS.map((setting) => ({ sex, setting }))),
+  ...ALL_CONDITIONS.flatMap((c) =>
+    SEXES.map((sex) => ({ condition: c.id, sex })),
+  ),
+  ...SETTINGS.flatMap((setting) =>
+    ["General medicine", "Cardiology", "Paediatrics"].map((specialty) => ({
+      setting,
+      specialty,
+    })),
+  ),
+  ...ALL_BANDS.map((age_band) => ({ age_band, sex: "female" as const })),
+  { condition: "e11", sex: "female", setting: "outpatient" },
+  { condition: "j18", age_band: "80+", sex: "male" },
+  { age_band: "80+", setting: "admitted", specialty: "General medicine" },
+];
+/** One-hospital filters with no all-hospitals twin. */
+function hospitalOnly(id: string): Partial<AnalysisQuery>[] {
+  const p = PROFILES.find((x) => x.id === id)!;
+  return [
+    ...HOSPITAL_BANDS.filter((b) => b !== "80+").map((age_band) => ({
+      age_band,
+    })),
+    ...LOCATIONS.map((l) => ({ location: l.id })),
+    ...(p.sources.length > 1 ? p.sources.map((s) => ({ source: s.id })) : []),
+    { condition: "unmapped" },
+    { condition: "unmapped", sex: "female" },
+    { location: "ward4", sex: "female", age_band: "40-64", condition: "i10" },
+  ];
+}
+/** The one-hospital query that asks the same as an all-hospitals one. */
+function twinOf(f: Partial<AnalysisQuery>): Partial<AnalysisQuery> | null {
+  if (f.age_band && f.age_band !== "80+") return null;
+  if (!f.condition) return f;
+  const c = CONDITIONS.find(
+    (x) => x.icd10 !== null && allId(x.id) === f.condition,
+  );
+  return c ? { ...f, condition: c.id } : null;
+}
+
+/** What each view's headline counts, over what. */
+const HEAD_FIDS: Record<ViewId, readonly [string, string]> = {
+  prevalence: ["head", "seen"],
+  affected: ["head", "seen"],
+  "co-occurring": ["head", "seen"],
+  findings: ["fhead", "seen"],
+  quality: ["qagreed", "qrated"],
+};
+/** The figures an all-hospitals row shows for its hospital. */
+const ROW_FIDS = new Set(["seen", "head", "fhead", "qagreed", "qrated"]);
+
+/** Every count one owner (all hospitals, or one) publishes, by what it counts. */
+type Owner = {
+  figs: Map<string, AGuarded>;
+  /** Lists cut at 20 rows: a missing row there is not a 0. */
+  cut: Set<string>;
+  /** Whether its own One hospital views were read, not only its rows. */
+  views: boolean;
+  bands: readonly string[];
+  hospital: boolean;
+  condition: string | null;
+};
+const owner = (
+  views: boolean,
+  hospital: boolean,
+  condition: string | null,
+): Owner => ({
+  figs: new Map(),
+  cut: new Set(),
+  views,
+  bands: hospital ? HOSPITAL_BANDS : ALL_BANDS,
+  hospital,
+  condition: condition === null ? null : allId(condition),
+});
+const show = (g: AGuarded) =>
+  g.suppressed ? `hidden${g.why ? ` (${g.why})` : ""}` : String(g.value);
+const label = (q: AnalysisQuery) =>
+  `${q.hospital ?? "all"} ${q.period} ${JSON.stringify(
+    Object.fromEntries(
+      Object.entries(q).filter(
+        ([k, v]) => v !== null && !["scope", "hospital", "period"].includes(k),
+      ),
+    ),
+  )}`;
+
+/** Reads all five views of a query into `o` (and the rows into `rows`). */
+async function readAll(
+  m: Mock,
+  q: AnalysisQuery,
+  o: Owner,
+  problems: string[],
+  rows?: Map<string, Owner>,
+) {
+  for (const v of VIEW_IDS) {
+    const out = await view(m, v, q);
+    const where = `${v} ${label(q)}`;
+    const put = (to: Owner, fid: string, g: AGuarded, at = where) => {
+      const had = to.figs.get(fid);
+      const g2: AGuarded = { value: g.value, suppressed: g.suppressed };
+      if (g.why !== undefined) g2.why = g.why;
+      if (had === undefined) to.figs.set(fid, g2);
+      else if (
+        had.value !== g2.value ||
+        had.suppressed !== g2.suppressed ||
+        had.why !== g2.why
+      )
+        problems.push(
+          `[same cell] ${at} ${fid}: ${show(had)} here, ${show(g2)} there`,
+        );
+    };
+    for (const [key, g] of guarded(out)) {
+      if (g.suppressed && g.value !== null)
+        problems.push(`[small] ${where} ${key}: hidden but carries a value`);
+      if (
+        !g.suppressed &&
+        COUNTS.has(key) &&
+        g.value !== null &&
+        g.value >= 1 &&
+        g.value <= 4
+      )
+        problems.push(`[small] ${where} ${key} shows ${g.value}`);
+      if (g.why !== undefined && (!g.suppressed || q.scope !== "all"))
+        problems.push(`[small] ${where} ${key}: why ${g.why}`);
+    }
+    const [hc, hb] = HEAD_FIDS[v];
+    put(o, "group", out.patients);
+    put(o, hc, out.headline.count);
+    put(o, hb, out.headline.base);
+    if (out.comparison) put(o, "seen", out.comparison.context.size);
+    if (rows && out.hospitals)
+      for (const r of out.hospitals) {
+        const h = rows.get(r.hospital.id)!;
+        const at = `${where} row ${r.hospital.id}`;
+        put(h, "seen", r.size, at);
+        put(h, hc, r.headline.count, at);
+        put(h, hb, r.headline.base, at);
+      }
+    const cid = (id: string) => allId(id);
+    if (v === "prevalence") {
+      const d = out.data as PrevalenceData;
+      for (const r of d.by_condition) {
+        const c = cid(r.condition.id);
+        put(o, `c:${c}`, r.cases);
+        put(o, `c:${c}`, r.rate.count);
+        put(o, `n:${c}`, r.new);
+        put(o, "seen", r.rate.base);
+      }
+      for (const s of d.series) {
+        put(o, `mh:${s.month}`, s.rate.count);
+        put(o, `ms:${s.month}`, s.rate.base);
+      }
+    } else if (v === "affected") {
+      const d = out.data as AffectedData;
+      for (const r of d.by_age) put(o, `age:${r.band}`, r.patients);
+      for (const r of d.by_sex) put(o, `sex:${r.sex}`, r.patients);
+      for (const r of d.by_setting)
+        put(o, `set:${r.setting ?? "-"}`, r.patients);
+      for (const r of d.by_specialty)
+        put(o, `spec:${r.specialty ?? "-"}`, r.patients);
+      for (const r of d.by_location ?? [])
+        put(o, `loc:${r.location?.id ?? "-"}`, r.patients);
+    } else if (v === "co-occurring") {
+      const d = out.data as CoOccurringData;
+      for (const p of d.pairs)
+        put(o, `p:${cid(p.a.id)}|${cid(p.b.id)}`, p.patients);
+      if (d.pairs.length >= 20) o.cut.add("p:");
+    } else if (v === "findings") {
+      const d = out.data as FindingsData;
+      for (const x of d.findings) {
+        const k = `f:${x.name ?? "-"}|${x.flag ?? "-"}`;
+        put(o, k, x.patients);
+        put(o, k, x.rate.count);
+        put(o, "seen", x.rate.base);
+      }
+      if (d.findings.length >= 20) o.cut.add("f:");
+      put(o, "al:total", d.alerts.total);
+      for (const s of ["critical", "urgent", "info"] as const)
+        put(o, `al:${s}`, d.alerts.by_severity[s]);
+    } else {
+      const d = out.data as QualityData;
+      for (const r of d.by_condition) {
+        const p = `q:${cid(r.condition.id)}:`;
+        put(o, `${p}cons`, r.consultations);
+        for (const c of ["high", "medium", "low"] as const)
+          put(o, `${p}${c}`, r.confidence[c]);
+        put(o, `${p}rated`, r.rated);
+        put(o, `${p}rev`, r.reviewers);
+        put(o, `${p}corr`, r.corrections.total);
+        for (const c of ["approved", "rejected", "waiting"] as const)
+          put(o, `${p}${c}`, r.corrections[c]);
+      }
+    }
+  }
+}
+
+/**
+ * A total and the parts that add up to it. Fails when the hidden parts can
+ * be worked out: exactly one hidden part, or hidden parts adding up to 1 to
+ * 4, or a hidden total whose parts all show.
+ */
+function sums(
+  total: AGuarded | undefined,
+  parts: (AGuarded | "unknown")[],
+  where: string,
+  problems: string[],
+) {
+  if (total === undefined) return;
+  const hidden = parts.filter((p) => p === "unknown" || p.suppressed).length;
+  const shown = parts.reduce(
+    (s, p) => (p === "unknown" || p.suppressed ? s : s + (p.value ?? 0)),
+    0,
+  );
+  if (total.suppressed) {
+    if (hidden === 0 && total.why === undefined)
+      problems.push(`${where}: hidden, but the parts show it is ${shown}`);
+    return;
+  }
+  const rest = (total.value ?? 0) - shown;
+  if (hidden === 0) {
+    if (rest !== 0) problems.push(`${where}: the parts add up to ${shown}`);
+  } else if (hidden === 1)
+    problems.push(`${where}: one hidden part, worked out as ${rest}`);
+  else if (rest >= 1 && rest <= 4)
+    problems.push(`${where}: the hidden parts add up to ${rest}`);
+}
+
+/** The sets inside one owner's replies that add up. */
+function withinOwner(o: Owner, where: string, problems: string[]) {
+  const eqs: [string, string[]][] = [
+    ["group", o.bands.map((b) => `age:${b}`)],
+    ["group", SEXES.map((s) => `sex:${s}`)],
+    ["group", [...SETTINGS, "-"].map((s) => `set:${s}`)],
+    ["group", [...SPECIALTIES, "-"].map((s) => `spec:${s}`)],
+    ["al:total", ["critical", "urgent", "info"].map((s) => `al:${s}`)],
+  ];
+  if (o.hospital)
+    eqs.push([
+      "group",
+      [...LOCATIONS.map((l) => l.id), "-"].map((l) => `loc:${l}`),
+    ]);
+  const qids = [...o.figs.keys()].flatMap((k) => {
+    const x = /^q:(.+):cons$/.exec(k);
+    return x ? [x[1]!] : [];
+  });
+  for (const id of qids)
+    eqs.push(
+      [`q:${id}:cons`, ["high", "medium", "low"].map((c) => `q:${id}:${c}`)],
+      [
+        `q:${id}:corr`,
+        ["approved", "rejected", "waiting"].map((c) => `q:${id}:${c}`),
+      ],
+    );
+  eqs.push(["qrated", qids.map((id) => `q:${id}:rated`)]);
+  if (o.condition === null) eqs.push(["seen", ["group"]]);
+  else eqs.push(["group", ["head"]], ["group", [`c:${o.condition}`]]);
+  for (const [t, parts] of eqs)
+    sums(
+      o.figs.get(t),
+      parts.map((k) => o.figs.get(k) ?? ZERO),
+      `[sub-total] ${where} ${t} = ${parts.join(" + ")}`,
+      problems,
+    );
+}
+
+/** All hospitals' figure against the hospitals' own, for each figure. */
+function acrossOwners(
+  total: Owner,
+  parts: Owner[],
+  where: string,
+  problems: string[],
+) {
+  const comparable = (fid: string, p: Owner) =>
+    p.views
+      ? !(fid.startsWith("age:") && fid !== "age:80+")
+      : ROW_FIDS.has(fid);
+  for (const [fid, t] of total.figs) {
+    if (parts.some((p) => !comparable(fid, p))) continue;
+    sums(
+      t,
+      parts.map(
+        (p) =>
+          p.figs.get(fid) ?? (p.cut.has(fid.slice(0, 2)) ? "unknown" : ZERO),
+      ),
+      `[across] ${where} ${fid}`,
+      problems,
+    );
+  }
+}
+
+async function gridFor(period: AnalysisPeriod) {
+  const { m } = setup();
+  const problems: string[] = [];
+  for (const f of ACROSS) {
+    const q = all({ ...f, period });
+    const twin = twinOf(f);
+    const total = owner(true, false, q.condition);
+    const rows = new Map(
+      PROFILES.map((p) => [
+        p.id,
+        owner(twin !== null, true, twin?.condition ?? null),
+      ]),
+    );
+    await readAll(m, q, total, problems, rows);
+    withinOwner(total, label(q), problems);
+    if (twin)
+      for (const p of PROFILES) {
+        const own = one(p.id, { ...twin, period });
+        await readAll(m, own, rows.get(p.id)!, problems);
+        withinOwner(rows.get(p.id)!, label(own), problems);
+      }
+    acrossOwners(total, [...rows.values()], label(q), problems);
+  }
+  for (const p of PROFILES)
+    for (const f of hospitalOnly(p.id)) {
+      const q = one(p.id, { ...f, period });
+      const o = owner(true, true, q.condition);
+      await readAll(m, q, o, problems);
+      withinOwner(o, label(q), problems);
+    }
+  return problems;
+}
+
+describe("the grid: nothing small is shown, or can be worked out", () => {
+  it.each(PERIOD_IDS)(
+    "every view and filter, both scopes, %s",
+    async (period) => {
+      const problems = await gridFor(period);
+      const kinds = ["[small]", "[same cell]", "[sub-total]", "[across]"].map(
+        (k) => `${k} ${problems.filter((p) => p.startsWith(k)).length}`,
+      );
+      expect(
+        problems.slice(0, 40),
+        `${problems.length} problems: ${kinds.join(", ")}`,
+      ).toEqual([]);
+    },
+    600_000,
+  );
+});
+
+describe("one hospital and all hospitals", () => {
   it("gives one row per included hospital with its size, kind and coverage", async () => {
     const out = await view(setup().m, "prevalence", all());
     expect(out.scope).toBe("all");
@@ -821,6 +1092,34 @@ describe("the views", () => {
       if (row.rated.value) expect(row.reviewers.suppressed).toBe(true);
     // No reviewer id or name in any reply.
     expect(JSON.stringify(lake)).not.toMatch(/reviewer"?:\s*"/);
+  });
+
+  it("quality: the headline is the agreement rate, agreed over rated", async () => {
+    const { m } = setup();
+    let rated = 0;
+    let agreed = 0;
+    for (const p of cohortOf("h_havana"))
+      for (const c of p.consultations)
+        if (c.agreed !== null) {
+          rated++;
+          if (c.agreed) agreed++;
+        }
+    const own = await view(m, "quality", one("h_havana"));
+    expect(own.headline.count).toEqual({ value: agreed, suppressed: false });
+    expect(own.headline.base).toEqual({ value: rated, suppressed: false });
+    const rate = Math.round((agreed / rated) * 1000 * 10) / 10;
+    expect(own.headline.per_1000).toEqual({ value: rate, suppressed: false });
+    // The comparison compares the same rate.
+    expect(own.comparison!.current).toEqual(own.headline.per_1000);
+    expect(own.comparison!.available).toBe(true);
+    // The base is the rated count, the sum of the conditions' rated.
+    const sum = own.data.by_condition.reduce(
+      (s, r) => s + (r.rated.value ?? 0),
+      0,
+    );
+    expect(sum).toBe(rated);
+    const across = await view(m, "quality", all());
+    expect(rowOf(across, "h_havana").headline).toEqual(own.headline);
   });
 });
 
