@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 import type { ActivityAction } from "@/lib/api/contract";
 import { AUDIT_TYPES } from "@/lib/api/audit-contract";
 import { auditEvent } from "@/tests/audit-event";
-import { KINDS, REASON_WORDS, TYPE_WORDS } from "./kinds";
+import { REJECT_LABEL, REVOKE_LABEL, STATUS_LABEL } from "@mhai/ui/clearances";
+import {
+  KINDS,
+  LETTER_STATUS_WORDS,
+  LOCATION_WORDS,
+  REASON_WORDS,
+  TYPE_WORDS,
+  VIEW_WORDS,
+  locationWords,
+  viewWords,
+} from "./kinds";
 
 describe("the audit kinds", () => {
   it("every kind maps to one of the 14 types", () => {
@@ -45,7 +55,7 @@ describe("the audit kinds", () => {
       kind: "drilldown_named",
       target: null,
       reason: "clinical_follow_up",
-      facts: { patient_count: 12, view: "abnormal_results" },
+      facts: { patient_count: 12, view: "findings" },
     });
     expect(KINDS.drilldown_named.words(e)).toBe(
       "Opened a named patient list · 12 patients",
@@ -201,8 +211,108 @@ describe("the audit kinds", () => {
         "same_side",
         "gone",
         "not_owner",
+        // Plan 11: rejecting, revoking and narrowing a letter.
+        "wrong_people",
+        "end_date_mismatch",
+        "not_leadership",
+        "unreadable",
+        "no_longer_needed",
+        "person_left",
+        "uploaded_in_error",
+        // A refused file.
+        "file_type",
+        "file_too_large",
+        "too_many_pages",
+        "password_protected",
+        "failed_safety_check",
+        // A platform admin the letter covers.
+        "covers_you",
       ].sort(),
     );
+  });
+});
+
+describe("Plan 11's audit words", () => {
+  it("every reject and revoke reason has words, the same as the screens'", () => {
+    for (const [code, words] of Object.entries(REJECT_LABEL))
+      if (code !== "other") expect(REASON_WORDS[code], code).toBe(words);
+    for (const [code, words] of Object.entries(REVOKE_LABEL))
+      expect(REASON_WORDS[code], code).toBe(words);
+  });
+
+  it("the letter status words are the shared ones", () => {
+    expect(LETTER_STATUS_WORDS).toEqual(STATUS_LABEL);
+    expect(LETTER_STATUS_WORDS.waiting).toBe("Waiting for Measured Health");
+  });
+
+  it("the switch's requested, approved and cancelled kinds", () => {
+    const e = auditEvent({
+      type: "named_access",
+      target: { kind: "setting", id: "named_access" },
+      reason: null,
+    });
+    expect(
+      KINDS.named_switch_requested.words({
+        ...e,
+        kind: "named_switch_requested",
+      }),
+    ).toBe("Asked to raise the named access switch");
+    expect(
+      KINDS.named_switch_approved.words({
+        ...e,
+        kind: "named_switch_approved",
+      }),
+    ).toBe("Approved raising the named access switch");
+    expect(
+      KINDS.named_switch_cancelled.words({
+        ...e,
+        kind: "named_switch_cancelled",
+      }),
+    ).toBe("Cancelled a request to raise the named access switch");
+    for (const kind of [
+      "named_switch_requested",
+      "named_switch_approved",
+      "named_switch_cancelled",
+      "named_switch_changed",
+    ]) {
+      expect(KINDS[kind].type, kind).toBe("named_access");
+      expect(KINDS[kind].targets, kind).toEqual(["setting"]);
+    }
+  });
+
+  it("a verify refusal says whether it was their hospital or a letter that covers them", () => {
+    const e = auditEvent({
+      type: "named_access",
+      kind: "verify_refused",
+      outcome: "refused",
+      target: { kind: "clearance", id: "cl_wait" },
+      reason: "same_side",
+    });
+    expect(KINDS.verify_refused.words(e)).toBe(
+      "Tried to verify their own hospital's letter",
+    );
+    expect(KINDS.verify_refused.words({ ...e, reason: "covers_you" })).toBe(
+      "Tried to verify a letter that covers them",
+    );
+  });
+
+  it("views are Plan 6's, and locations admitted, outpatient and emergency", () => {
+    expect(Object.keys(VIEW_WORDS)).toEqual([
+      "prevalence",
+      "affected",
+      "co-occurring",
+      "findings",
+      "quality",
+    ]);
+    expect(viewWords("co-occurring")).toBe("Co-occurring conditions");
+    expect(viewWords("abnormal_results")).toBe("a patient list");
+    expect(Object.keys(LOCATION_WORDS)).toEqual([
+      "admitted",
+      "outpatient",
+      "emergency",
+    ]);
+    expect(locationWords("admitted")).toBe("Admitted");
+    expect(locationWords("inpatient")).toBe("another setting");
   });
 });
 
@@ -286,6 +396,15 @@ describe("Plan 8's Activity actions", () => {
       clean_up_resumed: true,
       triage_switched_off: true,
       feedback_buffer_cleared: true,
+      clearance_viewed: true,
+      clearance_verified: true,
+      clearance_rejected: true,
+      clearance_revoked: true,
+      clearance_verify_refused: true,
+      named_access_requested: true,
+      named_access_approved: true,
+      named_access_cancelled: true,
+      named_access_lowered: true,
     };
     for (const action of Object.keys(ACTIONS))
       expect(KINDS[action], action).toBeDefined();

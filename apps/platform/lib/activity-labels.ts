@@ -104,6 +104,34 @@ export function actionLabel(a: ActivityAction, target?: string | null): string {
       return t
         ? `cleared unapproved learning data: ${t}`
         : "cleared unapproved learning data";
+    // Clearance letters: the target is "the clearance letter signed by …".
+    case "clearance_viewed":
+      return `viewed ${t ?? "a clearance letter"}`;
+    case "clearance_verified":
+      return `verified ${t ?? "a clearance letter"}`;
+    case "clearance_rejected":
+      return `rejected ${t ?? "a clearance letter"}`;
+    case "clearance_revoked":
+      return `revoked ${t ?? "a clearance letter"}`;
+    case "clearance_verify_refused":
+      return `was refused verifying ${t ?? "a clearance letter"} (linked to the hospital)`;
+    // The switch: the target is "{position} for {hospital}".
+    case "named_access_requested":
+      return t
+        ? `asked to turn named access to ${t}`
+        : "asked to change named access";
+    case "named_access_approved":
+      return t
+        ? `approved turning named access to ${t}`
+        : "approved a change to named access";
+    case "named_access_cancelled":
+      return t
+        ? `cancelled turning named access to ${t}`
+        : "cancelled a change to named access";
+    case "named_access_lowered":
+      return t
+        ? `turned named access down to ${t}`
+        : "turned named access down";
   }
 }
 

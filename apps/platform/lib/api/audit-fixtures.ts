@@ -214,8 +214,9 @@ const SPECIALTIES = [
   "neurology",
   "obstetrics",
 ];
-const VIEWS = ["condition", "abnormal_results", "open_alerts", "follow_up_due"];
-const LOCATIONS = ["inpatient", "outpatient", "emergency", "community"];
+// Plan 6's Analysis view ids and location types (ruling 5).
+const VIEWS = ["prevalence", "affected", "co-occurring", "findings", "quality"];
+const LOCATIONS = ["admitted", "outpatient", "emergency"];
 const CONFIDENCE = ["high", "medium", "low"] as const;
 const DEVICES = [
   "Firefox 140 on macOS",

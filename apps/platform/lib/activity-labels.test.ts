@@ -41,6 +41,16 @@ const WITH: Record<ActivityAction, string> = {
   clean_up_resumed: "resumed the records clean-up",
   triage_switched_off: "switched triage off",
   feedback_buffer_cleared: "cleared unapproved learning data: Kemi",
+  clearance_viewed: "viewed Kemi",
+  clearance_verified: "verified Kemi",
+  clearance_rejected: "rejected Kemi",
+  clearance_revoked: "revoked Kemi",
+  clearance_verify_refused:
+    "was refused verifying Kemi (linked to the hospital)",
+  named_access_requested: "asked to turn named access to Kemi",
+  named_access_approved: "approved turning named access to Kemi",
+  named_access_cancelled: "cancelled turning named access to Kemi",
+  named_access_lowered: "turned named access down to Kemi",
 };
 const WITHOUT: Partial<Record<ActivityAction, string>> = {
   admin_invited: "invited the first hospital admin",
@@ -70,6 +80,16 @@ const WITHOUT: Partial<Record<ActivityAction, string>> = {
   clean_up_resumed: "resumed the records clean-up",
   triage_switched_off: "switched triage off",
   feedback_buffer_cleared: "cleared unapproved learning data",
+  clearance_viewed: "viewed a clearance letter",
+  clearance_verified: "verified a clearance letter",
+  clearance_rejected: "rejected a clearance letter",
+  clearance_revoked: "revoked a clearance letter",
+  clearance_verify_refused:
+    "was refused verifying a clearance letter (linked to the hospital)",
+  named_access_requested: "asked to change named access",
+  named_access_approved: "approved a change to named access",
+  named_access_cancelled: "cancelled a change to named access",
+  named_access_lowered: "turned named access down",
 };
 
 describe("actionLabel", () => {
@@ -90,6 +110,41 @@ describe("actionLabel", () => {
       "asked for a change: Triage on",
     );
     expect(actionLabel("hold_placed", "  ")).toBe("placed a legal hold");
+  });
+  it("the nine clearance labels read with their real targets", () => {
+    const letter = "the clearance letter signed by Dr. Funmi Ade";
+    expect(actionLabel("clearance_viewed", letter)).toBe(
+      "viewed the clearance letter signed by Dr. Funmi Ade",
+    );
+    expect(actionLabel("clearance_verified", letter)).toBe(
+      "verified the clearance letter signed by Dr. Funmi Ade",
+    );
+    expect(actionLabel("clearance_rejected", letter)).toBe(
+      "rejected the clearance letter signed by Dr. Funmi Ade",
+    );
+    expect(actionLabel("clearance_revoked", letter)).toBe(
+      "revoked the clearance letter signed by Dr. Funmi Ade",
+    );
+    expect(actionLabel("clearance_verify_refused", letter)).toBe(
+      "was refused verifying the clearance letter signed by Dr. Funmi Ade (linked to the hospital)",
+    );
+    expect(
+      actionLabel("named_access_requested", "On for Havana Hospital"),
+    ).toBe("asked to turn named access to On for Havana Hospital");
+    expect(
+      actionLabel("named_access_approved", "Letters only for every hospital"),
+    ).toBe("approved turning named access to Letters only for every hospital");
+    expect(
+      actionLabel(
+        "named_access_cancelled",
+        "On for Riverside Children's Hospital",
+      ),
+    ).toBe(
+      "cancelled turning named access to On for Riverside Children's Hospital",
+    );
+    expect(actionLabel("named_access_lowered", "Off for every hospital")).toBe(
+      "turned named access down to Off for every hospital",
+    );
   });
   it("formats a time plainly", () => {
     expect(formatWhen("2026-10-21T10:42:00")).toBe("21 Oct 2026, 10:42");

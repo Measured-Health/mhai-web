@@ -35,7 +35,20 @@ type Row = [
   method: string,
   path: string,
   body: unknown,
+  /** A file's reply, of a type it accepts; JSON otherwise. */
+  file?: () => Response,
 ];
+const csv = () =>
+  new Response("a,b\n", { headers: { "Content-Type": "text/csv" } });
+const png = () =>
+  new Response(new Uint8Array([137, 80, 78, 71]), {
+    headers: { "Content-Type": "image/png" },
+  });
+const SIGNOFFS = {
+  clinical: { by: "Dr. A. Musa", at: "2026-02-01", ref: "CS-014" },
+  privacy: { by: "Ngozi Eke", at: "2026-02-02", ref: "PR-007" },
+  legal: { by: "Bayo Adeyemi", at: "2026-02-02", ref: "LG-021" },
+};
 const ROWS: Row[] = [
   [
     "listHospitals",
@@ -390,6 +403,7 @@ const ROWS: Row[] = [
     "GET",
     "/api/v1/platform/audit/exports/ex_1/file",
     undefined,
+    csv,
   ],
   [
     "listExports",
@@ -601,6 +615,132 @@ const ROWS: Row[] = [
     "/api/v1/platform/settings/feedback-buffer/reset",
     { reason: "Training data", mfa_code: "123456" },
   ],
+  [
+    "listClearances",
+    (c) =>
+      c.listClearances({
+        status: "waiting",
+        hospital: "h_havana",
+        covers: "me",
+        cursor: "50",
+      }),
+    "GET",
+    "/api/v1/platform/clearances?status=waiting&hospital=h_havana&covers=me&cursor=50",
+    undefined,
+  ],
+  [
+    "getClearance",
+    (c) => c.getClearance("cl_wait"),
+    "GET",
+    "/api/v1/platform/clearances/cl_wait",
+    undefined,
+  ],
+  [
+    "getClearancePage",
+    (c) => c.getClearancePage("cl_wait", 2),
+    "GET",
+    "/api/v1/platform/clearances/cl_wait/pages/2",
+    undefined,
+    png,
+  ],
+  [
+    "verifyClearance",
+    (c) => c.verifyClearance("cl_wait", { version: 2, ...CODE }, K),
+    "POST",
+    "/api/v1/platform/clearances/cl_wait/verify",
+    { version: 2, mfa_code: "123456" },
+  ],
+  [
+    "rejectClearance",
+    (c) =>
+      c.rejectClearance(
+        "cl_wait",
+        { reason: "other", note: "No signature", version: 2, ...CODE },
+        K,
+      ),
+    "POST",
+    "/api/v1/platform/clearances/cl_wait/reject",
+    { reason: "other", note: "No signature", version: 2, mfa_code: "123456" },
+  ],
+  [
+    "revokeClearance",
+    (c) =>
+      c.revokeClearance(
+        "cl_act",
+        { reason: "security_concern", version: 3, backup_code: "4F7K-92QX" },
+        K,
+      ),
+    "POST",
+    "/api/v1/platform/clearances/cl_act/revoke",
+    { reason: "security_concern", version: 3, backup_code: "4F7K-92QX" },
+  ],
+  [
+    "getNamedAccess",
+    (c) => c.getNamedAccess(),
+    "GET",
+    "/api/v1/platform/named-access",
+    undefined,
+  ],
+  [
+    "requestNamedAccess",
+    (c) =>
+      c.requestNamedAccess(
+        {
+          hospital: "h_riverside",
+          position: "letters_only",
+          signoffs: SIGNOFFS,
+          version: 1,
+          ...CODE,
+        },
+        K,
+      ),
+    "POST",
+    "/api/v1/platform/named-access/requests",
+    {
+      hospital: "h_riverside",
+      position: "letters_only",
+      signoffs: SIGNOFFS,
+      version: 1,
+      mfa_code: "123456",
+    },
+  ],
+  [
+    "approveNamedAccess",
+    (c) => c.approveNamedAccess("req_1", { version: 2, ...CODE }, K),
+    "POST",
+    "/api/v1/platform/named-access/requests/req_1/approve",
+    { version: 2, mfa_code: "123456" },
+  ],
+  [
+    "cancelNamedAccess",
+    (c) => c.cancelNamedAccess("req_1", { version: 2 }, K),
+    "POST",
+    "/api/v1/platform/named-access/requests/req_1/cancel",
+    { version: 2 },
+  ],
+  [
+    "lowerNamedAccess",
+    (c) =>
+      c.lowerNamedAccess(
+        {
+          hospital: null,
+          position: "off",
+          reason: "A complaint",
+          version: 4,
+          ...CODE,
+        },
+        K,
+      ),
+    "POST",
+    "/api/v1/platform/named-access/lower",
+    {
+      hospital: null,
+      position: "off",
+      reason: "A complaint",
+      version: 4,
+      mfa_code: "123456",
+    },
+  ],
 ];
 
 describe("live platform client", () => {
@@ -611,7 +751,8 @@ describe("live platform client", () => {
 
   it.each(ROWS)(
     "each method calls the right method and path with an Idempotency-Key: %s",
-    async (_name, run, method, path, body) => {
+    async (_name, run, method, path, body, file) => {
+      if (file) reply(file);
       await run(client());
       expect(fetchImpl).toHaveBeenCalledTimes(1);
       const [url, init] = call();
@@ -843,6 +984,9 @@ describe("live platform client", () => {
         credentials: "same-origin",
         cache: "no-store",
       });
+      expect((init.headers as Record<string, string>).Accept).toBe(
+        "text/csv, application/zip",
+      );
 
       reply(() => Response.json({ code: "gone" }, { status: 410 }));
       const e = await client()
@@ -859,6 +1003,89 @@ describe("live platform client", () => {
     });
   });
 
+  describe("clearances and the switch", () => {
+    it('listClearances({ covers: "me" }) sends covers=me, and leaves out the rest', async () => {
+      await client().listClearances({ covers: "me" });
+      await client().listClearances({});
+      await client().getClearance("a/b");
+      expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
+        "/api/v1/platform/clearances?covers=me",
+        "/api/v1/platform/clearances",
+        "/api/v1/platform/clearances/a%2Fb",
+      ]);
+    });
+
+    it("a page is fetched with apiBlob: an image Accept, no-store, and only PNG or JPEG", async () => {
+      reply(png);
+      const page = await client().getClearancePage("cl_wait", 1);
+      expect(page.type).toBe("image/png");
+      const [url, init] = call();
+      expect(url).toBe("/api/v1/platform/clearances/cl_wait/pages/1");
+      expect(init).toMatchObject({ cache: "no-store", method: "GET" });
+      expect((init.headers as Record<string, string>).Accept).toBe(
+        "image/png, image/jpeg",
+      );
+      reply(
+        () =>
+          new Response("<html></html>", {
+            headers: { "Content-Type": "text/html" },
+          }),
+      );
+      await expect(
+        client().getClearancePage("cl_wait", 1),
+      ).rejects.toMatchObject({ status: 502, code: "bad_gateway" });
+      reply(() => Response.json({ code: "not_ready" }, { status: 409 }));
+      await expect(
+        client().getClearancePage("cl_wait", 1),
+      ).rejects.toMatchObject({ status: 409, code: "not_ready" });
+    });
+
+    it("every write carries its Idempotency-Key", async () => {
+      const c = client();
+      await c.verifyClearance(
+        "x",
+        { version: 1, ...CODE },
+        { idempotencyKey: "a" },
+      );
+      await c.rejectClearance(
+        "x",
+        { reason: "unreadable", version: 1, ...CODE },
+        { idempotencyKey: "b" },
+      );
+      await c.revokeClearance(
+        "x",
+        { reason: "other", note: "n", version: 1, ...CODE },
+        { idempotencyKey: "c" },
+      );
+      await c.requestNamedAccess(
+        {
+          hospital: null,
+          position: "on",
+          signoffs: SIGNOFFS,
+          version: 1,
+          ...CODE,
+        },
+        { idempotencyKey: "d" },
+      );
+      await c.approveNamedAccess(
+        "r",
+        { version: 1, ...CODE },
+        { idempotencyKey: "e" },
+      );
+      await c.cancelNamedAccess("r", { version: 1 }, { idempotencyKey: "f" });
+      await c.lowerNamedAccess(
+        { hospital: "h_1", position: "off", reason: "r", version: 1, ...CODE },
+        { idempotencyKey: "g" },
+      );
+      expect(
+        fetchImpl.mock.calls.map(
+          ([, init]) =>
+            (init?.headers as Record<string, string>)["Idempotency-Key"],
+        ),
+      ).toEqual(["a", "b", "c", "d", "e", "f", "g"]);
+    });
+  });
+
   describe("against the proxy's shape table", () => {
     beforeEach(() => {
       vi.stubEnv("PLATFORM_SESSION_SECRET", "p".repeat(40));
@@ -870,29 +1097,33 @@ describe("live platform client", () => {
       (r: Request, c: unknown) => Promise<Response>
     >;
 
-    it.each(ROWS)("the proxy accepts %s", async (_name, run) => {
-      await run(client());
-      const [url, init] = call();
-      const u = new URL(url, "http://platform.test");
-      const path = u.pathname
-        .replace(/^\/api\/v1\//, "")
-        .split("/")
-        .map(decodeURIComponent);
-      const req = new Request(u, {
-        method: init.method,
-        headers: {
-          host: "platform.test",
-          origin: "http://platform.test",
-          ...(init.headers as Record<string, string>),
-        },
-        body: init.body,
-      });
-      const res = await HANDLERS[init.method!]!(req, {
-        params: Promise.resolve({ path }),
-      });
-      // Past the shape check, a request with no session is signed out.
-      expect(res.status).toBe(401);
-    });
+    it.each(ROWS)(
+      "the proxy accepts %s",
+      async (_name, run, _method, _path, _body, file) => {
+        if (file) reply(file);
+        await run(client());
+        const [url, init] = call();
+        const u = new URL(url, "http://platform.test");
+        const path = u.pathname
+          .replace(/^\/api\/v1\//, "")
+          .split("/")
+          .map(decodeURIComponent);
+        const req = new Request(u, {
+          method: init.method,
+          headers: {
+            host: "platform.test",
+            origin: "http://platform.test",
+            ...(init.headers as Record<string, string>),
+          },
+          body: init.body,
+        });
+        const res = await HANDLERS[init.method!]!(req, {
+          params: Promise.resolve({ path }),
+        });
+        // Past the shape check, a request with no session is signed out.
+        expect(res.status).toBe(401);
+      },
+    );
 
     it("refuses a shape the client never makes", async () => {
       const res = await GET(

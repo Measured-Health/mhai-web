@@ -37,8 +37,8 @@ describe("readAuditEvent", () => {
         target: { kind: "patient" },
         reason: "clinical_follow_up",
         facts: {
-          view: "abnormal_results",
-          location_type: "inpatient",
+          view: "co-occurring",
+          location_type: "admitted",
           patient_count: 12,
           purpose: "clinical_follow_up",
           from: "2026-10-01T00:00:00Z",

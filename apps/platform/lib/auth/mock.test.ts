@@ -145,10 +145,11 @@ describe("mock auth client", () => {
     await expect(client.keepAlive()).resolves.toBeUndefined();
   });
 
-  it("lists Ada, Tunde, Amara and the new admin as sample accounts", () => {
+  it("lists Ada, Tunde, Bola, Amara and the new admin as sample accounts", () => {
     expect(SAMPLE_ACCOUNTS.map((a) => a.email)).toEqual([
       TEAM_EMAILS.ada,
       TEAM_EMAILS.tunde,
+      TEAM_EMAILS.bola,
       TEAM_EMAILS.amara,
       NEW_ADMIN_EMAIL,
     ]);

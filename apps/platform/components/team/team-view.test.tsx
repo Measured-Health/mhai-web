@@ -37,7 +37,7 @@ const rowOf = (table: HTMLElement, name: string) =>
     .find((r) => within(r).queryByText(name))!;
 
 describe("the team page", () => {
-  it("lists the five team members with role, status and two-step", async () => {
+  it("lists the six team members with role, status and two-step", async () => {
     renderWithAuth(<TeamView />);
     const table = await screen.findByRole("table");
     for (const h of [
@@ -52,7 +52,7 @@ describe("the team page", () => {
         within(table).getByRole("columnheader", { name: h }),
       ).toBeInTheDocument();
     const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(6);
     const ada = rowOf(table, "Ada Bakare");
     expect(within(ada).getByText("Platform admin")).toBeInTheDocument();
     expect(within(ada).getByText("Active")).toBeInTheDocument();
@@ -236,7 +236,7 @@ describe("the team page", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitFor(() => expect(screen.queryByText("Tunde Okafor")).toBeNull());
     expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(
-      5,
+      6,
     );
   });
 
@@ -261,7 +261,7 @@ describe("the team page", () => {
     install(AMARA.email);
     renderWithAuth(<TeamView />, { user: AMARA });
     const table = await screen.findByRole("table");
-    expect(within(table).getAllByRole("row")).toHaveLength(6);
+    expect(within(table).getAllByRole("row")).toHaveLength(7);
     expect(
       screen.queryByRole("button", { name: "Invite team member" }),
     ).toBeNull();
@@ -299,7 +299,7 @@ describe("the team page", () => {
     const list = await screen.findByRole("list", { name: "Team" });
     expect(screen.queryByRole("table")).toBeNull();
     const items = within(list).getAllByRole("listitem");
-    expect(items).toHaveLength(5);
+    expect(items).toHaveLength(6);
     const kemi = items.find((i) => within(i).queryByText("Kemi Lawal"))!;
     expect(within(kemi).getByText("Invite pending")).toBeInTheDocument();
     expect(

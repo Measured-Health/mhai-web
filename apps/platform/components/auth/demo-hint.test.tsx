@@ -15,6 +15,7 @@ describe("DemoHint", () => {
     expect(SAMPLE_ACCOUNTS.map((a) => a.label)).toEqual([
       "Ada Bakare",
       "Tunde Okafor",
+      "Bola Hassan",
       "Amara Eze",
       "New platform admin",
     ]);

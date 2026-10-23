@@ -2,6 +2,7 @@
 // file is built here from structured fields, never from server text. A kind,
 // reason, role or letter status that isn't listed makes the entry "can't be
 // displayed" (see read.ts). Plans 8 and 11 add their kinds to KINDS.
+import { REJECT_LABEL, REVOKE_LABEL, STATUS_LABEL } from "@mhai/ui/clearances";
 import type {
   ActorRole,
   AuditEvent,
@@ -53,6 +54,23 @@ export const REASON_WORDS: Record<string, string> = {
   same_side: "Own hospital's letter",
   gone: "Already downloaded or expired",
   not_owner: "Made by someone else",
+  // Rejecting, revoking and narrowing a clearance letter (Plan 11), in the
+  // screens' words.
+  wrong_people: REJECT_LABEL.wrong_people,
+  end_date_mismatch: REJECT_LABEL.end_date_mismatch,
+  not_leadership: REJECT_LABEL.not_leadership,
+  unreadable: REJECT_LABEL.unreadable,
+  no_longer_needed: REVOKE_LABEL.no_longer_needed,
+  person_left: REVOKE_LABEL.person_left,
+  uploaded_in_error: REVOKE_LABEL.uploaded_in_error,
+  // A letter's file refused.
+  file_type: "File type not accepted",
+  file_too_large: "File larger than 10 MB",
+  too_many_pages: "More than 20 pages",
+  password_protected: "Password-protected file",
+  failed_safety_check: "Didn't pass the safety check",
+  // A verify refused because the letter covers the platform admin.
+  covers_you: "The letter covers them",
 };
 
 export const ROLE_WORDS: Record<ActorRole, string> = {
@@ -64,33 +82,29 @@ export const ROLE_WORDS: Record<ActorRole, string> = {
   system: "System",
 };
 
-export const LETTER_STATUS_WORDS: Record<LetterStatus, string> = {
-  checking: "Checking",
-  refused: "Refused",
-  waiting: "Waiting for verification",
-  active: "Active",
-  rejected: "Rejected",
-  ended: "Ended",
-  revoked: "Revoked",
-};
+/** The one set of letter status words, shared with the Clearances page. */
+export const LETTER_STATUS_WORDS: Record<LetterStatus, string> = STATUS_LABEL;
 
-/** Patient-list views (codes); anything else reads "a patient list". */
+/**
+ * The Analysis view a patient list came from (Plan 6's view ids); anything
+ * else reads "a patient list".
+ */
 export const VIEW_WORDS: Record<string, string> = {
-  condition: "Patients with a condition",
-  abnormal_results: "Patients with abnormal results",
-  open_alerts: "Patients with open alerts",
-  follow_up_due: "Patients due a follow-up",
+  prevalence: "Prevalence and trends",
+  affected: "Who is affected",
+  "co-occurring": "Co-occurring conditions",
+  findings: "Findings and alerts",
+  quality: "MHAI quality",
 };
 export const viewWords = (code: string | undefined) =>
   (code !== undefined && Object.hasOwn(VIEW_WORDS, code) && VIEW_WORDS[code]) ||
   "a patient list";
 
-/** Location types (codes); anything else reads "another setting". */
+/** Location types (Plan 6's settings); anything else reads "another setting". */
 export const LOCATION_WORDS: Record<string, string> = {
-  inpatient: "Inpatient ward",
-  outpatient: "Outpatient clinic",
-  emergency: "Emergency department",
-  community: "Community",
+  admitted: "Admitted",
+  outpatient: "Outpatient",
+  emergency: "Emergency",
 };
 export const locationWords = (code: string | undefined) =>
   (code !== undefined &&
@@ -407,10 +421,91 @@ export const KINDS: Record<string, Kind> = {
   named_switch_changed: k("named_access", "Changed the named access switch", {
     targets: ["setting"],
   }),
+  named_switch_requested: k(
+    "named_access",
+    "Asked to raise the named access switch",
+    { targets: ["setting"] },
+  ),
+  named_switch_approved: k(
+    "named_access",
+    "Approved raising the named access switch",
+    { targets: ["setting"] },
+  ),
+  named_switch_cancelled: k(
+    "named_access",
+    "Cancelled a request to raise the named access switch",
+    { targets: ["setting"] },
+  ),
   verify_refused: k(
     "named_access",
-    "Tried to verify their own hospital's letter",
+    (e) =>
+      e.reason === "covers_you"
+        ? "Tried to verify a letter that covers them"
+        : "Tried to verify their own hospital's letter",
     { targets: ["clearance"] },
+  ),
+  // The platform app's own Activity for letters and the switch (Plan 11b).
+  // Its letter target is "the clearance letter signed by …", so these name
+  // the target as it comes.
+  clearance_viewed: k(
+    "named_access",
+    named((t) => `Viewed ${t}`, "Viewed a clearance letter"),
+    { targets: ["clearance"], named: true },
+  ),
+  clearance_verified: k(
+    "named_access",
+    named((t) => `Verified ${t}`, "Verified a clearance letter"),
+    { targets: ["clearance"], named: true },
+  ),
+  clearance_rejected: k(
+    "named_access",
+    named((t) => `Rejected ${t}`, "Rejected a clearance letter"),
+    { targets: ["clearance"], named: true },
+  ),
+  clearance_revoked: k(
+    "named_access",
+    named((t) => `Revoked ${t}`, "Revoked a clearance letter"),
+    { targets: ["clearance"], named: true },
+  ),
+  clearance_verify_refused: k(
+    "named_access",
+    (e) =>
+      e.reason === "covers_you"
+        ? "Tried to verify a letter that covers them"
+        : "Tried to verify their own hospital's letter",
+    { targets: ["clearance"] },
+  ),
+  named_access_requested: k(
+    "named_access",
+    named(
+      (t) => `Asked to turn named access to ${t}`,
+      "Asked to raise the named access switch",
+    ),
+    { targets: ["setting"], named: true },
+  ),
+  named_access_approved: k(
+    "named_access",
+    named(
+      (t) => `Approved turning named access to ${t}`,
+      "Approved raising the named access switch",
+    ),
+    { targets: ["setting"], named: true },
+  ),
+  named_access_cancelled: k(
+    "named_access",
+    named(
+      (t) => `Cancelled turning named access to ${t}`,
+      "Cancelled a request to raise the named access switch",
+    ),
+    { targets: ["setting"], named: true },
+  ),
+  named_access_lowered: k(
+    "named_access",
+    named(
+      (t) => `Turned named access down to ${t}`,
+      "Turned the named access switch down",
+    ),
+    { targets: ["setting"], named: true },
   ),
   // Platform.
   change_followed_up: k(

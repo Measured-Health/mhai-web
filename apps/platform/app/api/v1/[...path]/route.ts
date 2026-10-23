@@ -90,11 +90,38 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["GET", "platform/audit/verify/runs"],
   ["GET", "platform/audit/verify/runs/{id}"],
   ["POST", "platform/audit/verify/runs/{id}/outcome"],
+  ["GET", "platform/clearances"],
+  ["GET", "platform/clearances/{id}"],
+  ["GET", "platform/clearances/{id}/pages/{id}"],
+  ["POST", "platform/clearances/{id}/verify"],
+  ["POST", "platform/clearances/{id}/reject"],
+  ["POST", "platform/clearances/{id}/revoke"],
+  ["GET", "platform/named-access"],
+  ["POST", "platform/named-access/requests"],
+  ["POST", "platform/named-access/requests/{id}/approve"],
+  ["POST", "platform/named-access/requests/{id}/cancel"],
+  ["POST", "platform/named-access/lower"],
 ];
 
-/** The one shape that returns a file, not JSON. */
-const FILE_SHAPE = "GET platform/audit/exports/{id}/file";
-const FILE_TYPES = ["text/csv", "application/zip"];
+/**
+ * The shapes that return a file, not JSON: the only types each may carry
+ * (anything else from upstream is 502 `bad_gateway`), and whether it is
+ * shown in the page (`inline`, never sniffed) rather than saved.
+ */
+const FILES: ReadonlyMap<
+  string,
+  { types: readonly string[]; inline: boolean }
+> = new Map([
+  [
+    "GET platform/audit/exports/{id}/file",
+    { types: ["text/csv", "application/zip"], inline: false },
+  ],
+  // A letter's page, drawn by the server: never the letter's file itself.
+  [
+    "GET platform/clearances/{id}/pages/{id}",
+    { types: ["image/png", "image/jpeg"], inline: true },
+  ],
+]);
 
 /**
  * The only writes an auditor may make, as `METHOD shape` rows of the table
@@ -217,6 +244,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   if (body && Buffer.byteLength(body) > MAX_BODY)
     return json(413, { code: "too_large" });
 
+  const file = FILES.get(shape) ?? null;
   const key = req.headers.get("idempotency-key");
   // Only reads carry filters; a write's query string is never forwarded.
   const search = method === "GET" ? new URL(req.url).search : "";
@@ -226,8 +254,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     res = await platformFetch(url, {
       method,
       headers: {
-        Accept:
-          shape === FILE_SHAPE ? FILE_TYPES.join(", ") : "application/json",
+        Accept: file ? file.types.join(", ") : "application/json",
         Authorization: `Bearer ${s.token}`,
         ...(body ? { "Content-Type": "application/json" } : {}),
         ...(key && IDEMPOTENCY_KEY.test(key) ? { "Idempotency-Key": key } : {}),
@@ -253,12 +280,9 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     return json(res.status, problem(res.status, p));
   }
   const type = res.headers.get("Content-Type") ?? "application/json";
-  // A file is passed through only as a CSV or a ZIP, never as anything else.
-  if (
-    shape === FILE_SHAPE &&
-    !FILE_TYPES.includes(type.split(";")[0]!.trim().toLowerCase())
-  ) {
-    await res.body?.cancel();
+  // A file is passed through only as a type its shape allows.
+  if (file && !file.types.includes(type.split(";")[0]!.trim().toLowerCase())) {
+    await res.body?.cancel().catch(() => {});
     return json(502, { code: "bad_gateway" });
   }
   return new Response(res.body, {
@@ -266,6 +290,13 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     headers: {
       "Content-Type": type,
       "Cache-Control": "no-store",
+      // A page is shown, never saved or sniffed as anything else.
+      ...(file?.inline
+        ? {
+            "Content-Disposition": "inline",
+            "X-Content-Type-Options": "nosniff",
+          }
+        : {}),
     },
   });
 }
