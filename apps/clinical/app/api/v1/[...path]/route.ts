@@ -425,6 +425,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     headers: {
       "Content-Type": res.headers.get("Content-Type") ?? "application/json",
       "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

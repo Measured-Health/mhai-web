@@ -19,7 +19,7 @@ export interface ApiUser {
   recovery_codes_left?: number | null;
   /**
    * Switches the API turned on for this person (assumed). `named_access`
-   * (Plan 11) is read but never trusted on its own.
+   * (Plan 11) counts only with Analysis on and the named sign-off key set.
    */
   features?: { analysis?: boolean; named_access?: boolean };
 }

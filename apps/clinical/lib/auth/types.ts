@@ -24,7 +24,8 @@ export interface User {
   backupCodesLeft: number | null;
   /**
    * Switches the API turned on for this person. Absent means off. `named`
-   * (Plan 11) is present only when on.
+   * (Plan 11) is present only when on: the API's `named_access` is true,
+   * Analysis is on and the named sign-off key is set.
    */
   features?: { analysis: boolean; named?: boolean };
 }
@@ -161,7 +162,7 @@ export const canUseAnalysis = (u: User | null) =>
 
 /**
  * Named access (Plan 11): someone who can use Analysis, with the named
- * switch on for them (the demo, or the server's sign-off key). Whether names
+ * switch on for them (the demo; live, the API's flag and the sign-off key). Whether names
  * ever show is still the backend's call.
  */
 export const canUseNamedAccess = (u: User | null) =>

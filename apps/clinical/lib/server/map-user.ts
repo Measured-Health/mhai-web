@@ -35,14 +35,16 @@ export function toUser(u: ApiUser): User {
     mfaEnabled: u.mfa_enabled === true,
     backupCodesLeft: u.recovery_codes_left ?? null,
     // On only when the API says so and the hospital has signed it off.
-    // Named access rides on Analysis and its own sign-off key; the API's
-    // `named_access` is never trusted on its own (the position comes from
-    // `GET analysis/named-access`).
+    // Named access is on only when the API's `named_access` is true,
+    // Analysis is on and the named sign-off key is set: the key can only
+    // keep it off.
     ...(u.features?.analysis === true && analysisSignedOff()
       ? {
           features: {
             analysis: true,
-            ...(namedSignedOff() ? { named: true } : {}),
+            ...(namedSignedOff() && u.features?.named_access === true
+              ? { named: true }
+              : {}),
           },
         }
       : {}),

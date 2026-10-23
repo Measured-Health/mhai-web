@@ -72,7 +72,7 @@ describe("toUser analysis switch", () => {
       ).toBe(false);
   });
   it("named is on only with analysis on and the key set", () => {
-    const on = { ...base, features: { analysis: true } };
+    const on = { ...base, features: { analysis: true, named_access: true } };
     vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "true");
     // Analysis not signed off: neither switch.
     expect(toUser(on).features).toBeUndefined();
@@ -80,6 +80,14 @@ describe("toUser analysis switch", () => {
     expect(toUser(on).features).toEqual({ analysis: true, named: true });
     // The API doesn't turn analysis on: named stays off too.
     expect(toUser(base).features).toBeUndefined();
+    // The API's flag absent, false or a string: off.
+    for (const named_access of [undefined, false, "true"])
+      expect(
+        toUser({
+          ...base,
+          features: { analysis: true, named_access },
+        } as unknown as ApiUser).features,
+      ).toEqual({ analysis: true });
     vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "TRUE");
     expect(toUser(on).features).toEqual({ analysis: true });
     vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "");
