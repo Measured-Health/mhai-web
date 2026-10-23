@@ -1,5 +1,6 @@
 // The analytics measures in plain words, and their values under the
 // small-group rule (spec §5). Display only: the server computes every number.
+import type { GuardKind } from "@mhai/ui/guards";
 import { FEWER_THAN_5, isSmallCount } from "@mhai/ui/small-groups";
 import type { Area, Guarded, MeasureId } from "../api/analytics-contract";
 
@@ -7,7 +8,7 @@ import type { Area, Guarded, MeasureId } from "../api/analytics-contract";
  * How a value reads. "rate" is a ratio of counts (questions per active
  * clinician): a plain number, never treated as a count of people.
  */
-export type MeasureKind = "count" | "rate" | "minutes" | "share" | "hours";
+export type MeasureKind = GuardKind;
 
 export const NO_DATA = "No data yet";
 
