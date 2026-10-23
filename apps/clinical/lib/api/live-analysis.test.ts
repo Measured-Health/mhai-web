@@ -68,4 +68,77 @@ describe("live analysis client", () => {
     expect(e).toBeInstanceOf(ApiError);
     expect(e).toMatchObject({ status: 422, code: "too_small" });
   });
+
+  it("asks for names in a POST body with a key, never in the URL, and reads clearance/me", async () => {
+    await client().listNamedPatients(
+      {
+        drill: "cond-e11",
+        filters: empty,
+        purpose: "other",
+        note: "Ward 4 follow-up & recall",
+      },
+      { idempotencyKey: "k-1" },
+    );
+    await client().listNamedPatients(
+      { drill: "cond-e11", filters: empty, purpose: "audit" },
+      { idempotencyKey: "k-2" },
+    );
+    await client().getClearanceMe();
+    expect(urls()).toEqual([
+      "/api/v1/analysis/patients/named",
+      "/api/v1/analysis/patients/named",
+      "/api/v1/analysis/clearance/me",
+    ]);
+    const init = (i: number) =>
+      (fetchImpl.mock.calls[i] as [string, RequestInit])[1];
+    expect(init(0)).toMatchObject({ method: "POST" });
+    expect(new Headers(init(0).headers).get("Idempotency-Key")).toBe("k-1");
+    expect(JSON.parse(init(0).body as string)).toEqual({
+      drill: "cond-e11",
+      purpose: "other",
+      note: "Ward 4 follow-up & recall",
+      filters: empty,
+    });
+    expect(JSON.parse(init(1).body as string)).toEqual({
+      drill: "cond-e11",
+      purpose: "audit",
+      filters: empty,
+    });
+    for (const u of urls()) expect(u).not.toMatch(/purpose|note|Ward/);
+    expect(init(2)).toMatchObject({ method: "GET" });
+  });
+
+  it("reads the switch through named-access, a 404 as Off", async () => {
+    fetchImpl.mockImplementationOnce(async () =>
+      Response.json({ position: "on", since: "2026-09-16T10:00:00.000Z" }),
+    );
+    expect(await client().getNamedAccess()).toEqual({
+      position: "on",
+      since: "2026-09-16T10:00:00.000Z",
+    });
+    fetchImpl.mockImplementationOnce(async () =>
+      Response.json({ code: "not_found" }, { status: 404 }),
+    );
+    expect(await client().getNamedAccess()).toEqual({
+      position: "off",
+      since: null,
+    });
+    expect(urls()).toEqual([
+      "/api/v1/analysis/named-access",
+      "/api/v1/analysis/named-access",
+    ]);
+  });
+
+  it("turns a named refusal into its code", async () => {
+    fetchImpl.mockImplementationOnce(async () =>
+      Response.json({ code: "not_cleared" }, { status: 403 }),
+    );
+    const e = await client()
+      .listNamedPatients(
+        { drill: "x", filters: empty, purpose: "audit" },
+        { idempotencyKey: "k-3" },
+      )
+      .catch((x) => x);
+    expect(e).toMatchObject({ status: 403, code: "not_cleared" });
+  });
 });

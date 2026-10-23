@@ -10,10 +10,16 @@ import {
   type WriteOpts,
 } from "./contract";
 import type { EmrClient } from "./emr-contract";
+import { dayLabel } from "@mhai/ui/clearances";
+import type {
+  Clearance,
+  ClearancesClient,
+  NamedAccessOut,
+} from "./clearances-contract";
 import type { HoldsClient } from "./holds-contract";
 import type { SettingsClient } from "./settings-contract";
 
-const { apiRequest } = createApiRequest({
+const { apiRequest, apiBlob } = createApiRequest({
   prefix: "/api/v1",
   onUnauthorized: reportUnauthorized,
 });
@@ -114,6 +120,78 @@ function emrLive(ok: LiveOk): EmrClient {
 }
 
 /**
+ * A file under /platform, never cached: refused like any call, and 502
+ * `bad_gateway` when it isn't one of the `accept` types.
+ */
+export type LiveBlob = (
+  path: string,
+  accept: readonly string[],
+) => Promise<Blob>;
+
+/** The page images a letter is viewed as: never the file itself. */
+const PAGE_TYPES = ["image/png", "image/jpeg"] as const;
+
+/**
+ * A letter must carry its hospital's day, and the switch Measured Health's
+ * (what a sign-off date is checked against): one without a real `today`
+ * (YYYY-MM-DD) fails closed, as a bad reply, rather than have the browser
+ * guess the day.
+ */
+function withDay<T extends { today: string }>(c: T): T {
+  const today = (c as { today?: unknown } | null)?.today;
+  try {
+    if (typeof today === "string" && dayLabel(today)) return c;
+  } catch {
+    // Not a calendar day: refused below.
+  }
+  throw new ApiError(502, "bad_gateway");
+}
+
+/**
+ * Clearance letters and the named-access switch (Plan 11b): rows
+ * `platform/clearances…` and `platform/named-access…` of the shape table.
+ */
+function clearancesLive(ok: LiveOk, blob: LiveBlob): ClearancesClient {
+  const id = encodeURIComponent;
+  const letter = (x: string, rest = "") => `/clearances/${id(x)}${rest}`;
+  const request = (x: string, rest: string) =>
+    `/named-access/requests/${id(x)}${rest}`;
+  return {
+    listClearances: async (q) => {
+      const r: Awaited<ReturnType<ClearancesClient["listClearances"]>> =
+        await ok(
+          `/clearances${query({
+            status: q.status,
+            hospital: q.hospital,
+            covers: q.covers,
+            cursor: q.cursor,
+          })}`,
+        );
+      if (!Array.isArray(r?.clearances)) throw new ApiError(502, "bad_gateway");
+      return { ...r, clearances: r.clearances.map(withDay) };
+    },
+    getClearance: (x) => ok<Clearance>(letter(x)).then(withDay),
+    getClearancePage: (x, n) =>
+      blob(letter(x, `/pages/${Math.trunc(n)}`), PAGE_TYPES),
+    verifyClearance: (x, b, o) =>
+      ok<Clearance>(letter(x, "/verify"), "POST", b, o).then(withDay),
+    rejectClearance: (x, b, o) =>
+      ok<Clearance>(letter(x, "/reject"), "POST", b, o).then(withDay),
+    revokeClearance: (x, b, o) =>
+      ok<Clearance>(letter(x, "/revoke"), "POST", b, o).then(withDay),
+    getNamedAccess: () => ok<NamedAccessOut>("/named-access").then(withDay),
+    requestNamedAccess: (b, o) =>
+      ok<NamedAccessOut>("/named-access/requests", "POST", b, o).then(withDay),
+    approveNamedAccess: (x, b, o) =>
+      ok<NamedAccessOut>(request(x, "/approve"), "POST", b, o).then(withDay),
+    cancelNamedAccess: (x, b, o) =>
+      ok<NamedAccessOut>(request(x, "/cancel"), "POST", b, o).then(withDay),
+    lowerNamedAccess: (b, o) =>
+      ok<NamedAccessOut>("/named-access/lower", "POST", b, o).then(withDay),
+  };
+}
+
+/**
  * The platform API through this app's /api/v1 proxy (the token stays
  * server-side). Every path is a row of the proxy's shape table.
  */
@@ -154,6 +232,9 @@ export function createLivePlatformClient({
     }
     return data as T;
   };
+
+  const blob: LiveBlob = (path, accept) =>
+    apiBlob(fetchImpl, `/platform${path}`, accept);
 
   const id = encodeURIComponent;
   const h = (hospital: string, rest = "") =>
@@ -200,7 +281,7 @@ export function createLivePlatformClient({
     markSeen: (b, o) => ok("/notifications/seen", "POST", b, o),
     getEmailPref: () => ok("/me/analytics-email"),
     setEmailPref: (b, o) => ok("/me/analytics-email", "PUT", b, o),
-    ...liveAudit(ok, fetchImpl),
+    ...liveAudit(ok, blob),
     // The health poll is background too: it must not keep a session alive.
     getHealth: (o) =>
       ok(
@@ -225,5 +306,6 @@ export function createLivePlatformClient({
     ...holdsLive(ok),
     ...settingsLive(ok),
     ...emrLive(ok),
+    ...clearancesLive(ok, blob),
   };
 }

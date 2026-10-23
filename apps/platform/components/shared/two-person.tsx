@@ -1,4 +1,5 @@
 "use client";
+import type { ReactNode } from "react";
 import type { TwoPersonRequest } from "@/lib/api/contract";
 import { dayMonthLabel } from "@/lib/format";
 import { Button } from "@mhai/ui/button";
@@ -8,6 +9,11 @@ export const WAITING = "Waiting for a different platform admin to approve";
 
 export type TwoPersonActionsProps = {
   request: TwoPersonRequest;
+  /**
+   * The request in words, in place of "Requested by {name} · {date} ·
+   * lapses {date}" (e.g. one that also says what was asked for).
+   */
+  line?: ReactNode;
   /** False for an auditor: the request line only, no buttons. */
   canAct: boolean;
   /** The approve button's words, e.g. "Approve lift". */
@@ -31,6 +37,7 @@ export type TwoPersonActionsProps = {
  */
 export function TwoPersonActions({
   request,
+  line: words,
   canAct,
   approveLabel,
   onApprove,
@@ -40,9 +47,13 @@ export function TwoPersonActions({
 }: TwoPersonActionsProps) {
   const line = (
     <p className="text-[13.5px] text-ink-2 [overflow-wrap:anywhere]">
-      Requested by {request.requested_by.name} ·{" "}
-      {dayMonthLabel(request.requested_at)} · lapses{" "}
-      {dayMonthLabel(request.expires_at)}
+      {words ?? (
+        <>
+          Requested by {request.requested_by.name} ·{" "}
+          {dayMonthLabel(request.requested_at)} · lapses{" "}
+          {dayMonthLabel(request.expires_at)}
+        </>
+      )}
     </p>
   );
   if (!canAct) return line;

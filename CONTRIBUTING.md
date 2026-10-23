@@ -109,8 +109,12 @@ Every PR must pass:
   browser storage, a service worker or the URL, and the page images are
   `no-store`); **no file names in logs** or analytics. Names end at their end
   date, on a revocation and on any `clearance_ended`, `not_cleared` or
-  `named_access_off` refusal. Any change to this needs `clinical-review` and
-  that sign-off.
+  `named_access_off` refusal. Named patient rows in Analysis are **only in
+  memory**: fetched by `POST analysis/patients/named` (the purpose and its
+  note are in the body, **never in the URL**), held in a query with
+  `gcTime: 0`, never logged, and dropped at `named_until`, when the 30-second
+  clearance check changes, and on a filter change or sign-out. Any change to
+  this needs `clinical-review` and that sign-off.
 - **Alerts are EMR-agnostic** ([ADR 0003](docs/adr/0003-many-emr-systems.md)):
   no vendor or product names anywhere, the record link comes from the API
   (`emr_link`), and only the hospital's own `source_label` is shown.

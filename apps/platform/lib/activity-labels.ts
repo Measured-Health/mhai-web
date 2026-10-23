@@ -4,8 +4,21 @@ import type { ActivityAction } from "@/lib/api/contract";
 const connection = (t: string | null) =>
   t ? `the record connection “${t}”` : "the record connection";
 
-/** What was done, as the end of a sentence after the person's name. */
-export function actionLabel(a: ActivityAction, target?: string | null): string {
+/** Why a verify was refused, by its code. */
+const REFUSED: Record<string, string> = {
+  same_side: "they're linked to the hospital",
+  same_person: "the letter names them",
+};
+
+/**
+ * What was done, as the end of a sentence after the person's name. `reason`
+ * is a refusal's code, put in words after it.
+ */
+export function actionLabel(
+  a: ActivityAction,
+  target?: string | null,
+  reason?: string | null,
+): string {
   const t = target?.trim() || null;
   switch (a) {
     case "hospital_added":
@@ -118,6 +131,38 @@ export function actionLabel(a: ActivityAction, target?: string | null): string {
       return `switched off ${connection(t)}`;
     case "emr_connection_tested":
       return `tested ${connection(t)}`;
+    // Clearance letters: the target is "the clearance letter signed by …".
+    case "clearance_viewed":
+      return `viewed ${t ?? "a clearance letter"}`;
+    case "clearance_verified":
+      return `verified ${t ?? "a clearance letter"}`;
+    case "clearance_rejected":
+      return `rejected ${t ?? "a clearance letter"}`;
+    case "clearance_revoked":
+      return `revoked ${t ?? "a clearance letter"}`;
+    case "clearance_verify_refused": {
+      const why =
+        reason && Object.hasOwn(REFUSED, reason) ? REFUSED[reason] : null;
+      const what = `couldn't verify ${t ?? "a letter"}`;
+      return why ? `${what}: ${why}` : what;
+    }
+    // The switch: the target is "{position} for {hospital}".
+    case "named_access_requested":
+      return t
+        ? `asked to turn named access to ${t}`
+        : "asked to change named access";
+    case "named_access_approved":
+      return t
+        ? `approved turning named access to ${t}`
+        : "approved a change to named access";
+    case "named_access_cancelled":
+      return t
+        ? `cancelled turning named access to ${t}`
+        : "cancelled a change to named access";
+    case "named_access_lowered":
+      return t
+        ? `turned named access down to ${t}`
+        : "turned named access down";
   }
 }
 

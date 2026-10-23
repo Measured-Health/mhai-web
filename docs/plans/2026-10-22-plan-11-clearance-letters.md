@@ -128,7 +128,11 @@
   - `GET /platform/clearances/{id}`;
   - `status=ending_soon` on the platform list;
   - the per-hospital switch fields;
-  - `reason` on `GET /analysis/clearance/me`;
+  - `reason` on `GET /analysis/clearance/me`; when `named` is false, `until` and `clearance_id` are null and `version` is 0 (the app reads anything else there as a change);
+  - the named list is `POST /analysis/patients/named` with an `Idempotency-Key` and the JSON body `{drill, purpose, note?, filters}`, so the purpose and its note are never in a URL; `GET /analysis/patients` is de-identified only, and the clinical proxy refuses a GET with any other `level` (**403** `named_access_off`);
+  - the named list's Idempotency-Key is bound to the caller and the body (`drill`, `filters`, `purpose`, `note`): a replay re-runs every check, records no new view and returns the original `named_until` (never extended); the same key with another caller or body is **422** `idempotency_mismatch`; a key whose `named_until` has passed is spent, **409** `expired`, never renewed; the clinical proxy answers **422** `invalid` to the POST with no valid key, before upstream;
+  - `until` (on `clearance/me`) and `named_until` are ISO instants with `Z` or a `±hh:mm` offset; the app reads a bare date or a time with no offset as a wrong shape;
+  - after a revoke or a removal from the letter, a named request is **403** `not_cleared`; only a passed end date gives **403** `clearance_ended`;
   - **422** `would_empty` on narrow;
   - `renews` (a letter id or null) on the letter itself, so a renewal shows what it replaces;
   - `revocation.day` (the revocation's `at` as the hospital's `YYYY-MM-DD` day), required with every revocation, so the browser does no time-zone arithmetic;
@@ -140,7 +144,20 @@
     - a replay re-runs every check and returns the original `named_until`, never a later one;
     - once `named_until` has passed, the key is spent: **409** `expired`, and it is never renewed;
     - the proxy answers **422** `invalid` to a named view with no key or a malformed one;
+  - (11c) the hospital app treats **409** `expired` and **422** `idempotency_mismatch` on the named list as plain errors with **Try again**, not as an end of access; only the 403 codes above, a change in `clearance/me`, `named_until` and a filter or group change end names;
+  - (11c) `GET /analysis/clearance/me` when not covered: `named: false`, `clearance_id: null`, `until: null`, `version: 0` and a `reason` (the app reads anything else in those fields as a change);
   - for Plan 12b: `covered_platform` on the letter (both apps) and on upload; `covers_you` on the platform letter; `covers=me` on the platform list ("my clearances"); **409** `same_person` on verify and reject when the caller is covered;
+  - from Task 8 (11b):
+    - `version` on every switch write (request, approve, cancel and lower), from `SwitchState.version`, which is per scope; a stale one is **409** `conflict`. Cancel's body is `{ version }`;
+    - `version` on revoke (both apps), with **409** `conflict` on a mismatch;
+    - `revocation.day` on the platform letter (the hospital's day), as the clinical letter has it;
+    - `SwitchRequest = TwoPersonRequest & { kind: "named_access"; hospital: Person | null; position; signoffs }`, so it carries a server-set `reason` and `expires_at`. It lapses after 7 days (**409** `expired`), and `TwoPersonKind` gains `"named_access"`;
+    - a request that isn't a raise is **422** `invalid`, and missing sign-offs are **409** `signoff_missing`;
+    - one name per event: the audit kinds are the platform Activity actions' names (`clearance_*`, `named_access_*`). A refused verify is `clearance_verify_refused` with reason `same_side` or `same_person`, the 409 codes;
+    - a refused reject logs the same `clearance_verify_refused` (one action for both), and the refusal is checked and logged before the letter's status, so a refusal on a letter that isn't waiting is still logged, once per attempt. The backend should match;
+  - from Task 10 (11b): `today` on every platform letter, in `GET /platform/clearances` rows and `GET /platform/clearances/{id}` (and the verify, reject and revoke replies): that letter's hospital's day, `YYYY-MM-DD`, set by the server. The list spans hospitals in different zones, so the day is per letter. The status words and the Revoke cut-off count to it; the browser does no time-zone arithmetic. The live client refuses a letter without a valid `today` (**502** `bad_gateway`);
+  - from the Task 10 ruling (11b): revoke is refused like verify and reject, **409** `same_person` when the letter covers the platform admin (checked first) and **409** `same_side` when they are linked to the hospital, before the status check. The refusal is not logged;
+  - from Task 11 (11b): `today` on `NamedAccessOut` (and on the replies to request, approve, cancel and lower): Measured Health's day, `YYYY-MM-DD`, set by the server. The client checks a sign-off's date against it (`signoffProblem`), and the server also refuses a sign-off dated after it (**422** `invalid`). The live client refuses a reply without a valid `today` (**502** `bad_gateway`);
   - the whole contract is **§14.10** in mhai-multiagent's frontend requirements.
 - **Narrowing to nobody is refused.** Removing everyone is a revocation. The server still ends a letter's access when its last covered person loses their role.
 - **Staff eligibility in the picker** is read from `StaffOut`: `status === "active"`, roles include `hospital_admin` or `analyst`, and `issues` doesn't include `mfa_not_set_up`. The server has the last word (**422** `not_eligible`, with the ids).
@@ -933,7 +950,7 @@ type NamedAccessOut = { global: SwitchState; hospitals: HospitalSwitch[] };
 - `clearance_verified`: "verified {t}";
 - `clearance_rejected`: "rejected {t}";
 - `clearance_revoked`: "revoked {t}";
-- `clearance_verify_refused`: "was refused verifying {t} (linked to the hospital)";
+- `clearance_verify_refused`: "couldn't verify {t}", then the reason in words: ": they're linked to the hospital" (`same_side`) or ": the letter names them" (`same_person`). The event carries `reason`;
 - `named_access_requested`: "asked to turn named access to {t}";
 - `named_access_approved`: "approved turning named access to {t}";
 - `named_access_cancelled`: "cancelled turning named access to {t}";
@@ -1276,7 +1293,7 @@ type ClearanceMeOut = {
   - `listPatients(q: { drill: string; level: PatientLevel; filters: AnalysisFilters; purpose?: NamedPurpose; note?: string })`;
   - `getClearanceMe(): Promise<ClearanceMeOut>`;
   - `getNamedAccess()`, re-exported from the clearance client.
-- **Live paths:** `GET analysis/patients?…&level=named&purpose=…&note=…` and `GET analysis/clearance/me`.
+- **Live paths:** `POST analysis/patients/named` (body `{drill, purpose, note?, filters}`, with an `Idempotency-Key`; the purpose is never in a URL) and `GET analysis/clearance/me`.
 - **`readPatients(raw: unknown, expected: PatientLevel, now: number)`:**
   - fails closed when the reply's `level` isn't `expected`;
   - a de-identified reply keeps Plan 6's rules, so `name` and `mrn` fail;

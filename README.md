@@ -145,7 +145,21 @@ record number) for any count of 5 or more; each opening is recorded in
 patients. As everywhere, any group of fewer than 5 shows "Fewer than 5" (on
 screen, in tables and in the CSV), and a figure that would give one away is
 hidden too. A hospital admin gives the Analyst role to a clinician in Staff.
-Like the rest of the demo, nothing is kept in browser storage.
+**Show names** appears above a list only for someone a verified clearance
+letter covers (Grace Nwosu is; Dr. Obi's letter is still waiting, so he sees
+"Named access needs a clearance letter. Ask your hospital admin."), and only
+while the named access switch is On. It asks for a purpose (Clinical
+follow-up, Quality improvement, Audit or Other, with a note for Other), then
+adds Name and MRN under the banner "Named view · letter until {date} · this
+view is recorded", with your name and the time marked across the list. The
+view is recorded in **Activity** as "viewed {n} patients by name in
+Analysis", flagged. Names end at the end of the letter's end date (the demo ends each
+view sooner; Show names again to continue), and an
+open screen rechecks every 30 seconds and drops names, with "Named access has
+ended" and the reason, when access ends: the letter is revoked, you are
+removed from it or lose your role, or the switch is turned off. They also end
+when the filters or group change, or you sign out. Like the rest of the demo,
+nothing is kept in browser storage.
 
 **Named access.** Sign in as the hospital admin sample (Grace Nwosu) and
 open **Named access** (clearance letters) in the Hospital admin group. A
@@ -161,8 +175,11 @@ letter to **View letter** page by page (no download or print), **Revoke** it
 (with a code), **Remove a person** or **Renew** it. A person's Staff panel
 shows their named access line. Verifying a waiting letter happens in the
 platform admin app's demo, whose store is separate: a letter verified there
-doesn't change this demo, and the other way round. Like the rest of the demo,
-nothing is kept in browser storage.
+doesn't change this demo, and the other way round. Names in Analysis (Show
+names, above) need a verified letter, and need the same clinical, privacy and
+legal sign-off as the rest of named access; until it is given they run on
+sample data only. Like the rest of the demo, nothing is kept in browser
+storage.
 
 ### Platform admin app
 
@@ -181,6 +198,7 @@ codes work too):
 
 - Ada Bakare, platform admin: `ada.bakare@measured-health.example`;
 - Tunde Okafor, platform admin: `tunde.okafor@measured-health.example`;
+- Bola Hassan, platform admin linked to Havana Hospital: `bola.hassan@measured-health.example`;
 - Amara Eze, auditor: `amara.eze@measured-health.example`;
 - Chidi Nwosu, a new platform admin: `new.admin@measured-health.example`.
   He sets a password, accepts the terms and sets up two-step (code
@@ -313,6 +331,29 @@ The sample has a Northgate General clearance letter with three named patient
 lists (search `P-6DC445` to find one), two earlier exports and an Intact
 check. Auditors and platform admins both read; the demo does not mirror the
 session's other platform actions into the log.
+
+**Clearances.** **Clearances** in the sidebar (after Analytics) is where
+Measured Health checks the clearance letters hospitals upload, and where the
+named-access switch lives. The queue opens on **To verify** (oldest first),
+with Active, Ending soon and All; pick a letter to see what the hospital
+entered, who it covers and its history, then **View letter** to read it page
+by page (page images only: no download, no print, nothing kept). **Verify**,
+**Reject** (with a reason) and **Revoke** each take your two-step code
+(`123456`). Try Northgate General's waiting letter as Ada Bakare, who can
+verify it. Bola Hassan
+(`bola.hassan@measured-health.example`) is a platform admin linked to Havana
+Hospital by a past account, so Havana's letters read "You can't verify
+letters from a hospital you're linked to"; Tunde Okafor is covered by
+Havana's waiting letter, so it reads "You can't verify a letter that covers
+you". Auditors read the page and see no buttons. **Named access** at the top
+shows the global switch and each hospital's (Off, Letters only or On; the
+lower of the two is in effect). The demo runs On, with Northgate General
+Off. **Turn up** asks for a position with the clinical, privacy and legal
+sign-offs (name, date and reference) and a code, then waits for a different
+platform admin: sign in as Tunde in the same tab to approve. **Turn down**
+needs one admin, a reason and a code, and takes effect at once. This demo's
+letters are separate from the clinical demo's: verifying one here doesn't
+change that demo. Nothing is kept in browser storage.
 
 **The auditor** (Amara Eze) sees every hospital, the team and the activity,
 with no buttons to change anything; the server refuses an auditor's changes
@@ -450,8 +491,10 @@ before live use, and it has not been given. In live mode it stays off until
 `NAMED_ACCESS_SIGNED_OFF=true` is set on the server **and** the backend
 switch is raised by two platform admins (Off, Letters only, On). With either
 missing the Named access page, its sidebar entry and its API routes do not
-exist (the proxy answers 404), and names are never shown. Until then it runs
-on sample data only.
+exist (the proxy answers 404), and names are never shown. Names in Analysis
+(Show names) are part of the same sign-off, and the proxy answers 404 to the
+named patient list until it is given, and never serves names on a GET. Until then it runs on sample data
+only.
 
 ### Tests
 

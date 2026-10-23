@@ -35,6 +35,7 @@ import { CoOccurringView } from "./co-occurring-view";
 import { FindingsView } from "./findings-view";
 import { QualityView } from "./quality-view";
 import { AnalysisFiltersBar, type OptionsState } from "./analysis-filters";
+import { ClearanceLine } from "./clearance-line";
 import { PrevalenceView } from "./prevalence-view";
 import { UpdatedAt } from "./view-frame";
 
@@ -270,6 +271,8 @@ export function AnalysisView({ today: todayProp }: { today?: string } = {}) {
             }
             onRetryOptions={() => void optionsQ.refetch()}
           />
+          {/* Above the drill-down area: the person's named access (Plan 11c). */}
+          <ClearanceLine />
           <ViewPicker
             view={view}
             onView={setView}

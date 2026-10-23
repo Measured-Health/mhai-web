@@ -24,6 +24,8 @@ import { LETTER_STATUS_WORDS, REASON_WORDS, ROLE_WORDS, kindOf } from "./kinds";
 export const ID = /^[A-Za-z0-9_-]+$/;
 const HASH = /^[0-9a-f]{64}$/;
 const CODE = /^[a-z][a-z_]{0,39}$/;
+/** An Analysis view id: Plan 6's ids may hold a hyphen ("co-occurring"). */
+const VIEW_CODE = /^[a-z][a-z_-]{0,39}$/;
 const DEVICE = /^[\w .,()/;:+-]*$/;
 const IPV4 =
   /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
@@ -37,6 +39,7 @@ const isObj = (v: unknown): v is Obj =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 const isId = (v: unknown): v is string => typeof v === "string" && ID.test(v);
 const isCode = (v: unknown) => typeof v === "string" && CODE.test(v);
+const isView = (v: unknown) => typeof v === "string" && VIEW_CODE.test(v);
 const isBool = (v: unknown) => typeof v === "boolean";
 const isCount = (v: unknown): v is number =>
   typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
@@ -162,7 +165,7 @@ const isCheckpoint = exact({
 const isFacts = some({
   specialty: isCode,
   confidence: oneOf("high", "medium", "low"),
-  view: isCode,
+  view: isView,
   location_type: isCode,
   from: isTime,
   to: isTime,

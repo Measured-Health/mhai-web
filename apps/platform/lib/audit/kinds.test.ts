@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 import type { ActivityAction } from "@/lib/api/contract";
 import { AUDIT_TYPES } from "@/lib/api/audit-contract";
 import { auditEvent } from "@/tests/audit-event";
-import { KINDS, REASON_WORDS, TYPE_WORDS } from "./kinds";
+import { REJECT_LABEL, REVOKE_LABEL, STATUS_LABEL } from "@mhai/ui/clearances";
+import {
+  KINDS,
+  LETTER_STATUS_WORDS,
+  LOCATION_WORDS,
+  REASON_WORDS,
+  TYPE_WORDS,
+  VIEW_WORDS,
+  locationWords,
+  viewWords,
+} from "./kinds";
 
 describe("the audit kinds", () => {
   it("every kind maps to one of the 14 types", () => {
@@ -45,7 +55,7 @@ describe("the audit kinds", () => {
       kind: "drilldown_named",
       target: null,
       reason: "clinical_follow_up",
-      facts: { patient_count: 12, view: "abnormal_results" },
+      facts: { patient_count: 12, view: "findings" },
     });
     expect(KINDS.drilldown_named.words(e)).toBe(
       "Opened a named patient list · 12 patients",
@@ -201,8 +211,149 @@ describe("the audit kinds", () => {
         "same_side",
         "gone",
         "not_owner",
+        // Plan 11: rejecting, revoking and narrowing a letter.
+        "wrong_people",
+        "end_date_mismatch",
+        "not_leadership",
+        "unreadable",
+        "no_longer_needed",
+        "person_left",
+        "uploaded_in_error",
+        // A refused file.
+        "file_type",
+        "file_too_large",
+        "too_many_pages",
+        "password_protected",
+        "failed_safety_check",
+        // A verify refused because the letter names them.
+        "same_person",
       ].sort(),
     );
+  });
+});
+
+describe("Plan 11's audit words", () => {
+  it("every reject and revoke reason has words, the same as the screens'", () => {
+    for (const [code, words] of Object.entries(REJECT_LABEL))
+      if (code !== "other") expect(REASON_WORDS[code], code).toBe(words);
+    for (const [code, words] of Object.entries(REVOKE_LABEL))
+      expect(REASON_WORDS[code], code).toBe(words);
+  });
+
+  it("the letter status words are the shared ones", () => {
+    expect(LETTER_STATUS_WORDS).toEqual(STATUS_LABEL);
+    expect(LETTER_STATUS_WORDS.waiting).toBe("Waiting for Measured Health");
+  });
+
+  it("one name per event: the audit kinds are the Activity actions' names", () => {
+    for (const old of [
+      "letter_uploaded",
+      "letter_refused",
+      "letter_verified",
+      "letter_rejected",
+      "letter_narrowed",
+      "letter_revoked",
+      "letter_ended",
+      "letter_viewed",
+      "letter_reminder_sent",
+      "verify_refused",
+      "named_switch_changed",
+      "named_switch_requested",
+      "named_switch_approved",
+      "named_switch_cancelled",
+    ])
+      expect(KINDS[old], old).toBeUndefined();
+    for (const kind of [
+      "clearance_uploaded",
+      "clearance_refused",
+      "clearance_verified",
+      "clearance_rejected",
+      "clearance_narrowed",
+      "clearance_revoked",
+      "clearance_ended",
+      "clearance_viewed",
+      "clearance_reminder_sent",
+      "clearance_verify_refused",
+    ]) {
+      expect(KINDS[kind]!.type, kind).toBe("named_access");
+      expect(KINDS[kind]!.targets, kind).toEqual(["clearance"]);
+    }
+    for (const kind of [
+      "named_access_requested",
+      "named_access_approved",
+      "named_access_cancelled",
+      "named_access_lowered",
+    ]) {
+      expect(KINDS[kind]!.type, kind).toBe("named_access");
+      expect(KINDS[kind]!.targets, kind).toEqual(["setting"]);
+    }
+    const e = auditEvent({
+      type: "named_access",
+      kind: "clearance_verified",
+      target: { kind: "clearance", id: "cl_northgate_2026" },
+      reason: null,
+    });
+    expect(KINDS.clearance_verified!.words(e)).toBe(
+      "Verified clearance letter cl_northgate_2026",
+    );
+    const s = auditEvent({
+      type: "named_access",
+      kind: "named_access_requested",
+      target: {
+        kind: "setting",
+        id: "named_access",
+        name: "On for Havana Hospital",
+      },
+      reason: null,
+    });
+    expect(KINDS.named_access_requested!.words(s)).toBe(
+      "Asked to turn named access to On for Havana Hospital",
+    );
+    expect(
+      KINDS.named_access_lowered!.words({
+        ...s,
+        kind: "named_access_lowered",
+        target: null,
+      }),
+    ).toBe("Turned the named access switch down");
+  });
+
+  it("a verify refusal is one kind with a reason: same_side or same_person", () => {
+    const e = auditEvent({
+      type: "named_access",
+      kind: "clearance_verify_refused",
+      outcome: "refused",
+      target: { kind: "clearance", id: "cl_wait" },
+      reason: "same_side",
+    });
+    expect(KINDS.clearance_verify_refused!.words(e)).toBe(
+      "Couldn't verify clearance letter cl_wait: they're linked to the hospital",
+    );
+    expect(
+      KINDS.clearance_verify_refused!.words({ ...e, reason: "same_person" }),
+    ).toBe("Couldn't verify clearance letter cl_wait: the letter names them");
+    expect(REASON_WORDS.same_side).toBe("Linked to the hospital");
+    expect(REASON_WORDS.same_person).toBe("The letter names them");
+    expect(REASON_WORDS.covers_you).toBeUndefined();
+  });
+
+  it("views are Plan 6's, and locations admitted, outpatient and emergency", () => {
+    expect(Object.keys(VIEW_WORDS)).toEqual([
+      "prevalence",
+      "affected",
+      "co-occurring",
+      "findings",
+      "quality",
+    ]);
+    expect(viewWords("co-occurring")).toBe("Co-occurring conditions");
+    expect(viewWords("abnormal_results")).toBe("a patient list");
+    expect(Object.keys(LOCATION_WORDS)).toEqual([
+      "admitted",
+      "outpatient",
+      "emergency",
+    ]);
+    expect(locationWords("admitted")).toBe("Admitted");
+    expect(locationWords("inpatient")).toBe("another setting");
   });
 });
 
@@ -291,6 +442,15 @@ describe("Plan 8's Activity actions", () => {
       emr_connection_switched_on: true,
       emr_connection_switched_off: true,
       emr_connection_tested: true,
+      clearance_viewed: true,
+      clearance_verified: true,
+      clearance_rejected: true,
+      clearance_revoked: true,
+      clearance_verify_refused: true,
+      named_access_requested: true,
+      named_access_approved: true,
+      named_access_cancelled: true,
+      named_access_lowered: true,
     };
     for (const action of Object.keys(ACTIONS))
       expect(KINDS[action], action).toBeDefined();

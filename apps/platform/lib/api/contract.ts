@@ -11,6 +11,7 @@ import type {
 } from "./analytics-contract";
 import type { AuditClient } from "./audit-contract";
 import type { EmrClient } from "./emr-contract";
+import type { ClearancesClient } from "./clearances-contract";
 import type { HoldShort, HoldsClient } from "./holds-contract";
 import type { EmailPref, NotificationsOut } from "./notifications-contract";
 import type { OpsClient } from "./ops-contract";
@@ -194,7 +195,19 @@ export type ActivityAction =
   | "emr_connection_changed"
   | "emr_connection_switched_on"
   | "emr_connection_switched_off"
-  | "emr_connection_tested";
+  | "emr_connection_tested"
+  // Clearance letters and the named-access switch (Plan 11b). A letter's
+  // target is "the clearance letter signed by {signed_by}"; a switch's is
+  // "{position} for {hospital}" or "{position} for every hospital".
+  | "clearance_viewed"
+  | "clearance_verified"
+  | "clearance_rejected"
+  | "clearance_revoked"
+  | "clearance_verify_refused"
+  | "named_access_requested"
+  | "named_access_approved"
+  | "named_access_cancelled"
+  | "named_access_lowered";
 export type ActivityEvent = {
   id: string;
   at: string;
@@ -203,10 +216,16 @@ export type ActivityEvent = {
   hospital: Person | null;
   target: string | null;
   detail: string | null;
+  /**
+   * Why it was refused, as a code (a refused verify: `same_side` or
+   * `same_person`); the label puts it in words.
+   */
+  reason?: string | null;
 };
 
 /** The changes that need a second platform admin's approval. */
-export type TwoPersonKind = "hold_lift" | "retention_shorten" | "triage_on";
+export type TwoPersonKind =
+  "hold_lift" | "retention_shorten" | "triage_on" | "named_access";
 /**
  * A change one platform admin asked for and a different one must approve,
  * with step-up, within 7 days. Either may cancel it, with no step-up.
@@ -245,11 +264,18 @@ export class BlockedError extends ApiError {
 }
 
 /**
- * Each area (legal holds, operations, settings, the audit log) keeps its
- * client in its own contract file and adds its name to `extends` here.
+ * Each area (legal holds, operations, settings, the audit log, clearances)
+ * keeps its client in its own contract file and adds its name to `extends`
+ * here.
  */
 export interface PlatformClient
-  extends HoldsClient, OpsClient, AuditClient, SettingsClient, EmrClient {
+  extends
+    HoldsClient,
+    OpsClient,
+    AuditClient,
+    SettingsClient,
+    EmrClient,
+    ClearancesClient {
   listHospitals(
     q: HospitalQuery,
   ): Promise<{ hospitals: HospitalSummary[]; next_cursor: string | null }>;

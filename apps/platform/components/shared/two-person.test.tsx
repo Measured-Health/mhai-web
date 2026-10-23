@@ -47,6 +47,14 @@ describe("TwoPersonActions", () => {
     ).toBeInTheDocument();
   });
 
+  it("a caller's own line replaces the default, for everyone", () => {
+    show({ line: "Tunde Okafor asked to turn it On", canAct: false });
+    expect(
+      screen.getByText("Tunde Okafor asked to turn it On"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^Requested by/)).not.toBeInTheDocument();
+  });
+
   it("another admin sees Approve and Cancel request", async () => {
     const { onApprove, onCancel } = show();
     expect(screen.queryByText(WAITING)).not.toBeInTheDocument();

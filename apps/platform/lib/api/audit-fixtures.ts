@@ -214,8 +214,9 @@ const SPECIALTIES = [
   "neurology",
   "obstetrics",
 ];
-const VIEWS = ["condition", "abnormal_results", "open_alerts", "follow_up_due"];
-const LOCATIONS = ["inpatient", "outpatient", "emergency", "community"];
+// Plan 6's Analysis view ids and location types (ruling 5).
+const VIEWS = ["prevalence", "affected", "co-occurring", "findings", "quality"];
+const LOCATIONS = ["admitted", "outpatient", "emergency"];
 const CONFIDENCE = ["high", "medium", "low"] as const;
 const DEVICES = [
   "Firefox 140 on macOS",
@@ -524,7 +525,7 @@ export function seedAudit(
   const ngClin = staffOf(ngH, "clinician");
   add({
     at: ago(92),
-    kind: "letter_uploaded",
+    kind: "clearance_uploaded",
     actor: ngAdmin,
     hospital: ngH,
     target: { kind: "clearance", id: LETTER_ID },
@@ -532,7 +533,7 @@ export function seedAudit(
   });
   add({
     at: ago(91.5),
-    kind: "letter_verified",
+    kind: "clearance_verified",
     actor: TUNDE,
     hospital: ngH,
     target: { kind: "clearance", id: LETTER_ID },
