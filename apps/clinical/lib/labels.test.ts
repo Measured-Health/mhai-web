@@ -69,6 +69,20 @@ describe("labels", () => {
     ])
       expect(FORBIDDEN_TERMS).toContain(code);
   });
+  it("forbids the alert settings and routing codes (Plan 13)", () => {
+    for (const code of [
+      "no_recipients",
+      "critical_urgent",
+      "sent_to",
+      "by_route",
+      "to_you",
+      "not_connected",
+      "alert_units_changed",
+      "alert_rules_changed",
+      "alert_recipients_changed",
+    ])
+      expect(FORBIDDEN_TERMS).toContain(code);
+  });
   it("lists the six analysing steps in order", () => {
     expect(STAGES.map((s) => s.label)).toEqual([
       "Protecting patient privacy",
