@@ -150,7 +150,7 @@ export function AlertsView() {
               pressed={sentTo === null}
               onClick={() => setSentTo(null)}
             >
-              All
+              All alerts
             </FilterChip>
             <FilterChip
               pressed={sentTo === "you"}

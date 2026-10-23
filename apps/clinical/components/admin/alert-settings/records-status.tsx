@@ -53,7 +53,7 @@ export function RecordsStatusSection({
   now: number;
 }) {
   const id = useId();
-  const s = STATUS[connection.status];
+  const s = STATUS[connection.status] ?? STATUS.not_connected;
   return (
     <section aria-labelledby={id} className="card-v3 px-[22px] py-4">
       <h3

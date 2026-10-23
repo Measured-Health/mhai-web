@@ -396,10 +396,9 @@ describe("Notifications: Sent to filter", () => {
     renderWithAuth(<NotificationsPage />);
     await shows(6);
     const group = screen.getByRole("group", { name: "Sent to" });
-    expect(within(group).getByRole("button", { name: "All" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      within(group).getByRole("button", { name: "All alerts" }),
+    ).toHaveAttribute("aria-pressed", "true");
     await user.click(
       within(group).getByRole("button", { name: "Hospital queue" }),
     );

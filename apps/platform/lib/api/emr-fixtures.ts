@@ -107,7 +107,7 @@ export function seedConnections(now: number): ConnectionRecord[] {
       type: "hl7v2_feed",
       source_label: "Results system",
       base_url: "https://records.havana.example/results-feed",
-      settings: { sender_id: "HAVANA_LAB" },
+      settings: { sender_id: "HAVANA_RESULTS" },
       credentials_set: { shared_key: iso(now - 45 * D) },
       enabled: true,
       synced: true,

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { VENDOR_NAMES } from "./vendor-names.mjs";
+import { VENDOR_NAMES, findVendor } from "./vendor-names.mjs";
 
 export { VENDOR_NAMES };
 
@@ -13,7 +13,6 @@ export { VENDOR_NAMES };
 const root = fileURLToPath(new URL("..", import.meta.url));
 const self = fileURLToPath(import.meta.url);
 const skip = new Set(["node_modules", ".next", "test-results", "coverage"]);
-const WORDS = new RegExp(`\\b(?:${VENDOR_NAMES.join("|")})\\b`, "i");
 
 const dirs = (parent, inner) =>
   readdirSync(join(root, parent), { withFileTypes: true })
@@ -46,12 +45,29 @@ test("no vendor or product name appears in apps or packages", () => {
   assert.ok(places.length > 0, "found nothing to check");
   for (const d of places)
     for (const f of files(d)) {
-      const m = WORDS.exec(readFileSync(f, "utf8"));
-      if (m) hits.push(`${relative(root, f)}: ${m[0]}`);
+      const m = findVendor(readFileSync(f, "utf8"));
+      if (m) hits.push(`${relative(root, f)}: ${m}`);
     }
   assert.deepEqual(hits, []);
 });
 
 test("the list itself is lower case, whole words", () => {
   for (const v of VENDOR_NAMES) assert.match(v, /^[a-z]+$/);
+});
+
+// The test strings are built from parts so this file doesn't trip the guard.
+test("the guard catches names inside identifiers, and not ordinary words", () => {
+  const j = (...p) => p.join("");
+  for (const hit of [
+    j("ep", "ic", "_fhir"),
+    j("Ep", "icClient"),
+    j("cerner", "Millennium"),
+    j("DHI", "S2"),
+    j("athena", "health"),
+    j("Cer", "ner"),
+    j("open", "mrs-sync"),
+  ])
+    assert.ok(findVendor(hit), hit);
+  for (const ok of ["epicenter", "label", "collaborate", "oracles", "athens"])
+    assert.equal(findVendor(ok), null, ok);
 });

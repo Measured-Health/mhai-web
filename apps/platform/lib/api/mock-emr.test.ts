@@ -556,7 +556,7 @@ describe("mock record connections", () => {
     const u = await m.updateConnection(
       c.id,
       {
-        source_label: "Lab results",
+        source_label: "Results feed",
         credentials: { private_key: SECRET2 },
         version: c.version,
         ...CODE,
@@ -565,7 +565,7 @@ describe("mock record connections", () => {
     );
     const plain = await m.updateConnection(
       c.id,
-      { source_label: "Lab feed", version: u.version, ...CODE },
+      { source_label: "Results system 2", version: u.version, ...CODE },
       KEY(),
     );
     const t = await m.testConnection(c.id, KEY());
@@ -589,15 +589,15 @@ describe("mock record connections", () => {
       ["emr_connection_added", "Results system", null, westfield, ada],
       [
         "emr_connection_changed",
-        "Lab results",
+        "Results feed",
         "Credentials replaced",
         westfield,
         ada,
       ],
-      ["emr_connection_changed", "Lab feed", null, westfield, ada],
-      ["emr_connection_tested", "Lab feed", null, westfield, ada],
-      ["emr_connection_switched_on", "Lab feed", null, westfield, ada],
-      ["emr_connection_switched_off", "Lab feed", null, westfield, ada],
+      ["emr_connection_changed", "Results system 2", null, westfield, ada],
+      ["emr_connection_tested", "Results system 2", null, westfield, ada],
+      ["emr_connection_switched_on", "Results system 2", null, westfield, ada],
+      ["emr_connection_switched_off", "Results system 2", null, westfield, ada],
     ]);
     expect(JSON.stringify(mine)).not.toContain("SECRET-");
     // The hospital's own feed has them too.
