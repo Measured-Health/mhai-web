@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LetterViewer } from "./letter-viewer";
@@ -84,11 +84,61 @@ describe("LetterViewer", () => {
   });
 
   it("closing revokes the URL", async () => {
-    const { onClose } = view(async (n) => png(n));
+    const order: string[] = [];
+    URL.revokeObjectURL = vi.fn((url: string) => {
+      order.push(`revoke ${url}`);
+    });
+    view(
+      async (n) => png(n),
+      vi.fn(() => order.push("close")),
+    );
     await screen.findByAltText("Page 1 of 3");
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(revoked).toEqual(["blob:test/1"]);
+    expect(order).toEqual(["revoke blob:test/1", "close"]);
+  });
+
+  it("paging to the last page by keyboard keeps the focus in the viewer", async () => {
+    view(async (n) => png(n));
+    await screen.findByAltText("Page 1 of 3");
+    const prev = screen.getByRole("button", { name: "Previous" });
+    const next = screen.getByRole("button", { name: "Next" });
+    next.focus();
+    await userEvent.keyboard("{Enter}");
+    await screen.findByAltText("Page 2 of 3");
+    expect(next).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await screen.findByAltText("Page 3 of 3");
+    expect(next).toBeDisabled();
+    expect(prev).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await screen.findByAltText("Page 2 of 3");
+    expect(prev).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await screen.findByAltText("Page 1 of 3");
+    expect(prev).toBeDisabled();
+    expect(next).toHaveFocus();
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it("a page that can't be decoded shows Couldn't show this page", async () => {
+    view(async (n) => png(n));
+    fireEvent.error(await screen.findByAltText("Page 1 of 3"));
+    expect(
+      await screen.findByText("Couldn't show this page"),
+    ).toBeInTheDocument();
+  });
+
+  it("a page count that isn't a number reads as one page", async () => {
+    render(
+      <LetterViewer
+        title="Clearance letter"
+        pages={Number.NaN}
+        loadPage={async (n) => png(n)}
+        onClose={() => {}}
+      />,
+    );
+    expect(await screen.findByAltText("Page 1 of 1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
 
   it("unmounting revokes the URL", async () => {
@@ -123,7 +173,12 @@ describe("LetterViewer", () => {
   });
 
   it("accepts PNG, JPEG and SVG pages", async () => {
-    for (const type of ["image/png", "image/jpeg", "image/svg+xml"]) {
+    for (const type of [
+      "image/png",
+      "image/jpeg",
+      "image/svg+xml",
+      "image/svg+xml;charset=utf-8",
+    ]) {
       const { unmount } = view(async () => new Blob(["x"], { type }));
       expect(await screen.findByAltText("Page 1 of 3")).toBeInTheDocument();
       unmount();
@@ -183,6 +238,6 @@ describe("LetterViewer", () => {
         onClose={() => {}}
       />,
     );
-    await waitFor(() => expect(loadPage).toHaveBeenCalledTimes(1));
+    expect(loadPage).toHaveBeenCalledTimes(1);
   });
 });

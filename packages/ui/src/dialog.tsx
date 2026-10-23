@@ -61,7 +61,7 @@ export function Dialog({
       }}
       className={cn(
         "m-auto rounded-3xl bg-white p-6 text-ink shadow-[0_40px_80px_-30px_#1c0d22aa] backdrop:bg-ink/40 backdrop:backdrop-blur-sm",
-        className ?? "w-[min(440px,92vw)]",
+        className || "w-[min(440px,92vw)]",
       )}
     >
       <h2

@@ -1,9 +1,11 @@
 "use client";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { mediaType } from "@mhai/api-client/request";
 import { Button } from "./button";
 import { cn } from "./cn";
 import { Dialog } from "./dialog";
+import { LETTER_MAX_PAGES } from "./clearances";
 
 /**
  * The only page types shown, and only ever in an `<img>`, where no script
@@ -37,7 +39,10 @@ export function LetterViewer({
   loadPage(n: number): Promise<Blob>;
   onClose(): void;
 }) {
-  const total = Math.max(1, Math.floor(pages));
+  const total =
+    Number.isFinite(pages) && pages >= 1
+      ? Math.min(Math.floor(pages), LETTER_MAX_PAGES)
+      : 1;
   const [page, setPage] = useState(1);
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
@@ -51,6 +56,17 @@ export function LetterViewer({
 
   // Previous is disabled on page 1, so the first focus goes to Close.
   const closeButton = useRef<HTMLButtonElement>(null);
+  // A paging button that disables itself at either end hands the focus to
+  // the other one, so a keyboard user keeps their place.
+  const prevButton = useRef<HTMLButtonElement>(null);
+  const nextButton = useRef<HTMLButtonElement>(null);
+  const pagedBy = useRef<"prev" | "next" | null>(null);
+  useEffect(() => {
+    const by = pagedBy.current;
+    pagedBy.current = null;
+    if (by === "next" && page >= total) prevButton.current?.focus();
+    if (by === "prev" && page <= 1) nextButton.current?.focus();
+  }, [page, total]);
   const shown = useRef<string | null>(null);
   const revoke = useCallback(() => {
     if (shown.current) URL.revokeObjectURL(shown.current);
@@ -62,7 +78,10 @@ export function LetterViewer({
     load.current(page).then(
       (blob) => {
         if (!live) return;
-        if (!(blob instanceof Blob) || !PAGE_TYPES.includes(blob.type)) {
+        if (
+          !(blob instanceof Blob) ||
+          !PAGE_TYPES.includes(mediaType(blob.type))
+        ) {
           setResult({ key, url: null });
           return;
         }
@@ -104,8 +123,12 @@ export function LetterViewer({
         <Button
           variant="ghost"
           size="sm"
+          ref={prevButton}
           disabled={page <= 1}
-          onClick={() => setPage((p) => p - 1)}
+          onClick={() => {
+            pagedBy.current = "prev";
+            setPage((p) => Math.max(1, p - 1));
+          }}
         >
           <ChevronLeft aria-hidden className="size-4" />
           Previous
@@ -116,8 +139,12 @@ export function LetterViewer({
         <Button
           variant="ghost"
           size="sm"
+          ref={nextButton}
           disabled={page >= total}
-          onClick={() => setPage((p) => p + 1)}
+          onClick={() => {
+            pagedBy.current = "next";
+            setPage((p) => Math.min(total, p + 1));
+          }}
         >
           Next
           <ChevronRight aria-hidden className="size-4" />

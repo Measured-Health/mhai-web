@@ -10,7 +10,10 @@ export class ApiError extends Error {
 }
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
-const EMAIL = /^[^\s@<>"]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
+// Printable ASCII only, so no control or bidi character can change how an
+// address reads.
+const EMAIL =
+  /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
 const PEOPLE_MAX = 20;
 
 const checked = (raw: unknown, ok: (s: string) => boolean): string[] =>
@@ -34,11 +37,13 @@ export class NotEligibleError extends ApiError {
   ) {
     super(422, code);
     this.name = "NotEligibleError";
-    this.ids = checked(people.ids, (s) => ID.test(s));
-    this.emails = checked(
-      people.emails,
-      (s) => s.length <= 254 && EMAIL.test(s),
-    );
+    // Staff ids for `not_eligible`, emails for `not_eligible_platform`.
+    this.ids =
+      code === "not_eligible" ? checked(people.ids, (s) => ID.test(s)) : [];
+    this.emails =
+      code === "not_eligible_platform"
+        ? checked(people.emails, (s) => s.length <= 254 && EMAIL.test(s))
+        : [];
   }
 }
 

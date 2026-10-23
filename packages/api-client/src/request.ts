@@ -98,16 +98,21 @@ export function createApiRequest({ prefix, onUnauthorized }: ApiRequestConfig) {
   ): Promise<Blob> {
     const res = await send(fetchImpl, path, accept.join(", "), {});
     if (!res.ok) throw refusal(res.status, await json(res));
-    const type = (res.headers.get("Content-Type") ?? "")
-      .split(";")[0]
-      .trim()
-      .toLowerCase();
-    if (!accept.includes(type)) throw new ApiError(502, "bad_gateway");
-    return res.blob();
+    const type = mediaType(res.headers.get("Content-Type") ?? "");
+    if (!accept.map(mediaType).includes(type))
+      throw new ApiError(502, "bad_gateway");
+    // The connection can drop mid-body: a one-shot file can't be fetched again.
+    return res.blob().catch(() => {
+      throw new ApiError(200, "interrupted");
+    });
   }
 
   return { apiRequest, apiOk, apiBlob };
 }
+
+/** "Image/SVG+XML; charset=utf-8" → "image/svg+xml": the bare media type. */
+export const mediaType = (contentType: string) =>
+  contentType.split(";")[0].trim().toLowerCase();
 
 /** The Idempotency-Key header for a write, when it has one. */
 export const keyHeader = (opts?: { idempotencyKey?: string }) =>

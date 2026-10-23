@@ -157,6 +157,29 @@ describe("createApiRequest", () => {
         }),
     );
     expect((await apiBlob(csv, "/p", ["text/csv"])).type).toMatch(/^text\/csv/);
+    expect((await apiBlob(csv, "/p", ["Text/CSV"])).type).toMatch(/^text\/csv/);
+  });
+
+  it("apiBlob: a body cut off mid-download is ApiError 200 interrupted", async () => {
+    const { apiBlob } = createApiRequest({
+      prefix: "/api/v1",
+      onUnauthorized: vi.fn(),
+    });
+    const dropped = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(c) {
+              c.enqueue(new TextEncoder().encode("a,b"));
+              c.error(new TypeError("network error"));
+            },
+          }),
+          { headers: { "Content-Type": "text/csv" } },
+        ),
+    );
+    const e = await apiBlob(dropped, "/p", ["text/csv"]).catch((x) => x);
+    expect(e).toBeInstanceOf(ApiError);
+    expect(e).toMatchObject({ status: 200, code: "interrupted" });
   });
 
   it("a not_eligible refusal keeps its checked ids, and not_eligible_platform its emails", async () => {
@@ -184,7 +207,14 @@ describe("createApiRequest", () => {
       Response.json(
         {
           code: "not_eligible_platform",
-          emails: ["ada@measured-health.example", "not an email", null],
+          emails: [
+            "ada@measured-health.example",
+            "not an email",
+            null,
+            "ev\u202Eil@measured-health.example",
+            "zero\u200Bwidth@measured-health.example",
+          ],
+          ids: ["s-obi"],
         },
         { status: 422 },
       ),
@@ -195,6 +225,17 @@ describe("createApiRequest", () => {
       code: "not_eligible_platform",
       ids: [],
       emails: ["ada@measured-health.example"],
+    });
+
+    const both = vi.fn(async () =>
+      Response.json(
+        { code: "not_eligible", ids: ["s-obi"], emails: ["a@b.example"] },
+        { status: 422 },
+      ),
+    );
+    expect(await apiOk(both, "/x").catch((x) => x)).toMatchObject({
+      ids: ["s-obi"],
+      emails: [],
     });
 
     const many = vi.fn(async () =>
