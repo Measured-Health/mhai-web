@@ -7,10 +7,12 @@ import {
 } from "@/lib/api/client";
 import { createMockPlatform } from "@/lib/api/mock";
 import type { User } from "@/lib/auth/types";
-import { AMARA, renderWithAuth } from "@/tests/render";
+import { ADA, AMARA, renderWithAuth } from "@/tests/render";
 import { AppShell } from "./app-shell";
 import { TopBar } from "./top-bar";
 
+const online = vi.hoisted(() => ({ value: true }));
+vi.mock("@mhai/ui/hooks/use-online", () => ({ useOnline: () => online.value }));
 const pathname = vi.hoisted(() => ({ value: "/hospitals" }));
 vi.mock("next/navigation", () => ({
   usePathname: () => pathname.value,
@@ -18,6 +20,7 @@ vi.mock("next/navigation", () => ({
 }));
 beforeEach(() => {
   pathname.value = "/hospitals";
+  online.value = true;
 });
 
 const shell = (user?: User) =>
@@ -29,7 +32,7 @@ const shell = (user?: User) =>
   );
 
 describe("the platform shell", () => {
-  it("the sidebar shows Platform and the eight links in order", () => {
+  it("the sidebar shows Platform and the nine links in order", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     expect(within(nav).getByText("Platform")).toBeInTheDocument();
@@ -190,6 +193,30 @@ describe("the platform shell", () => {
     shell();
     await screen.findAllByRole("navigation", { name: "Platform" });
     expect(read).not.toHaveBeenCalled();
+    __resetPlatformClientForTests();
+  });
+
+  it("the banners sit in order: offline strip, integrity, then health", async () => {
+    online.value = false;
+    __setPlatformClientForTests(
+      createMockPlatform({
+        delayMs: 0,
+        me: () => ADA.email,
+        audit: { integrity: "broken" },
+        health: "problem",
+      }),
+    );
+    shell();
+    const integrity = await screen.findByText(
+      /The audit log failed its integrity check/,
+    );
+    const health = await screen.findByText(/The service is having problems/);
+    const strip = screen.getByRole("status");
+    const before = (a: Node, b: Node) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(strip).toHaveTextContent(/You're offline/);
+    expect(before(strip, integrity)).toBe(true);
+    expect(before(integrity, health)).toBe(true);
     __resetPlatformClientForTests();
   });
 });

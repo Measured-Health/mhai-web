@@ -241,10 +241,7 @@ export class BlockedError extends ApiError {
  * client in its own contract file and adds its name to `extends` here.
  */
 export interface PlatformClient
-  extends HoldsClient,
-    OpsClient,
-    AuditClient,
-    SettingsClient {
+  extends HoldsClient, OpsClient, AuditClient, SettingsClient {
   listHospitals(
     q: HospitalQuery,
   ): Promise<{ hospitals: HospitalSummary[]; next_cursor: string | null }>;
