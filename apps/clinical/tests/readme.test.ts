@@ -170,4 +170,20 @@ describe("README demo instructions", () => {
       /Clinical,\s+privacy\s+and\s+legal\s+sign-off\s+is\s+required\s+before\s+live\s+use/,
     );
   });
+
+  it("documents the named access demo", () => {
+    expect(readme).toMatch(/\*\*Named access\.\*\*/);
+    expect(readme).toMatch(
+      /platform\s+admin\s+app's\s+demo,\s+whose\s+store\s+is\s+separate/,
+    );
+    expect(readme).toContain("`123456`");
+  });
+
+  it("says named access stays off until sign-off", () => {
+    const from = readme.indexOf("### Analysis");
+    const section = readme.slice(from);
+    expect(section).toMatch(/NAMED_ACCESS_SIGNED_OFF=true/);
+    expect(section).toMatch(/clinical,\s+privacy\s+and\s+legal\s+sign-off/);
+    expect(section).toMatch(/two\s+platform\s+admins/);
+  });
 });

@@ -116,7 +116,7 @@ export async function openReview(page: Page) {
 /** From a signed-in screen: opens a Hospital admin page (from the menu on phones). */
 export async function openAdmin(
   page: Page,
-  name: "Staff" | "Hospital settings" | "Activity" | "Usage",
+  name: "Staff" | "Hospital settings" | "Activity" | "Usage" | "Named access",
 ) {
   if (isMobile(page))
     await page.getByRole("button", { name: "Open menu" }).click();

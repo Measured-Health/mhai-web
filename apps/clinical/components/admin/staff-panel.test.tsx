@@ -609,6 +609,42 @@ describe("StaffPanel", () => {
       ).not.toHaveTextContent(ENDS_NAMED);
     });
 
+    it("says Couldn't load named access when the letters fail, and Try again brings the line back", async () => {
+      vi.spyOn(holder.clearances, "listClearances").mockRejectedValueOnce(
+        new ApiError(403, "forbidden"),
+      );
+      const panel = await openNamed("s-nwosu");
+      expect(
+        await within(panel).findByText("Couldn't load named access"),
+      ).toBeInTheDocument();
+      expect(within(panel).queryByText("No named access")).toBeNull();
+      await userEvent.click(
+        within(panel).getByRole("button", { name: "Try again" }),
+      );
+      expect(
+        await within(panel).findByText(/^Named access until/),
+      ).toBeInTheDocument();
+      expect(
+        within(panel).queryByText("Couldn't load named access"),
+      ).toBeNull();
+    });
+
+    it("says Couldn't load named access when the switch's position fails", async () => {
+      vi.spyOn(holder.clearances, "getNamedAccess").mockRejectedValueOnce(
+        new ApiError(403, "forbidden"),
+      );
+      const panel = await openNamed("s-nwosu");
+      expect(
+        await within(panel).findByText("Couldn't load named access"),
+      ).toBeInTheDocument();
+      await userEvent.click(
+        within(panel).getByRole("button", { name: "Try again" }),
+      );
+      expect(
+        await within(panel).findByText(/^Named access until/),
+      ).toBeInTheDocument();
+    });
+
     it("without named access on the account, nothing is asked of the letters", async () => {
       const position = vi.spyOn(holder.clearances, "getNamedAccess");
       const panel = await open("s-nwosu");
