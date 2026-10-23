@@ -468,6 +468,7 @@ export function createMockClearances({
           by: { display_name: by },
           side: "hospital",
           at: iso(now()),
+          day: hospitalDay(now()),
           reason: body.reason,
           note,
         };

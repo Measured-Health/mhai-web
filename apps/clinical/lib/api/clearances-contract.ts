@@ -61,6 +61,8 @@ export type ClearanceOut = {
     by: Who;
     side: "hospital" | "platform";
     at: string;
+    /** `at` as the hospital's day (YYYY-MM-DD). */
+    day: string;
     reason: RevokeReason;
     note: string | null;
   } | null;
