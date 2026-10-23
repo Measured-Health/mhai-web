@@ -4,6 +4,10 @@ import { FORBIDDEN_TERMS } from "../labels";
 import {
   ALERT_STATUS_LABEL,
   DISMISS_REASONS,
+  EVIDENCE_MAX,
+  ROUTE_LABEL,
+  evidenceOf,
+  routingOf,
   LOCATION_NOT_RECORDED,
   NOT_STANDARDISED,
   SEVERITY,
@@ -43,14 +47,25 @@ describe("alert wording", () => {
   });
 
   it("gives likely causes the result labels' words, at most three", () => {
-    expect(likelyCauses(makeAlert())).toEqual([
-      { label: "Diuretic treatment", level: "high", word: "High confidence" },
+    expect(likelyCauses(makeAlert(), ALERT_NOW)).toEqual([
+      {
+        label: "Diuretic treatment",
+        level: "high",
+        word: "High confidence",
+        evidence: [],
+      },
       {
         label: "Vomiting or diarrhoea",
         level: "caution",
         word: "Use with caution",
+        evidence: [],
       },
-      { label: "Low magnesium", level: "review", word: "Needs review" },
+      {
+        label: "Low magnesium",
+        level: "review",
+        word: "Needs review",
+        evidence: [],
+      },
     ]);
     const four = makeAlert({
       likely_causes: [
@@ -58,7 +73,7 @@ describe("alert wording", () => {
         { label: "Fourth", confidence: "high" },
       ],
     });
-    expect(likelyCauses(four)).toHaveLength(3);
+    expect(likelyCauses(four, ALERT_NOW)).toHaveLength(3);
   });
 
   it("says who handled it and when", () => {
@@ -146,7 +161,9 @@ describe("alert wording", () => {
     expect(severityOf("critical")).toBe("critical");
     expect(severityOf("catastrophic")).toBe("urgent");
     expect(severityOf("constructor")).toBe("urgent");
-    expect(likelyCauses(makeAlert({ likely_causes: [] }))).toEqual([]);
+    expect(likelyCauses(makeAlert({ likely_causes: [] }), ALERT_NOW)).toEqual(
+      [],
+    );
     expect(
       likelyCauses(
         makeAlert({
@@ -155,8 +172,11 @@ describe("alert wording", () => {
             { label: "  ", confidence: "high" },
           ],
         }),
+        ALERT_NOW,
       ),
-    ).toEqual([{ label: "Odd", level: "review", word: "Needs review" }]);
+    ).toEqual([
+      { label: "Odd", level: "review", word: "Needs review", evidence: [] },
+    ]);
     expect(
       handledLine(
         makeAlert({ status: "handled", handled_by: null, handled_at: null }),
@@ -181,5 +201,51 @@ describe("alert wording", () => {
     for (const term of FORBIDDEN_TERMS)
       expect(shown.toLowerCase()).not.toContain(term.toLowerCase());
     expect(shown).not.toMatch(/\blab\b/i);
+  });
+});
+
+describe("evidence and routing", () => {
+  it("evidence reads label · value · time and stops at three", () => {
+    const ev = (
+      label: string,
+      value: string | null,
+      recorded_at: string | null,
+    ) => ({
+      label,
+      value,
+      recorded_at,
+    });
+    const cause = {
+      label: "Low magnesium",
+      confidence: "review" as const,
+      evidence: [
+        ev("Magnesium", "0.6 mmol/L (low)", at(8, 10)),
+        ev("Furosemide 40 mg daily", "started 19 Oct", null),
+        ev("Sodium", null, at(7, 5)),
+        ev("  ", "ignored", null),
+        ev("Fourth", "4", null),
+      ],
+    };
+    expect(EVIDENCE_MAX).toBe(3);
+    expect(evidenceOf(cause, ALERT_NOW)).toEqual([
+      "Magnesium · 0.6 mmol/L (low) · 08:10",
+      "Furosemide 40 mg daily · started 19 Oct",
+      "Sodium · 07:05",
+    ]);
+    expect(evidenceOf({ label: "x", confidence: "high" }, ALERT_NOW)).toEqual(
+      [],
+    );
+    expect(
+      likelyCauses({ likely_causes: [cause] }, ALERT_NOW)[0]!.evidence,
+    ).toHaveLength(3);
+  });
+
+  it("missing routing reads For you", () => {
+    expect(routingOf({})).toEqual({ to_you: true, queue: false });
+    expect(routingOf({ routing: { to_you: false, queue: true } })).toEqual({
+      to_you: false,
+      queue: true,
+    });
+    expect(ROUTE_LABEL).toEqual({ you: "For you", queue: "Hospital queue" });
   });
 });

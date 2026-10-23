@@ -13,7 +13,7 @@ import { NOTIFICATIONS_HREF } from "@/lib/notifications/popups";
 import { StatusChip } from "../corrections/chips";
 import { useDecisions } from "../corrections/decisions-provider";
 import { useAlerts } from "./alerts-provider";
-import { NotStandardisedChip, SeverityChip } from "./chips";
+import { NotStandardisedChip, RouteChip, SeverityChip } from "./chips";
 
 /** The latest few of each kind in the panel (spec §2). */
 export const BELL_ALERTS = 4;
@@ -157,6 +157,7 @@ export function NotificationBell() {
                       >
                         <span className="flex flex-wrap items-center gap-2">
                           <SeverityChip severity={al.severity} />
+                          <RouteChip alert={al} />
                           <b className="min-w-0 [overflow-wrap:anywhere]">
                             {al.patient.full_name}
                           </b>

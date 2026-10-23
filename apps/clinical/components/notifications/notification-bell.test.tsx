@@ -376,3 +376,24 @@ describe("SeverityChip", () => {
     expect(screen.getByText("Urgent").querySelector("svg")).toBeTruthy();
   });
 });
+
+describe("NotificationBell: routing", () => {
+  it("queue-only alerts count on the bell", async () => {
+    const queued = makeAlert({
+      id: "q1",
+      severity: "urgent",
+      routing: { to_you: false, queue: true },
+    });
+    alerts.listAlerts.mockResolvedValue({
+      alerts: [queued],
+      next_cursor: null,
+      sources: ["Main record"],
+    });
+    alerts.getUnreadCount.mockResolvedValue({ count: 1 });
+    const user = userEvent.setup();
+    ui();
+    await user.click(await bell("Notifications, 1 unread"));
+    const list = screen.getByRole("region", { name: "Patient alerts" });
+    expect(within(list).getByText("Hospital queue")).toBeVisible();
+  });
+});

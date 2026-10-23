@@ -430,3 +430,84 @@ describe("AlertCard", () => {
     expect(name.className).toContain("[overflow-wrap:anywhere]");
   });
 });
+
+describe("AlertCard: category, evidence and routing", () => {
+  const withEvidence = () =>
+    makeAlert({
+      category: { id: "blood-chemistry", label: "Blood chemistry" },
+      routing: { to_you: false, queue: true },
+      likely_causes: [
+        {
+          label: "Diuretic treatment",
+          confidence: "high",
+          evidence: [
+            {
+              label: "Furosemide 40 mg daily",
+              value: "started 19 Oct",
+              recorded_at: null,
+            },
+          ],
+        },
+        { label: "Low magnesium", confidence: "review" },
+      ],
+    });
+
+  it("shows Blood chemistry and the evidence under Diuretic treatment", () => {
+    renderWithAuth(
+      <AlertCard alert={withEvidence()} now={ALERT_NOW} showSource />,
+    );
+    const c = within(screen.getByRole("article"));
+    expect(c.getByText("Blood chemistry")).toBeVisible();
+    const list = c.getByRole("list", {
+      name: "Evidence for Diuretic treatment",
+    });
+    expect(
+      within(list).getByText("Furosemide 40 mg daily · started 19 Oct"),
+    ).toBeVisible();
+    expect(c.getByText("Evidence")).toBeVisible();
+  });
+
+  it("shows For you or Hospital queue with an icon", () => {
+    const { unmount } = renderWithAuth(
+      <AlertCard alert={withEvidence()} now={ALERT_NOW} showSource />,
+    );
+    const chip = screen.getByText("Hospital queue");
+    expect(chip.querySelector("svg")).not.toBeNull();
+    expect(screen.queryByText("For you")).toBeNull();
+    unmount();
+    renderWithAuth(
+      <AlertCard
+        alert={makeAlert({ routing: { to_you: true, queue: true } })}
+        now={ALERT_NOW}
+        showSource
+      />,
+    );
+    expect(screen.getByText("For you").querySelector("svg")).not.toBeNull();
+    expect(screen.queryByText("Hospital queue")).toBeNull();
+  });
+
+  it("no evidence draws no Evidence list", () => {
+    renderWithAuth(
+      <AlertCard alert={makeAlert()} now={ALERT_NOW} showSource />,
+    );
+    expect(screen.queryByText("Evidence")).toBeNull();
+    expect(screen.queryByRole("list", { name: /^Evidence for/ })).toBeNull();
+    // A missing routing reads For you.
+    expect(screen.getByText("For you")).toBeVisible();
+  });
+
+  it("has no control that sends anything to a patient", () => {
+    renderWithAuth(
+      <AlertCard alert={withEvidence()} now={ALERT_NOW} showSource />,
+    );
+    const controls = [
+      ...screen.getAllByRole("button"),
+      ...screen.queryAllByRole("link"),
+    ];
+    for (const el of controls) {
+      const name = el.textContent ?? "";
+      if (/open patient record/i.test(name)) continue;
+      expect(name).not.toMatch(/patient(?! record)/i);
+    }
+  });
+});

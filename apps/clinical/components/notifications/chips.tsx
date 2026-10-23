@@ -7,12 +7,20 @@ import {
   Info,
   OctagonAlert,
   ShieldCheck,
+  UserRound,
+  Users,
 } from "lucide-react";
-import type { AlertStatus, CauseConfidence } from "@/lib/api/alerts-contract";
+import type {
+  AlertOut,
+  AlertStatus,
+  CauseConfidence,
+} from "@/lib/api/alerts-contract";
 import { RESULT_LABEL } from "@/lib/labels";
 import {
   ALERT_STATUS_LABEL,
   NOT_STANDARDISED,
+  ROUTE_LABEL,
+  routingOf,
   SEVERITY,
   severityOf,
 } from "@/lib/notifications/alert-view";
@@ -76,6 +84,18 @@ export function CauseChip({ level }: { level: CauseConfidence }) {
     <Chip tone={tone}>
       <Icon aria-hidden className="size-3" />
       {RESULT_LABEL[level]}
+    </Chip>
+  );
+}
+
+/** Who the alert was sent to: "For you" or "Hospital queue", with an icon. */
+export function RouteChip({ alert }: { alert: Pick<AlertOut, "routing"> }) {
+  const toYou = routingOf(alert).to_you;
+  const Icon = toYou ? UserRound : Users;
+  return (
+    <Chip tone={toYou ? "brand" : "muted"}>
+      <Icon aria-hidden className="size-3" />
+      {toYou ? ROUTE_LABEL.you : ROUTE_LABEL.queue}
     </Chip>
   );
 }
