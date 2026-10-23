@@ -208,6 +208,11 @@ export type ActivityEvent = {
   hospital: Person | null;
   target: string | null;
   detail: string | null;
+  /**
+   * Why it was refused, as a code (a refused verify: `same_side` or
+   * `same_person`); the label puts it in words.
+   */
+  reason?: string | null;
 };
 
 /** The changes that need a second platform admin's approval. */

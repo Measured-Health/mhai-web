@@ -51,7 +51,9 @@ export const REASON_WORDS: Record<string, string> = {
   wrong_code: "Wrong code",
   locked: "Locked",
   not_covered: "Not covered by a clearance letter",
-  same_side: "Own hospital's letter",
+  // A verify refused (the 409 codes).
+  same_side: "Linked to the hospital",
+  same_person: "The letter names them",
   gone: "Already downloaded or expired",
   not_owner: "Made by someone else",
   // Rejecting, revoking and narrowing a clearance letter (Plan 11), in the
@@ -69,8 +71,12 @@ export const REASON_WORDS: Record<string, string> = {
   too_many_pages: "More than 20 pages",
   password_protected: "Password-protected file",
   failed_safety_check: "Didn't pass the safety check",
-  // A verify refused because the letter covers the platform admin.
-  covers_you: "The letter covers them",
+};
+
+/** Why a verify was refused, as the end of a sentence. */
+export const REFUSAL_WORDS: Record<string, string> = {
+  same_side: "they're linked to the hospital",
+  same_person: "the letter names them",
 };
 
 export const ROLE_WORDS: Record<ActorRole, string> = {
@@ -357,7 +363,9 @@ export const KINDS: Record<string, Kind> = {
     (e) => join("Opened a named patient list", patients(e)),
     { targets: ["patient", "clearance"] },
   ),
-  letter_uploaded: k(
+  // One name per event: the same as the platform's Activity actions
+  // (clearance_*, named_access_*).
+  clearance_uploaded: k(
     "named_access",
     letter(
       (t) => `Uploaded clearance letter ${t}`,
@@ -365,10 +373,10 @@ export const KINDS: Record<string, Kind> = {
     ),
     { targets: ["clearance"], named: true },
   ),
-  letter_refused: k("named_access", "A clearance letter file was refused", {
+  clearance_refused: k("named_access", "A clearance letter file was refused", {
     targets: ["clearance"],
   }),
-  letter_verified: k(
+  clearance_verified: k(
     "named_access",
     letter(
       (t) => `Verified clearance letter ${t}`,
@@ -376,7 +384,7 @@ export const KINDS: Record<string, Kind> = {
     ),
     { targets: ["clearance"], named: true },
   ),
-  letter_rejected: k(
+  clearance_rejected: k(
     "named_access",
     letter(
       (t) => `Rejected clearance letter ${t}`,
@@ -384,7 +392,7 @@ export const KINDS: Record<string, Kind> = {
     ),
     { targets: ["clearance"], named: true },
   ),
-  letter_narrowed: k(
+  clearance_narrowed: k(
     "named_access",
     letter(
       (t) => `Narrowed clearance letter ${t}`,
@@ -392,7 +400,7 @@ export const KINDS: Record<string, Kind> = {
     ),
     { targets: ["clearance"], named: true },
   ),
-  letter_revoked: k(
+  clearance_revoked: k(
     "named_access",
     letter(
       (t) => `Revoked clearance letter ${t}`,
@@ -400,17 +408,17 @@ export const KINDS: Record<string, Kind> = {
     ),
     { targets: ["clearance"], named: true },
   ),
-  letter_ended: k(
+  clearance_ended: k(
     "named_access",
     letter((t) => `Clearance letter ${t} ended`, "A clearance letter ended"),
     { targets: ["clearance"], named: true },
   ),
-  letter_viewed: k(
+  clearance_viewed: k(
     "named_access",
     letter((t) => `Viewed clearance letter ${t}`, "Viewed a clearance letter"),
     { targets: ["clearance"], named: true },
   ),
-  letter_reminder_sent: k(
+  clearance_reminder_sent: k(
     "named_access",
     letter(
       (t) => `Sent a reminder about clearance letter ${t}`,
@@ -418,62 +426,19 @@ export const KINDS: Record<string, Kind> = {
     ),
     { targets: ["clearance"], named: true },
   ),
-  named_switch_changed: k("named_access", "Changed the named access switch", {
-    targets: ["setting"],
-  }),
-  named_switch_requested: k(
-    "named_access",
-    "Asked to raise the named access switch",
-    { targets: ["setting"] },
-  ),
-  named_switch_approved: k(
-    "named_access",
-    "Approved raising the named access switch",
-    { targets: ["setting"] },
-  ),
-  named_switch_cancelled: k(
-    "named_access",
-    "Cancelled a request to raise the named access switch",
-    { targets: ["setting"] },
-  ),
-  verify_refused: k(
-    "named_access",
-    (e) =>
-      e.reason === "covers_you"
-        ? "Tried to verify a letter that covers them"
-        : "Tried to verify their own hospital's letter",
-    { targets: ["clearance"] },
-  ),
-  // The platform app's own Activity for letters and the switch (Plan 11b).
-  // Its letter target is "the clearance letter signed by …", so these name
-  // the target as it comes.
-  clearance_viewed: k(
-    "named_access",
-    named((t) => `Viewed ${t}`, "Viewed a clearance letter"),
-    { targets: ["clearance"], named: true },
-  ),
-  clearance_verified: k(
-    "named_access",
-    named((t) => `Verified ${t}`, "Verified a clearance letter"),
-    { targets: ["clearance"], named: true },
-  ),
-  clearance_rejected: k(
-    "named_access",
-    named((t) => `Rejected ${t}`, "Rejected a clearance letter"),
-    { targets: ["clearance"], named: true },
-  ),
-  clearance_revoked: k(
-    "named_access",
-    named((t) => `Revoked ${t}`, "Revoked a clearance letter"),
-    { targets: ["clearance"], named: true },
-  ),
+  // One refusal with a reason: same_side or same_person (the 409 codes).
   clearance_verify_refused: k(
     "named_access",
-    (e) =>
-      e.reason === "covers_you"
-        ? "Tried to verify a letter that covers them"
-        : "Tried to verify their own hospital's letter",
-    { targets: ["clearance"] },
+    (e) => {
+      const r = e.reason ?? "";
+      const why = Object.hasOwn(REFUSAL_WORDS, r) ? REFUSAL_WORDS[r] : null;
+      const what = letter(
+        (t) => `Couldn't verify clearance letter ${t}`,
+        "Couldn't verify a clearance letter",
+      )(e);
+      return why ? `${what}: ${why}` : what;
+    },
+    { targets: ["clearance"], named: true },
   ),
   named_access_requested: k(
     "named_access",

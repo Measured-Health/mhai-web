@@ -225,8 +225,8 @@ describe("the audit kinds", () => {
         "too_many_pages",
         "password_protected",
         "failed_safety_check",
-        // A platform admin the letter covers.
-        "covers_you",
+        // A verify refused because the letter names them.
+        "same_person",
       ].sort(),
     );
   });
@@ -245,55 +245,96 @@ describe("Plan 11's audit words", () => {
     expect(LETTER_STATUS_WORDS.waiting).toBe("Waiting for Measured Health");
   });
 
-  it("the switch's requested, approved and cancelled kinds", () => {
-    const e = auditEvent({
-      type: "named_access",
-      target: { kind: "setting", id: "named_access" },
-      reason: null,
-    });
-    expect(
-      KINDS.named_switch_requested.words({
-        ...e,
-        kind: "named_switch_requested",
-      }),
-    ).toBe("Asked to raise the named access switch");
-    expect(
-      KINDS.named_switch_approved.words({
-        ...e,
-        kind: "named_switch_approved",
-      }),
-    ).toBe("Approved raising the named access switch");
-    expect(
-      KINDS.named_switch_cancelled.words({
-        ...e,
-        kind: "named_switch_cancelled",
-      }),
-    ).toBe("Cancelled a request to raise the named access switch");
-    for (const kind of [
+  it("one name per event: the audit kinds are the Activity actions' names", () => {
+    for (const old of [
+      "letter_uploaded",
+      "letter_refused",
+      "letter_verified",
+      "letter_rejected",
+      "letter_narrowed",
+      "letter_revoked",
+      "letter_ended",
+      "letter_viewed",
+      "letter_reminder_sent",
+      "verify_refused",
+      "named_switch_changed",
       "named_switch_requested",
       "named_switch_approved",
       "named_switch_cancelled",
-      "named_switch_changed",
+    ])
+      expect(KINDS[old], old).toBeUndefined();
+    for (const kind of [
+      "clearance_uploaded",
+      "clearance_refused",
+      "clearance_verified",
+      "clearance_rejected",
+      "clearance_narrowed",
+      "clearance_revoked",
+      "clearance_ended",
+      "clearance_viewed",
+      "clearance_reminder_sent",
+      "clearance_verify_refused",
     ]) {
-      expect(KINDS[kind].type, kind).toBe("named_access");
-      expect(KINDS[kind].targets, kind).toEqual(["setting"]);
+      expect(KINDS[kind]!.type, kind).toBe("named_access");
+      expect(KINDS[kind]!.targets, kind).toEqual(["clearance"]);
     }
-  });
-
-  it("a verify refusal says whether it was their hospital or a letter that covers them", () => {
+    for (const kind of [
+      "named_access_requested",
+      "named_access_approved",
+      "named_access_cancelled",
+      "named_access_lowered",
+    ]) {
+      expect(KINDS[kind]!.type, kind).toBe("named_access");
+      expect(KINDS[kind]!.targets, kind).toEqual(["setting"]);
+    }
     const e = auditEvent({
       type: "named_access",
-      kind: "verify_refused",
+      kind: "clearance_verified",
+      target: { kind: "clearance", id: "cl_northgate_2026" },
+      reason: null,
+    });
+    expect(KINDS.clearance_verified!.words(e)).toBe(
+      "Verified clearance letter cl_northgate_2026",
+    );
+    const s = auditEvent({
+      type: "named_access",
+      kind: "named_access_requested",
+      target: {
+        kind: "setting",
+        id: "named_access",
+        name: "On for Havana Hospital",
+      },
+      reason: null,
+    });
+    expect(KINDS.named_access_requested!.words(s)).toBe(
+      "Asked to turn named access to On for Havana Hospital",
+    );
+    expect(
+      KINDS.named_access_lowered!.words({
+        ...s,
+        kind: "named_access_lowered",
+        target: null,
+      }),
+    ).toBe("Turned the named access switch down");
+  });
+
+  it("a verify refusal is one kind with a reason: same_side or same_person", () => {
+    const e = auditEvent({
+      type: "named_access",
+      kind: "clearance_verify_refused",
       outcome: "refused",
       target: { kind: "clearance", id: "cl_wait" },
       reason: "same_side",
     });
-    expect(KINDS.verify_refused.words(e)).toBe(
-      "Tried to verify their own hospital's letter",
+    expect(KINDS.clearance_verify_refused!.words(e)).toBe(
+      "Couldn't verify clearance letter cl_wait: they're linked to the hospital",
     );
-    expect(KINDS.verify_refused.words({ ...e, reason: "covers_you" })).toBe(
-      "Tried to verify a letter that covers them",
-    );
+    expect(
+      KINDS.clearance_verify_refused!.words({ ...e, reason: "same_person" }),
+    ).toBe("Couldn't verify clearance letter cl_wait: the letter names them");
+    expect(REASON_WORDS.same_side).toBe("Linked to the hospital");
+    expect(REASON_WORDS.same_person).toBe("The letter names them");
+    expect(REASON_WORDS.covers_you).toBeUndefined();
   });
 
   it("views are Plan 6's, and locations admitted, outpatient and emergency", () => {

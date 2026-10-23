@@ -45,7 +45,6 @@ async function failure(p: Promise<unknown>): Promise<[number, string]> {
 }
 
 const activity = async (m: Mock) => (await m.listActivity({})).events;
-const actions = async (m: Mock) => (await activity(m)).map((e) => e.action);
 const SIGNOFFS: Signoffs = {
   clinical: {
     by: "Dr. A. Musa, Clinical lead",
@@ -124,6 +123,8 @@ describe("mock clearances: the letters", () => {
       actor: { id: "tm_bola", name: "Bola Hassan" },
       hospital: { id: "h_havana", name: "Havana Hospital" },
       target: "the clearance letter signed by Dr. Funmi Ade",
+      reason: "same_side",
+      detail: null,
     });
     expect((await m.getClearance("cl_wait")).status).toBe("waiting");
     // Northgate is his to verify.
@@ -155,9 +156,11 @@ describe("mock clearances: the letters", () => {
         ),
       ),
     ).toEqual([409, "same_person"]);
-    expect((await actions(m)).slice(0, 2)).toEqual([
-      "clearance_verify_refused",
-      "clearance_verify_refused",
+    expect(
+      (await activity(m)).slice(0, 2).map((e) => [e.action, e.reason]),
+    ).toEqual([
+      ["clearance_verify_refused", "same_person"],
+      ["clearance_verify_refused", "same_person"],
     ]);
     as(TEAM_EMAILS.ada);
     const ok = await m.verifyClearance(

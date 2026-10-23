@@ -525,7 +525,7 @@ export function seedAudit(
   const ngClin = staffOf(ngH, "clinician");
   add({
     at: ago(92),
-    kind: "letter_uploaded",
+    kind: "clearance_uploaded",
     actor: ngAdmin,
     hospital: ngH,
     target: { kind: "clearance", id: LETTER_ID },
@@ -533,7 +533,7 @@ export function seedAudit(
   });
   add({
     at: ago(91.5),
-    kind: "letter_verified",
+    kind: "clearance_verified",
     actor: TUNDE,
     hospital: ngH,
     target: { kind: "clearance", id: LETTER_ID },

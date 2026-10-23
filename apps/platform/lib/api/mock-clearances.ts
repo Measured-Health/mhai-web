@@ -236,10 +236,7 @@ export function createClearanceMock(
     log(person(m), "clearance_verify_refused", {
       hospital: c.hospital,
       target: letterTarget(c),
-      detail:
-        code === "same_person"
-          ? "The letter covers them"
-          : "Linked to the hospital",
+      reason: code,
     });
     fail(409, code);
   }

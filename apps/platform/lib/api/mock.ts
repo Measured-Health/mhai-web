@@ -189,6 +189,7 @@ export type MockCore = {
       hospital?: Person | null;
       target?: string | null;
       detail?: string | null;
+      reason?: string | null;
     },
   ): void;
   /** The person's own two-step or backup code in `body`, else refused. */
@@ -297,10 +298,12 @@ export function createMockPlatform({
       hospital = null,
       target = null,
       detail = null,
+      reason,
     }: {
       hospital?: Person | null;
       target?: string | null;
       detail?: string | null;
+      reason?: string | null;
     } = {},
   ) {
     activity = [
@@ -312,6 +315,8 @@ export function createMockPlatform({
         hospital,
         target,
         detail,
+        // Only refusals carry a reason.
+        ...(reason ? { reason } : {}),
       },
       ...activity,
     ];

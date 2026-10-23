@@ -1,7 +1,20 @@
 import type { ActivityAction } from "@/lib/api/contract";
 
-/** What was done, as the end of a sentence after the person's name. */
-export function actionLabel(a: ActivityAction, target?: string | null): string {
+/** Why a verify was refused, by its code. */
+const REFUSED: Record<string, string> = {
+  same_side: "they're linked to the hospital",
+  same_person: "the letter names them",
+};
+
+/**
+ * What was done, as the end of a sentence after the person's name. `reason`
+ * is a refusal's code, put in words after it.
+ */
+export function actionLabel(
+  a: ActivityAction,
+  target?: string | null,
+  reason?: string | null,
+): string {
   const t = target?.trim() || null;
   switch (a) {
     case "hospital_added":
@@ -113,8 +126,12 @@ export function actionLabel(a: ActivityAction, target?: string | null): string {
       return `rejected ${t ?? "a clearance letter"}`;
     case "clearance_revoked":
       return `revoked ${t ?? "a clearance letter"}`;
-    case "clearance_verify_refused":
-      return `was refused verifying ${t ?? "a clearance letter"} (linked to the hospital)`;
+    case "clearance_verify_refused": {
+      const why =
+        reason && Object.hasOwn(REFUSED, reason) ? REFUSED[reason] : null;
+      const what = `couldn't verify ${t ?? "a letter"}`;
+      return why ? `${what}: ${why}` : what;
+    }
     // The switch: the target is "{position} for {hospital}".
     case "named_access_requested":
       return t

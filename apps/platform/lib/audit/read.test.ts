@@ -336,10 +336,10 @@ describe("readAuditEvent", () => {
     ).toBe(true);
   });
 
-  it("a staff target on letter_verified is undisplayable", () => {
+  it("a staff target on clearance_verified is undisplayable", () => {
     const letter = auditEvent({
       type: "named_access",
-      kind: "letter_verified",
+      kind: "clearance_verified",
       reason: null,
       target: { kind: "clearance", id: "cl_1", name: "cl_northgate_2026" },
     });

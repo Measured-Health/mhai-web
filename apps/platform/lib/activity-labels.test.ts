@@ -45,8 +45,7 @@ const WITH: Record<ActivityAction, string> = {
   clearance_verified: "verified Kemi",
   clearance_rejected: "rejected Kemi",
   clearance_revoked: "revoked Kemi",
-  clearance_verify_refused:
-    "was refused verifying Kemi (linked to the hospital)",
+  clearance_verify_refused: "couldn't verify Kemi",
   named_access_requested: "asked to turn named access to Kemi",
   named_access_approved: "approved turning named access to Kemi",
   named_access_cancelled: "cancelled turning named access to Kemi",
@@ -84,8 +83,7 @@ const WITHOUT: Partial<Record<ActivityAction, string>> = {
   clearance_verified: "verified a clearance letter",
   clearance_rejected: "rejected a clearance letter",
   clearance_revoked: "revoked a clearance letter",
-  clearance_verify_refused:
-    "was refused verifying a clearance letter (linked to the hospital)",
+  clearance_verify_refused: "couldn't verify a letter",
   named_access_requested: "asked to change named access",
   named_access_approved: "approved a change to named access",
   named_access_cancelled: "cancelled a change to named access",
@@ -125,8 +123,18 @@ describe("actionLabel", () => {
     expect(actionLabel("clearance_revoked", letter)).toBe(
       "revoked the clearance letter signed by Dr. Funmi Ade",
     );
-    expect(actionLabel("clearance_verify_refused", letter)).toBe(
-      "was refused verifying the clearance letter signed by Dr. Funmi Ade (linked to the hospital)",
+    expect(actionLabel("clearance_verify_refused", letter, "same_side")).toBe(
+      "couldn't verify the clearance letter signed by Dr. Funmi Ade: they're linked to the hospital",
+    );
+    expect(actionLabel("clearance_verify_refused", letter, "same_person")).toBe(
+      "couldn't verify the clearance letter signed by Dr. Funmi Ade: the letter names them",
+    );
+    expect(actionLabel("clearance_verify_refused", null, "same_side")).toBe(
+      "couldn't verify a letter: they're linked to the hospital",
+    );
+    // An unknown or inherited code adds nothing.
+    expect(actionLabel("clearance_verify_refused", null, "constructor")).toBe(
+      "couldn't verify a letter",
     );
     expect(
       actionLabel("named_access_requested", "On for Havana Hospital"),
