@@ -364,6 +364,21 @@ describe("revoking", () => {
     );
   });
 
+  it("refuses a revoke sent with a stale version (409 conflict); without one it goes through", async () => {
+    const c = as();
+    const { version } = await c.getClearance("cl_wait");
+    await c.narrowClearance(
+      "cl_wait",
+      { remove: ["pa_tunde"], reason: "person_left", version, ...GOOD },
+      key(),
+    );
+    const body = { reason: "other" as const, ...GOOD };
+    expect(
+      await code(c.revokeClearance("cl_wait", { ...body, version }, key())),
+    ).toBe("409 conflict");
+    expect(await code(c.revokeClearance("cl_wait", body, key()))).toBe("ok");
+  });
+
   it("needs the code", async () => {
     expect(
       await code(

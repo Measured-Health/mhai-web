@@ -1,4 +1,5 @@
 "use client";
+import { FileKey } from "lucide-react";
 import { useId } from "react";
 import type { HospitalSettingsOut, StaffOut } from "@/lib/api/admin-contract";
 import {
@@ -7,6 +8,11 @@ import {
   useStaffActivity,
 } from "@/lib/admin-queries";
 import { actorName, describeEvent } from "@/lib/admin/activity";
+import { useAuth } from "@/lib/auth/auth-context";
+import { canOpenNamedAccess } from "@/lib/auth/types";
+import { useClearances, useNamedAccess } from "@/lib/clearance-queries";
+import { safeDayLabel } from "@/lib/clearances/status";
+import { namedAccessFor } from "@/lib/clearances/summary";
 import { eventClock } from "@/lib/time";
 import { adminError } from "@/lib/admin/errors";
 import { inviteNote, policyBroken, sortName } from "@/lib/admin/staff";
@@ -29,6 +35,35 @@ const JOINED = new Intl.DateTimeFormat("en-GB", {
 function joined(s: StaffOut): string | null {
   const t = s.joined_at ? Date.parse(s.joined_at) : NaN;
   return Number.isFinite(t) ? `joined ${JOINED.format(t)}` : null;
+}
+
+/**
+ * This person's named access (Plan 11), from the hospital's letters:
+ * `undefined` while there is nothing to show (the switch isn't On, or the
+ * letters haven't loaded), `null` for none, or the latest end date.
+ */
+function useNamedAccessOf(
+  staffId: string,
+): { until: string } | null | undefined {
+  const { user } = useAuth();
+  const allowed = canOpenNamedAccess(user);
+  const position = useNamedAccess({ enabled: allowed });
+  const on = allowed && position.data?.position === "on";
+  const letters = useClearances({ enabled: on });
+  if (!on || !letters.data) return undefined;
+  return namedAccessFor(staffId, letters.data.clearances, letters.data.today);
+}
+
+function NamedAccessLine({ access }: { access: { until: string } | null }) {
+  const until = access ? safeDayLabel(access.until) : null;
+  return (
+    <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-ink-2">
+      <FileKey aria-hidden className="size-4 shrink-0" />
+      {until
+        ? `Named access until ${until} · letter on file`
+        : "No named access"}
+    </p>
+  );
 }
 
 /** The staff member side panel (hospital-admin.html tab 3). */
@@ -102,6 +137,7 @@ function Member({
   const activity = useStaffActivity(row.id);
   const recentId = useId();
   const note = inviteNote(row, now);
+  const named = useNamedAccessOf(row.id);
   return (
     <div className="flex flex-col gap-5">
       <header className="flex items-start gap-3">
@@ -115,6 +151,7 @@ function Member({
           <div className="mt-2">
             <StaffStatusChip staff={row} now={now} />
           </div>
+          {named !== undefined && <NamedAccessLine access={named} />}
         </div>
       </header>
 
@@ -133,12 +170,18 @@ function Member({
           row={row}
           list={list}
           specialties={settings.specialties}
+          named={!!named}
         />
       ) : (
         <Skeleton className="h-48" />
       )}
 
-      <AccountActions row={row} list={list} onRemoved={onClose} />
+      <AccountActions
+        row={row}
+        list={list}
+        onRemoved={onClose}
+        named={!!named}
+      />
 
       <section aria-labelledby={recentId}>
         <h3 id={recentId} className="mb-2 text-[13px] font-semibold">

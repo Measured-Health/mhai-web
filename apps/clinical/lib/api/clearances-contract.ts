@@ -98,6 +98,11 @@ export type NamedAccessOut = { position: NamedPosition; since: string | null };
 export type RevokeBody = {
   reason: RevokeReason;
   note?: string;
+  /**
+   * The letter's version as the admin saw it. When sent, a letter changed
+   * since is refused with 409 `conflict` (Review Focus 5).
+   */
+  version?: number;
 } & StepUp;
 
 export type NarrowBody = {

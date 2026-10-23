@@ -1,4 +1,5 @@
 "use client";
+import { TriangleAlert } from "lucide-react";
 import { useId, useState } from "react";
 import type {
   StaffOut,
@@ -10,6 +11,7 @@ import { adminError, type AdminError } from "@/lib/admin/errors";
 import { ROLE_LABEL, guardFor } from "@/lib/admin/staff";
 import { useAuth } from "@/lib/auth/auth-context";
 import { analysisOn } from "@/lib/auth/types";
+import { ENDS_NAMED } from "@/lib/clearances/summary";
 import { useNetwork } from "@mhai/api-client/network";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
@@ -71,10 +73,13 @@ export function AccessEditor({
   row,
   list,
   specialties,
+  named = false,
 }: {
   row: StaffOut;
   list: StaffOut[];
   specialties: string[];
+  /** A letter gives this person named access now (Plan 11). */
+  named?: boolean;
 }) {
   const update = useUpdateStaff();
   const toast = useToast();
@@ -84,6 +89,7 @@ export function AccessEditor({
   const lockId = useId();
   const offlineId = useId();
   const selfId = useId();
+  const endsId = useId();
   const [draft, setDraft] = useState(() => fromRow(row));
   const [seen, setSeen] = useState(row.version);
   const [error, setError] = useState<AdminError | null>(null);
@@ -102,6 +108,12 @@ export function AccessEditor({
   const clinician = draft.roles.includes("clinician");
   // Your own roles: allowed, but recorded and flagged in the activity log.
   const selfRoles = row.is_you && !!patch?.roles;
+  // A letter covers only analysts and hospital admins: losing both ends
+  // their named access. Said above Save, with no new confirm (ruling 8).
+  const endsNamed =
+    named &&
+    !!patch?.roles &&
+    !patch.roles.some((r) => r === "analyst" || r === "hospital_admin");
   const options =
     row.specialty && !specialties.includes(row.specialty)
       ? [row.specialty, ...specialties]
@@ -253,11 +265,20 @@ export function AccessEditor({
           hospital&apos;s admins. It takes effect next time you sign in.
         </p>
       )}
+      {endsNamed && (
+        <p
+          id={endsId}
+          className="flex items-center gap-1.5 text-[13px] font-semibold text-warn-deep"
+        >
+          <TriangleAlert aria-hidden className="size-4 shrink-0" />
+          {ENDS_NAMED}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           disabled={!patch || !!problem || !online || update.isPending}
           aria-describedby={
-            [!online && offlineId, selfRoles && selfId]
+            [!online && offlineId, selfRoles && selfId, endsNamed && endsId]
               .filter(Boolean)
               .join(" ") || undefined
           }

@@ -63,10 +63,15 @@ export function createLiveClearances({
         headers: keyHeader(opts),
       });
     },
-    revokeClearance(c, { reason, note, ...auth }, opts) {
+    revokeClearance(c, { reason, note, version, ...auth }, opts) {
       return post(
         `/hospital/clearances/${id(c)}/revoke`,
-        { reason, ...(note ? { note } : {}), ...code(auth as StepUp) },
+        {
+          reason,
+          ...(note ? { note } : {}),
+          ...(version !== undefined ? { version } : {}),
+          ...code(auth as StepUp),
+        },
         opts,
       );
     },

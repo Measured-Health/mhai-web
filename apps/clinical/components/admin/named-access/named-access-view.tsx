@@ -8,6 +8,7 @@ import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { Skeleton } from "@mhai/ui/skeleton";
 import { AdminFrame } from "../admin-frame";
+import { LetterDetail } from "./letter-detail";
 import { LetterList } from "./letter-list";
 import { UploadDialog } from "./upload-dialog";
 
@@ -42,8 +43,8 @@ export function NamedAccessView() {
   const { online } = useNetwork();
   const offlineId = useId();
   const [uploading, setUploading] = useState(false);
-  // The letter's details open from here (Task 6). Held in memory only, never the URL.
-  const [, setOpenId] = useState<string | null>(null);
+  // The open letter: held in memory only, never the URL.
+  const [openId, setOpenId] = useState<string | null>(null);
 
   let content;
   if (named.isError)
@@ -127,6 +128,7 @@ export function NamedAccessView() {
     >
       {content}
       <UploadDialog open={uploading} onClose={() => setUploading(false)} />
+      <LetterDetail id={on ? openId : null} onClose={() => setOpenId(null)} />
     </AdminFrame>
   );
 }
