@@ -51,11 +51,11 @@
 - **Many connections per hospital** (D3). The platform lists them by hospital; there is no "the" connection. Havana has two, labelled "Main record" and "Results system", which are `MOCK_SOURCES` in the clinical mock, so the two demos agree.
 - **Connector types are data** (D4). `GET platform/emr/connector-types` returns each type's label, one-line summary and fields. The form renders those fields; adding a type needs no code. Sample types:
 
-  | id            | label                   | summary                                         | fields (key · label · kind)                                                     |
-  | ------------- | ----------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------- |
-  | `fhir_r4`     | FHIR R4 server          | Reads records from a FHIR R4 server             | `client_id` · Client ID · text; `private_key` · Private key · secret            |
-  | `hl7v2_feed`  | Results message feed    | Receives results messages as they are sent      | `sender_id` · Sending system ID · text; `shared_key` · Shared key · secret       |
-  | `file_export` | Scheduled file export   | Collects an export file from a secure folder    | `folder` · Folder · text; `access_key` · Access key · secret                    |
+  | id            | label                 | summary                                      | fields (key · label · kind)                                                |
+  | ------------- | --------------------- | -------------------------------------------- | -------------------------------------------------------------------------- |
+  | `fhir_r4`     | FHIR R4 server        | Reads records from a FHIR R4 server          | `client_id` · Client ID · text; `private_key` · Private key · secret       |
+  | `hl7v2_feed`  | Results message feed  | Receives results messages as they are sent   | `sender_id` · Sending system ID · text; `shared_key` · Shared key · secret |
+  | `file_export` | Scheduled file export | Collects an export file from a secure folder | `folder` · Folder · text; `access_key` · Access key · secret               |
 
   The base address and source label are fixed fields on every connection, not per type.
 
@@ -121,13 +121,13 @@ README.md, ARCHITECTURE.md, CHANGELOG.md, CONTRIBUTING.md, apps/clinical/tests/r
 
 **Files shared between tasks** (sequenced by the Parallel work section):
 
-| File                                                               | Tasks          | Kind of clash                               |
-| ------------------------------------------------------------------ | -------------- | ------------------------------------------- |
-| `apps/platform/lib/api/contract.ts`, `mock.ts`, `live.ts`, `route.ts` | 1 only        | none inside Plan 13                         |
-| `apps/platform/components/shell/nav.ts`, `hospital-view.tsx`      | 3 only         | none inside Plan 13                         |
-| `apps/clinical/lib/api/alerts-contract.ts`, `mock-alerts.ts`      | 4 (types, data), 6 reads only | Task 6 starts after Task 4       |
-| `apps/clinical/lib/labels.ts` (`FORBIDDEN_TERMS`)                 | 4 only         | none                                        |
-| `apps/*/tests/e2e/helpers.ts`, README, ARCHITECTURE, CHANGELOG    | 7 only         | none inside Plan 13                         |
+| File                                                                  | Tasks                         | Kind of clash              |
+| --------------------------------------------------------------------- | ----------------------------- | -------------------------- |
+| `apps/platform/lib/api/contract.ts`, `mock.ts`, `live.ts`, `route.ts` | 1 only                        | none inside Plan 13        |
+| `apps/platform/components/shell/nav.ts`, `hospital-view.tsx`          | 3 only                        | none inside Plan 13        |
+| `apps/clinical/lib/api/alerts-contract.ts`, `mock-alerts.ts`          | 4 (types, data), 6 reads only | Task 6 starts after Task 4 |
+| `apps/clinical/lib/labels.ts` (`FORBIDDEN_TERMS`)                     | 4 only                        | none                       |
+| `apps/*/tests/e2e/helpers.ts`, README, ARCHITECTURE, CHANGELOG        | 7 only                        | none inside Plan 13        |
 
 **Files shared with other in-flight plans:** `nav.ts` and `SHAPES` (Plan 12), `contract.ts` `ActivityAction`, `lib/audit/kinds.ts`, `admin-contract.ts` `ActivityKind`, `admin-nav.tsx`, README/CHANGELOG/ARCHITECTURE. All appended lines; whichever merges second rebases.
 
@@ -250,46 +250,46 @@ export const BASE_URL_MAX = 500;
 
 **`lib/emr/labels.ts`** (the only place these words live):
 
-| Code                | Words                                                                    |
-| ------------------- | ------------------------------------------------------------------------ |
-| `not_tested`        | Not tested                                                               |
-| `connected`         | Connected                                                                |
-| `needs_attention`   | Needs attention                                                          |
-| `off`               | Switched off                                                             |
-| `unreachable`       | Couldn't reach the record system                                         |
-| `sign_in_refused`   | The record system refused the sign-in. Check the credentials.            |
-| `timed_out`         | The record system took too long to answer                                |
-| `unreadable_data`   | Some records couldn't be read                                            |
-| `unmapped_codes`    | Some results use codes MHAI doesn't know yet                             |
-| `too_many_requests` | The record system asked MHAI to slow down                                |
-| unknown             | Something went wrong with this connection.                               |
+| Code                | Words                                                         |
+| ------------------- | ------------------------------------------------------------- |
+| `not_tested`        | Not tested                                                    |
+| `connected`         | Connected                                                     |
+| `needs_attention`   | Needs attention                                               |
+| `off`               | Switched off                                                  |
+| `unreachable`       | Couldn't reach the record system                              |
+| `sign_in_refused`   | The record system refused the sign-in. Check the credentials. |
+| `timed_out`         | The record system took too long to answer                     |
+| `unreadable_data`   | Some records couldn't be read                                 |
+| `unmapped_codes`    | Some results use codes MHAI doesn't know yet                  |
+| `too_many_requests` | The record system asked MHAI to slow down                     |
+| unknown             | Something went wrong with this connection.                    |
 
 `STATE_ICON` maps each state to a lucide icon (`CheckCircle2`, `CircleAlert`, `CirclePause`, `CircleDashed`). `syncLine(c, now)`: "Last update {time} · {n} records" or "No updates yet".
 
 **Proxy shapes and live paths:**
 
-| Method | Path                                        |
-| ------ | ------------------------------------------- |
-| GET    | `platform/emr/connector-types`              |
-| GET    | `platform/emr/connections`                  |
-| POST   | `platform/hospitals/{id}/emr/connections`   |
-| GET    | `platform/emr/connections/{id}`             |
-| PATCH  | `platform/emr/connections/{id}`             |
-| PUT    | `platform/emr/connections/{id}/enabled`     |
-| POST   | `platform/emr/connections/{id}/test`        |
+| Method | Path                                      |
+| ------ | ----------------------------------------- |
+| GET    | `platform/emr/connector-types`            |
+| GET    | `platform/emr/connections`                |
+| POST   | `platform/hospitals/{id}/emr/connections` |
+| GET    | `platform/emr/connections/{id}`           |
+| PATCH  | `platform/emr/connections/{id}`           |
+| PUT    | `platform/emr/connections/{id}/enabled`   |
+| POST   | `platform/emr/connections/{id}/test`      |
 
 **Activity and audit words:**
 
-| Action / kind                 | Activity (after the name)                            | Audit log                                                         |
-| ----------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------- |
-| `emr_connection_added`        | added the record connection “{t}”                    | Added the record connection “{t}” for {hospital}                  |
-| `emr_connection_changed`      | changed the record connection “{t}”                  | Changed the record connection “{t}” for {hospital}                |
-| `emr_connection_switched_on`  | switched on the record connection “{t}”              | Switched on the record connection “{t}” for {hospital}            |
-| `emr_connection_switched_off` | switched off the record connection “{t}”             | Switched off the record connection “{t}” for {hospital}           |
-| `emr_connection_tested`       | tested the record connection “{t}”                   | Tested the record connection “{t}” for {hospital}                 |
-| `alert_units_changed`         | (hospital side; not a platform action)               | Changed which units alerts cover                                  |
-| `alert_rules_changed`         | (hospital side)                                      | Changed what alerts flag                                          |
-| `alert_recipients_changed`    | (hospital side)                                      | Changed who gets alerts                                           |
+| Action / kind                 | Activity (after the name)                | Audit log                                               |
+| ----------------------------- | ---------------------------------------- | ------------------------------------------------------- |
+| `emr_connection_added`        | added the record connection “{t}”        | Added the record connection “{t}” for {hospital}        |
+| `emr_connection_changed`      | changed the record connection “{t}”      | Changed the record connection “{t}” for {hospital}      |
+| `emr_connection_switched_on`  | switched on the record connection “{t}”  | Switched on the record connection “{t}” for {hospital}  |
+| `emr_connection_switched_off` | switched off the record connection “{t}” | Switched off the record connection “{t}” for {hospital} |
+| `emr_connection_tested`       | tested the record connection “{t}”       | Tested the record connection “{t}” for {hospital}       |
+| `alert_units_changed`         | (hospital side; not a platform action)   | Changed which units alerts cover                        |
+| `alert_rules_changed`         | (hospital side)                          | Changed what alerts flag                                |
+| `alert_recipients_changed`    | (hospital side)                          | Changed who gets alerts                                 |
 
 Without a target, "the record connection" replaces “{t}”. `emr_connection_changed` has `detail` "Credentials replaced" when a secret was sent; never the secret.
 
@@ -307,13 +307,13 @@ Without a target, "the record connection" replaces “{t}”. `emr_connection_ch
 
 **Fixtures** (`emr-fixtures.ts`; times relative to `now`):
 
-| id          | Hospital      | Type          | Source label     | State                                                                                  |
-| ----------- | ------------- | ------------- | ---------------- | -------------------------------------------------------------------------------------- |
-| `emr_hv1`   | Havana        | `fhir_r4`     | Main record      | Connected; last sync 2 min ago, 1,284 records; tested ok 30 days ago                    |
-| `emr_hv2`   | Havana        | `hl7v2_feed`  | Results system   | Connected; last sync 1 min ago, 312 records                                            |
-| `emr_ng1`   | Northgate     | `fhir_r4`     | Patient record   | Needs attention; `sign_in_refused` ×3 today (latest 25 min ago), last good sync 6 h ago |
-| `emr_rc1`   | Riverside     | `file_export` | Nightly export   | Switched off by Ada 5 days ago; tested ok                                              |
-| `emr_wf1`   | Westfield     | `fhir_r4`     | Main record      | Not tested; added by Tunde 1 hour ago; private key not set                             |
+| id        | Hospital  | Type          | Source label   | State                                                                                   |
+| --------- | --------- | ------------- | -------------- | --------------------------------------------------------------------------------------- |
+| `emr_hv1` | Havana    | `fhir_r4`     | Main record    | Connected; last sync 2 min ago, 1,284 records; tested ok 30 days ago                    |
+| `emr_hv2` | Havana    | `hl7v2_feed`  | Results system | Connected; last sync 1 min ago, 312 records                                             |
+| `emr_ng1` | Northgate | `fhir_r4`     | Patient record | Needs attention; `sign_in_refused` ×3 today (latest 25 min ago), last good sync 6 h ago |
+| `emr_rc1` | Riverside | `file_export` | Nightly export | Switched off by Ada 5 days ago; tested ok                                               |
+| `emr_wf1` | Westfield | `fhir_r4`     | Main record    | Not tested; added by Tunde 1 hour ago; private key not set                              |
 
 Base addresses use `https://records.{hospital}.example/...`. Eastbrook, Harbour View, Southpoint and Hilltop have none.
 
@@ -432,8 +432,7 @@ Task 3 uses `StateChip` and the hooks from Task 2. To run in parallel with Task 
 **Interfaces (`emr-contract.ts`):**
 
 ```ts
-export type RecordsStatus =
-  "connected" | "problems" | "off" | "not_connected";
+export type RecordsStatus = "connected" | "problems" | "off" | "not_connected";
 export interface RecordsSourceOut {
   /** The hospital's own label, e.g. "Main record". */
   label: string;
@@ -485,8 +484,12 @@ export interface EmrClient {
     opts?: WriteOpts,
   ): Promise<AlertSettingsOut>;
 }
-export const FLAG_LEVELS: readonly FlagLevel[] =
-  ["off", "critical", "critical_urgent", "all"];
+export const FLAG_LEVELS: readonly FlagLevel[] = [
+  "off",
+  "critical",
+  "critical_urgent",
+  "all",
+];
 ```
 
 **Alert additions (`alerts-contract.ts`):**
