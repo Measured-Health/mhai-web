@@ -67,7 +67,8 @@ function hospitalShape(method: string, path: string[]): boolean {
       STAFF_ACTIONS.has(action ?? "")
     );
   }
-  if (area === "settings")
+  // Alert settings (Plan 13): one section per PATCH, no two-step code (D8).
+  if (area === "settings" || area === "alert-settings")
     return n === 2 && (method === "GET" || method === "PATCH");
   if (area === "clearances") return clearanceShape(method, path);
   if (READ_ONLY.has(area ?? "")) return n === 2 && method === "GET";
@@ -263,6 +264,15 @@ const analysisShape = (method: string, [, second, third, ...rest]: string[]) =>
     : second === "clearance" && third === "me");
 
 const ALERT_ACTIONS = new Set(["acknowledge", "dismiss"]);
+const SENT_TO = new Set(["you", "queue"]);
+
+/** The alerts list's `sent_to`, when given, is exactly one of `you` or `queue` (Plan 13). */
+function alertQueryOk(req: Request, path: string[]): boolean {
+  if (req.method !== "GET" || path[0] !== "alerts" || path.length !== 1)
+    return true;
+  const sent = new URL(req.url).searchParams.getAll("sent_to");
+  return sent.length === 0 || (sent.length === 1 && SENT_TO.has(sent[0]!));
+}
 
 /**
  * Patient alerts and your notification settings: exactly the shapes the
@@ -363,6 +373,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   // The key is on, but this person's named access may not be.
   if (!namedGateHolds(req, path, s.user))
     return json(403, { code: "named_access_off" });
+  if (!alertQueryOk(req, path)) return json(400, { code: "invalid" });
   if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
 
   let body: string | Uint8Array<ArrayBuffer> | undefined;

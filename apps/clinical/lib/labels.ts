@@ -102,6 +102,15 @@ export const FORBIDDEN_TERMS = [
   "dismiss_reasons",
   "top_findings",
   "top_locations",
+  "no_recipients",
+  "critical_urgent",
+  "sent_to",
+  "by_route",
+  "to_you",
+  "not_connected",
+  "alert_units_changed",
+  "alert_rules_changed",
+  "alert_recipients_changed",
 ] as const;
 
 export function citationTag(action: Citation["action"]): {

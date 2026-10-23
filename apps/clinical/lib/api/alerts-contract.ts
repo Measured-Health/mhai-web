@@ -38,9 +38,29 @@ export interface FindingOut {
   standardised: boolean;
 }
 
+/** One piece of evidence behind a likely cause: clinical values and dates, never an identifier. */
+export interface EvidenceOut {
+  /** e.g. "Furosemide 40 mg daily", "Magnesium". */
+  label: string;
+  /** e.g. "0.6 mmol/L (low)", "started 19 Oct". */
+  value: string | null;
+  /** ISO 8601. */
+  recorded_at: string | null;
+}
+
 export interface LikelyCauseOut {
   label: string;
   confidence: CauseConfidence;
+  /** At most three. Missing means none: nothing is drawn. */
+  evidence?: EvidenceOut[];
+}
+
+/** Who an alert was sent to. Missing reads `{ to_you: true, queue: false }`. */
+export interface AlertRoutingOut {
+  /** You were named for it (for you, with pop-ups). */
+  to_you: boolean;
+  /** It is on the hospital queue. */
+  queue: boolean;
 }
 
 export interface AlertPatientOut {
@@ -70,13 +90,20 @@ export interface AlertOut {
   handled_at: string | null;
   dismiss_reason: DismissReason | null;
   created_at: string;
+  /** What the alert is about, by the hospital's category label. */
+  category?: { id: string; label: string } | null;
+  routing?: AlertRoutingOut;
 }
+
+/** `you`: alerts routed to you; `queue`: alerts on the hospital queue only. */
+export type AlertSentTo = "you" | "queue";
 
 export interface AlertQuery {
   status?: AlertStatus;
   severity?: AlertSeverity;
   /** One of the list's `sources`. */
   source?: string;
+  sent_to?: AlertSentTo;
   cursor?: string;
   limit?: number;
 }
@@ -87,6 +114,8 @@ export interface AlertPageOut {
   next_cursor: string | null;
   /** The hospital's own labels for its connected systems (R10). */
   sources: string[];
+  /** The hospital uses the queue, so the list offers the Sent to filter. */
+  queue?: boolean;
 }
 
 export interface UnreadCountOut {

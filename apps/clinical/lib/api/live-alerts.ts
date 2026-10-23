@@ -10,6 +10,7 @@ const query = (q: AlertQuery) => {
   if (q.status) p.set("status", q.status);
   if (q.severity) p.set("severity", q.severity);
   if (q.source) p.set("source", q.source);
+  if (q.sent_to) p.set("sent_to", q.sent_to);
   if (q.cursor) p.set("cursor", q.cursor);
   if (q.limit) p.set("limit", String(q.limit));
   const s = p.toString();

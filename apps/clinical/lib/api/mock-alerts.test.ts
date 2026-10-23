@@ -231,6 +231,123 @@ describe("sample alerts", () => {
     setItem.mockRestore();
   });
 
+  it("sent_to you lists only alerts routed to you", async () => {
+    const page = await mockAlerts().listAlerts({ sent_to: "you" });
+    expect(page.queue).toBe(true);
+    expect(page.alerts.length).toBeGreaterThan(0);
+    for (const a of page.alerts) expect(a.routing?.to_you, a.id).toBe(true);
+    expect(page.alerts.map((a) => a.id)).toContain("al-101");
+    expect(page.alerts.map((a) => a.id)).not.toContain("al-102");
+  });
+
+  it("sent_to queue lists only queue-only alerts", async () => {
+    const m = mockAlerts();
+    const page = await m.listAlerts({ sent_to: "queue" });
+    expect(page.queue).toBe(true);
+    for (const a of page.alerts)
+      expect(a.routing, a.id).toEqual({ to_you: false, queue: true });
+    const ids = page.alerts.map((a) => a.id);
+    // al-101 is in the queue too, but it's for you.
+    expect(ids).toContain("al-102");
+    expect(ids).not.toContain("al-101");
+    expect(
+      page.alerts.some((a) => a.severity === "urgent" && a.status === "new"),
+    ).toBe(true);
+    const all = (await m.listAlerts({})).alerts.length;
+    const you = (await m.listAlerts({ sent_to: "you" })).alerts.length;
+    expect(you + page.alerts.length).toBe(all);
+    expect((await m.listAlerts({})).queue).toBe(true);
+  });
+
+  it("every seed has a category, routing and at most three pieces of evidence per cause", async () => {
+    const { alerts } = await mockAlerts().listAlerts({});
+    for (const a of alerts) {
+      expect(a.category, a.id).toEqual({
+        id: expect.stringMatching(/^[a-z-]+$/),
+        label: expect.any(String),
+      });
+      expect(a.routing, a.id).toEqual({
+        to_you: expect.any(Boolean),
+        queue: expect.any(Boolean),
+      });
+      expect(a.routing!.to_you || a.routing!.queue, a.id).toBe(true);
+      for (const c of a.likely_causes) {
+        expect(Array.isArray(c.evidence), a.id).toBe(true);
+        expect(c.evidence!.length, a.id).toBeLessThanOrEqual(3);
+      }
+    }
+    const one = alerts.find((a) => a.id === "al-101")!;
+    expect(one.category).toEqual({
+      id: "blood-chemistry",
+      label: "Blood chemistry",
+    });
+    expect(one.routing).toEqual({ to_you: true, queue: true });
+    const ev = Object.fromEntries(
+      one.likely_causes.map((c) => [c.label, c.evidence]),
+    );
+    expect(ev["Diuretic treatment"]).toEqual([
+      {
+        label: "Furosemide 40 mg daily",
+        value: "started 19 Oct",
+        recorded_at: null,
+      },
+    ]);
+    expect(ev["Low magnesium"]).toEqual([
+      {
+        label: "Magnesium",
+        value: "0.6 mmol/L (low)",
+        recorded_at: new Date(
+          Date.parse(one.created_at) - 86_400_000,
+        ).toISOString(),
+      },
+    ]);
+    const lactate = alerts.find((a) => a.id === "al-102")!;
+    expect(lactate.severity).toBe("critical");
+    expect(lactate.routing).toEqual({ to_you: false, queue: true });
+    expect(
+      alerts.some(
+        (a) =>
+          a.severity === "info" &&
+          a.routing!.to_you &&
+          a.likely_causes.length > 0 &&
+          a.likely_causes.every((c) => c.evidence!.length === 0),
+      ),
+    ).toBe(true);
+    // Evidence is clinical values and dates, never an identifier.
+    const text = JSON.stringify(alerts.map((a) => a.likely_causes));
+    for (const a of alerts) {
+      expect(text).not.toContain(a.patient.mrn);
+      expect(text).not.toContain(a.patient.full_name);
+    }
+  });
+
+  it("alternates arrivals for you and for the hospital queue", async () => {
+    let t = ALERT_NOW;
+    const m = createMockAlerts({
+      now: () => t,
+      me: async () => "Dr. Reyes",
+      delayMs: 0,
+    });
+    t += 4 * MOCK_ALERT_EVERY_MS;
+    const { alerts } = await m.listAlerts({ status: "new" });
+    const byId = Object.fromEntries(alerts.map((a) => [a.id, a]));
+    expect(byId["al-n1"]!.routing).toEqual({ to_you: true, queue: false });
+    expect(byId["al-n2"]!.routing).toEqual({ to_you: false, queue: true });
+    expect(byId["al-n3"]!.routing).toEqual({ to_you: true, queue: false });
+    // The fourth is the queue-only Urgent one (Review Focus 5).
+    expect(byId["al-n4"]).toMatchObject({
+      severity: "urgent",
+      routing: { to_you: false, queue: true },
+    });
+    for (const a of alerts) expect(a.category, a.id).toBeTruthy();
+  });
+
+  it("refuses an unknown sent_to", async () => {
+    await expect(
+      mockAlerts().listAlerts({ sent_to: "other" as never }),
+    ).rejects.toMatchObject({ status: 400, code: "invalid" });
+  });
+
   it("returns copies, so callers can't change the samples", async () => {
     const m = mockAlerts();
     const { alerts } = await m.listAlerts({});

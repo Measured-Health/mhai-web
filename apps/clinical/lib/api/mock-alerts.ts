@@ -3,6 +3,8 @@ import type { AlertsClient } from "./alerts";
 import type {
   AlertLocationOut,
   AlertOut,
+  AlertRoutingOut,
+  AlertSentTo,
   AlertSeverity,
   CauseConfidence,
   DismissReason,
@@ -10,6 +12,7 @@ import type {
   NotificationSettingsOut,
 } from "./alerts-contract";
 import type { Sex, WriteOpts } from "./contract";
+import { categoryRef } from "./emr-fixtures";
 import { AlertHandledError, ApiError } from "./errors";
 
 /** In the demo a new sample alert arrives this often (spec §7). */
@@ -21,7 +24,9 @@ export const MOCK_SOURCES = ["Main record", "Results system"] as const;
 export const ALERT_PAGE_SIZE = 20;
 
 const MIN = 60_000;
+const DAY = 24 * 60 * MIN;
 const NOTE_MAX = 500;
+const SENT_TO = new Set<AlertSentTo>(["you", "queue"]);
 const REASONS = new Set<DismissReason>([
   "not_relevant",
   "already_known",
@@ -30,6 +35,17 @@ const REASONS = new Set<DismissReason>([
 ]);
 
 type Source = (typeof MOCK_SOURCES)[number];
+
+/** One piece of evidence: label, value, and how long before the alert it was recorded (null: no time). */
+type Evidence = [label: string, value: string | null, before: number | null];
+type Cause = [
+  label: string,
+  confidence: CauseConfidence,
+  evidence?: Evidence[],
+];
+
+const FOR_YOU: AlertRoutingOut = { to_you: true, queue: false };
+const QUEUE_ONLY: AlertRoutingOut = { to_you: false, queue: true };
 
 /** One synthetic alert. Every name and MRN here is invented. */
 interface Sample {
@@ -42,7 +58,9 @@ interface Sample {
     range: string | null;
     standardised?: boolean;
   };
-  causes: [string, CauseConfidence][];
+  causes: Cause[];
+  /** One of the sample categories (`emr-fixtures`). */
+  category: string;
   name: string;
   mrn: string;
   location: AlertLocationOut | null;
@@ -54,6 +72,7 @@ interface Sample {
 interface Seed extends Sample {
   id: string;
   minutesAgo: number;
+  routing: AlertRoutingOut;
   handled?: {
     status: "handled" | "dismissed";
     by: string;
@@ -66,6 +85,7 @@ const SEEDS: Seed[] = [
   {
     id: "al-101",
     minutesAgo: 18,
+    routing: { to_you: true, queue: true },
     severity: "critical",
     finding: {
       name: "Potassium",
@@ -75,10 +95,15 @@ const SEEDS: Seed[] = [
       range: "3.5–5.1",
     },
     causes: [
-      ["Diuretic treatment", "high"],
-      ["Vomiting or diarrhoea", "caution"],
-      ["Low magnesium", "review"],
+      [
+        "Diuretic treatment",
+        "high",
+        [["Furosemide 40 mg daily", "started 19 Oct", null]],
+      ],
+      ["Vomiting or diarrhoea", "caution", []],
+      ["Low magnesium", "review", [["Magnesium", "0.6 mmol/L (low)", DAY]]],
     ],
+    category: "blood-chemistry",
     name: "Maryam Abdullahi",
     mrn: "204817",
     location: { kind: "admitted", ward: "Ward 3", bed: "Bed 12" },
@@ -89,6 +114,7 @@ const SEEDS: Seed[] = [
   {
     id: "al-102",
     minutesAgo: 35,
+    routing: QUEUE_ONLY,
     severity: "critical",
     finding: {
       name: "Lactate",
@@ -98,9 +124,21 @@ const SEEDS: Seed[] = [
       range: "0.5–2.2",
     },
     causes: [
-      ["Sepsis", "caution"],
-      ["Poor blood flow to the tissues", "review"],
+      [
+        "Sepsis",
+        "caution",
+        [
+          ["Temperature", "38.9 °C (high)", 50 * MIN],
+          ["White cells", "17.2 ×10⁹/L (high)", 40 * MIN],
+        ],
+      ],
+      [
+        "Poor blood flow to the tissues",
+        "review",
+        [["Blood pressure", "84/50 mmHg (low)", 30 * MIN]],
+      ],
     ],
+    category: "blood-gases",
     name: "Ibrahim Danladi",
     mrn: "377190",
     location: { kind: "emergency" },
@@ -111,6 +149,7 @@ const SEEDS: Seed[] = [
   {
     id: "al-103",
     minutesAgo: 52,
+    routing: QUEUE_ONLY,
     severity: "urgent",
     finding: {
       name: "Haemoglobin",
@@ -120,10 +159,22 @@ const SEEDS: Seed[] = [
       range: "12.0–15.5",
     },
     causes: [
-      ["Bleeding", "caution"],
-      ["Iron deficiency", "caution"],
-      ["Long-term kidney disease", "review"],
+      [
+        "Bleeding",
+        "caution",
+        [
+          ["Haemoglobin", "10.4 g/dL", 30 * DAY],
+          ["Aspirin 75 mg daily", "taking", null],
+        ],
+      ],
+      ["Iron deficiency", "caution", [["Ferritin", "9 µg/L (low)", 60 * DAY]]],
+      [
+        "Long-term kidney disease",
+        "review",
+        [["Creatinine", "142 µmol/L (high)", 60 * DAY]],
+      ],
     ],
+    category: "blood-count",
     name: "Esther Okoye",
     mrn: "128844",
     location: { kind: "outpatient", clinic: "Cardiology clinic" },
@@ -134,6 +185,7 @@ const SEEDS: Seed[] = [
   {
     id: "al-104",
     minutesAgo: 70,
+    routing: FOR_YOU,
     severity: "urgent",
     finding: {
       name: "Heart rate",
@@ -143,9 +195,10 @@ const SEEDS: Seed[] = [
       range: "60–100",
     },
     causes: [
-      ["Fever", "caution"],
-      ["Dehydration", "review"],
+      ["Fever", "caution", [["Temperature", "38.4 °C (high)", 20 * MIN]]],
+      ["Dehydration", "review", []],
     ],
+    category: "vital-signs",
     name: "Oluwafunmilayo Adebayo-Ogunleye-Fashola",
     mrn: "559031",
     location: null,
@@ -156,6 +209,7 @@ const SEEDS: Seed[] = [
   {
     id: "al-105",
     minutesAgo: 95,
+    routing: FOR_YOU,
     severity: "info",
     finding: {
       name: "Creatinine",
@@ -164,10 +218,12 @@ const SEEDS: Seed[] = [
       flag: "high",
       range: "45–90",
     },
+    // For you, with likely causes but no evidence.
     causes: [
-      ["Dehydration", "caution"],
-      ["Medicine side effect", "review"],
+      ["Dehydration", "caution", []],
+      ["Medicine side effect", "review", []],
     ],
+    category: "kidney-function",
     name: "Samuel Bassey",
     mrn: "640212",
     location: { kind: "admitted", ward: "Ward 5", bed: null },
@@ -178,6 +234,7 @@ const SEEDS: Seed[] = [
   {
     id: "al-106",
     minutesAgo: 120,
+    routing: FOR_YOU,
     severity: "info",
     finding: {
       name: "HS-TROP (local code)",
@@ -188,6 +245,7 @@ const SEEDS: Seed[] = [
       standardised: false,
     },
     causes: [],
+    category: "heart-markers",
     name: "Blessing Uche",
     mrn: "702366",
     location: { kind: "outpatient", clinic: null },
@@ -198,6 +256,7 @@ const SEEDS: Seed[] = [
   {
     id: "al-107",
     minutesAgo: 180,
+    routing: FOR_YOU,
     severity: "urgent",
     finding: {
       name: "Sodium",
@@ -206,7 +265,14 @@ const SEEDS: Seed[] = [
       flag: "low",
       range: "135–145",
     },
-    causes: [["Diuretic treatment", "caution"]],
+    causes: [
+      [
+        "Diuretic treatment",
+        "caution",
+        [["Hydrochlorothiazide 25 mg daily", "started 2 Oct", null]],
+      ],
+    ],
+    category: "blood-chemistry",
     name: "Kemi Afolabi",
     mrn: "815540",
     location: { kind: "admitted", ward: "Ward 2", bed: "Bed 7" },
@@ -218,6 +284,7 @@ const SEEDS: Seed[] = [
   {
     id: "al-108",
     minutesAgo: 300,
+    routing: { to_you: true, queue: true },
     severity: "info",
     finding: {
       name: "Glucose",
@@ -226,7 +293,10 @@ const SEEDS: Seed[] = [
       flag: "high",
       range: "3.9–7.8",
     },
-    causes: [["Known diabetes", "high"]],
+    causes: [
+      ["Known diabetes", "high", [["HbA1c", "71 mmol/mol (high)", 90 * DAY]]],
+    ],
+    category: "blood-sugar",
     name: "Peter Ogbu",
     mrn: "903117",
     location: { kind: "outpatient", clinic: "Diabetes clinic" },
@@ -254,9 +324,14 @@ const ARRIVALS: Sample[] = [
       range: "150–400",
     },
     causes: [
-      ["Medicine side effect", "caution"],
-      ["Infection", "review"],
+      [
+        "Medicine side effect",
+        "caution",
+        [["Heparin", "started 5 days ago", null]],
+      ],
+      ["Infection", "review", []],
     ],
+    category: "blood-count",
     name: "Emeka Nnamdi",
     mrn: "318552",
     location: { kind: "admitted", ward: "Ward 2", bed: "Bed 4" },
@@ -274,10 +349,19 @@ const ARRIVALS: Sample[] = [
       range: "3.5–5.1",
     },
     causes: [
-      ["Kidney injury", "caution"],
-      ["Medicine side effect", "caution"],
-      ["Sample damaged in handling", "review"],
+      [
+        "Kidney injury",
+        "caution",
+        [["Creatinine", "310 µmol/L (high)", 10 * MIN]],
+      ],
+      [
+        "Medicine side effect",
+        "caution",
+        [["Ramipril 10 mg daily", null, null]],
+      ],
+      ["Sample damaged in handling", "review", []],
     ],
+    category: "blood-chemistry",
     name: "Halima Garba",
     mrn: "401276",
     location: { kind: "emergency" },
@@ -294,7 +378,8 @@ const ARRIVALS: Sample[] = [
       flag: "low",
       range: "135–145",
     },
-    causes: [["Medicine side effect", "review"]],
+    causes: [["Medicine side effect", "review", []]],
+    category: "blood-chemistry",
     name: "Joseph Eke",
     mrn: "512903",
     location: { kind: "outpatient", clinic: "Renal clinic" },
@@ -306,7 +391,12 @@ const ARRIVALS: Sample[] = [
 
 const iso = (ms: number) => new Date(ms).toISOString();
 
-function build(id: string, s: Sample, createdAt: number): AlertOut {
+function build(
+  id: string,
+  s: Sample,
+  createdAt: number,
+  routing: AlertRoutingOut,
+): AlertOut {
   return {
     id,
     severity: s.severity,
@@ -321,9 +411,14 @@ function build(id: string, s: Sample, createdAt: number): AlertOut {
       code_system: s.finding.standardised === false ? null : "LOINC",
       standardised: s.finding.standardised ?? true,
     },
-    likely_causes: s.causes.map(([label, confidence]) => ({
+    likely_causes: s.causes.map(([label, confidence, evidence = []]) => ({
       label,
       confidence,
+      evidence: evidence.map(([l, value, before]) => ({
+        label: l,
+        value,
+        recorded_at: before === null ? null : iso(createdAt - before),
+      })),
     })),
     patient: { full_name: s.name, mrn: s.mrn, location: s.location },
     age: s.age,
@@ -335,11 +430,13 @@ function build(id: string, s: Sample, createdAt: number): AlertOut {
     handled_at: null,
     dismiss_reason: null,
     created_at: iso(createdAt),
+    category: categoryRef(s.category),
+    routing: { ...routing },
   };
 }
 
 function seed(s: Seed, start: number): AlertOut {
-  const a = build(s.id, s, start - s.minutesAgo * MIN);
+  const a = build(s.id, s, start - s.minutesAgo * MIN, s.routing);
   if (s.handled) {
     a.status = s.handled.status;
     a.handled_by = { display_name: s.handled.by };
@@ -412,6 +509,9 @@ export function createMockAlerts({
           `al-n${arrived}`,
           ARRIVALS[(arrived - 1) % ARRIVALS.length]!,
           start + arrived * MOCK_ALERT_EVERY_MS,
+          // For you and queue-only in turn, so a queue-only Urgent one
+          // arrives fourth (Review Focus 5).
+          arrived % 2 === 1 ? FOR_YOU : QUEUE_ONLY,
         ),
       );
     }
@@ -448,13 +548,24 @@ export function createMockAlerts({
   return {
     async listAlerts(q) {
       await wait();
+      if (q.sent_to !== undefined && !SENT_TO.has(q.sent_to))
+        fail(400, "invalid");
       catchUp();
+      const sentTo = (a: AlertOut) => {
+        const r = a.routing ?? FOR_YOU;
+        return q.sent_to === "you"
+          ? r.to_you
+          : q.sent_to === "queue"
+            ? r.queue && !r.to_you
+            : true;
+      };
       const all = rows
         .filter(
           (a) =>
             (!q.status || a.status === q.status) &&
             (!q.severity || a.severity === q.severity) &&
-            (!q.source || a.source_label === q.source),
+            (!q.source || a.source_label === q.source) &&
+            sentTo(a),
         )
         .sort(newest);
       const from = q.cursor === undefined ? 0 : Number(q.cursor);
@@ -464,6 +575,7 @@ export function createMockAlerts({
         alerts: all.slice(from, from + size).map(copy),
         next_cursor: from + size < all.length ? String(from + size) : null,
         sources: [...MOCK_SOURCES],
+        queue: true,
       };
     },
     async getUnreadCount() {

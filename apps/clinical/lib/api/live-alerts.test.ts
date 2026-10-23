@@ -41,6 +41,16 @@ describe("live alerts client", () => {
     });
   });
 
+  it("sends sent_to in the query", async () => {
+    fetchImpl.mockImplementation(async () => Response.json({}));
+    await client().listAlerts({ sent_to: "queue" });
+    await client().listAlerts({ status: "new", sent_to: "you", cursor: "20" });
+    expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
+      "/api/v1/alerts?sent_to=queue",
+      "/api/v1/alerts?status=new&sent_to=you&cursor=20",
+    ]);
+  });
+
   it("returns the alert page as the API sent it, record link included", async () => {
     const page = {
       alerts: [{ id: "al-1", emr_link: "https://record.example/p/1" }],

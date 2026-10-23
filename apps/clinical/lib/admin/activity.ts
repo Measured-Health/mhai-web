@@ -88,6 +88,12 @@ export function describeEvent(e: ActivityEventOut): string {
       return `${actorName(e)} viewed a clearance letter`;
     case "clearance_reminder_sent":
       return `A reminder was sent to ${t} about a letter ending`;
+    case "alert_units_changed":
+      return "Changed which units alerts cover";
+    case "alert_rules_changed":
+      return "Changed what alerts flag";
+    case "alert_recipients_changed":
+      return "Changed who gets alerts";
     case "specialty_changed":
       return e.specialty
         ? `Changed ${t}'s specialty to ${e.specialty}`
