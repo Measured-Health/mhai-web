@@ -47,11 +47,30 @@ jobs:
       - name: Platform marker check
         run: npm run check:platform-marker
 
-      # Runs both apps' suites (clinical, then platform).
+  # Each app's e2e suite runs in its own job, alongside the checks job.
+  # Playwright's webServer builds the app, so no separate build step here.
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [clinical, platform]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
       - name: E2E (mock mode)
-        run: |
-          npx playwright install --with-deps chromium
-          npm run e2e
+        run: npm run e2e -w @mhai/${{ matrix.app }}
         env:
           NEXT_PUBLIC_USE_MOCK: "true"
 
@@ -59,12 +78,10 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.app }}
           path: |
-            apps/clinical/playwright-report/
-            apps/clinical/test-results/
-            apps/platform/playwright-report/
-            apps/platform/test-results/
+            apps/${{ matrix.app }}/playwright-report/
+            apps/${{ matrix.app }}/test-results/
           retention-days: 7
 
   secrets:
