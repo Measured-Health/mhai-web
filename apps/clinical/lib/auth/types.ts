@@ -22,8 +22,12 @@ export interface User {
   mfaEnabled: boolean;
   /** Unused backup codes, or null when unknown. */
   backupCodesLeft: number | null;
-  /** Switches the API turned on for this person. Absent means off. */
-  features?: { analysis: boolean };
+  /**
+   * Switches the API turned on for this person. Absent means off. `named`
+   * (Plan 11) is present only when on: the API's `named_access` is true,
+   * Analysis is on and the named sign-off key is set.
+   */
+  features?: { analysis: boolean; named?: boolean };
 }
 
 /** First sign-in steps still to do, in this order. */
@@ -155,6 +159,18 @@ export const canUseAnalysis = (u: User | null) =>
   !isPlatformAccount(u) &&
   analysisOn(u) &&
   (isHospitalAdmin(u) || (isClinical(u) && rolesOf(u).includes("analyst")));
+
+/**
+ * Named access (Plan 11): someone who can use Analysis, with the named
+ * switch on for them (the demo; live, the API's flag and the sign-off key). Whether names
+ * ever show is still the backend's call.
+ */
+export const canUseNamedAccess = (u: User | null) =>
+  canUseAnalysis(u) && u?.features?.named === true;
+
+/** The Named access page (clearance letters): hospital admins only. */
+export const canOpenNamedAccess = (u: User | null) =>
+  isHospitalAdmin(u) && canUseNamedAccess(u);
 
 export type Area = "clinical" | "admin" | "analysis";
 

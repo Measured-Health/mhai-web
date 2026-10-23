@@ -10,7 +10,12 @@ import {
   CircleHelp,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-context";
-import { canUseAnalysis, isAdminOnly, isHospitalAdmin } from "@/lib/auth/types";
+import {
+  canOpenNamedAccess,
+  canUseAnalysis,
+  isAdminOnly,
+  isHospitalAdmin,
+} from "@/lib/auth/types";
 import { ANALYSIS_HREF } from "@/lib/analysis-queries";
 import { useReviewBadge } from "@/lib/correction-queries";
 import { historyStatus, type SessionItem } from "@/lib/session-store";
@@ -186,7 +191,13 @@ export function Sidebar({
           )}
         </>
       )}
-      {admin && <AdminNav rail={rail} analysis={analysis} />}
+      {admin && (
+        <AdminNav
+          rail={rail}
+          analysis={analysis}
+          named={canOpenNamedAccess(user)}
+        />
+      )}
       {adminOnly ? (
         // Keeps the account menu at the bottom.
         <div className="flex-1" />

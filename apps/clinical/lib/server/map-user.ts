@@ -1,5 +1,5 @@
 import type { ApiSession, ApiUser } from "../api/auth-contract";
-import { analysisSignedOff } from "./features";
+import { analysisSignedOff, namedSignedOff } from "./features";
 import type { Device, FirstStep, Role, User } from "../auth/types";
 
 export type { ApiUser, ApiLoginOk, ApiMfaRequired } from "../api/auth-contract";
@@ -35,8 +35,18 @@ export function toUser(u: ApiUser): User {
     mfaEnabled: u.mfa_enabled === true,
     backupCodesLeft: u.recovery_codes_left ?? null,
     // On only when the API says so and the hospital has signed it off.
+    // Named access is on only when the API's `named_access` is true,
+    // Analysis is on and the named sign-off key is set: the key can only
+    // keep it off.
     ...(u.features?.analysis === true && analysisSignedOff()
-      ? { features: { analysis: true } }
+      ? {
+          features: {
+            analysis: true,
+            ...(namedSignedOff() && u.features?.named_access === true
+              ? { named: true }
+              : {}),
+          },
+        }
       : {}),
   };
 }

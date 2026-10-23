@@ -17,8 +17,11 @@ export interface ApiUser {
   must_change_password?: boolean;
   terms_accepted_at?: string | null;
   recovery_codes_left?: number | null;
-  /** Switches the API turned on for this person (assumed). */
-  features?: { analysis?: boolean };
+  /**
+   * Switches the API turned on for this person (assumed). `named_access`
+   * (Plan 11) counts only with Analysis on and the named sign-off key set.
+   */
+  features?: { analysis?: boolean; named_access?: boolean };
 }
 export interface ApiLoginOk {
   access_token: string;

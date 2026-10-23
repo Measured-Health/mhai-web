@@ -5,6 +5,8 @@ import {
   analysisOn,
   canUse,
   canUseAnalysis,
+  canOpenNamedAccess,
+  canUseNamedAccess,
   isAdminOnly,
   isClinical,
   isHospitalAdmin,
@@ -47,6 +49,49 @@ describe("analysis access", () => {
   it("a platform account can't", () => {
     expect(canUseAnalysis(on("admin", "hospital_admin"))).toBe(false);
     expect(canUseAnalysis(on("auditor", "clinician", "analyst"))).toBe(false);
+  });
+});
+
+describe("named access", () => {
+  const both = (...roles: Role[]) => ({
+    ...as(...roles),
+    features: { analysis: true, named: true },
+  });
+  it("a hospital admin with both features can use named access", () => {
+    for (const u of [
+      both("hospital_admin"),
+      both("clinician", "hospital_admin"),
+    ]) {
+      expect(canUseNamedAccess(u)).toBe(true);
+      expect(canOpenNamedAccess(u)).toBe(true);
+    }
+    expect(canUseNamedAccess(both("clinician", "analyst"))).toBe(true);
+  });
+  it("without features.named nobody can", () => {
+    for (const roles of [
+      ["hospital_admin"],
+      ["clinician", "hospital_admin"],
+      ["clinician", "analyst"],
+    ] as Role[][]) {
+      for (const u of [
+        { ...as(...roles), features: { analysis: true } },
+        { ...as(...roles), features: { analysis: true, named: false } },
+        // Named never stands without Analysis.
+        { ...as(...roles), features: { analysis: false, named: true } },
+        as(...roles),
+      ]) {
+        expect(canUseNamedAccess(u)).toBe(false);
+        expect(canOpenNamedAccess(u)).toBe(false);
+      }
+    }
+    expect(canUseNamedAccess(null)).toBe(false);
+    expect(canUseNamedAccess(both("admin", "hospital_admin"))).toBe(false);
+    expect(canUseNamedAccess(both("clinician"))).toBe(false);
+  });
+  it("an analyst who isn't an admin can't open the Named access page", () => {
+    const u = both("clinician", "analyst");
+    expect(canUseNamedAccess(u)).toBe(true);
+    expect(canOpenNamedAccess(u)).toBe(false);
   });
 });
 
