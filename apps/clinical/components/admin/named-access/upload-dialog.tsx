@@ -46,9 +46,22 @@ export function sizeLabel(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function Problem({ id, children }: { id?: string; children: ReactNode }) {
+function Problem({
+  id,
+  alert,
+  children,
+}: {
+  id?: string;
+  /** Announce it as it appears (a refusal after an action). */
+  alert?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <p id={id} className="mt-1 text-[13px] font-semibold text-bad-deep">
+    <p
+      id={id}
+      role={alert ? "alert" : undefined}
+      className="mt-1 text-[13px] font-semibold text-bad-deep"
+    >
       {children}
     </p>
   );
@@ -93,6 +106,7 @@ function UploadForm({
   const ids = {
     file: useId(),
     fileNote: useId(),
+    fileProblem: useId(),
     signer: useId(),
     title: useId(),
     letterDate: useId(),
@@ -168,7 +182,12 @@ function UploadForm({
     setFile(null);
     setFileError(null);
     if (!f) return;
-    const problem = await fileProblem(f);
+    let problem: string | null;
+    try {
+      problem = await fileProblem(f);
+    } catch {
+      problem = "Couldn't read this file. Choose it again.";
+    }
     if (turn !== fileTurn.current) return;
     if (problem) {
       setFileError(problem);
@@ -227,8 +246,11 @@ function UploadForm({
             step.wrong();
           } else step.setCode("");
         },
-        onSettled: () => {
+        onSettled: (_data, e) => {
           sending.current = false;
+          // After a refusal, forget the call, and with it the file and the
+          // spent code; the form keeps its own copy and the error words.
+          if (e) upload.reset();
         },
       },
     );
@@ -244,8 +266,8 @@ function UploadForm({
       className="flex flex-col gap-4 text-[14px]"
     >
       <p className="text-sm text-ink-2">
-        Measured Health checks the letter before anyone sees names. The letter
-        itself is never shown here.
+        Measured Health checks the letter before anyone sees names. Only its
+        name and size show here.
       </p>
 
       <div>
@@ -258,7 +280,10 @@ function UploadForm({
           type="file"
           accept={ACCEPT}
           disabled={busy}
-          aria-describedby={ids.fileNote}
+          aria-invalid={fileError ? true : undefined}
+          aria-describedby={
+            fileError ? `${ids.fileNote} ${ids.fileProblem}` : ids.fileNote
+          }
           onChange={(e) => void pick(e.target.files?.[0] ?? null)}
           className="mt-1 block min-h-11 w-full text-[13px] file:mr-3 file:min-h-11 file:rounded-full file:border file:border-line file:bg-white file:px-4 file:font-semibold"
         />
@@ -270,7 +295,11 @@ function UploadForm({
             {file.name} · {sizeLabel(file.size)}
           </p>
         )}
-        {fileError && <Problem>{fileError}</Problem>}
+        {fileError && (
+          <Problem id={ids.fileProblem} alert>
+            {fileError}
+          </Problem>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -361,6 +390,7 @@ function UploadForm({
                 addEmail();
               }
             }}
+            aria-invalid={draftError ? true : undefined}
             aria-describedby={draftError ? ids.emailProblem : undefined}
             className={field}
           />
@@ -372,7 +402,11 @@ function UploadForm({
             Add
           </Button>
         </div>
-        {draftError && <Problem id={ids.emailProblem}>{draftError}</Problem>}
+        {draftError && (
+          <Problem id={ids.emailProblem} alert>
+            {draftError}
+          </Problem>
+        )}
         {emails.length > 0 && (
           <ul aria-label="Measured Health staff" className="mt-2 flex flex-col">
             {emails.map((e) => (

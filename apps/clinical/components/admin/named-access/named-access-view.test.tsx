@@ -147,6 +147,30 @@ describe("NamedAccessView", () => {
     );
   });
 
+  it("offers Try again when named access can't load", async () => {
+    vi.spyOn(holder.clearances, "getNamedAccess").mockRejectedValueOnce(
+      new ApiError(403, "forbidden"),
+    );
+    renderAdmin(<NamedAccessView />);
+    expect(
+      await screen.findByText("Couldn't load named access"),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await table();
+  });
+
+  it("says so, not a skeleton, when first opened offline", async () => {
+    onlineManager.setOnline(false);
+    renderAdmin(<NamedAccessView />);
+    expect(
+      await screen.findByText(
+        "You're offline. Named access will load when you reconnect.",
+      ),
+    ).toBeInTheDocument();
+    act(() => onlineManager.setOnline(true));
+    await table();
+  });
+
   it("offers Try again when the letters can't load", async () => {
     vi.spyOn(holder.clearances, "listClearances").mockRejectedValueOnce(
       new ApiError(403, "forbidden"),

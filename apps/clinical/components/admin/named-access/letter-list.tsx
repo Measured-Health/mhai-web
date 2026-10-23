@@ -76,10 +76,16 @@ function facts(c: ClearanceOut, today: string): Facts {
 }
 
 /** Newest upload first, whatever order they came in. */
+const uploadedMs = (c: ClearanceOut) => {
+  const ms = Date.parse(c.uploaded_at);
+  return Number.isNaN(ms) ? -Infinity : ms; // an unreadable time goes last
+};
 const newestFirst = (list: ClearanceOut[]) =>
-  [...list].sort((a, b) =>
-    a.uploaded_at < b.uploaded_at ? 1 : a.uploaded_at > b.uploaded_at ? -1 : 0,
-  );
+  [...list].sort((a, b) => {
+    const x = uploadedMs(a);
+    const y = uploadedMs(b);
+    return x === y ? 0 : y > x ? 1 : -1;
+  });
 
 type ListProps = {
   letters: ClearanceOut[];

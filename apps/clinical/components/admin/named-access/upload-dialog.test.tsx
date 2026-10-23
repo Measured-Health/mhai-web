@@ -65,9 +65,12 @@ describe("UploadDialog", () => {
         type: "application/pdf",
       }),
     );
-    expect(
-      await within(dialog).findByText("This file type isn't accepted"),
-    ).toBeInTheDocument();
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "This file type isn't accepted",
+    );
+    const input = within(dialog).getByLabelText("The letter");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription(/This file type isn't accepted/);
     expect(within(dialog).queryByText(/^notes\.pdf · /)).toBeNull();
     await fillUpload(dialog, t, { file: false });
     expect(uploadButton(dialog)).toBeDisabled();
@@ -133,6 +136,47 @@ describe("UploadDialog", () => {
       target: { value: t },
     });
     expect(uploadButton(dialog)).toBeEnabled();
+    // The end date too: empty, then today, are not dates to send.
+    const end = within(dialog).getByLabelText("End date");
+    const good = (end as HTMLInputElement).value;
+    fireEvent.change(end, { target: { value: "" } });
+    expect(uploadButton(dialog)).toBeDisabled();
+    fireEvent.change(end, { target: { value: t } });
+    expect(uploadButton(dialog)).toBeDisabled();
+    expect(
+      within(dialog).getByText("Choose an end date after today"),
+    ).toBeInTheDocument();
+    fireEvent.change(end, { target: { value: good } });
+    expect(uploadButton(dialog)).toBeEnabled();
+  });
+
+  it("a file that can't be read says so, and keeps nothing", async () => {
+    const dialog = await open();
+    const bad = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], "a.pdf");
+    vi.spyOn(bad, "slice").mockImplementation(() => {
+      throw new Error("gone");
+    });
+    await userEvent.upload(within(dialog).getByLabelText("The letter"), bad);
+    expect(
+      await within(dialog).findByText(
+        "Couldn't read this file. Choose it again.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/^a\.pdf · /)).toBeNull();
+  });
+
+  it("a bad email is announced and marks the box", async () => {
+    const dialog = await open();
+    const email = within(dialog).getByLabelText(
+      "Measured Health staff named in the letter (optional)",
+    );
+    await userEvent.type(email, "not-an-email");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "Enter a full email address",
+    );
+    expect(email).toHaveAttribute("aria-invalid", "true");
+    expect(email).toHaveAccessibleDescription("Enter a full email address");
   });
 
   it("adding tunde.okafor@measured-health.example sends covered_platform; an unknown email shows the refusal with that email", async () => {
