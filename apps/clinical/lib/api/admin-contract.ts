@@ -10,6 +10,7 @@ import type {
   DismissReason,
   FindingFlag,
 } from "./alerts-contract";
+import type { NamedPurpose } from "./analysis-contract";
 
 export type StaffRole = "clinician" | "analyst" | "hospital_admin";
 export type StaffStatus = "active" | "invited" | "deactivated";
@@ -263,6 +264,16 @@ export type ActivityKind =
   | "analyst_granted"
   | "analyst_removed"
   | "analysis_patients_viewed"
+  | "clearance_uploaded"
+  | "clearance_refused"
+  | "clearance_verified"
+  | "clearance_rejected"
+  | "clearance_narrowed"
+  | "clearance_revoked"
+  | "clearance_ended"
+  | "clearance_viewed"
+  | "clearance_reminder_sent"
+  | "analysis_named_viewed"
   /** An admin changed their own roles: allowed, audited, flagged `alert`. */
   | "self_role_change";
 
@@ -285,6 +296,8 @@ export interface ActivityEventOut {
   flag: "policy" | "alert" | null;
   /** On a self role change: the roles they gave themselves. */
   roles_added?: StaffRole[];
+  /** On a named view in Analysis: why the person asked for names. */
+  purpose?: NamedPurpose;
 }
 
 export interface ActivityQuery {

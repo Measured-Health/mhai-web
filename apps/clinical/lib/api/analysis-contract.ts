@@ -20,6 +20,9 @@ export type Sex = "female" | "male" | "other" | "not_recorded";
 export type Setting = "admitted" | "outpatient" | "emergency";
 /** "named" is a later plan. */
 export type PatientLevel = "deidentified";
+/** Why a person asked to see names (Plan 11c). */
+export type NamedPurpose =
+  "clinical_follow_up" | "quality_improvement" | "audit" | "other";
 
 /** `name` null reads "Not standardised". */
 export type ConditionRef = {

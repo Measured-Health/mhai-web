@@ -239,6 +239,16 @@ const KINDS = [
   "analyst_granted",
   "analyst_removed",
   "analysis_patients_viewed",
+  "clearance_uploaded",
+  "clearance_refused",
+  "clearance_verified",
+  "clearance_rejected",
+  "clearance_narrowed",
+  "clearance_revoked",
+  "clearance_ended",
+  "clearance_viewed",
+  "clearance_reminder_sent",
+  "analysis_named_viewed",
 ];
 
 // Same matching rule as the e2e scan: upper-case terms are case-sensitive.
@@ -246,6 +256,81 @@ const hits = (text: string) =>
   FORBIDDEN_TERMS.filter((t) =>
     new RegExp(`\\b${t}\\b`, t === t.toUpperCase() ? "" : "i").test(text),
   );
+
+describe("the clearance and named-view sentences (Plan 11)", () => {
+  it("says exactly what the spec words them as", () => {
+    const grace = who("Grace Nwosu");
+    const cases: [Parameters<typeof makeEvent>[0], string][] = [
+      [
+        { kind: "clearance_uploaded", type: "admin", actor: grace },
+        "Grace Nwosu uploaded a clearance letter",
+      ],
+      [
+        { kind: "clearance_refused", type: "security", actor: null },
+        "A clearance letter's file was refused",
+      ],
+      [
+        {
+          kind: "clearance_verified",
+          type: "admin",
+          actor: who("Tunde Okafor"),
+        },
+        "Tunde Okafor at Measured Health verified a clearance letter",
+      ],
+      [
+        {
+          kind: "clearance_rejected",
+          type: "admin",
+          actor: who("Tunde Okafor"),
+        },
+        "Tunde Okafor at Measured Health rejected a clearance letter",
+      ],
+      [
+        {
+          kind: "clearance_narrowed",
+          type: "admin",
+          actor: grace,
+          target: who("Dr. Obi"),
+        },
+        "Grace Nwosu removed Dr. Obi from a clearance letter",
+      ],
+      [
+        { kind: "clearance_revoked", type: "admin", actor: grace },
+        "Grace Nwosu revoked a clearance letter",
+      ],
+      [
+        { kind: "clearance_ended", type: "admin", actor: null },
+        "A clearance letter ended",
+      ],
+      [
+        { kind: "clearance_viewed", type: "admin", actor: grace },
+        "Grace Nwosu viewed a clearance letter",
+      ],
+      [
+        {
+          kind: "clearance_reminder_sent",
+          type: "admin",
+          actor: null,
+          target: who("Grace Nwosu"),
+        },
+        "A reminder was sent to Grace Nwosu about a letter ending",
+      ],
+      [
+        {
+          kind: "analysis_named_viewed",
+          type: "security",
+          actor: who("Dr. Kemi Adeyemi"),
+          count: 12,
+          flag: "alert",
+          purpose: "audit",
+        },
+        "Dr. Kemi Adeyemi viewed 12 patients by name in Analysis",
+      ],
+    ];
+    for (const [over, text] of cases)
+      expect(describeEvent(makeEvent(over)), over?.kind).toBe(text);
+  });
+});
 
 describe("every kind reads as plain words", () => {
   it("gives a sentence with no backend code, for each kind", () => {
