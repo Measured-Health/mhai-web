@@ -1,7 +1,11 @@
 "use client";
 import { AlertTriangle, Info, OctagonAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { AlertSeverity, AlertStatus } from "@/lib/api/alerts-contract";
+import type {
+  AlertSentTo,
+  AlertSeverity,
+  AlertStatus,
+} from "@/lib/api/alerts-contract";
 import { useNow } from "@mhai/ui/hooks/use-now";
 import {
   alertsOff,
@@ -10,6 +14,7 @@ import {
 } from "@/lib/notification-queries";
 import {
   ALERT_STATUS_LABEL,
+  ROUTE_LABEL,
   SEVERITY,
   showSources,
 } from "@/lib/notifications/alert-view";
@@ -51,8 +56,10 @@ export function AlertsView() {
   const [status, setStatus] = useState<AlertStatus>("new");
   const [severity, setSeverity] = useState<AlertSeverity | null>(null);
   const [source, setSource] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<AlertSentTo | null>(null);
   const filter: AlertFilter = {
     status,
+    ...(sentTo ? { sent_to: sentTo } : {}),
     ...(severity ? { severity } : {}),
     ...(source ? { source } : {}),
   };
@@ -63,6 +70,7 @@ export function AlertsView() {
   );
   const sources = q.data?.pages[0]?.sources ?? [];
   const multi = showSources(sources);
+  const hasQueue = q.data?.pages[0]?.queue === true;
   const focusId = ctx?.focusId ?? null;
   const focusDone = ctx?.focusDone;
 
@@ -89,8 +97,8 @@ export function AlertsView() {
     <>
       <div className="print:hidden">
         <p className="mb-3 text-[13.5px] text-ink-2">
-          Abnormal results MHAI spotted for your patients, with likely causes to
-          check. You decide what happens next.
+          Abnormal results MHAI spotted, with the evidence and likely causes to
+          check. Clinicians decide what happens next.
         </p>
         <div
           role="group"
@@ -132,6 +140,32 @@ export function AlertsView() {
             );
           })}
         </div>
+        {hasQueue && (
+          <div
+            role="group"
+            aria-label="Sent to"
+            className="mb-2 flex flex-wrap gap-1.5"
+          >
+            <FilterChip
+              pressed={sentTo === null}
+              onClick={() => setSentTo(null)}
+            >
+              All
+            </FilterChip>
+            <FilterChip
+              pressed={sentTo === "you"}
+              onClick={() => setSentTo("you")}
+            >
+              {ROUTE_LABEL.you}
+            </FilterChip>
+            <FilterChip
+              pressed={sentTo === "queue"}
+              onClick={() => setSentTo("queue")}
+            >
+              {ROUTE_LABEL.queue}
+            </FilterChip>
+          </div>
+        )}
         {multi && (
           <div
             role="group"

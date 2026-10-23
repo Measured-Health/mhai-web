@@ -26,6 +26,7 @@ import {
   AlertStatusChip,
   CauseChip,
   NotStandardisedChip,
+  RouteChip,
   SeverityChip,
 } from "./chips";
 import { DismissDialog } from "./dismiss-dialog";
@@ -70,7 +71,7 @@ export function AlertCard({
   const gone = closed && !dismiss.isPending && !dismiss.isSuccess;
   const handled = handledLine(alert, now);
   const recorded = recordedLabel(alert.finding, now);
-  const causes = likelyCauses(alert);
+  const causes = likelyCauses(alert, now);
   const link = recordLink(alert.emr_link);
   const busy = ack.isPending || dismiss.isPending;
   // A disabled action always says why (Global Constraints).
@@ -128,6 +129,7 @@ export function AlertCard({
         <div className="flex flex-wrap items-center gap-2">
           <SeverityChip severity={alert.severity} />
           <AlertStatusChip status={alert.status} />
+          <RouteChip alert={alert} />
           {showSource && alert.source_label && (
             <Chip tone="muted">
               <span className="sr-only">Source: </span>
@@ -140,9 +142,14 @@ export function AlertCard({
             {eventClock(alert.created_at, now)}
           </span>
         </div>
+        {alert.category?.label?.trim() && (
+          <p className="mt-2 text-[12px] text-ink-3 [overflow-wrap:anywhere]">
+            {alert.category.label.trim()}
+          </p>
+        )}
         <h3
           id={`${ids}-finding`}
-          className="mt-2.5 text-[15px] font-semibold [overflow-wrap:anywhere]"
+          className="mt-1 text-[15px] font-semibold [overflow-wrap:anywhere]"
         >
           {findingLine(alert.finding)}
           {recorded && (
@@ -171,12 +178,26 @@ export function AlertCard({
             </h4>
             <ul className="mt-2 flex flex-col gap-1.5">
               {causes.map((c) => (
-                <li
-                  key={c.label}
-                  className="flex flex-wrap items-center gap-2 text-[13.5px]"
-                >
-                  <span className="[overflow-wrap:anywhere]">{c.label}</span>
-                  <CauseChip level={c.level} />
+                <li key={c.label} className="text-[13.5px]">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="[overflow-wrap:anywhere]">{c.label}</span>
+                    <CauseChip level={c.level} />
+                  </span>
+                  {c.evidence.length > 0 && (
+                    <div className="mt-1 text-[12px] text-ink-2">
+                      <p className="font-semibold text-ink-3">Evidence</p>
+                      <ul
+                        aria-label={`Evidence for ${c.label}`}
+                        className="list-disc pl-4"
+                      >
+                        {c.evidence.map((e, i) => (
+                          <li key={i} className="[overflow-wrap:anywhere]">
+                            {e}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

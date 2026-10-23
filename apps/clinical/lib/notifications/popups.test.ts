@@ -234,3 +234,26 @@ describe("alertPopup", () => {
     });
   });
 });
+
+describe("pop-up routing", () => {
+  const queueOnly = (id: string, severity: AlertSeverity) => ({
+    ...fresh(id, severity),
+    routing: { to_you: false, queue: true },
+  });
+  it("a queue-only Urgent alert doesn't pop up with pop-ups on", () => {
+    expect(planPopups([queueOnly("q", "urgent")], ON).show).toEqual([]);
+  });
+  it("a queue-only Critical one does", () => {
+    const q = queueOnly("q", "critical");
+    expect(planPopups([q], ON).show).toEqual([q]);
+    expect(planPopups([q], OFF).show).toEqual([q]);
+  });
+  it("a for-you Urgent alert pops up only with pop-ups on", () => {
+    const a = {
+      ...fresh("y", "urgent"),
+      routing: { to_you: true, queue: true },
+    };
+    expect(planPopups([a], ON).show).toEqual([a]);
+    expect(planPopups([a], OFF).show).toEqual([]);
+  });
+});
