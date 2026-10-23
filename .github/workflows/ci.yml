@@ -38,6 +38,16 @@ jobs:
       - name: Test
         run: npm test --if-present
 
+      - name: Cache Next build
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/clinical/.next/cache
+            apps/platform/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('apps/**/*.ts', 'apps/**/*.tsx', 'packages/**/*.ts', 'packages/**/*.tsx') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
       - name: Build
         run: npm run build
 
@@ -47,11 +57,51 @@ jobs:
       - name: Platform marker check
         run: npm run check:platform-marker
 
-      # Runs both apps' suites (clinical, then platform).
+  # Each app's e2e suite runs in two shards, each in its own job, alongside the checks job.
+  # Playwright's webServer builds the app, so no separate build step here.
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [clinical, platform]
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Cache browser
+        id: browser-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install browser
+        if: steps.browser-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install browser system packages
+        if: steps.browser-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Cache Next build
+        uses: actions/cache@v4
+        with:
+          path: apps/${{ matrix.app }}/.next/cache
+          key: next-e2e-${{ matrix.app }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('apps/**/*.ts', 'apps/**/*.tsx', 'packages/**/*.ts', 'packages/**/*.tsx') }}
+          restore-keys: |
+            next-e2e-${{ matrix.app }}-${{ hashFiles('package-lock.json') }}-
+
       - name: E2E (mock mode)
-        run: |
-          npx playwright install --with-deps chromium
-          npm run e2e
+        run: npm run e2e -w @mhai/${{ matrix.app }} -- --shard=${{ matrix.shard }}/2
         env:
           NEXT_PUBLIC_USE_MOCK: "true"
 
@@ -59,12 +109,10 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.app }}-${{ matrix.shard }}
           path: |
-            apps/clinical/playwright-report/
-            apps/clinical/test-results/
-            apps/platform/playwright-report/
-            apps/platform/test-results/
+            apps/${{ matrix.app }}/playwright-report/
+            apps/${{ matrix.app }}/test-results/
           retention-days: 7
 
   secrets:
