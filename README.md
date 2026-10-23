@@ -145,7 +145,21 @@ record number) for any count of 5 or more; each opening is recorded in
 patients. As everywhere, any group of fewer than 5 shows "Fewer than 5" (on
 screen, in tables and in the CSV), and a figure that would give one away is
 hidden too. A hospital admin gives the Analyst role to a clinician in Staff.
-Like the rest of the demo, nothing is kept in browser storage.
+**Show names** appears above a list only for someone a verified clearance
+letter covers (Grace Nwosu is; Dr. Obi's letter is still waiting, so he sees
+"Named access needs a clearance letter. Ask your hospital admin."), and only
+while the named access switch is On. It asks for a purpose (Clinical
+follow-up, Quality improvement, Audit or Other, with a note for Other), then
+adds Name and MRN under the banner "Named view · letter until {date} · this
+view is recorded", with your name and the time marked across the list. The
+view is recorded in **Activity** as "viewed {n} patients by name in
+Analysis", flagged. Names end at the end of the letter's end date (the demo ends each
+view sooner; Show names again to continue), and an
+open screen rechecks every 30 seconds and drops names, with "Named access has
+ended" and the reason, when access ends: the letter is revoked, you are
+removed from it or lose your role, or the switch is turned off. They also end
+when the filters or group change, or you sign out. Like the rest of the demo,
+nothing is kept in browser storage.
 
 **Named access.** Sign in as the hospital admin sample (Grace Nwosu) and
 open **Named access** (clearance letters) in the Hospital admin group. A
@@ -161,8 +175,11 @@ letter to **View letter** page by page (no download or print), **Revoke** it
 (with a code), **Remove a person** or **Renew** it. A person's Staff panel
 shows their named access line. Verifying a waiting letter happens in the
 platform admin app's demo, whose store is separate: a letter verified there
-doesn't change this demo, and the other way round. Like the rest of the demo,
-nothing is kept in browser storage.
+doesn't change this demo, and the other way round. Names in Analysis (Show
+names, above) need a verified letter, and need the same clinical, privacy and
+legal sign-off as the rest of named access; until it is given they run on
+sample data only. Like the rest of the demo, nothing is kept in browser
+storage.
 
 ### Platform admin app
 
@@ -452,8 +469,10 @@ before live use, and it has not been given. In live mode it stays off until
 `NAMED_ACCESS_SIGNED_OFF=true` is set on the server **and** the backend
 switch is raised by two platform admins (Off, Letters only, On). With either
 missing the Named access page, its sidebar entry and its API routes do not
-exist (the proxy answers 404), and names are never shown. Until then it runs
-on sample data only.
+exist (the proxy answers 404), and names are never shown. Names in Analysis
+(Show names) are part of the same sign-off, and the proxy answers 404 to the
+named patient list until it is given, and never serves names on a GET. Until then it runs on sample data
+only.
 
 ### Tests
 

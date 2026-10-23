@@ -480,6 +480,23 @@ never exported or kept, and each opening is logged in the hospital's
 activity. Sample data only; it needs clinical, privacy and legal sign-off
 before live use (see the README).
 
+**Names (level 2).** Where `useNamedAccessOn()` holds (the switch reads On
+and the person passes `canUseNamedAccess`), the patients panel offers
+**Show names** to someone `GET analysis/clearance/me` says is covered, and
+otherwise the line "Named access needs a clearance letter. Ask your hospital
+admin." The purpose (and its note) goes in the body of
+`POST analysis/patients/named` with an `Idempotency-Key` fixed when the view
+opens, so a refetch replays the same recorded view and the purpose is never
+in a URL. The rows live in a query with `gcTime: 0` and in component state,
+under the banner and a viewer-and-time watermark; the view is `print:hidden`
+and has no copy or export. `NamedView` ends them, with the reason, at
+`named_until` (a timer and a one-second clock check), on any change in the
+30-second `clearance/me` check (or a failure of it other than the network),
+on a 403 `clearance_ended`, `not_cleared` or `named_access_off`, on a filter
+or group change and on sign-out; the query is then removed. A 409 `expired`
+or 422 `idempotency_mismatch` is a plain error ("Couldn't load named
+patients" with **Try again**), not an end of access.
+
 ### 4.10 Named access
 
 Route: `/admin/named-access`, in the Hospital admin group after Analysis

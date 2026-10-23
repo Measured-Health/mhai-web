@@ -1,9 +1,10 @@
 // The synthetic cohort behind the Analysis sample data: about 600 made-up
 // patients at the demo hospital over 12 months, built from a fixed seed (a
 // small PRNG, no dependency) so the same seed gives the same cohort every
-// time. Nothing here is real, and nothing names a person: patients are only
-// a pseudonymous pid. Sources are display labels ("Main record" and
-// "Results system"), never a product.
+// time. Nothing here is real. Patients are a pseudonymous pid; each also has
+// an invented name and record number (MRN), which only the named list (Plan
+// 11c) ever sends. Sources are display labels ("Main record" and "Results
+// system"), never a product.
 
 import type { ConfidenceLevel } from "./admin-contract";
 import type {
@@ -88,6 +89,10 @@ export type CohortConsultation = {
 };
 export type CohortPatient = {
   pid: string;
+  /** Invented, from fixed lists; sent only in the named list. */
+  name: string;
+  /** Invented, "HH-" and six digits; sent only in the named list. */
+  mrn: string;
   age_band: AgeBand;
   sex: Sex;
   setting: Setting | null;
@@ -130,6 +135,70 @@ const dayNum = (iso: string) =>
 const dayIso = (n: number) => new Date(n * DAY).toISOString().slice(0, 10);
 
 const PID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+// Invented names for the named list. None is a sample person in the demo (the
+// README's, the staff or the platform team), and the pairs are made up.
+const GIVEN = [
+  "Ifeoma",
+  "Tobenna",
+  "Zainab",
+  "Musa",
+  "Efe",
+  "Kelechi",
+  "Aisha",
+  "Bashir",
+  "Nneka",
+  "Emeka",
+  "Zuwaira",
+  "Sola",
+  "Uche",
+  "Fatima",
+  "Obinna",
+  "Ronke",
+  "Ibrahim",
+  "Chiamaka",
+  "Dayo",
+  "Hauwa",
+  "Femi",
+  "Adaeze",
+  "Ikenna",
+  "Nkechi",
+] as const;
+const FAMILY = [
+  "Okonkwo",
+  "Balogun",
+  "Lawal",
+  "Ibekwe",
+  "Abubakar",
+  "Oyelaran",
+  "Nnamdi",
+  "Ogbu",
+  "Akande",
+  "Usman",
+  "Odili",
+  "Bamidele",
+  "Garba",
+  "Chukwu",
+  "Ajayi",
+  "Okeke",
+  "Salami",
+  "Ilori",
+  "Yakubu",
+  "Onyeka",
+  "Afolabi",
+  "Danladi",
+  "Etim",
+  "Olowo",
+  "Nwachukwu",
+] as const;
+/**
+ * The i-th patient's name: 24 given and 25 family names pair up uniquely for
+ * every i under 600. No PRNG draw, so the rest of the cohort is unchanged.
+ */
+const nameOf = (i: number) =>
+  `${GIVEN[i % GIVEN.length]} ${FAMILY[i % FAMILY.length]}`;
+/** A unique six-digit record number: 7919 shares no factor with 900000. */
+const mrnOf = (i: number) => `HH-${100000 + ((i * 7919 + 4233) % 900000)}`;
 
 const SPECIALTY_OF: Record<string, string> = {
   i10: "Cardiology",
@@ -374,6 +443,8 @@ export function buildCohort(): CohortPatient[] {
 
     out.push({
       pid,
+      name: nameOf(i),
+      mrn: mrnOf(i),
       age_band,
       sex,
       setting,

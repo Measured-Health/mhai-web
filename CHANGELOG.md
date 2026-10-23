@@ -49,6 +49,13 @@ All notable changes to this project are documented here. The format follows
   approval, and lowered at once by one admin. Auditors read it all. A new
   sample platform admin, Bola Hassan, is linked to Havana Hospital. End-to-end
   tests cover it on desktop and phone.
+- Names in Analysis, on sample data: **Show names** on a patient list for
+  someone a verified clearance letter covers, with a purpose, a banner and a
+  watermark, recorded in Activity, and ended at once (with the reason) when
+  the letter ends, the switch goes off, the filters change or the person
+  signs out. A person's Analysis page says whether they have named access.
+  Same sign-off and switch as Named access. End-to-end tests cover it on
+  desktop and phone.
 - Legal holds in the platform admin app, on sample data: a Legal holds page
   with filters, a hold on a hospital's records (all of them or a date range)
   that blocks its removal, a Hold tag on the hospitals list, a Legal holds
