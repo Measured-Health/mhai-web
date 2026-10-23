@@ -175,6 +175,23 @@ describe("Sidebar", () => {
     );
   });
 
+  it("puts Alert settings after Hospital settings, for hospital admins only", () => {
+    renderWithAuth(<Sidebar items={[]} />, {
+      ...TEST_USER,
+      roles: ["hospital_admin"],
+    });
+    const group = screen.getByRole("region", { name: "Hospital admin" });
+    const links = within(group)
+      .getAllByRole("link")
+      .map((l) => l.getAttribute("aria-label"));
+    expect(links.indexOf("Alert settings")).toBe(
+      links.indexOf("Hospital settings") + 1,
+    );
+    const link = within(group).getByRole("link", { name: "Alert settings" });
+    expect(link).toHaveAttribute("href", "/admin/alerts");
+    expect(link).toHaveAccessibleDescription("Units, what to flag, who hears");
+  });
+
   it("shows no hospital admin group to a clinician", () => {
     renderWithAuth(<Sidebar items={[]} />);
     expect(screen.queryByRole("region", { name: "Hospital admin" })).toBeNull();
@@ -191,7 +208,13 @@ describe("Sidebar", () => {
       within(group)
         .getAllByRole("link")
         .map((l) => l.getAttribute("aria-label")),
-    ).toEqual(["Staff", "Hospital settings", "Activity", "Usage"]);
+    ).toEqual([
+      "Staff",
+      "Hospital settings",
+      "Alert settings",
+      "Activity",
+      "Usage",
+    ]);
     expect(within(group).getByRole("link", { name: "Staff" })).toHaveAttribute(
       "href",
       "/admin/staff",
@@ -312,6 +335,7 @@ describe("Sidebar", () => {
       ).toEqual([
         "Staff",
         "Hospital settings",
+        "Alert settings",
         "Activity",
         "Usage",
         "Analysis",
@@ -361,6 +385,7 @@ describe("Sidebar", () => {
         expect(names()).toEqual([
           "Staff",
           "Hospital settings",
+          "Alert settings",
           "Activity",
           "Usage",
           "Analysis",
