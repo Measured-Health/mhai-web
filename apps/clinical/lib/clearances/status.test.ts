@@ -89,6 +89,7 @@ describe("statusLine", () => {
             by: { display_name: "Ada Admin" },
             side: "hospital",
             at: "2026-10-02T08:00:00Z",
+            day: "2026-10-02",
             reason: "person_left",
             note: null,
           },
@@ -133,5 +134,47 @@ describe("statusLine", () => {
       words: "Ended 22 Oct 2026",
       detail: null,
     });
+  });
+
+  it("Ends in 30 days at 30, Active until at 31", () => {
+    expect(statusLine(letter({ end_date: "2026-11-22" }), TODAY).words).toBe(
+      "Ends in 30 days",
+    );
+    expect(statusLine(letter({ end_date: "2026-11-23" }), TODAY).icon).toBe(
+      "check",
+    );
+  });
+
+  it("revoked uses the server's hospital day, and never a cut instant", () => {
+    const rev = (day?: string) =>
+      letter({
+        status: "revoked",
+        revocation: {
+          by: { display_name: "Ada" },
+          side: "hospital",
+          at: "2026-10-02T23:30:00Z",
+          ...(day ? { day } : {}),
+          reason: "other",
+          note: null,
+        },
+      });
+    expect(statusLine(rev("2026-10-03"), TODAY).words).toBe(
+      "Revoked 3 Oct 2026",
+    );
+    expect(statusLine(rev(), TODAY).words).toBe("Revoked");
+    expect(statusLine(letter({ status: "revoked" }), TODAY)).toEqual({
+      icon: "ban",
+      words: "Revoked",
+      detail: null,
+    });
+  });
+
+  it("a malformed date fails closed instead of throwing", () => {
+    expect(statusLine(letter({ end_date: "2026-02-31" }), TODAY)).toEqual({
+      icon: "calendar-x",
+      words: "Ended",
+      detail: null,
+    });
+    expect(statusLine(letter({}), "bad").words).toBe("Ended");
   });
 });

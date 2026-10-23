@@ -26,6 +26,19 @@ export type StatusLine = {
  * passed reads as ended: fail toward no access.
  */
 export function statusLine(c: ClearanceOut, today: string): StatusLine {
+  try {
+    return line(c, today);
+  } catch {
+    // A malformed date from the server fails closed: no access, no date.
+    return {
+      icon: "calendar-x",
+      words: STATUS_LABEL[c.status === "active" ? "ended" : c.status],
+      detail: null,
+    };
+  }
+}
+
+function line(c: ClearanceOut, today: string): StatusLine {
   switch (c.status) {
     case "checking":
       return { icon: "clock", words: STATUS_LABEL.checking, detail: null };
@@ -57,7 +70,8 @@ export function statusLine(c: ClearanceOut, today: string): StatusLine {
       const v = c.revocation;
       return {
         icon: "ban",
-        words: v ? revokedWords(v.at.slice(0, 10)) : STATUS_LABEL.revoked,
+        // The hospital's day, as the server sends it; never cut from the instant.
+        words: v?.day ? revokedWords(v.day) : STATUS_LABEL.revoked,
         detail: v
           ? `By ${v.by.display_name} · ${REVOKE_LABEL[v.reason]}`
           : null,

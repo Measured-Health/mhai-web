@@ -1,18 +1,21 @@
-import { dayLabel, REFUSED_TEXT } from "@mhai/ui/clearances";
+import { dayLabel, daysBetween, REFUSED_TEXT } from "@mhai/ui/clearances";
 import { ApiError, NotEligibleError } from "@mhai/api-client/errors";
 import type { ClearanceOut } from "../api/clearances-contract";
 import { adminError } from "../admin/errors";
 import { END_DATE_CAP_TEXT } from "./file-check";
 
 /**
- * Each covered person's latest end date over the active letters. With
- * `today`, an "active" letter past its end date counts as ended.
+ * Each covered person's latest end date over the active letters. `today` is the hospital's day from the server. An "active" letter past its end date counts as ended.
  */
-function latestEnds(list: ClearanceOut[], today?: string): Map<string, string> {
+function latestEnds(list: ClearanceOut[], today: string): Map<string, string> {
   const ends = new Map<string, string>();
   for (const c of list) {
     if (c.status !== "active") continue;
-    if (today !== undefined && c.end_date < today) continue;
+    try {
+      if (daysBetween(today, c.end_date) < 0) continue;
+    } catch {
+      continue; // a malformed date fails closed: no access
+    }
     for (const p of c.covered) {
       const seen = ends.get(p.id);
       if (seen === undefined || c.end_date > seen) ends.set(p.id, c.end_date);
@@ -25,14 +28,14 @@ function latestEnds(list: ClearanceOut[], today?: string): Map<string, string> {
 export function namedAccessFor(
   staffId: string,
   list: ClearanceOut[],
-  today?: string,
+  today: string,
 ): { until: string } | null {
   const until = latestEnds(list, today).get(staffId);
   return until === undefined ? null : { until };
 }
 
 /** One line on who has named access now, over the active letters. */
-export function accessSummary(list: ClearanceOut[], today?: string): string {
+export function accessSummary(list: ClearanceOut[], today: string): string {
   const ends = [...latestEnds(list, today).values()];
   if (ends.length === 0) return "Nobody has named access";
   const earliest = ends.reduce((a, b) => (b < a ? b : a));
@@ -84,10 +87,16 @@ export function errorText(
         return "Named access isn't available yet";
       case "invalid":
         return "Check what you entered and try again";
-      case "mfa_invalid":
-      case "mfa_locked":
-        return adminError(e).title;
     }
+    if (
+      e.status === 0 ||
+      e.status >= 500 ||
+      e.code === "mfa_required" ||
+      e.code === "mfa_invalid" ||
+      e.code === "mfa_locked" ||
+      e.code === "rate_limited"
+    )
+      return adminError(e).title;
   }
   return "Something went wrong. Try again.";
 }

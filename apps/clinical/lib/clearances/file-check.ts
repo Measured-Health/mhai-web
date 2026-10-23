@@ -1,6 +1,13 @@
-import { LETTER_MAX_BYTES, REFUSED_TEXT } from "@mhai/ui/clearances";
+import { dayLabel, LETTER_MAX_BYTES, REFUSED_TEXT } from "@mhai/ui/clearances";
 
-const YMD = /^\d{4}-\d{2}-\d{2}$/;
+const isDay = (s: string) => {
+  try {
+    dayLabel(s);
+    return true;
+  } catch {
+    return false;
+  }
+};
 const CAP_TEXT = "The end date can't be more than 12 months away";
 
 const readBytes = (b: Blob): Promise<ArrayBuffer> =>
@@ -36,7 +43,7 @@ export function endDateProblem(
   today: string,
   max: string,
 ): string | null {
-  if (!YMD.test(end) || end <= today) return "Choose an end date after today";
+  if (!isDay(end) || end <= today) return "Choose an end date after today";
   if (end > max) return CAP_TEXT;
   return null;
 }
@@ -47,9 +54,9 @@ export function letterDateProblem(
   today: string,
   end: string,
 ): string | null {
-  if (!YMD.test(letter)) return "Enter the letter date";
+  if (!isDay(letter)) return "Enter the letter date";
   if (letter > today) return "The letter date can't be in the future";
-  if (YMD.test(end) && letter > end)
+  if (isDay(end) && letter > end)
     return "The letter date can't be after the end date";
   return null;
 }

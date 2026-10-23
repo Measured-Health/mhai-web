@@ -4,6 +4,7 @@ import { accessSummary, errorText, namedAccessFor } from "./summary";
 import { ApiError } from "../api/errors";
 import { NotEligibleError } from "@mhai/api-client/errors";
 
+const TODAY = "2026-10-23";
 const letter = (
   id: string,
   status: ClearanceOut["status"],
@@ -25,13 +26,12 @@ describe("namedAccessFor", () => {
       letter("c", "waiting", "2027-09-01", ["s1"]),
       letter("d", "revoked", "2027-10-01", ["s1"]),
     ];
-    expect(namedAccessFor("s1", list)).toEqual({ until: "2027-03-12" });
-    expect(namedAccessFor("s2", list)).toEqual({ until: "2027-03-12" });
-    expect(namedAccessFor("s3", list)).toBeNull();
+    expect(namedAccessFor("s1", list, TODAY)).toEqual({ until: "2027-03-12" });
+    expect(namedAccessFor("s2", list, TODAY)).toEqual({ until: "2027-03-12" });
+    expect(namedAccessFor("s3", list, TODAY)).toBeNull();
   });
-  it("ignores an active letter that has passed its end date when given today", () => {
+  it("ignores an active letter that has passed its end date", () => {
     const list = [letter("a", "active", "2026-10-22", ["s1"])];
-    expect(namedAccessFor("s1", list)).toEqual({ until: "2026-10-22" });
     expect(namedAccessFor("s1", list, "2026-10-23")).toBeNull();
     expect(namedAccessFor("s1", list, "2026-10-22")).toEqual({
       until: "2026-10-22",
@@ -41,38 +41,47 @@ describe("namedAccessFor", () => {
 
 describe("accessSummary", () => {
   it("says nobody when no active letter covers anyone", () => {
-    expect(accessSummary([])).toBe("Nobody has named access");
-    expect(accessSummary([letter("a", "waiting", "2027-01-01", ["s1"])])).toBe(
-      "Nobody has named access",
-    );
+    expect(accessSummary([], TODAY)).toBe("Nobody has named access");
+    expect(
+      accessSummary([letter("a", "waiting", "2027-01-01", ["s1"])], TODAY),
+    ).toBe("Nobody has named access");
   });
   it("says one person with their date", () => {
-    expect(accessSummary([letter("a", "active", "2027-03-12", ["s1"])])).toBe(
-      "1 person has named access until 12 Mar 2027",
-    );
+    expect(
+      accessSummary([letter("a", "active", "2027-03-12", ["s1"])], TODAY),
+    ).toBe("1 person has named access until 12 Mar 2027");
   });
   it("says n people with one shared date", () => {
     expect(
-      accessSummary([
-        letter("a", "active", "2027-03-12", ["s1", "s2"]),
-        letter("b", "active", "2027-03-12", ["s2", "s3"]),
-      ]),
+      accessSummary(
+        [
+          letter("a", "active", "2027-03-12", ["s1", "s2"]),
+          letter("b", "active", "2027-03-12", ["s2", "s3"]),
+        ],
+        TODAY,
+      ),
     ).toBe("3 people have named access until 12 Mar 2027");
   });
   it("counts each person at their latest end and names the earliest", () => {
     expect(
-      accessSummary([
-        letter("a", "active", "2026-12-01", ["s1", "s2"]),
-        letter("b", "active", "2027-03-12", ["s2"]),
-      ]),
+      accessSummary(
+        [
+          letter("a", "active", "2026-12-01", ["s1", "s2"]),
+          letter("b", "active", "2027-03-12", ["s2"]),
+        ],
+        TODAY,
+      ),
     ).toBe("2 people have named access; the earliest ends 1 Dec 2026");
   });
   it("counts people with the same latest date once, even if letters differ", () => {
     expect(
-      accessSummary([
-        letter("a", "active", "2026-12-01", ["s1"]),
-        letter("b", "active", "2027-03-12", ["s1"]),
-      ]),
+      accessSummary(
+        [
+          letter("a", "active", "2026-12-01", ["s1"]),
+          letter("b", "active", "2027-03-12", ["s1"]),
+        ],
+        TODAY,
+      ),
     ).toBe("1 person has named access until 12 Mar 2027");
   });
   it("drops letters past their end date when given today", () => {
@@ -82,6 +91,16 @@ describe("accessSummary", () => {
         "2026-10-23",
       ),
     ).toBe("Nobody has named access");
+  });
+});
+
+describe("malformed dates", () => {
+  it("fail closed: no access, no throw", () => {
+    const bad = [letter("a", "active", "2026-02-31", ["s1"])];
+    expect(namedAccessFor("s1", bad, TODAY)).toBeNull();
+    expect(accessSummary(bad, TODAY)).toBe("Nobody has named access");
+    const ok = [letter("a", "active", "2027-03-12", ["s1"])];
+    expect(accessSummary(ok, "nonsense")).toBe("Nobody has named access");
   });
 });
 
@@ -111,6 +130,11 @@ describe("errorText", () => {
     expect(errorText(e("invalid"))).toBe(
       "Check what you entered and try again",
     );
+  });
+  it("gives plain words for two-step required, rate limits and no network", () => {
+    expect(errorText(e("mfa_required"))).toMatch(/Turn on two-step/);
+    expect(errorText(e("rate_limited"))).toBe("Too many changes at once");
+    expect(errorText(new ApiError(0, "network"))).toBe("Couldn't reach MHAI");
   });
   it("not_eligible names the refused people when it can", () => {
     const err = new NotEligibleError("not_eligible", { ids: ["s1", "s2"] });
