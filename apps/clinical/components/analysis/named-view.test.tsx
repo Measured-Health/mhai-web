@@ -39,6 +39,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => "/analysis",
 }));
+import { watermarkTile } from "./named-view";
 import { PatientsPanel } from "./patients-panel";
 
 let qc: QueryClient;
@@ -92,10 +93,13 @@ const cached = () =>
       .map((q) => q.state.data),
   );
 
+/** The ended notice: said politely, with the focus, and the reason. */
 async function ended(reason: string) {
-  const alert = await screen.findByRole("alert");
-  expect(alert).toHaveTextContent("Named access has ended");
-  expect(alert).toHaveTextContent(reason);
+  const title = await screen.findByText("Named access has ended");
+  const notice = title.closest<HTMLElement>("[data-named-ended]")!;
+  expect(notice).toHaveAttribute("role", "status");
+  expect(notice).toHaveTextContent(reason);
+  await waitFor(() => expect(notice).toHaveFocus());
   expect(screen.queryByRole("table", { name: /^Named patients/ })).toBeNull();
   // Back to the de-identified rows.
   expect(
@@ -128,12 +132,70 @@ describe("NamedView", () => {
     const mark = document.querySelector<HTMLElement>("[data-watermark]")!;
     expect(mark).toHaveAttribute("aria-hidden", "true");
     expect(mark).toHaveClass("pointer-events-none", "select-none");
-    expect(mark.textContent).toContain("Grace Nwosu · 09:05");
-    // Repeated across the list.
-    expect(
-      within(mark).getAllByText("Grace Nwosu · 09:05").length,
-    ).toBeGreaterThan(3);
+    expect(mark).toHaveAttribute("data-watermark", "Grace Nwosu · 09:05");
+    // A tile repeated as a background, drawn with the viewer and the time.
+    expect(mark).toHaveClass("absolute", "inset-0", "bg-repeat");
+    expect(decodeURIComponent(mark.style.backgroundImage)).toContain(
+      ">Grace Nwosu · 09:05</text>",
+    );
   });
+
+  it("the watermark covers a 200-row list, its whole height and width", async () => {
+    open(GRACE);
+    const table = await showNames();
+    // Grace's group is over 200 patients: the first 200 show.
+    expect(within(table).getAllByRole("row")).toHaveLength(201);
+    const mark = document.querySelector<HTMLElement>("[data-watermark]")!;
+    // The overlay fills the box that is sized to the table's scroll area
+    // (not the scrolling frame), so every row and column is under it.
+    const box = mark.parentElement!;
+    expect(box).toContainElement(table);
+    expect(box).toHaveClass("relative", "inline-block", "min-w-full");
+    expect(box.parentElement).toHaveClass("overflow-x-auto");
+    expect(mark).toHaveClass("absolute", "inset-0", "bg-repeat");
+  });
+
+  it("the watermark tile escapes the name", () => {
+    const tile = decodeURIComponent(watermarkTile(`A <b>"&'</b> · 09:05`));
+    expect(tile).toContain(
+      ">A &lt;b&gt;&quot;&amp;&apos;&lt;/b&gt; · 09:05</text>",
+    );
+    expect(tile).not.toContain("<b>");
+  });
+
+  it("after showing names the focus is on the named banner, and it is said", async () => {
+    open(GRACE);
+    await showNames();
+    const banner = document.querySelector<HTMLElement>("[data-named-banner]")!;
+    await waitFor(() => expect(banner).toHaveFocus());
+    expect(
+      within(document.querySelector("[data-named-view]")!).getByRole("status"),
+    ).toHaveTextContent(
+      /^Names shown\. Named view · letter until .+ · this view is recorded$/,
+    );
+  });
+
+  it.each([
+    ["visibilitychange", () => document],
+    ["pageshow", () => window],
+    ["focus", () => window],
+  ] as const)(
+    "after a sleep or a restore, %s ends names on the real clock",
+    async (event, target) => {
+      const user = fakeClock();
+      open(GRACE);
+      await showNames("Audit", undefined, user);
+      // The clock jumps past named_until while timers were paused.
+      vi.setSystemTime(Date.now() + 2 * 60 * MINUTE);
+      act(() => {
+        target().dispatchEvent(new Event(event));
+      });
+      expect(
+        screen.queryByRole("table", { name: /^Named patients/ }),
+      ).toBeNull();
+      await ended("This named view has ended. Show names again to continue.");
+    },
+  );
 
   it("names go at named_until, offline too", async () => {
     // Kemi's letter ends in 12 days: shortly before the end of its last
@@ -153,12 +215,7 @@ describe("NamedView", () => {
       screen.getByRole("table", { name: /^Named patients/ }),
     ).toBeVisible();
     await act(() => vi.advanceTimersByTimeAsync(11 * SECOND));
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("Named access has ended");
-    expect(alert).toHaveTextContent(
-      "This named view has ended. Show names again to continue.",
-    );
-    expect(screen.queryByRole("table", { name: /^Named patients/ })).toBeNull();
+    await ended("This named view has ended. Show names again to continue.");
     expect(namedQueries()).toHaveLength(0);
   });
 
@@ -252,6 +309,34 @@ describe("NamedView", () => {
     await ended("This named view has ended. Show names again to continue.");
   });
 
+  it("a first POST refused 403 not_cleared ends at once, showing no rows", async () => {
+    open(GRACE);
+    vi.spyOn(holder.client, "listNamedPatients").mockRejectedValue(
+      new ApiError(403, "not_cleared"),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Show names" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Show names" });
+    await userEvent.click(within(dialog).getByRole("radio", { name: "Audit" }));
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Show names" }),
+    );
+    await ended("Your clearance changed.");
+    expect(cached()).not.toMatch(/HH-\d{6}|"mrn"/);
+  });
+
+  it("the switch going down, seen by the position first, ends names with the words", async () => {
+    open(GRACE);
+    await showNames();
+    holder.client = analysisAs(GRACE, admin, "off");
+    await act(() =>
+      qc.refetchQueries({ queryKey: ["analysis", "named-access"] }),
+    );
+    await ended("Named access was switched off.");
+    expect(namedQueries()).toHaveLength(0);
+  });
+
   it("a 403 clearance_ended on refetch drops the names at once", async () => {
     open(GRACE);
     await showNames();
@@ -318,6 +403,8 @@ describe("NamedView", () => {
   });
 
   it("removing Kemi's Analyst role in the staff panel ends her names within 30 seconds", async () => {
+    // Through the admin client's updateStaff, the call the staff panel's
+    // Save makes (that Save is tested with the staff panel, Task 6).
     const user = fakeClock();
     open(KEMI);
     await showNames("Audit", undefined, user);

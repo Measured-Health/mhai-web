@@ -45,9 +45,13 @@ import {
   conditionText,
   settingText,
 } from "@/lib/analysis/labels";
-import { END_TEXT, namedNow, type EndReason } from "@/lib/analysis/named";
+import {
+  END_TEXT,
+  namedNow,
+  networkDown,
+  type EndReason,
+} from "@/lib/analysis/named";
 import { useOptionalAuth } from "@/lib/auth/auth-context";
-import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { useOnline } from "@mhai/ui/hooks/use-online";
 import { SidePanel } from "@mhai/ui/side-panel";
@@ -161,13 +165,7 @@ export function PatientsPanel({
 
   return (
     <SidePanel open onClose={onClose} title={title} className="print:hidden">
-      {named.ended && (
-        <div className="mb-3">
-          <Banner tone="warn" title="Named access has ended">
-            {END_TEXT[named.ended]}
-          </Banner>
-        </div>
-      )}
+      {named.ended && <EndedNotice reason={named.ended} />}
       {d && !showing && <NamesOffer named={named} />}
       {showing ? (
         <NamedView
@@ -210,7 +208,11 @@ function useNames() {
   const [ended, setEnded] = useState<EndReason | null>(null);
   // Nothing named shows without a signed-in person and the switch On; a
   // view lost that way is over, never picked up again without a purpose.
-  if (choice && !(on && user)) setChoice(null);
+  if (choice && !(on && user)) {
+    setChoice(null);
+    // The switch went down: say so. Signed out: the page is leaving anyway.
+    if (user) setEnded("switched_off");
+  }
   const view = choice && on && user ? choice : null;
 
   useEffect(() => {
@@ -240,12 +242,57 @@ function useNames() {
 }
 
 /**
+ * "Named access has ended" and why. It takes the focus when it appears (the
+ * named view it replaces had it) and is said politely.
+ */
+function EndedNotice({ reason }: { reason: EndReason }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+  }, [reason]);
+  return (
+    <div
+      ref={ref}
+      tabIndex={-1}
+      role="status"
+      aria-live="polite"
+      data-named-ended
+      className="mb-3 flex gap-3 rounded-2xl border border-warn-line bg-warn-wash px-4 py-3.5 text-[13.5px] leading-normal text-warn-deep focus-visible:outline-2 focus-visible:outline-mint-deep"
+    >
+      <TriangleAlert aria-hidden className="mt-0.5 size-5 shrink-0" />
+      <div>
+        <b className="block text-sm">Named access has ended</b>
+        {END_TEXT[reason]}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Show names, or why not: nothing below On; the needs-a-letter line when
- * not covered; disabled offline, with the reason.
+ * not covered; a failed check offers nothing but Try again; disabled
+ * offline, with the reason.
  */
 function NamesOffer({ named }: { named: ReturnType<typeof useNames> }) {
   const reasonId = useId();
-  if (!named.on || named.me.data === undefined) return null;
+  if (!named.on) return null;
+  // The last check failed (not just the network): don't offer names on an
+  // older reply, which would record a view that ends at once.
+  if (named.me.isError && !networkDown(named.me.error))
+    return (
+      <p className="mb-3 flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
+        <OctagonAlert aria-hidden className="size-4 shrink-0 text-bad-deep" />
+        <span>Couldn&apos;t load your named access</span>
+        <Button
+          variant="ghost"
+          className="min-h-11"
+          onClick={() => void named.me.refetch()}
+        >
+          Try again
+        </Button>
+      </p>
+    );
+  if (named.me.data === undefined) return null;
   // An `until` already past when the reply was read: not covered.
   if (!namedNow(named.me.data, named.me.dataUpdatedAt))
     return (

@@ -761,6 +761,9 @@ describe("Named access in the patients panel", () => {
       .map((h) => h.textContent);
     expect(heads.slice(0, 2)).toEqual(["Name", "MRN"]);
     const first = within(table).getAllByRole("row")[1]!;
+    // The Name column holds a name, not a record number.
+    const name = within(first).getByRole("rowheader").textContent!;
+    expect(name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
     expect(within(first).getAllByRole("cell")[0]).toHaveTextContent(
       /^HH-\d{6}$/,
     );
@@ -855,6 +858,17 @@ describe("Named access in the patients panel", () => {
       }),
     ).toBeNull();
     expect(within(dialog).queryByRole("link")).toBeNull();
+  });
+
+  it("a failed check offers Try again, not Show names", async () => {
+    await namedPanel(GRACE, "on", {
+      getClearanceMe: () => Promise.reject(new ApiError(403, "forbidden")),
+    });
+    expect(
+      await screen.findByText("Couldn't load your named access"),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Show names" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
   });
 
   it("Show names is disabled offline", async () => {

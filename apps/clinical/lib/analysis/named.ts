@@ -94,3 +94,7 @@ export function namedNow(
 ): boolean {
   return !!me?.named && me.until !== null && msUntil(me.until, now) > 0;
 }
+
+/** No answer at all (offline, or the network failed): not a reason to end names. */
+export const networkDown = (e: unknown): boolean =>
+  e instanceof ApiError && e.status === 0;

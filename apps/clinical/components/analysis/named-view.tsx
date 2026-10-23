@@ -8,7 +8,6 @@ import type {
   NamedPatientRowOut,
   NamedPurpose,
 } from "@/lib/api/analysis-contract";
-import { ApiError } from "@/lib/api/errors";
 import { countLabel } from "@/lib/admin/report";
 import { useClearanceMe, useNamedPatients } from "@/lib/analysis-queries";
 import {
@@ -22,6 +21,7 @@ import {
   endReasonFrom,
   meChanged,
   msUntil,
+  networkDown,
   type EndReason,
 } from "@/lib/analysis/named";
 import { useOptionalAuth } from "@/lib/auth/auth-context";
@@ -31,17 +31,14 @@ import { Skeleton } from "@mhai/ui/skeleton";
 
 /** setTimeout's longest wait; named_until is never near it (an hour at most). */
 const LONGEST_WAIT = 2 ** 31 - 1;
-/** How many times the watermark repeats over the list. */
-const MARKS = 40;
+/** How often the real clock is held against named_until. */
+const CHECK_EVERY_MS = 1_000;
 
 const two = (n: number) => String(n).padStart(2, "0");
 const clockText = (ms: number) => {
   const d = new Date(ms);
   return `${two(d.getHours())}:${two(d.getMinutes())}`;
 };
-
-/** No answer at all (offline, or the network failed): not a reason to end. */
-const networkDown = (e: unknown) => e instanceof ApiError && e.status === 0;
 
 /** Stable text for filters, so a new object with the same filters isn't a change. */
 const filtersText = (f: AnalysisFilters) =>
@@ -56,14 +53,26 @@ const FLAG_WORD: Record<FindingFlag, string> = {
 const sexText = (s: NamedPatientRowOut["sex"]) =>
   s === "not_recorded" ? "Sex not recorded" : SEX_LABEL[s];
 
-/** The time now, for the watermark, moving on each minute. */
-function useClock(): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-  return now;
+const XML: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&apos;",
+};
+
+/**
+ * The watermark as one tile, repeated as a background: it covers the whole
+ * table however long or wide it is. An image in CSS runs no script.
+ */
+export function watermarkTile(text: string): string {
+  const safe = text.replace(/[&<>"']/g, (c) => XML[c]!);
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="280" height="140">` +
+    `<text x="140" y="75" text-anchor="middle" transform="rotate(-20 140 70)" ` +
+    `font-family="sans-serif" font-size="13" font-weight="600" ` +
+    `fill="rgba(28,13,34,0.11)">${safe}</text></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
 /**
@@ -104,7 +113,8 @@ export function NamedView({
   }));
   const q = useNamedPatients(user ? req : null);
   const me = useClearanceMe({ poll: true });
-  const now = useClock();
+  // The real clock, for the watermark and for hiding rows past named_until.
+  const [now, setNow] = useState(() => Date.now());
 
   const done = useRef(false);
   const end = useEffectEvent((reason: EndReason) => {
@@ -122,15 +132,51 @@ export function NamedView({
 
   const d = q.data?.status === "ok" ? q.data.data : null;
   const until = d?.named_until ?? null;
-  // Names go at named_until without waiting for the server.
+  // Names go at named_until without waiting for the server. A timer alone
+  // can outlive it (sleep, a restored page, a frozen tab: timers pause), so
+  // the real clock is also checked every second and whenever the page
+  // comes back.
   useEffect(() => {
     if (until === null) return;
-    const t = setTimeout(
-      () => end("until"),
+    const check = () => {
+      const t = Date.now();
+      const over = msUntil(until, t) === 0;
+      // Re-render only when the watermark's minute moves, or names are over.
+      setNow((was) =>
+        over || Math.floor(was / 60_000) !== Math.floor(t / 60_000) ? t : was,
+      );
+      if (over) end("until");
+    };
+    const back = () => {
+      if (document.visibilityState === "visible") check();
+    };
+    const exact = setTimeout(
+      check,
       Math.min(msUntil(until, Date.now()), LONGEST_WAIT),
     );
-    return () => clearTimeout(t);
+    const tick = setInterval(check, CHECK_EVERY_MS);
+    document.addEventListener("visibilitychange", back);
+    window.addEventListener("pageshow", check);
+    window.addEventListener("focus", check);
+    window.addEventListener("online", check);
+    return () => {
+      clearTimeout(exact);
+      clearInterval(tick);
+      document.removeEventListener("visibilitychange", back);
+      window.removeEventListener("pageshow", check);
+      window.removeEventListener("focus", check);
+      window.removeEventListener("online", check);
+    };
   }, [until]);
+
+  // Focus: the view while it loads (the dialog's opener has gone), then the
+  // named banner once names show. Said politely too.
+  const root = useRef<HTMLDivElement>(null);
+  const banner = useRef<HTMLParagraphElement>(null);
+  const loaded = d !== null;
+  useEffect(() => {
+    (loaded ? banner : root).current?.focus();
+  }, [loaded]);
 
   // A refusal that ends access, from the list.
   useEffect(() => {
@@ -157,17 +203,40 @@ export function NamedView({
     else if (meChanged(first.current, m)) end(endReasonFrom(m) ?? "changed");
   }, [me.data]);
 
-  if (!user) return null;
-  const mark = `${user.displayName} · ${clockText(now)}`;
+  // Never a frame of old names: other filters, or past named_until.
+  if (!user || !sameAsAsked) return null;
+  const live = d !== null && now < Date.parse(d.named_until);
+  const mark = `${user.fullName ?? user.displayName} · ${clockText(now)}`;
   const failed = q.data?.status === "failed" || (q.isError && !d);
+  const bannerText = d
+    ? `Named view · letter until ${dayLabel(d.clearance.end_date)} · this view is recorded`
+    : "";
 
   return (
-    <div data-named-view className="print:hidden">
-      {d ? (
+    <div
+      ref={root}
+      tabIndex={-1}
+      aria-busy={d === null && !failed}
+      data-named-view
+      className="print:hidden focus:outline-none"
+    >
+      <p role="status" className="sr-only">
+        {live
+          ? `Names shown. ${bannerText}`
+          : d === null && !failed
+            ? "Loading named patients…"
+            : ""}
+      </p>
+      {d && !live ? null : d ? (
         <>
-          <p className="mb-3 flex items-start gap-1.5 rounded-xl border border-warn-line bg-warn-wash px-3 py-2 text-[13px] font-semibold text-warn-deep">
+          <p
+            ref={banner}
+            tabIndex={-1}
+            data-named-banner
+            className="mb-3 flex items-start gap-1.5 rounded-xl border border-warn-line bg-warn-wash px-3 py-2 text-[13px] font-semibold text-warn-deep focus-visible:outline-2 focus-visible:outline-mint-deep"
+          >
             <Eye aria-hidden className="mt-0.5 size-4 shrink-0" />
-            {`Named view · letter until ${dayLabel(d.clearance.end_date)} · this view is recorded`}
+            {bannerText}
           </p>
           {d.count > d.patients.length && (
             <p className="mb-2 text-[13px] text-ink-2">
@@ -175,65 +244,67 @@ export function NamedView({
               {countLabel(d.count)}
             </p>
           )}
-          <div className="relative overflow-x-auto rounded-xl border border-line bg-white">
-            <table className="w-full text-left text-[13px]">
-              <caption className="sr-only">
-                {`Named patients · ${countLabel(d.patients.length)}`}
-              </caption>
-              <thead className="border-b border-line text-[12px] text-ink-3">
-                <tr>
-                  {[
-                    "Name",
-                    "MRN",
-                    "Patient ID",
-                    "Age, sex and location",
-                    "Conditions and findings",
-                  ].map((h) => (
-                    <th key={h} scope="col" className="px-3 py-2 font-semibold">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {d.patients.map((p) => (
-                  <tr key={p.pid} className="border-b border-line align-top">
-                    <th scope="row" className="px-3 py-2 font-semibold">
-                      {p.name}
-                    </th>
-                    <td className="px-3 py-2 font-mono">{p.mrn}</td>
-                    <td className="px-3 py-2 font-mono">{p.pid}</td>
-                    <td className="px-3 py-2 text-ink-2">
-                      {[
-                        `Age ${AGE_LABEL[p.age_band]}`,
-                        sexText(p.sex),
-                        settingText(p.setting),
-                      ].join(" · ")}
-                    </td>
-                    <td className="px-3 py-2 [overflow-wrap:anywhere]">
-                      {[
-                        ...p.conditions.map(conditionText),
-                        ...p.findings.map((f) =>
-                          f.flag
-                            ? `${f.name ?? NOT_STANDARDISED} (${FLAG_WORD[f.flag]})`
-                            : (f.name ?? NOT_STANDARDISED),
-                        ),
-                      ].join(", ")}
-                    </td>
+          <div className="overflow-x-auto rounded-xl border border-line bg-white">
+            {/* Sized to the table's whole scroll area, so the watermark is too. */}
+            <div className="relative inline-block min-w-full align-top">
+              <table className="w-full text-left text-[13px]">
+                <caption className="sr-only">
+                  {`Named patients · ${countLabel(d.patients.length)}`}
+                </caption>
+                <thead className="border-b border-line text-[12px] text-ink-3">
+                  <tr>
+                    {[
+                      "Name",
+                      "MRN",
+                      "Patient ID",
+                      "Age, sex and location",
+                      "Conditions and findings",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        scope="col"
+                        className="px-3 py-2 font-semibold"
+                      >
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            <div
-              data-watermark
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 flex select-none flex-wrap content-start gap-x-10 gap-y-12 overflow-hidden p-4 text-[13px] font-semibold text-ink/10"
-            >
-              {Array.from({ length: MARKS }, (_, i) => (
-                <span key={i} className="-rotate-12 whitespace-nowrap">
-                  {mark}
-                </span>
-              ))}
+                </thead>
+                <tbody>
+                  {d.patients.map((p) => (
+                    <tr key={p.pid} className="border-b border-line align-top">
+                      <th scope="row" className="px-3 py-2 font-semibold">
+                        {p.name}
+                      </th>
+                      <td className="px-3 py-2 font-mono">{p.mrn}</td>
+                      <td className="px-3 py-2 font-mono">{p.pid}</td>
+                      <td className="px-3 py-2 text-ink-2">
+                        {[
+                          `Age ${AGE_LABEL[p.age_band]}`,
+                          sexText(p.sex),
+                          settingText(p.setting),
+                        ].join(" · ")}
+                      </td>
+                      <td className="px-3 py-2 [overflow-wrap:anywhere]">
+                        {[
+                          ...p.conditions.map(conditionText),
+                          ...p.findings.map((f) =>
+                            f.flag
+                              ? `${f.name ?? NOT_STANDARDISED} (${FLAG_WORD[f.flag]})`
+                              : (f.name ?? NOT_STANDARDISED),
+                          ),
+                        ].join(", ")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div
+                data-watermark={mark}
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 select-none bg-repeat"
+                style={{ backgroundImage: watermarkTile(mark) }}
+              />
             </div>
           </div>
         </>

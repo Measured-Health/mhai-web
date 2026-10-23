@@ -105,7 +105,11 @@ function PurposeForm({
           ))}
         </div>
         {problem === "purpose" && (
-          <p id={`${id}-purpose`} className="mt-1.5 text-xs text-bad">
+          <p
+            id={`${id}-purpose`}
+            role="alert"
+            className="mt-1.5 text-xs text-bad"
+          >
             ✕ Choose a purpose.
           </p>
         )}
@@ -133,7 +137,7 @@ function PurposeForm({
       />
       <p className="mt-1 flex justify-between gap-3 text-[11px] text-ink-3">
         {problem === "note" ? (
-          <span id={`${id}-note-err`} className="text-xs text-bad">
+          <span id={`${id}-note-err`} role="alert" className="text-xs text-bad">
             ✕ Add a note for Other.
           </span>
         ) : (
