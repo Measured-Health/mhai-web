@@ -36,6 +36,12 @@ export type StepUpInput = {
   extra?: string;
 } & StepUp;
 
+/** Just the two-step or backup code of what the dialog returned. */
+export const codeOf = (input: StepUpInput): StepUp =>
+  "backup_code" in input
+    ? { backup_code: input.backup_code }
+    : { mfa_code: input.mfa_code };
+
 export type StepUpDialogProps = {
   open: boolean;
   title: string;

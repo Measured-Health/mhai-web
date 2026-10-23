@@ -16,7 +16,7 @@ function setup(
   over: {
     email?: string | null;
     triage?: "ready" | "not_ready";
-    resetFails?: boolean;
+    resetFails?: boolean | (() => boolean);
     delayMs?: number;
   } = {},
 ) {
@@ -545,6 +545,92 @@ describe("mock settings", () => {
     expect(after.waiting).toBe(37);
     expect(after.last_reset!.cleared).toBe(112);
     expect(await actions(f.m)).not.toContain("feedback_buffer_cleared");
+  });
+
+  it("a failed reset adds a real failed job to the System jobs list", async () => {
+    const f = setup({ resetFails: true });
+    const before = (await f.m.listJobs({ status: "failed" })).jobs.length;
+    const r = await f.m.resetFeedbackBuffer({ reason, ...CODE }, KEY());
+    // Still running: nothing failed yet.
+    expect((await f.m.listJobs({ status: "failed" })).jobs).toHaveLength(
+      before,
+    );
+    f.advance(3000);
+    const jobs = (await f.m.listJobs({ status: "failed" })).jobs;
+    expect(jobs).toHaveLength(before + 1);
+    const j = jobs.find((x) => x.id === r.job_id)!;
+    expect(j.type).toBe("feedback_buffer_reset");
+    expect(j.status).toBe("failed");
+    expect(j.hospital).toBeNull();
+    // Listed once, however often it is read.
+    expect((await f.m.listJobs({ status: "failed" })).jobs).toHaveLength(
+      before + 1,
+    );
+    // Retrying it works like any other.
+    const out = await f.m.retryJobs({ ids: [r.job_id] }, KEY());
+    expect(out.retried).toEqual([r.job_id]);
+    // A reset that works adds none.
+    const g = setup();
+    await g.m.resetFeedbackBuffer({ reason, ...CODE }, KEY());
+    g.advance(3000);
+    await g.m.getSettings();
+    expect((await g.m.listJobs({ status: "failed" })).jobs).toHaveLength(
+      before,
+    );
+  });
+
+  it("two failed resets in a row both reach System's list", async () => {
+    const f = setup({ resetFails: true });
+    const a = await f.m.resetFeedbackBuffer({ reason, ...CODE }, KEY());
+    f.advance(3000);
+    await f.m.getSettings();
+    const b = await f.m.resetFeedbackBuffer({ reason, ...CODE }, KEY());
+    f.advance(3000);
+    const ids = (await f.m.listJobs({ status: "failed" })).jobs.map(
+      (j) => j.id,
+    );
+    expect(ids).toEqual(expect.arrayContaining([a.job_id, b.job_id]));
+    expect(ids.filter((i) => i === a.job_id)).toHaveLength(1);
+  });
+
+  it("a failed reset's link goes away once System retries or cancels the job", async () => {
+    for (const how of ["retry", "cancel"] as const) {
+      const f = setup({ resetFails: true });
+      const r = await f.m.resetFeedbackBuffer({ reason, ...CODE }, KEY());
+      f.advance(3000);
+      expect((await f.m.getSettings()).feedback_buffer.failed_job_id).toBe(
+        r.job_id,
+      );
+      if (how === "retry") await f.m.retryJobs({ ids: [r.job_id] }, KEY());
+      else
+        await f.m.cancelJobs(
+          { ids: [r.job_id], reason: "no_longer_needed", ...CODE },
+          KEY(),
+        );
+      const fb = (await f.m.getSettings()).feedback_buffer;
+      expect(fb.failed_job_id).toBeNull();
+      // The last outcome is still the earlier clear.
+      expect(fb.last_reset!.cleared).toBe(112);
+    }
+  });
+
+  it("a failed reset, then one that works: no failed link, the job stays listed", async () => {
+    let fails = true;
+    const f = setup({ resetFails: () => fails });
+    const a = await f.m.resetFeedbackBuffer({ reason, ...CODE }, KEY());
+    f.advance(3000);
+    expect((await f.m.getSettings()).feedback_buffer.failed_job_id).toBe(
+      a.job_id,
+    );
+    fails = false;
+    await f.m.resetFeedbackBuffer({ reason, ...CODE }, KEY());
+    f.advance(3000);
+    const fb = (await f.m.getSettings()).feedback_buffer;
+    expect(fb.failed_job_id).toBeNull();
+    expect(fb.last_reset!.cleared).toBe(37);
+    expect(
+      (await f.m.listJobs({ status: "failed" })).jobs.map((j) => j.id),
+    ).toContain(a.job_id);
   });
 
   it("every write except cancelRequest needs the code", async () => {

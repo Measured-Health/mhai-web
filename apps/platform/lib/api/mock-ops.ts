@@ -14,8 +14,10 @@ import {
 } from "./ops-contract";
 import {
   SHARED_CLEAN_UP,
+  SHARED_JOB_SOURCE,
   SHARED_TRIAGE,
   type SharedCleanUp,
+  type SharedJobSource,
   type SharedTriage,
 } from "./settings-fixtures";
 import {
@@ -82,6 +84,10 @@ export function createMockOps(
   };
   const jobs: Job[] = seedJobs(core.now());
 
+  /** Brings in jobs other areas left behind (a failed learning-data reset). */
+  const sync = () =>
+    (core.shared[SHARED_JOB_SOURCE] as SharedJobSource | undefined)?.sync(jobs);
+
   const failedNow = () => jobs.filter((j) => j.status === "failed").length;
   const failedLast24h = () =>
     jobs.filter((j) => core.now() - Date.parse(j.failed_at) <= DAY_MS).length;
@@ -97,6 +103,7 @@ export function createMockOps(
   return {
     getHealth: () =>
       core.read(() => {
+        sync();
         const now = mode;
         if (now === "unavailable") return fail(503, "unavailable");
         const h = buildHealth(core.now(), now, failedNow(), failedLast24h());
@@ -111,6 +118,7 @@ export function createMockOps(
 
     listJobs: (q: JobQuery) =>
       core.read(() => {
+        sync();
         const status =
           filter<JobStatus | "all">(q.status, [...JOB_STATUSES, "all"]) ??
           "failed";
@@ -133,6 +141,7 @@ export function createMockOps(
 
     retryJobs: (body, opts) =>
       core.write(opts, (m) => {
+        sync();
         const ids = idsOf(body?.ids);
         const retried: string[] = [];
         const skipped: string[] = [];
@@ -158,6 +167,7 @@ export function createMockOps(
 
     cancelJobs: (body, opts) =>
       core.write(opts, async (m) => {
+        sync();
         const ids = idsOf(body?.ids);
         const reason = CANCEL_REASONS.find((r) => r === body.reason);
         if (!reason) return invalid();

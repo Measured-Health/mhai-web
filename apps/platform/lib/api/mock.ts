@@ -239,7 +239,7 @@ export function createMockPlatform({
   /** Whether triage can be switched on (see `SettingsMockOptions`). */
   triage?: SettingsMockOptions["triage"];
   /** The learning-data reset fails (see `SettingsMockOptions`). */
-  resetFails?: boolean;
+  resetFails?: boolean | (() => boolean);
   /** For tests: the core the areas are built on, once it exists. */
   onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {

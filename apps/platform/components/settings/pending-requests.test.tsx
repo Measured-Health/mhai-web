@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ApiError } from "@mhai/api-client/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetPlatformClientForTests,
@@ -160,6 +161,24 @@ describe("changes waiting for approval", () => {
       version: 2,
       mfa_code: MOCK_CODE,
     });
+  });
+
+  it("no code is asked for when the preview fails", async () => {
+    await tundeShortens();
+    const approve = vi.spyOn(api, "approveRequest");
+    vi.spyOn(api, "previewRetention").mockRejectedValueOnce(
+      new ApiError(503, "unavailable"),
+    );
+    await open();
+    await userEvent.click(btn("Approve"));
+    expect(
+      await within(region()).findByText(
+        "Couldn't check what would be deleted. Try again.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByLabelText("Digit 1 of 6")).toBeNull();
+    expect(approve).not.toHaveBeenCalled();
   });
 
   it("triage Approve shows the clinical sign-off", async () => {
