@@ -56,7 +56,7 @@ function hospitalOf(state: AnalyticsState, id: string): Person {
 }
 
 /**
- * The Analytics page (spec §4, layout B): What changed on the left, the
+ * The Usage page (spec §4, layout B): What changed on the left, the
  * selected change on the right, the tabs below. Each area has its own
  * "Updated {time}" and fails on its own. On phones the list shows alone;
  * a row opens the detail, with Back.
@@ -166,7 +166,7 @@ export function AnalyticsView() {
 
   return (
     <>
-      <TopBar title="Analytics" sub="Every active hospital" />
+      <TopBar title="Usage" sub="Every active hospital" />
       <div className="flex-1 overflow-auto px-4 pb-10 pt-6 md:px-[26px]">
         <div className="mx-auto flex max-w-[1100px] flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">

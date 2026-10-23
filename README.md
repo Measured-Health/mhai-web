@@ -234,7 +234,7 @@ Clinic and approve it: it shows Removal scheduled and, about a minute later,
 Removed. The sample data lives in the tab's memory, so a reload starts it
 afresh and signs you out.
 
-**Analytics.** **Analytics** in the sidebar shows how the service is used
+**Usage across hospitals.** **Usage** in the sidebar shows how the service is used
 across every active hospital, in counts only: no patient names, questions
 or answers. **What changed** always compares the last 7 days with the 4
 weeks before, whatever period is picked, and lists the biggest changes
@@ -251,9 +251,9 @@ with zeros, "Not enough data to compare yet" and "No active hospital
 admin". The period picker (last 7, 30 or 90 days) changes the charts, the
 tabs and the CSV. On a phone, tap a change to see it, then **Back**.
 
-**Notifications.** The bell at the top of every page counts the analytics
+**Notifications.** The bell at the top of every page counts the usage
 changes from **What changed** that you haven't seen. Opening it shows the 20
-newest (the change, the hospital and when) and marks them seen; choosing one opens **Analytics**
+newest (the change, the hospital and when) and marks them seen; choosing one opens **Usage**
 on that change, and **Mark all seen** clears the count. Seen is per person:
 Ada seeing a change doesn't clear Tunde's bell. Platform admins and auditors
 both have the bell. On **Account**, platform admins choose **Analytics
@@ -332,7 +332,7 @@ lists (search `P-6DC445` to find one), two earlier exports and an Intact
 check. Auditors and platform admins both read; the demo does not mirror the
 session's other platform actions into the log.
 
-**Clearances.** **Clearances** in the sidebar (after Analytics) is where
+**Clearances.** **Clearances** in the sidebar (after Usage) is where
 Measured Health checks the clearance letters hospitals upload, and where the
 named-access switch lives. The queue opens on **To verify** (oldest first),
 with Active, Ending soon and All; pick a letter to see what the hospital

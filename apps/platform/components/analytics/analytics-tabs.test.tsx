@@ -14,7 +14,7 @@ import { ADA, renderWithAuth } from "@/tests/render";
 import { AnalyticsView } from "./analytics-view";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/analytics",
+  usePathname: () => "/usage",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));

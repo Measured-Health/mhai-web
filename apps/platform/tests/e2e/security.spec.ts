@@ -89,7 +89,7 @@ test("every page has a CSP header with a nonce", async ({ page }) => {
     "/hospitals",
     "/hospitals/new",
     "/hospitals/h_northgate",
-    "/analytics",
+    "/usage",
     "/system/health",
     "/system/jobs",
     "/clearances",
@@ -124,6 +124,15 @@ test("every page has a CSP header with a nonce", async ({ page }) => {
   // A fresh nonce for every response.
   expect(nonces.size).toBe(paths.length);
   expect(violations).toEqual([]);
+});
+
+test("/analytics?change=x lands on /usage?change=x", async ({ request }) => {
+  const res = await request.get("/analytics?change=x", { maxRedirects: 0 });
+  expect(res.status()).toBe(307);
+  expect(new URL(res.headers()["location"]!, "http://x").pathname).toBe(
+    "/usage",
+  );
+  expect(res.headers()["location"]).toContain("change=x");
 });
 
 test("the phone layout shows cards and the step-up as a sheet", async ({

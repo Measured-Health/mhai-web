@@ -26,7 +26,7 @@ vi.mock("@mhai/ui/hooks/use-media", () => ({
   useIsDesktop: () => env.desktop,
 }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/analytics",
+  usePathname: () => "/usage",
   useRouter: () => ({ push: env.push, replace: vi.fn() }),
 }));
 
@@ -72,7 +72,7 @@ afterEach(() => {
 
 const bell = (name: string | RegExp = /^Notifications/) =>
   screen.findByRole("button", { name });
-const list = () => screen.getByRole("list", { name: "Notifications" });
+const list = () => screen.getByRole("list", { name: "New usage changes" });
 
 describe("the analytics bell", () => {
   it("the bell shows the count and its label", async () => {
@@ -206,15 +206,13 @@ describe("the analytics bell", () => {
     ).toBeInTheDocument();
   });
 
-  it("an item opens Analytics with that change selected", async () => {
+  it("an item opens Usage with that change selected", async () => {
     renderWithAuth(<NotificationBell />);
     await userEvent.click(await bell("Notifications, 6 new"));
     await userEvent.click(
       within(list()).getByRole("button", { name: /answers reviewed faster/ }),
     );
-    expect(env.push).toHaveBeenCalledWith(
-      "/analytics?change=chg_hav_review_time",
-    );
+    expect(env.push).toHaveBeenCalledWith("/usage?change=chg_hav_review_time");
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", { name: "Notifications" }),
@@ -357,7 +355,9 @@ describe("the analytics bell", () => {
     expect(sheet).toContainElement(list());
     await userEvent.keyboard("{Escape}");
     await waitFor(() =>
-      expect(screen.queryByRole("list", { name: "Notifications" })).toBeNull(),
+      expect(
+        screen.queryByRole("list", { name: "New usage changes" }),
+      ).toBeNull(),
     );
     expect(await bell()).toHaveFocus();
   });
@@ -366,7 +366,7 @@ describe("the analytics bell", () => {
     who = AMARA.email;
     const view = renderWithAuth(<NotificationBell />, { user: AMARA });
     await userEvent.click(await bell("Notifications, 6 new"));
-    await screen.findByRole("list", { name: "Notifications" });
+    await screen.findByRole("list", { name: "New usage changes" });
     expect(await bell("Notifications")).toBeInTheDocument();
     view.unmount();
     who = ADA.email;
@@ -406,7 +406,7 @@ describe("the analytics bell", () => {
     await api.markSeen({}, { idempotencyKey: "k-none" });
     renderWithAuth(<NotificationBell />);
     await userEvent.click(await bell("Notifications"));
-    await screen.findByRole("list", { name: "Notifications" });
+    await screen.findByRole("list", { name: "New usage changes" });
     expect(screen.queryByRole("button", { name: "Mark all seen" })).toBeNull();
   });
 });

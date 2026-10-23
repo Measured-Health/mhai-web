@@ -15,7 +15,7 @@ import {
 export const NAV = [
   { href: "/hospitals", label: "Hospitals", Icon: Building2 },
   { href: "/connections", label: "Connections", Icon: Cable },
-  { href: "/analytics", label: "Analytics", Icon: ChartColumn },
+  { href: "/usage", label: "Usage", Icon: ChartColumn },
   { href: "/clearances", label: "Clearances", Icon: FileCheck2 },
   { href: "/legal-holds", label: "Legal holds", Icon: Scale },
   { href: "/system", label: "System", Icon: HeartPulse },

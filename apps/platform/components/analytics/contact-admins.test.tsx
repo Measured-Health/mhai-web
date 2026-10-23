@@ -5,7 +5,7 @@ import { renderWithAuth, TestProviders } from "@/tests/render";
 import { ContactAdmins } from "./contact-admins";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/analytics",
+  usePathname: () => "/usage",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 

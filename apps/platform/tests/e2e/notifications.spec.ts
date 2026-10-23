@@ -64,7 +64,7 @@ test("the bell counts new changes, the list opens, and they're marked seen", asy
   await expect(bell(page)).toHaveAccessibleName(UNSEEN);
   await bell(page).click();
   await expect(list(page)).toBeVisible();
-  const items = list(page).getByRole("list", { name: "Notifications" });
+  const items = list(page).getByRole("list", { name: "New usage changes" });
   await expect(items.getByRole("listitem").first()).toContainText("New");
   await expect(
     list(page).getByRole("button", { name: "Mark all seen" }),
@@ -90,16 +90,16 @@ test("Ada's seen doesn't clear Tunde's bell", async ({ page }) => {
   await expect(bell(page)).toHaveAccessibleName(UNSEEN);
 });
 
-test("an item opens Analytics on that change", async ({ page }) => {
+test("an item opens Usage on that change", async ({ page }) => {
   await signIn(page, ADA);
   await expect(bell(page)).toHaveAccessibleName(UNSEEN);
   await bell(page).click();
   await list(page)
     .getByRole("button", { name: /Critical alerts acknowledged 2× slower/ })
     .click();
-  await expect(page).toHaveURL(/\/analytics\?change=/);
+  await expect(page).toHaveURL(/\/usage\?change=/);
   await expect(
-    page.getByRole("heading", { level: 1, name: "Analytics" }),
+    page.getByRole("heading", { level: 1, name: "Usage" }),
   ).toBeVisible();
   const words = /Critical alerts acknowledged 2× slower/;
   if (isMobile(page)) {
