@@ -538,6 +538,30 @@ describe("mock clearances: the named-access switch", () => {
     expect([river.position, river.history]).toEqual(["off", []]);
   });
 
+  it("the switch carries Measured Health's day, and a sign-off dated after it is 422 invalid", async () => {
+    const { m, advance } = setup();
+    expect((await m.getNamedAccess()).today).toBe("2026-10-22");
+    const river = await switchOf(m, "h_riverside");
+    const ask = (at: string) =>
+      m.requestNamedAccess(
+        {
+          hospital: "h_riverside",
+          position: "letters_only",
+          signoffs: { ...SIGNOFFS, legal: { ...SIGNOFFS.legal, at } },
+          version: river.version,
+          ...CODE,
+        },
+        KEY(),
+      );
+    expect(await failure(ask("2026-10-23"))).toEqual([422, "invalid"]);
+    advance(14 * 3_600_000); // 23:30 UTC on 22 Oct: Lagos is on the 23rd
+    expect((await m.getNamedAccess()).today).toBe("2026-10-23");
+    await ask("2026-10-23");
+    expect((await switchOf(m, "h_riverside")).request?.position).toBe(
+      "letters_only",
+    );
+  });
+
   it("a raise without the legal sign-off is 409 signoff_missing", async () => {
     const { m } = setup();
     const river = await switchOf(m, "h_riverside");

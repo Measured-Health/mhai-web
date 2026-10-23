@@ -335,7 +335,11 @@ export function createClearanceMock(
         effective: lower(global.position, s.position),
       };
     });
-    return { global: structuredClone(global), hospitals };
+    return {
+      global: structuredClone(global),
+      hospitals,
+      today: dayIn(now(), DEMO_ZONE),
+    };
   }
   const requestHospital = (hospital: unknown): string | null => {
     if (hospital === null) return null;
@@ -482,6 +486,9 @@ export function createClearanceMock(
           fail(409, "above_global");
         if (s.request) fail(409, "conflict");
         const signoffs = signoffsOf(b.signoffs);
+        // No sign-off from the future, by Measured Health's day.
+        const today = dayIn(now(), DEMO_ZONE);
+        if (SIGNOFF_KINDS.some((k) => signoffs[k].at > today)) invalid();
         await core.checkCode(m, body);
         const ref =
           hospital === null

@@ -162,6 +162,11 @@ export type HospitalSwitch = SwitchState & {
 export type NamedAccessOut = {
   global: SwitchState;
   hospitals: HospitalSwitch[];
+  /**
+   * Measured Health's day (YYYY-MM-DD), from the server: a sign-off may not
+   * be dated after it. The browser does no time-zone arithmetic.
+   */
+  today: string;
 };
 
 export interface ClearancesClient {

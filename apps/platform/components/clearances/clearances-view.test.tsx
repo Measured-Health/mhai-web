@@ -223,6 +223,32 @@ describe("the queue", () => {
   });
 });
 
+describe("the switch panel", () => {
+  it("the named-access switch sits at the top, above the queue", async () => {
+    await open();
+    const panel = screen.getByRole("region", { name: "Named access" });
+    const queue = screen.getByRole("list", { name: "Letters" });
+    expect(
+      panel.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("with global Off, the panel shows Off and Turn up beside the empty page", async () => {
+    await open(ADA, "off");
+    await screen.findByText("Named access isn't available yet");
+    const panel = screen.getByRole("region", { name: "Named access" });
+    const every = within(panel).getByRole("group", { name: "Every hospital" });
+    expect(every.querySelector("[data-position='off']")).not.toBeNull();
+    expect(
+      within(every).getByRole("button", { name: "Turn up" }),
+    ).toBeInTheDocument();
+    // No hospital can go above global: none offers Turn up.
+    expect(
+      within(panel).getAllByRole("button", { name: "Turn up" }),
+    ).toHaveLength(1);
+  });
+});
+
 describe("the detail", () => {
   it("the detail shows what was entered beside the checklist", async () => {
     await open();

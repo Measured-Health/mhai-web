@@ -51,6 +51,9 @@ const LETTERS = () =>
     clearances: [{ id: "cl_wait", today: "2026-10-23" }],
     next_cursor: null,
   });
+/** The switch as the server sends it: with Measured Health's day. */
+const SWITCH = () =>
+  Response.json({ global: {}, hospitals: [], today: "2026-10-23" });
 const SIGNOFFS = {
   clinical: { by: "Dr. A. Musa", at: "2026-02-01", ref: "CS-014" },
   privacy: { by: "Ngozi Eke", at: "2026-02-02", ref: "PR-007" },
@@ -692,6 +695,7 @@ const ROWS: Row[] = [
     "GET",
     "/api/v1/platform/named-access",
     undefined,
+    SWITCH,
   ],
   [
     "requestNamedAccess",
@@ -715,6 +719,7 @@ const ROWS: Row[] = [
       version: 1,
       mfa_code: "123456",
     },
+    SWITCH,
   ],
   [
     "approveNamedAccess",
@@ -722,6 +727,7 @@ const ROWS: Row[] = [
     "POST",
     "/api/v1/platform/named-access/requests/req_1/approve",
     { version: 2, mfa_code: "123456" },
+    SWITCH,
   ],
   [
     "cancelNamedAccess",
@@ -729,6 +735,7 @@ const ROWS: Row[] = [
     "POST",
     "/api/v1/platform/named-access/requests/req_1/cancel",
     { version: 2 },
+    SWITCH,
   ],
   [
     "lowerNamedAccess",
@@ -752,6 +759,7 @@ const ROWS: Row[] = [
       version: 4,
       mfa_code: "123456",
     },
+    SWITCH,
   ],
 ];
 
@@ -1070,6 +1078,32 @@ describe("live platform client", () => {
       expect(clearances[0]!.today).toBe("2026-10-23");
     });
 
+    it("a switch reply without Measured Health's day is refused", async () => {
+      const refused = { status: 502, code: "bad_gateway" };
+      for (const today of [undefined, "", "23 Oct 2026", "2026-02-30", 1]) {
+        reply(() => Response.json({ global: {}, hospitals: [], today }));
+        const c = client();
+        await expect(c.getNamedAccess()).rejects.toMatchObject(refused);
+        await expect(
+          c.cancelNamedAccess("r", { version: 1 }, K),
+        ).rejects.toMatchObject(refused);
+        await expect(
+          c.lowerNamedAccess(
+            {
+              hospital: null,
+              position: "off",
+              reason: "r",
+              version: 1,
+              ...CODE,
+            },
+            K,
+          ),
+        ).rejects.toMatchObject(refused);
+      }
+      reply(SWITCH);
+      expect((await client().getNamedAccess()).today).toBe("2026-10-23");
+    });
+
     it("a page is fetched with apiBlob: an image Accept, no-store, and only PNG or JPEG", async () => {
       reply(png);
       const page = await client().getClearancePage("cl_wait", 1);
@@ -1096,7 +1130,7 @@ describe("live platform client", () => {
     });
 
     it("every write carries its Idempotency-Key", async () => {
-      // A letter reply carries its hospital's day; the switch replies needn't.
+      // Every reply here carries a day: a letter's, or the switch's.
       reply(LETTER);
       const c = client();
       await c.verifyClearance(
