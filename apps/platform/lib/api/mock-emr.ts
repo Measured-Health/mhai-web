@@ -311,6 +311,8 @@ export function emrMock(core: MockCore): EmrClient {
           r.test_result ??
           (missing || r.base_url.includes("fail") ? "sign_in_refused" : null);
         r.last_test = { at: iso(now()), ok: code === null, code };
+        // A pass means the problems are fixed: the demo shows it as Connected.
+        if (code === null) r.errors = [];
         log(person(m), "emr_connection_tested", entry(r));
         return full(r);
       }),

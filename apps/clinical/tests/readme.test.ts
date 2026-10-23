@@ -186,4 +186,18 @@ describe("README demo instructions", () => {
     expect(section).toMatch(/clinical,\s+privacy\s+and\s+legal\s+sign-off/);
     expect(section).toMatch(/two\s+platform\s+admins/);
   });
+
+  it("documents the EMR connections and alert settings demo", () => {
+    const section = readme.slice(
+      readme.indexOf("### EMR connections and alert settings"),
+      readme.indexOf("### Analysis"),
+    );
+    expect(section).toMatch(/Sample\s+data\s+only/);
+    expect(section).toMatch(/\*\*Connections\*\*/);
+    expect(section).toMatch(/\*\*Alert\s+settings\*\*/);
+    expect(section).toMatch(/`123456`/);
+    expect(section).toMatch(/write-only/);
+    expect(section).toMatch(/Plan\s+5a\s+clinical\s+and\s+privacy\s+sign-off/);
+    expect(section).not.toMatch(/\blab\b/i);
+  });
 });

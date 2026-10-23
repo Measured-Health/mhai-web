@@ -119,6 +119,16 @@ describe("Add a connection", () => {
     );
   });
 
+  it("clears the typed secret after a successful save", async () => {
+    renderWithAuth(<AddConnectionView />);
+    await fill();
+    expect(screen.getByLabelText("Shared key")).toHaveValue(SECRET);
+    await code(MOCK_CODE);
+    await waitFor(() => expect(nav.push).toHaveBeenCalled());
+    expect(screen.getByLabelText("Shared key")).toHaveValue("");
+    expect(document.body.innerHTML).not.toContain(SECRET);
+  });
+
   it("a wrong code keeps the form and says That code didn't work. Try again.", async () => {
     renderWithAuth(<AddConnectionView />);
     await fill();
