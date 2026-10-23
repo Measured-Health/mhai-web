@@ -66,7 +66,7 @@ export function AnalyticsTabs({
     <div className="card-v3 px-[22px] py-5">
       <div
         role="tablist"
-        aria-label="Analytics areas"
+        aria-label="Usage areas"
         className="mb-4 flex gap-1 overflow-x-auto border-b border-line"
       >
         {TABS.map((k, i) => (

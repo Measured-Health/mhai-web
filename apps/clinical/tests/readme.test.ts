@@ -103,8 +103,8 @@ describe("README demo instructions", () => {
     );
   });
 
-  it("documents the platform analytics demo", () => {
-    expect(readme).toMatch(/\*\*Analytics\.\*\*/);
+  it("documents the platform usage demo", () => {
+    expect(readme).toMatch(/\*\*Usage across hospitals\.\*\*/);
   });
 
   it("documents the platform clearances demo", () => {

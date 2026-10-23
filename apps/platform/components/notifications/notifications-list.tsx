@@ -57,7 +57,7 @@ export function NotificationsList({
         <p className="py-3 text-[14px] text-ink-2">Nothing new</p>
       ) : (
         <ul
-          aria-label="Notifications"
+          aria-label="New usage changes"
           className="flex max-h-[60vh] flex-col overflow-auto"
         >
           {items.map((n) => {

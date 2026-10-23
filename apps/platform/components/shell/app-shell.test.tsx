@@ -42,7 +42,7 @@ describe("the platform shell", () => {
     expect(links).toEqual([
       ["Hospitals", "/hospitals"],
       ["Connections", "/connections"],
-      ["Analytics", "/analytics"],
+      ["Usage", "/usage"],
       ["Clearances", "/clearances"],
       ["Legal holds", "/legal-holds"],
       ["System", "/system"],
@@ -95,21 +95,28 @@ describe("the platform shell", () => {
     ).toHaveAttribute("href", "/connections");
   });
 
-  it("the sidebar shows Analytics after Connections", () => {
+  it("the sidebar shows Usage between Connections and Clearances, linking to /usage", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     const names = within(nav)
       .getAllByRole("link")
       .map((l) => l.textContent);
-    const at = names.indexOf("Analytics");
+    const at = names.indexOf("Usage");
     expect(names[at - 1]).toBe("Connections");
     expect(names[at + 1]).toBe("Clearances");
-    expect(
-      within(nav).getByRole("link", { name: "Analytics" }),
-    ).toHaveAttribute("href", "/analytics");
+    expect(within(nav).getByRole("link", { name: "Usage" })).toHaveAttribute(
+      "href",
+      "/usage",
+    );
   });
 
-  it("the sidebar shows Clearances straight after Analytics; active on /clearances", () => {
+  it("no sidebar entry says Analytics", () => {
+    shell();
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    expect(within(nav).queryByText(/Analytics/)).toBeNull();
+  });
+
+  it("the sidebar shows Clearances straight after Usage; active on /clearances", () => {
     pathname.value = "/clearances";
     for (const user of [undefined, AMARA]) {
       const { unmount } = shell(user);
@@ -118,7 +125,7 @@ describe("the platform shell", () => {
         .getAllByRole("link")
         .map((l) => l.textContent);
       const at = names.indexOf("Clearances");
-      expect(names[at - 1]).toBe("Analytics");
+      expect(names[at - 1]).toBe("Usage");
       expect(names[at + 1]).toBe("Legal holds");
       const link = within(nav).getByRole("link", { name: "Clearances" });
       expect(link).toHaveAttribute("href", "/clearances");

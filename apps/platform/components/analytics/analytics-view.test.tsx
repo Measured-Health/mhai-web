@@ -21,7 +21,7 @@ vi.mock("@mhai/ui/csv", async (orig) => ({
 }));
 const nav = vi.hoisted(() => ({ search: "", replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/analytics",
+  usePathname: () => "/usage",
   useRouter: () => ({ push: vi.fn(), replace: nav.replace }),
   useSearchParams: () => new URLSearchParams(nav.search),
 }));
@@ -63,11 +63,11 @@ async function open(user = ADA) {
   await within(region("What changed")).findByRole("list", { name: "Changes" });
 }
 
-describe("the Analytics page", () => {
+describe("the Usage page", () => {
   it("opens on What changed with the most serious first and selected", async () => {
     await open();
     expect(
-      screen.getByRole("heading", { level: 1, name: "Analytics" }),
+      screen.getByRole("heading", { level: 1, name: "Usage" }),
     ).toBeInTheDocument();
     expect(
       within(region("What changed")).getByText(/^Updated \d{2}:\d{2}$/),
@@ -274,7 +274,7 @@ describe("the Analytics page", () => {
       await screen.findByText("Couldn't load what changed."),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { level: 1, name: "Analytics" }),
+      screen.getByRole("heading", { level: 1, name: "Usage" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("combobox", { name: "Period" }),
@@ -425,7 +425,7 @@ describe("the Analytics page", () => {
   });
 });
 
-describe("opening Analytics on a change", () => {
+describe("opening Usage on a change", () => {
   it("?change= selects that change", async () => {
     nav.search = "change=chg_hav_review_time";
     await open();
@@ -456,6 +456,6 @@ describe("opening Analytics on a change", () => {
     await open();
     await screen.findByText("That change has cleared.");
     await userEvent.click(rows()[1]!);
-    expect(nav.replace).toHaveBeenCalledWith("/analytics");
+    expect(nav.replace).toHaveBeenCalledWith("/usage");
   });
 });

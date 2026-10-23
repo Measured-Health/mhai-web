@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The platform admin app's **Analytics** page is now **Usage** (at `/usage`;
+  `/analytics` redirects there). Nothing else about it changes.
 - The fonts are now served from the repository (`packages/tokens/fonts`)
   instead of being fetched from Google during `next build`, so builds work
   offline and no longer break on Google's font URLs. They look the same.

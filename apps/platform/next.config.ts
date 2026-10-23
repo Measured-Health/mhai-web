@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: repositoryRoot,
   // Shared workspace packages ship TypeScript source.
   transpilePackages: ["@mhai/api-client", "@mhai/tokens", "@mhai/ui"],
+  async redirects() {
+    return [{ source: "/analytics", destination: "/usage", permanent: false }];
+  },
   turbopack: {
     root: repositoryRoot,
     rules: {

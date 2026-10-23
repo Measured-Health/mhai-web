@@ -16,10 +16,10 @@ test.afterEach(async ({ page }) => expectNoStorage(page));
 const NGH_CRITICAL = /Critical alerts acknowledged 2× slower/;
 const RIVERSIDE_NOTE = /Called Musa Danjuma/;
 
-/** Signs in and opens Analytics by clicking (a page load would sign out). */
-async function openAnalytics(page: Page, email: string) {
+/** Signs in and opens Usage by clicking (a page load would sign out). */
+async function openUsage(page: Page, email: string) {
   await signIn(page, email);
-  await openNav(page, "Analytics");
+  await openNav(page, "Usage");
   await expect(
     page.getByRole("heading", { level: 2, name: "What changed" }),
   ).toBeVisible();
@@ -35,10 +35,10 @@ const row = (page: Page, text: string | RegExp) =>
 const detail = (page: Page) =>
   page.getByRole("heading", { level: 2, name: NGH_CRITICAL });
 
-test("Analytics opens on What changed with Northgate's Critical change selected", async ({
+test("Usage opens on What changed with Northgate's Critical change selected", async ({
   page,
 }) => {
-  await openAnalytics(page, ADA);
+  await openUsage(page, ADA);
   const first = row(page, NGH_CRITICAL);
   await expect(first).toBeVisible();
   await expect(first).toHaveAttribute("aria-current", "true");
@@ -65,7 +65,7 @@ test("Analytics opens on What changed with Northgate's Critical change selected"
 test("mark followed up with a note as Ada, then sign in as Tunde in the same tab and see it", async ({
   page,
 }) => {
-  await openAnalytics(page, ADA);
+  await openUsage(page, ADA);
   await row(page, NGH_CRITICAL).click();
   await expect(detail(page)).toBeVisible();
   await page
@@ -81,7 +81,7 @@ test("mark followed up with a note as Ada, then sign in as Tunde in the same tab
 
   // Same tab: sign out and sign in as Tunde; the follow-up is still there.
   await signOut(page);
-  await openAnalytics(page, TUNDE);
+  await openUsage(page, TUNDE);
   const followed = row(page, /Critical alerts acknowledged 2× slower/);
   await expect(followed).toContainText("Followed up by Ada Bakare");
   await followed.click();
@@ -92,7 +92,7 @@ test("mark followed up with a note as Ada, then sign in as Tunde in the same tab
 });
 
 test("the auditor sees follow-ups but no controls", async ({ page }) => {
-  await openAnalytics(page, AMARA);
+  await openUsage(page, AMARA);
   await page.getByRole("button", { name: /^Show all \(\d+\)$/ }).click();
   const riverside = row(page, /Riverside Children's Hospital/);
   await expect(riverside).toContainText("Followed up by Tunde Okafor");
@@ -128,7 +128,7 @@ test("the auditor sees follow-ups but no controls", async ({ page }) => {
 test("Download CSV saves a file whose hidden values read Fewer than 5", async ({
   page,
 }) => {
-  await openAnalytics(page, ADA);
+  await openUsage(page, ADA);
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download CSV" }).click();
   const file = await download;
@@ -154,7 +154,7 @@ test("Download CSV saves a file whose hidden values read Fewer than 5", async ({
 
 test("phone: tap a change, see the detail, Back", async ({ page }) => {
   test.skip(!isMobile(page), "phones only; desktop shows both side by side");
-  await openAnalytics(page, ADA);
+  await openUsage(page, ADA);
   const northgate = row(page, NGH_CRITICAL);
   await expect(detail(page)).toHaveCount(0);
 
@@ -170,7 +170,7 @@ test("phone: tap a change, see the detail, Back", async ({ page }) => {
 });
 
 test("the Hospitals tab compares Riverside with the rest", async ({ page }) => {
-  await openAnalytics(page, ADA);
+  await openUsage(page, ADA);
   await page.getByRole("tab", { name: "Hospitals" }).click();
   const riverside = page.getByRole("button", {
     name: "Riverside Children's Hospital",
