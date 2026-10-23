@@ -1,5 +1,6 @@
 import {
   Building2,
+  Cable,
   ChartColumn,
   HeartPulse,
   History,
@@ -12,6 +13,7 @@ import {
 
 export const NAV = [
   { href: "/hospitals", label: "Hospitals", Icon: Building2 },
+  { href: "/connections", label: "Connections", Icon: Cable },
   { href: "/analytics", label: "Analytics", Icon: ChartColumn },
   { href: "/legal-holds", label: "Legal holds", Icon: Scale },
   { href: "/system", label: "System", Icon: HeartPulse },
