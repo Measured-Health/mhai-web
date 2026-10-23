@@ -37,8 +37,8 @@ describe("readAuditEvent", () => {
         target: { kind: "patient" },
         reason: "clinical_follow_up",
         facts: {
-          view: "abnormal_results",
-          location_type: "inpatient",
+          view: "co-occurring",
+          location_type: "admitted",
           patient_count: 12,
           purpose: "clinical_follow_up",
           from: "2026-10-01T00:00:00Z",
@@ -336,10 +336,10 @@ describe("readAuditEvent", () => {
     ).toBe(true);
   });
 
-  it("a staff target on letter_verified is undisplayable", () => {
+  it("a staff target on clearance_verified is undisplayable", () => {
     const letter = auditEvent({
       type: "named_access",
-      kind: "letter_verified",
+      kind: "clearance_verified",
       reason: null,
       target: { kind: "clearance", id: "cl_1", name: "cl_northgate_2026" },
     });

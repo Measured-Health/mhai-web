@@ -36,7 +36,7 @@ export function RecentActions({ hospitalId }: { hospitalId: string }) {
             <li key={e.id} className="py-2.5 text-[13.5px]">
               <p className="[overflow-wrap:anywhere]">
                 <strong className="font-semibold">{e.actor.name}</strong>{" "}
-                {actionLabel(e.action, e.target)}
+                {actionLabel(e.action, e.target, e.reason)}
                 {" · "}
                 <time dateTime={e.at}>{formatWhen(e.at)}</time>
               </p>

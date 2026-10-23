@@ -24,7 +24,9 @@ export function proxy(request: NextRequest) {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${devEval}`,
     styleSrc,
-    "img-src 'self' data:",
+    // blob: for a clearance letter's page, held in memory and shown through
+    // an object URL (never fetched by the image itself).
+    "img-src 'self' data: blob:",
     "font-src 'self'",
     "connect-src 'self'",
     "frame-ancestors 'none'",

@@ -9,10 +9,11 @@ import {
   type RemovalBlock,
   type WriteOpts,
 } from "./contract";
+import type { ClearancesClient } from "./clearances-contract";
 import type { HoldsClient } from "./holds-contract";
 import type { SettingsClient } from "./settings-contract";
 
-const { apiRequest } = createApiRequest({
+const { apiRequest, apiBlob } = createApiRequest({
   prefix: "/api/v1",
   onUnauthorized: reportUnauthorized,
 });
@@ -94,6 +95,51 @@ function settingsLive(ok: LiveOk): SettingsClient {
 }
 
 /**
+ * A file under /platform, never cached: refused like any call, and 502
+ * `bad_gateway` when it isn't one of the `accept` types.
+ */
+export type LiveBlob = (
+  path: string,
+  accept: readonly string[],
+) => Promise<Blob>;
+
+/** The page images a letter is viewed as: never the file itself. */
+const PAGE_TYPES = ["image/png", "image/jpeg"] as const;
+
+/**
+ * Clearance letters and the named-access switch (Plan 11b): rows
+ * `platform/clearances…` and `platform/named-access…` of the shape table.
+ */
+function clearancesLive(ok: LiveOk, blob: LiveBlob): ClearancesClient {
+  const id = encodeURIComponent;
+  const letter = (x: string, rest = "") => `/clearances/${id(x)}${rest}`;
+  const request = (x: string, rest: string) =>
+    `/named-access/requests/${id(x)}${rest}`;
+  return {
+    listClearances: (q) =>
+      ok(
+        `/clearances${query({
+          status: q.status,
+          hospital: q.hospital,
+          covers: q.covers,
+          cursor: q.cursor,
+        })}`,
+      ),
+    getClearance: (x) => ok(letter(x)),
+    getClearancePage: (x, n) =>
+      blob(letter(x, `/pages/${Math.trunc(n)}`), PAGE_TYPES),
+    verifyClearance: (x, b, o) => ok(letter(x, "/verify"), "POST", b, o),
+    rejectClearance: (x, b, o) => ok(letter(x, "/reject"), "POST", b, o),
+    revokeClearance: (x, b, o) => ok(letter(x, "/revoke"), "POST", b, o),
+    getNamedAccess: () => ok("/named-access"),
+    requestNamedAccess: (b, o) => ok("/named-access/requests", "POST", b, o),
+    approveNamedAccess: (x, b, o) => ok(request(x, "/approve"), "POST", b, o),
+    cancelNamedAccess: (x, b, o) => ok(request(x, "/cancel"), "POST", b, o),
+    lowerNamedAccess: (b, o) => ok("/named-access/lower", "POST", b, o),
+  };
+}
+
+/**
  * The platform API through this app's /api/v1 proxy (the token stays
  * server-side). Every path is a row of the proxy's shape table.
  */
@@ -134,6 +180,9 @@ export function createLivePlatformClient({
     }
     return data as T;
   };
+
+  const blob: LiveBlob = (path, accept) =>
+    apiBlob(fetchImpl, `/platform${path}`, accept);
 
   const id = encodeURIComponent;
   const h = (hospital: string, rest = "") =>
@@ -180,7 +229,7 @@ export function createLivePlatformClient({
     markSeen: (b, o) => ok("/notifications/seen", "POST", b, o),
     getEmailPref: () => ok("/me/analytics-email"),
     setEmailPref: (b, o) => ok("/me/analytics-email", "PUT", b, o),
-    ...liveAudit(ok, fetchImpl),
+    ...liveAudit(ok, blob),
     // The health poll is background too: it must not keep a session alive.
     getHealth: (o) =>
       ok(
@@ -204,5 +253,6 @@ export function createLivePlatformClient({
     cancelJobs: (b, o) => ok("/jobs/cancel", "POST", b, o),
     ...holdsLive(ok),
     ...settingsLive(ok),
+    ...clearancesLive(ok, blob),
   };
 }

@@ -130,6 +130,21 @@ const AUDIT_SHAPES: [Method, string][] = [
   ["POST", "platform/audit/verify/runs/{id}/outcome"],
 ];
 
+/** The 11 clearance and switch shapes (Plan 11b). */
+const CLEARANCE_SHAPES: [Method, string][] = [
+  ["GET", "platform/clearances"],
+  ["GET", "platform/clearances/{id}"],
+  ["GET", "platform/clearances/{id}/pages/{id}"],
+  ["POST", "platform/clearances/{id}/verify"],
+  ["POST", "platform/clearances/{id}/reject"],
+  ["POST", "platform/clearances/{id}/revoke"],
+  ["GET", "platform/named-access"],
+  ["POST", "platform/named-access/requests"],
+  ["POST", "platform/named-access/requests/{id}/approve"],
+  ["POST", "platform/named-access/requests/{id}/cancel"],
+  ["POST", "platform/named-access/lower"],
+];
+
 /** The table from the brief: `{id}` stands for one opaque id. */
 const SHAPES: [Method, string][] = [
   ["GET", "platform/hospitals"],
@@ -181,6 +196,7 @@ const SHAPES: [Method, string][] = [
   ["POST", "platform/settings/requests/{id}/cancel"],
   ["POST", "platform/settings/feedback-buffer/reset"],
   ...AUDIT_SHAPES,
+  ...CLEARANCE_SHAPES,
 ];
 /** The writes an auditor may make: their own read state, and the audit ones. */
 const AUDITOR_WRITES: [Method, string][] = [
@@ -191,11 +207,15 @@ const AUDITOR_WRITES: [Method, string][] = [
   ["POST", "platform/audit/verify/runs/{id}/outcome"],
 ];
 const FILE = "platform/audit/exports/{id}/file";
-/** What upstream sends back: a file for the file shape, JSON for the rest. */
+const PAGE = "platform/clearances/{id}/pages/{id}";
+const PNG = new Uint8Array([137, 80, 78, 71]);
+/** What upstream sends back: a file for the file shapes, JSON for the rest. */
 const upstream = (shape: string) =>
   shape === FILE
     ? new Response("a,b\n", { headers: { "Content-Type": "text/csv" } })
-    : Response.json({ ok: true });
+    : shape === PAGE
+      ? new Response(PNG, { headers: { "Content-Type": "image/png" } })
+      : Response.json({ ok: true });
 let n = 0;
 const concrete = (shape: string) =>
   shape.split("/").map((p) => (p === "{id}" ? `id_${++n}-X` : p));
@@ -216,6 +236,8 @@ describe("platform API proxy", () => {
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toBe("no-store");
       if (shape === FILE) expect(await res.text()).toBe("a,b\n");
+      else if (shape === PAGE)
+        expect(new Uint8Array(await res.arrayBuffer())).toEqual(PNG);
       else expect(await res.json()).toEqual({ ok: true });
       expect(calls()).toHaveLength(1);
       const [url, init] = calls()[0];
@@ -283,7 +305,9 @@ describe("platform API proxy", () => {
     async (method, shape) => {
       await session({ roles: ["auditor"] });
       fetchMock.mockResolvedValueOnce(
-        shape === FILE ? upstream(shape) : Response.json({ items: [] }),
+        shape === FILE || shape === PAGE
+          ? upstream(shape)
+          : Response.json({ items: [] }),
       );
       const res = await call(method, concrete(shape));
       expect(res.status).toBe(200);
@@ -686,6 +710,113 @@ describe("platform API proxy", () => {
               }),
         );
         const res = await call("GET", path);
+        expect([type, res.status]).toEqual([type, 502]);
+        expect(await res.json()).toEqual({ code: "bad_gateway" });
+      }
+    });
+  });
+
+  describe("the clearance and switch shapes", () => {
+    const page = ["platform", "clearances", "cl_wait", "pages", "2"];
+
+    it("the eleven shapes are accepted", async () => {
+      expect(CLEARANCE_SHAPES).toHaveLength(11);
+      for (const [method, shape] of CLEARANCE_SHAPES) {
+        fetchMock.mockReset();
+        await session();
+        fetchMock.mockResolvedValueOnce(upstream(shape));
+        const res = await call(method, concrete(shape), { body: "{}" });
+        expect([method, shape, res.status]).toEqual([method, shape, 200]);
+      }
+    });
+
+    it("auditor POSTs to verify, reject, revoke and the switch are refused before upstream", async () => {
+      await session({ roles: ["auditor"] });
+      for (const path of [
+        ["platform", "clearances", "cl_wait", "verify"],
+        ["platform", "clearances", "cl_wait", "reject"],
+        ["platform", "clearances", "cl_wait", "revoke"],
+        ["platform", "named-access", "requests"],
+        ["platform", "named-access", "requests", "req_1", "approve"],
+        ["platform", "named-access", "requests", "req_1", "cancel"],
+        ["platform", "named-access", "lower"],
+      ]) {
+        const res = await call("POST", path, { body: "{}" });
+        expect([path.join("/"), res.status]).toEqual([path.join("/"), 403]);
+        expect(await res.json()).toEqual({ code: "forbidden" });
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+      // They read and view letters.
+      fetchMock.mockResolvedValueOnce(upstream(PAGE));
+      expect((await call("GET", page)).status).toBe(200);
+    });
+
+    it("platform/clearances/x/download is 404", async () => {
+      await session();
+      for (const [method, path] of [
+        ["GET", ["platform", "clearances", "x", "download"]],
+        ["GET", ["platform", "clearances", "x", "file"]],
+        ["GET", ["platform", "clearances", "x", "pages"]],
+        ["GET", ["platform", "clearances", "x", "pages", "1", "raw"]],
+        ["GET", ["platform", "clearances", "x", "pages", "1.png"]],
+        ["POST", ["platform", "clearances"]],
+        ["PATCH", ["platform", "clearances", "x"]],
+        ["GET", ["platform", "clearances", "x", "verify"]],
+        ["POST", ["platform", "clearances", "x", "narrow"]],
+        ["PUT", ["platform", "named-access"]],
+        ["GET", ["platform", "named-access", "requests"]],
+        ["POST", ["platform", "named-access", "requests", "r", "deny"]],
+        ["DELETE", ["platform", "named-access", "requests", "r"]],
+        ["POST", ["platform", "named-access", "raise"]],
+      ] as [Method, string[]][]) {
+        const res = await call(method, path);
+        expect([path.join("/"), res.status]).toEqual([path.join("/"), 404]);
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("a page passes as PNG or JPEG, inline, nosniff and no-store, asked for with an image Accept", async () => {
+      await session();
+      for (const type of ["image/png", "image/jpeg"]) {
+        fetchMock.mockResolvedValueOnce(
+          new Response(PNG, { headers: { "Content-Type": type } }),
+        );
+        const res = await call("GET", page);
+        expect(res.status).toBe(200);
+        expect(res.headers.get("Content-Type")).toBe(type);
+        expect(res.headers.get("Cache-Control")).toBe("no-store");
+        expect(res.headers.get("Content-Disposition")).toBe("inline");
+        expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+      }
+      expect(headersOf(calls()[0]!).get("Accept")).toBe(
+        "image/png, image/jpeg",
+      );
+      // JSON calls still ask for JSON, and an export isn't inline.
+      fetchMock.mockResolvedValueOnce(Response.json({ clearances: [] }));
+      await call("GET", ["platform", "clearances"]);
+      expect(headersOf(calls()[2]!).get("Accept")).toBe("application/json");
+      fetchMock.mockResolvedValueOnce(upstream(FILE));
+      const exp = await call("GET", [
+        "platform",
+        "audit",
+        "exports",
+        "exp_1",
+        "file",
+      ]);
+      expect(exp.headers.get("Content-Disposition")).toBeNull();
+    });
+
+    it("a text/html page is 502", async () => {
+      await session();
+      for (const type of ["text/html", "image/svg+xml", "image/pngx", null]) {
+        fetchMock.mockResolvedValueOnce(
+          type === null
+            ? new Response(PNG)
+            : new Response("<script>x</script>", {
+                headers: { "Content-Type": type },
+              }),
+        );
+        const res = await call("GET", page);
         expect([type, res.status]).toEqual([type, 502]);
         expect(await res.json()).toEqual({ code: "bad_gateway" });
       }

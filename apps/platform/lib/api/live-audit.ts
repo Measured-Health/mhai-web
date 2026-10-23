@@ -1,7 +1,8 @@
-import { ApiError } from "@mhai/api-client/errors";
-import { reportUnauthorized } from "@/lib/auth/events";
 import type { AuditClient } from "./audit-contract";
-import type { LiveOk } from "./live";
+import type { LiveBlob, LiveOk } from "./live";
+
+/** The only types an export file comes as. */
+const EXPORT_TYPES = ["text/csv", "application/zip"] as const;
 
 /** Marks a read as background: the proxy won't count it as activity. */
 const BACKGROUND = { "X-MHAI-Background": "1" };
@@ -15,7 +16,7 @@ function query(q: Record<string, string | undefined>): string {
 }
 
 /** The audit log calls, through the same proxy as the rest of the client. */
-export function liveAudit(ok: LiveOk, fetchImpl: typeof fetch): AuditClient {
+export function liveAudit(ok: LiveOk, blob: LiveBlob): AuditClient {
   const id = encodeURIComponent;
   return {
     listAudit: (f, cursor) =>
@@ -52,37 +53,9 @@ export function liveAudit(ok: LiveOk, fetchImpl: typeof fetch): AuditClient {
         })}`,
       ),
     createExport: (b, o) => ok("/audit/exports", "POST", b, o),
-    async downloadExport(e) {
-      let res: Response;
-      try {
-        res = await fetchImpl(`/api/v1/platform/audit/exports/${id(e)}/file`, {
-          method: "GET",
-          headers: { Accept: "text/csv, application/zip" },
-          credentials: "same-origin",
-          cache: "no-store",
-        });
-      } catch {
-        throw new ApiError(0, "network");
-      }
-      if (res.status === 401) {
-        reportUnauthorized();
-        throw new ApiError(401, "session_expired");
-      }
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as {
-          code?: unknown;
-        } | null;
-        throw new ApiError(
-          res.status,
-          typeof data?.code === "string" ? data.code : "error",
-        );
-      }
-      // The server has answered: the file is spent. A drop mid-body is not
-      // retried (a 4xx-like code), and says so.
-      return res.blob().catch(() => {
-        throw new ApiError(200, "interrupted");
-      });
-    },
+    // The server has answered once the file comes: it is spent. A drop
+    // mid-body is not retried, and says so (`interrupted`).
+    downloadExport: (e) => blob(`/audit/exports/${id(e)}/file`, EXPORT_TYPES),
     listExports: (cursor) => ok(`/audit/exports${query({ cursor })}`),
     startCheck: (o) => ok("/audit/verify", "POST", undefined, o),
     // The status poll and a run's poll are background: they must not keep
