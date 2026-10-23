@@ -16,7 +16,7 @@ and health-check. It never touches the EMR containers or nginx.
 ## One-time setup on the instance
 
 Run as `ubuntu`. The demo is at `demo.measured-health.org`; its DNS A
-record must point at the instance (3.239.87.6).
+record must point at the instance's public IP.
 
 1. Compose file:
 
