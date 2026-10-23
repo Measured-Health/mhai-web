@@ -1,7 +1,7 @@
 import type { AnalysisClient } from "./analysis";
 import type { AnalysisFilters } from "./analysis-contract";
 import { createLiveClearances } from "./live-clearances";
-import { apiOk } from "./request";
+import { apiOk, keyHeader } from "./request";
 
 /** Nulls are dropped; `source` goes only when set. */
 export function filterParams(f: AnalysisFilters): URLSearchParams {
@@ -28,16 +28,17 @@ export function createLiveAnalysisClient({
     getFilterOptions: () => get("/analysis/filters"),
     getView: (view, f) =>
       get(`/analysis/${encodeURIComponent(view)}?${filterParams(f)}`),
-    listPatients: ({ drill, level, filters, purpose, note }) => {
+    listPatients: ({ drill, level, filters }) => {
       const p = new URLSearchParams({ drill, level });
       for (const [k, v] of filterParams(filters)) p.set(k, v);
-      // Why names are asked for goes only with a named request.
-      if (level === "named") {
-        if (purpose) p.set("purpose", purpose);
-        if (note) p.set("note", note);
-      }
       return get(`/analysis/patients?${p}`);
     },
+    listNamedPatients: ({ drill, purpose, note, filters }, opts) =>
+      apiOk(fetchImpl, "/analysis/patients/named", {
+        method: "POST",
+        body: { drill, purpose, ...(note ? { note } : {}), filters },
+        headers: keyHeader(opts),
+      }),
     getClearanceMe: () => get("/analysis/clearance/me"),
     getNamedAccess: () => clearances.getNamedAccess(),
   };

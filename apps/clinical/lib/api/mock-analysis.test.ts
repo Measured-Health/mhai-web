@@ -13,6 +13,7 @@ import type {
   Drillable,
   Setting,
   Sex,
+  NamedPatientsIn,
   ViewId,
   ViewOut,
 } from "./analysis-contract";
@@ -661,13 +662,16 @@ describe("named patients", () => {
     over: Record<string, unknown> = {},
     namedAccess: "off" | "letters_only" | "on" = "on",
   ) =>
-    as(email, namedAccess).listPatients({
-      drill: "sex-female",
-      level: "named",
-      filters: F,
-      purpose: "clinical_follow_up",
-      ...over,
-    });
+    as(email, namedAccess).listNamedPatients(
+      {
+        drill: "sex-female",
+        filters: F,
+        purpose: "clinical_follow_up",
+        ...over,
+      } as NamedPatientsIn,
+      { idempotencyKey: `k-${keyN++}` },
+    );
+  let keyN = 0;
   const code = async (p: Promise<unknown>) => {
     try {
       await p;
@@ -879,6 +883,43 @@ describe("named patients", () => {
     }
     await named(GRACE, { purpose: "audit" });
     expect(auditEvents()).toHaveLength(2);
+  });
+
+  it("names are never a GET: level named there is 422 level_not_supported", async () => {
+    const e = await as(GRACE)
+      .listPatients({ drill: "sex-female", level: "named", filters: F })
+      .catch((x) => x);
+    expect(e).toMatchObject({ status: 422, code: "level_not_supported" });
+    expect(auditEvents()).toHaveLength(0);
+  });
+
+  it("a retry with the same Idempotency-Key is one view, still checked afresh", async () => {
+    const m = as(GRACE);
+    const q: NamedPatientsIn = {
+      drill: "sex-female",
+      filters: F,
+      purpose: "audit",
+    };
+    const key = { idempotencyKey: "k-same" };
+    const a = await m.listNamedPatients(q, key);
+    const b = await m.listNamedPatients(q, key);
+    expect(b.patients).toEqual(a.patients);
+    expect(auditEvents()).toHaveLength(1);
+    await m.listNamedPatients(q, { idempotencyKey: "k-other" });
+    expect(auditEvents()).toHaveLength(2);
+    // The same key after the cover is gone is refused, not replayed.
+    await createMockClearances({
+      now: () => clock,
+      me: async () => GRACE,
+      delayMs: 0,
+      stepUp: createStepUp(() => clock),
+      staff: () => admin.listStaff(),
+    }).revokeClearance(
+      "cl_act",
+      { reason: "no_longer_needed", mfaCode: MOCK_CODE },
+      { idempotencyKey: "k-revoke" },
+    );
+    expect(await code(m.listNamedPatients(q, key))).toBe("403 not_cleared");
   });
 
   it("no invented name matches a real-person list", () => {

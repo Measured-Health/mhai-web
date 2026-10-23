@@ -1125,6 +1125,7 @@ describe("clearance routes (Plan 11)", () => {
     ["POST", ["hospital", "clearances", "cl_act", "narrow"]],
     ["GET", ["analysis", "named-access"]],
     ["GET", ["analysis", "clearance", "me"]],
+    ["POST", ["analysis", "patients", "named"]],
   ];
   const run = (method: string, path: string[]) => {
     const c = ctx(...path);
@@ -1137,7 +1138,7 @@ describe("clearance routes (Plan 11)", () => {
     vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "true");
   });
 
-  it("the eight clearance shapes are accepted", async () => {
+  it("the nine clearance shapes are accepted", async () => {
     await as();
     fetchMock.mockImplementation(async (url: string) =>
       url.includes("/pages/") ? png() : Response.json({}),
@@ -1146,7 +1147,7 @@ describe("clearance routes (Plan 11)", () => {
       const res = await run(method, path);
       expect([method, path, res.status]).toEqual([method, path, 200]);
     }
-    expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(fetchMock).toHaveBeenCalledTimes(9);
     expect(
       fetchMock.mock.calls.map(([url, init]) => [
         (init as RequestInit).method,
@@ -1167,6 +1168,10 @@ describe("clearance routes (Plan 11)", () => {
       ["GET", ["analysis", "named-access", "x"]],
       ["POST", ["analysis", "named-access"]],
       ["POST", ["analysis", "clearance", "me"]],
+      ["GET", ["analysis", "patients", "named"]],
+      ["POST", ["analysis", "patients"]],
+      ["POST", ["analysis", "patients", "named", "x"]],
+      ["POST", ["analysis", "patients", "other"]],
       ["GET", ["hospital", "clearances", "x", "pages"]],
       ["GET", ["hospital", "clearances", "x", "pages", "one"]],
       ["GET", ["hospital", "clearances", "x", "pages", "0"]],
@@ -1242,12 +1247,70 @@ describe("clearance routes (Plan 11)", () => {
     fetchMock.mockImplementation(async () => Response.json({}));
     expect((await patients("?level=deidentified")).status).toBe(200);
     expect((await patients("?from=2026-01")).status).toBe(200);
-    // With the key on, the server decides.
+    // With the key on, names are still never a GET.
     vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "true");
-    expect((await patients("?level=named")).status).toBe(200);
-    expect((fetchMock.mock.calls[2] as [string])[0]).toBe(
-      "http://api.test/api/v1/analysis/patients?level=named",
-    );
+    expect((await patients("?level=named")).status).toBe(403);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("a GET with level=named is still refused with the key on and named access", async () => {
+    await as(["clinician", "analyst"]);
+    fetchMock.mockImplementation(async () => Response.json({}));
+    for (const search of [
+      "?level=named",
+      "?drill=cond-e11&level=named&purpose=audit&note=x",
+      "?level=deidentified&level=named",
+    ]) {
+      const res = await GET(
+        get(`${BASE}/analysis/patients${search}`),
+        ctx("analysis", "patients"),
+      );
+      expect([search, res.status]).toEqual([search, 403]);
+      expect(await res.json()).toEqual({ code: "named_access_off" });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("the named list is a POST: its body and key go upstream, no query string", async () => {
+    await as(["clinician", "analyst"]);
+    fetchMock.mockImplementation(async () => Response.json({}));
+    const body = JSON.stringify({
+      drill: "cond-e11",
+      purpose: "other",
+      note: "Ward 4 recall",
+      filters: { from: "2026-01-01", to: "2026-03-31" },
+    });
+    const req = new Request(`${BASE}/analysis/patients/named?note=leak`, {
+      method: "POST",
+      headers: {
+        host: "demo.test",
+        origin: "http://demo.test",
+        "content-type": "application/json",
+        "Idempotency-Key": "k-named",
+      },
+      body,
+    });
+    const res = await POST(req, ctx("analysis", "patients", "named"));
+    expect(res.status).toBe(200);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://api.test/api/v1/analysis/patients/named");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(body);
+    expect(init.headers).toMatchObject({ "Idempotency-Key": "k-named" });
+    // From another origin it is refused, as every write is.
+    const cross = new Request(`${BASE}/analysis/patients/named`, {
+      method: "POST",
+      headers: {
+        host: "demo.test",
+        origin: "http://evil.test",
+        "content-type": "application/json",
+      },
+      body,
+    });
+    expect(
+      (await POST(cross, ctx("analysis", "patients", "named"))).status,
+    ).toBe(403);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("an upload that isn't multipart is 415", async () => {
@@ -1530,7 +1593,8 @@ describe("clearance routes (Plan 11)", () => {
         path[0] === "analysis" ? 200 : 403,
       ]);
     }
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // The position, their clearance and the named list.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     fetchMock.mockClear();
     for (const roles of [
       ["admin", "hospital_admin"],

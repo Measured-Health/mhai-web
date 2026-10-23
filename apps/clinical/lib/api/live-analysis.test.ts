@@ -69,35 +69,43 @@ describe("live analysis client", () => {
     expect(e).toMatchObject({ status: 422, code: "too_small" });
   });
 
-  it("asks for names with the purpose and note, and reads clearance/me", async () => {
-    await client().listPatients({
-      drill: "cond-e11",
-      level: "named",
-      filters: empty,
-      purpose: "other",
-      note: "Ward 4 follow-up & recall",
-    });
-    await client().listPatients({
-      drill: "cond-e11",
-      level: "named",
-      filters: empty,
-      purpose: "audit",
-    });
-    // A purpose is never sent with the de-identified list.
-    await client().listPatients({
-      drill: "cond-e11",
-      level: "deidentified",
-      filters: empty,
-      purpose: "audit",
-      note: "x",
-    });
+  it("asks for names in a POST body with a key, never in the URL, and reads clearance/me", async () => {
+    await client().listNamedPatients(
+      {
+        drill: "cond-e11",
+        filters: empty,
+        purpose: "other",
+        note: "Ward 4 follow-up & recall",
+      },
+      { idempotencyKey: "k-1" },
+    );
+    await client().listNamedPatients(
+      { drill: "cond-e11", filters: empty, purpose: "audit" },
+      { idempotencyKey: "k-2" },
+    );
     await client().getClearanceMe();
     expect(urls()).toEqual([
-      "/api/v1/analysis/patients?drill=cond-e11&level=named&from=2026-01-01&to=2026-03-31&purpose=other&note=Ward+4+follow-up+%26+recall",
-      "/api/v1/analysis/patients?drill=cond-e11&level=named&from=2026-01-01&to=2026-03-31&purpose=audit",
-      "/api/v1/analysis/patients?drill=cond-e11&level=deidentified&from=2026-01-01&to=2026-03-31",
+      "/api/v1/analysis/patients/named",
+      "/api/v1/analysis/patients/named",
       "/api/v1/analysis/clearance/me",
     ]);
+    const init = (i: number) =>
+      (fetchImpl.mock.calls[i] as [string, RequestInit])[1];
+    expect(init(0)).toMatchObject({ method: "POST" });
+    expect(new Headers(init(0).headers).get("Idempotency-Key")).toBe("k-1");
+    expect(JSON.parse(init(0).body as string)).toEqual({
+      drill: "cond-e11",
+      purpose: "other",
+      note: "Ward 4 follow-up & recall",
+      filters: empty,
+    });
+    expect(JSON.parse(init(1).body as string)).toEqual({
+      drill: "cond-e11",
+      purpose: "audit",
+      filters: empty,
+    });
+    for (const u of urls()) expect(u).not.toMatch(/purpose|note|Ward/);
+    expect(init(2)).toMatchObject({ method: "GET" });
   });
 
   it("reads the switch through named-access, a 404 as Off", async () => {
@@ -126,12 +134,10 @@ describe("live analysis client", () => {
       Response.json({ code: "not_cleared" }, { status: 403 }),
     );
     const e = await client()
-      .listPatients({
-        drill: "x",
-        level: "named",
-        filters: empty,
-        purpose: "audit",
-      })
+      .listNamedPatients(
+        { drill: "x", filters: empty, purpose: "audit" },
+        { idempotencyKey: "k-3" },
+      )
       .catch((x) => x);
     expect(e).toMatchObject({ status: 403, code: "not_cleared" });
   });

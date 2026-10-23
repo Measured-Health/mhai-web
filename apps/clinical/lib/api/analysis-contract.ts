@@ -179,6 +179,17 @@ export type NamedPatientsOut = {
 export type PatientsOut = DeidentifiedPatientsOut | NamedPatientsOut;
 
 /**
+ * `POST /analysis/patients/named`: the named list's request, in the body so
+ * the purpose and its note never reach a URL. `note` is needed for "other".
+ */
+export type NamedPatientsIn = {
+  drill: string;
+  purpose: NamedPurpose;
+  note?: string;
+  filters: AnalysisFilters;
+};
+
+/**
  * `GET /analysis/clearance/me`: whether this person may see names right now.
  * `until` is the ISO instant their letter's end day ends; the app does no
  * time-zone sum. Any change to `named`, `clearance_id` or `version` ends a

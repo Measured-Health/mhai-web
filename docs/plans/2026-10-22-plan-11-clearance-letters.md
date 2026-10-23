@@ -128,7 +128,9 @@
   - `GET /platform/clearances/{id}`;
   - `status=ending_soon` on the platform list;
   - the per-hospital switch fields;
-  - `reason` on `GET /analysis/clearance/me`;
+  - `reason` on `GET /analysis/clearance/me`; when `named` is false, `until` and `clearance_id` are null and `version` is 0 (the app reads anything else there as a change);
+  - the named list is `POST /analysis/patients/named` with an `Idempotency-Key` and the JSON body `{drill, purpose, note?, filters}`, so the purpose and its note are never in a URL; `GET /analysis/patients` is de-identified only, and the clinical proxy refuses a GET with any other `level` (**403** `named_access_off`);
+  - after a revoke or a removal from the letter, a named request is **403** `not_cleared`; only a passed end date gives **403** `clearance_ended`;
   - **422** `would_empty` on narrow;
   - for Plan 12b: `covered_platform` on the letter (both apps) and on upload; `covers_you` on the platform letter; `covers=me` on the platform list ("my clearances"); **409** `same_person` on verify and reject when the caller is covered;
   - the whole contract is **§14.10** in mhai-multiagent's frontend requirements.
@@ -1266,7 +1268,7 @@ type ClearanceMeOut = {
   - `listPatients(q: { drill: string; level: PatientLevel; filters: AnalysisFilters; purpose?: NamedPurpose; note?: string })`;
   - `getClearanceMe(): Promise<ClearanceMeOut>`;
   - `getNamedAccess()`, re-exported from the clearance client.
-- **Live paths:** `GET analysis/patients?…&level=named&purpose=…&note=…` and `GET analysis/clearance/me`.
+- **Live paths:** `POST analysis/patients/named` (body `{drill, purpose, note?, filters}`, with an `Idempotency-Key`; the purpose is never in a URL) and `GET analysis/clearance/me`.
 - **`readPatients(raw: unknown, expected: PatientLevel, now: number)`:**
   - fails closed when the reply's `level` isn't `expected`;
   - a de-identified reply keeps Plan 6's rules, so `name` and `mrn` fail;

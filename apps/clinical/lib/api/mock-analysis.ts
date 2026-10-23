@@ -17,6 +17,7 @@ import type {
   FindingsOut,
   Meta,
   NamedPatientRowOut,
+  NamedPatientsOut,
   NamedPurpose,
   PatientRowOut,
   PatientsOut,
@@ -802,6 +803,9 @@ export function createMockAnalysis({
     return (await staff()).find((s) => s.email.toLowerCase() === email);
   };
 
+  /** The Idempotency-Keys of views already recorded, until their named_until. */
+  const viewed = new Map<string, number>();
+
   /** Whether names may show for this person right now, read live. */
   async function clearanceMe(): Promise<ClearanceMeOut> {
     if (namedAccess !== "on") return NOT_NAMED("switched_off");
@@ -838,18 +842,11 @@ export function createMockAnalysis({
       checkRange(f);
       return VIEW_FNS[view](f) as ViewOut[V];
     },
-    async listPatients({
-      drill,
-      level,
-      filters,
-      purpose,
-      note,
-    }): Promise<PatientsOut> {
+    async listPatients({ drill, level, filters }): Promise<PatientsOut> {
       await wait();
       if (analysis === "unavailable") unavailable();
       checkRange(filters);
-      if (level === "named")
-        return namedPatients(drill, filters, purpose, note);
+      // Names are only ever a POST (the purpose stays out of URLs).
       if (level !== "deidentified")
         throw new ApiError(422, "level_not_supported");
       if (!shownDrills(filters).has(drill))
@@ -873,6 +870,26 @@ export function createMockAnalysis({
         flag: null,
       });
       return { level, count: hit.length, patients };
+    },
+    async listNamedPatients(q, opts) {
+      await wait();
+      if (analysis === "unavailable") unavailable();
+      const key = opts?.idempotencyKey;
+      if (!key) return fail(422, "invalid");
+      checkRange(q.filters);
+      // Every call is checked afresh; a retry with the same key is the same
+      // view, so it records nothing new.
+      const t = now();
+      for (const [k, until] of viewed) if (until <= t) viewed.delete(k);
+      const out = await namedPatients(
+        q.drill,
+        q.filters,
+        q.purpose,
+        q.note,
+        !viewed.has(key),
+      );
+      viewed.set(key, Date.parse(out.named_until));
+      return out;
     },
     async getClearanceMe() {
       await wait();
@@ -899,7 +916,8 @@ export function createMockAnalysis({
     filters: AnalysisFilters,
     purpose: unknown,
     note: unknown,
-  ): Promise<PatientsOut> {
+    record: boolean,
+  ): Promise<NamedPatientsOut> {
     if (namedAccess !== "on") return fail(403, "named_access_off");
     const p = await person();
     if (!eligible(p)) return fail(403, "not_cleared");
@@ -930,20 +948,21 @@ export function createMockAnalysis({
       .slice(0, PATIENT_ROWS_MAX)
       .map((x) => namedRowOf(x, filters));
     const until = Math.min(Date.parse(cover.until), t + NAMED_VIEW_MS);
-    recordAudit({
-      at: new Date(t).toISOString(),
-      type: "security",
-      kind: "analysis_named_viewed",
-      actor: { display_name: p.display_name },
-      target: null,
-      specialty: null,
-      confidence: null,
-      device: null,
-      // The rows opened, and why: never a name, an MRN or a pid.
-      count: patients.length,
-      flag: "alert",
-      purpose: why,
-    });
+    if (record)
+      recordAudit({
+        at: new Date(t).toISOString(),
+        type: "security",
+        kind: "analysis_named_viewed",
+        actor: { display_name: p.display_name },
+        target: null,
+        specialty: null,
+        confidence: null,
+        device: null,
+        // The rows opened, and why: never a name, an MRN or a pid.
+        count: patients.length,
+        flag: "alert",
+        purpose: why,
+      });
     return {
       level: "named",
       count: hit.length,
