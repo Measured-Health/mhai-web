@@ -486,6 +486,7 @@ platform endpoints; the contract it assumes is in
 | System      | Health (overall, parts, times, errors; refreshes every 30 s) and Failed jobs (retry, cancel with a code), in counts only               | platform admin (auditors read) |
 | Team        | Invite, change role, remove (never your own row)                                                                                       | platform admin (auditors read) |
 | Activity    | Every platform action, newest first, by hospital                                                                                       | both                           |
+| Audit log   | Every entry in the log newest first, named access, exports, and the integrity check; reads are recorded                                | both                           |
 | Account     | Password, backup codes, signed-in devices                                                                                              | both                           |
 
 ```text

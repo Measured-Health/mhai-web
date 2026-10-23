@@ -111,6 +111,25 @@ type Call = [string, RequestInit];
 const calls = () => fetchMock.mock.calls as Call[];
 const headersOf = (c: Call) => new Headers(c[1].headers);
 
+/** The 15 audit shapes. */
+const AUDIT_SHAPES: [Method, string][] = [
+  ["GET", "platform/audit"],
+  ["GET", "platform/audit/people"],
+  ["GET", "platform/audit/hospitals"],
+  ["GET", "platform/audit/{id}"],
+  ["GET", "platform/audit/{id}/patients"],
+  ["POST", "platform/audit/undisplayable"],
+  ["GET", "platform/audit/named-access"],
+  ["GET", "platform/audit/exports"],
+  ["POST", "platform/audit/exports"],
+  ["GET", "platform/audit/exports/{id}/file"],
+  ["POST", "platform/audit/verify"],
+  ["GET", "platform/audit/verify/status"],
+  ["GET", "platform/audit/verify/runs"],
+  ["GET", "platform/audit/verify/runs/{id}"],
+  ["POST", "platform/audit/verify/runs/{id}/outcome"],
+];
+
 /** The table from the brief: `{id}` stands for one opaque id. */
 const SHAPES: [Method, string][] = [
   ["GET", "platform/hospitals"],
@@ -153,11 +172,22 @@ const SHAPES: [Method, string][] = [
   ["POST", "platform/legal-holds/{id}/lift/approve"],
   ["POST", "platform/legal-holds/{id}/lift/cancel"],
   ["POST", "platform/legal-holds/{id}/lift/undo"],
+  ...AUDIT_SHAPES,
 ];
-/** The one write an auditor may make: their own read state. */
+/** The writes an auditor may make: their own read state, and the audit ones. */
 const AUDITOR_WRITES: [Method, string][] = [
   ["POST", "platform/notifications/seen"],
+  ["POST", "platform/audit/undisplayable"],
+  ["POST", "platform/audit/exports"],
+  ["POST", "platform/audit/verify"],
+  ["POST", "platform/audit/verify/runs/{id}/outcome"],
 ];
+const FILE = "platform/audit/exports/{id}/file";
+/** What upstream sends back: a file for the file shape, JSON for the rest. */
+const upstream = (shape: string) =>
+  shape === FILE
+    ? new Response("a,b\n", { headers: { "Content-Type": "text/csv" } })
+    : Response.json({ ok: true });
 let n = 0;
 const concrete = (shape: string) =>
   shape.split("/").map((p) => (p === "{id}" ? `id_${++n}-X` : p));
@@ -172,12 +202,13 @@ describe("platform API proxy", () => {
     "every listed shape is forwarded for a platform admin: %s %s",
     async (method, shape) => {
       await session();
-      fetchMock.mockResolvedValueOnce(Response.json({ ok: true }));
+      fetchMock.mockResolvedValueOnce(upstream(shape));
       const path = concrete(shape);
       const res = await call(method, path, { body: '{"a":1}' });
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toBe("no-store");
-      expect(await res.json()).toEqual({ ok: true });
+      if (shape === FILE) expect(await res.text()).toBe("a,b\n");
+      else expect(await res.json()).toEqual({ ok: true });
       expect(calls()).toHaveLength(1);
       const [url, init] = calls()[0];
       expect(url).toBe(`http://api.test/api/v1/${path.join("/")}`);
@@ -243,7 +274,9 @@ describe("platform API proxy", () => {
     "an auditor can read every GET shape: %s %s",
     async (method, shape) => {
       await session({ roles: ["auditor"] });
-      fetchMock.mockResolvedValueOnce(Response.json({ items: [] }));
+      fetchMock.mockResolvedValueOnce(
+        shape === FILE ? upstream(shape) : Response.json({ items: [] }),
+      );
       const res = await call(method, concrete(shape));
       expect(res.status).toBe(200);
       expect(calls()).toHaveLength(1);
@@ -506,6 +539,132 @@ describe("platform API proxy", () => {
     await call("GET", ["platform", "team"]);
     const s = await readSession();
     expect(Date.now() - s!.lastSeenAt).toBeLessThan(5_000);
+  });
+
+  describe("the audit shapes", () => {
+    const ok = () => fetchMock.mockResolvedValueOnce(Response.json({ ok: 1 }));
+
+    it("the 15 audit shapes are accepted", async () => {
+      expect(AUDIT_SHAPES).toHaveLength(15);
+      for (const [method, shape] of AUDIT_SHAPES) {
+        fetchMock.mockReset();
+        await session();
+        fetchMock.mockResolvedValueOnce(upstream(shape));
+        const res = await call(method, concrete(shape), { body: "{}" });
+        expect([method, shape, res.status]).toEqual([method, shape, 200]);
+      }
+    });
+
+    it("an auditor may POST exports, verify, outcome and undisplayable", async () => {
+      await session({ roles: ["auditor"] });
+      for (const path of [
+        ["platform", "audit", "exports"],
+        ["platform", "audit", "verify"],
+        ["platform", "audit", "verify", "runs", "run_1", "outcome"],
+        ["platform", "audit", "undisplayable"],
+      ]) {
+        ok();
+        const res = await call("POST", path, { body: "{}" });
+        expect([path.join("/"), res.status]).toEqual([path.join("/"), 200]);
+      }
+      expect(calls()).toHaveLength(4);
+    });
+
+    it("an auditor still can't PUT the analytics email", async () => {
+      await session({ roles: ["auditor"] });
+      const res = await call("PUT", ["platform", "me", "analytics-email"]);
+      expect(res.status).toBe(403);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("platform/audit/named-access is not read as an event id, and nor is verify", async () => {
+      await session();
+      ok();
+      await call("GET", ["platform", "audit", "named-access"]);
+      expect(calls()[0]![0]).toBe(
+        "http://api.test/api/v1/platform/audit/named-access",
+      );
+      // A reserved word is never an {id}: no event, no patients list.
+      for (const word of [
+        "verify",
+        "people",
+        "hospitals",
+        "undisplayable",
+        "named-access",
+        "exports",
+      ]) {
+        const res = await call("GET", ["platform", "audit", word, "patients"]);
+        expect([word, res.status]).toEqual([word, 404]);
+      }
+      expect(calls()).toHaveLength(1);
+    });
+
+    it("platform/audit/a.b is 404", async () => {
+      await session();
+      const res = await call("GET", ["platform", "audit", "a.b"]);
+      expect(res.status).toBe(404);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("a 422 too_many_rows forwards rows and nothing else", async () => {
+      await session();
+      fetchMock.mockResolvedValueOnce(
+        Response.json(
+          { code: "too_many_rows", rows: 62310, detail: "secret", x: 1 },
+          { status: 422 },
+        ),
+      );
+      const res = await call("POST", ["platform", "audit", "exports"], {
+        body: "{}",
+      });
+      expect(res.status).toBe(422);
+      expect(await res.json()).toEqual({ code: "too_many_rows", rows: 62310 });
+      // A rows that isn't an integer is dropped.
+      fetchMock.mockResolvedValueOnce(
+        Response.json({ code: "too_many_rows", rows: -5 }, { status: 422 }),
+      );
+      const bad = await call("POST", ["platform", "audit", "exports"], {
+        body: "{}",
+      });
+      expect(await bad.json()).toEqual({ code: "too_many_rows" });
+    });
+
+    it("the file shape streams text/csv and application/zip with no-store", async () => {
+      await session();
+      for (const type of ["text/csv; charset=utf-8", "application/zip"]) {
+        fetchMock.mockResolvedValueOnce(
+          new Response("data", { headers: { "Content-Type": type } }),
+        );
+        const res = await call("GET", [
+          "platform",
+          "audit",
+          "exports",
+          "exp_1",
+          "file",
+        ]);
+        expect(res.status).toBe(200);
+        expect(res.headers.get("Content-Type")).toBe(type);
+        expect(res.headers.get("Cache-Control")).toBe("no-store");
+        expect(await res.text()).toBe("data");
+      }
+    });
+
+    it("the file shape refuses text/html, text/csvfoo and a missing type with 502", async () => {
+      await session();
+      const path = ["platform", "audit", "exports", "exp_1", "file"];
+      for (const type of ["text/html", "text/csvfoo", null]) {
+        fetchMock.mockResolvedValueOnce(
+          type === null
+            ? new Response(new Uint8Array([60, 120]))
+            : new Response("<script>x</script>", {
+                headers: { "Content-Type": type },
+              }),
+        );
+        const res = await call("GET", path);
+        expect([type, res.status]).toEqual([type, 502]);
+        expect(await res.json()).toEqual({ code: "bad_gateway" });
+      }
+    });
   });
 
   describe("a background GET (X-MHAI-Background: 1)", () => {

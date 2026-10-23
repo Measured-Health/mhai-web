@@ -1,5 +1,5 @@
 "use client";
-import type { Notification } from "@/lib/api/notifications-contract";
+import { isChange, type Notification } from "@/lib/api/notifications-contract";
 import { changeLine } from "@/lib/analytics/changes";
 import { dayMonthLabel } from "@/lib/format";
 import { Button } from "@mhai/ui/button";
@@ -57,10 +57,30 @@ export function NotificationsList({
         <p className="py-3 text-[14px] text-ink-2">Nothing new</p>
       ) : (
         <ul
-          aria-label="New analytics changes"
+          aria-label="Notifications"
           className="flex max-h-[60vh] flex-col overflow-auto"
         >
           {items.map((n) => {
+            if (!isChange(n))
+              return (
+                <li key={n.id} className="border-t border-line first:border-0">
+                  <button
+                    type="button"
+                    onClick={() => onOpen(n)}
+                    className="flex min-h-11 w-full gap-2.5 rounded-lg px-1 py-2.5 text-left text-[13.5px] hover:bg-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint-deep"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block">
+                        ⚠ The audit log failed its integrity check
+                      </span>
+                      <span className="mt-0.5 block font-mono text-xs text-ink-3">
+                        Platform · {atLabel(n.at)} · Security
+                        {fresh.has(n.id) && " · New"}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
             const { sign, words } = changeLine(n);
             return (
               <li key={n.id} className="border-t border-line first:border-0">

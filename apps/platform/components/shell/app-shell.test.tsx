@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -6,7 +6,8 @@ import {
   __setPlatformClientForTests,
 } from "@/lib/api/client";
 import { createMockPlatform } from "@/lib/api/mock";
-import { renderWithAuth } from "@/tests/render";
+import type { User } from "@/lib/auth/types";
+import { AMARA, renderWithAuth } from "@/tests/render";
 import { AppShell } from "./app-shell";
 import { TopBar } from "./top-bar";
 
@@ -19,15 +20,16 @@ beforeEach(() => {
   pathname.value = "/hospitals";
 });
 
-const shell = () =>
+const shell = (user?: User) =>
   renderWithAuth(
     <AppShell>
       <TopBar title="Hospitals" />
     </AppShell>,
+    user ? { user } : {},
   );
 
 describe("the platform shell", () => {
-  it("the sidebar shows Platform and the seven links in order", () => {
+  it("the sidebar shows Platform and the eight links in order", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     expect(within(nav).getByText("Platform")).toBeInTheDocument();
@@ -41,8 +43,24 @@ describe("the platform shell", () => {
       ["System", "/system"],
       ["Team", "/team"],
       ["Activity", "/activity"],
+      ["Audit log", "/audit"],
       ["Account", "/account"],
     ]);
+  });
+
+  it("the sidebar shows Audit log after Activity, and both roles see it", () => {
+    for (const user of [undefined, AMARA]) {
+      const { unmount } = shell(user);
+      const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+      const names = within(nav)
+        .getAllByRole("link")
+        .map((l) => l.textContent);
+      expect(names[names.indexOf("Activity") + 1]).toBe("Audit log");
+      expect(
+        within(nav).getByRole("link", { name: "Audit log" }),
+      ).toHaveAttribute("href", "/audit");
+      unmount();
+    }
   });
 
   it("the sidebar shows Legal holds between Analytics and System", () => {
@@ -139,5 +157,23 @@ describe("the platform shell", () => {
       "href",
       "/sign-out",
     );
+  });
+
+  it("Hospitals shows no integrity banner while the check is intact, and other pages never read it", async () => {
+    const m = createMockPlatform({ delayMs: 0 });
+    const read = vi.spyOn(m, "getIntegrityStatus");
+    __setPlatformClientForTests(m);
+    const { unmount } = shell();
+    await waitFor(() => expect(read).toHaveBeenCalled());
+    expect(
+      screen.queryByText(/The audit log failed its integrity check/),
+    ).toBeNull();
+    unmount();
+    read.mockClear();
+    pathname.value = "/team";
+    shell();
+    await screen.findAllByRole("navigation", { name: "Platform" });
+    expect(read).not.toHaveBeenCalled();
+    __resetPlatformClientForTests();
   });
 });

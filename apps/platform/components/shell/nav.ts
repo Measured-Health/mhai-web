@@ -4,6 +4,7 @@ import {
   HeartPulse,
   History,
   Scale,
+  ScrollText,
   UserRound,
   Users,
 } from "lucide-react";
@@ -15,5 +16,6 @@ export const NAV = [
   { href: "/system", label: "System", Icon: HeartPulse },
   { href: "/team", label: "Team", Icon: Users },
   { href: "/activity", label: "Activity", Icon: History },
+  { href: "/audit", label: "Audit log", Icon: ScrollText },
   { href: "/account", label: "Account", Icon: UserRound },
 ] as const;
