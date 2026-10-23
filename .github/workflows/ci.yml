@@ -38,6 +38,16 @@ jobs:
       - name: Test
         run: npm test --if-present
 
+      - name: Cache Next build
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/clinical/.next/cache
+            apps/platform/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('apps/**/*.ts', 'apps/**/*.tsx', 'packages/**/*.ts', 'packages/**/*.tsx') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
       - name: Build
         run: npm run build
 
@@ -66,8 +76,28 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Cache browser
+        id: browser-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install browser
+        if: steps.browser-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+
+      - name: Install browser system packages
+        if: steps.browser-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Cache Next build
+        uses: actions/cache@v4
+        with:
+          path: apps/${{ matrix.app }}/.next/cache
+          key: next-e2e-${{ matrix.app }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('apps/**/*.ts', 'apps/**/*.tsx', 'packages/**/*.ts', 'packages/**/*.tsx') }}
+          restore-keys: |
+            next-e2e-${{ matrix.app }}-${{ hashFiles('package-lock.json') }}-
 
       - name: E2E (mock mode)
         run: npm run e2e -w @mhai/${{ matrix.app }}
