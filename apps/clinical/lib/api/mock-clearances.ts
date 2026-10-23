@@ -100,28 +100,57 @@ export function resetClearances(): void {
   store = null;
 }
 
-const COVERING = (c: ClearanceOut) => c.covered;
+/**
+ * The last instant of the hospital's day: the start of the next day there,
+ * less a millisecond, as an ISO string. Callers need no time-zone sum.
+ */
+export function endOfHospitalDay(ymd: string): string {
+  const nextMidnight = Date.parse(`${shiftDay(ymd, 1)}T00:00:00Z`);
+  const wall = zoned(nextMidnight);
+  // How far the hospital's clock is ahead of UTC at that moment.
+  const offset = Date.parse(`${wall.day}T${wall.time}:00Z`) - nextMidnight;
+  return iso(nextMidnight - offset - 1);
+}
+
+export type Cover =
+  | { covered: true; clearance_id: string; until: string; version: number }
+  | { covered: false; reason: "ended" | "not_cleared" };
 
 /**
- * The letter that lets this person see names right now, if any: active, and
- * its end date (the hospital's day) not yet passed. For the Analysis mock.
+ * Whether this person may see names right now, for the Analysis mock. Covered
+ * means an active letter whose end date (the hospital's day) hasn't passed;
+ * `until` is then the ISO instant that day ends. Otherwise the reason is
+ * "ended" if their latest covering letter ended or was revoked in the last 24
+ * hours, and "not_cleared" if not.
  */
-export function coverFor(
-  staffId: string,
-  now: number,
-): { clearance_id: string; until: string; version: number } | null {
+export function coverFor(staffId: string, now: number): Cover {
   const today = hospitalDay(now);
-  const best = seeded(now)
-    .letters.filter(
-      (c) =>
-        c.status === "active" &&
-        c.end_date >= today &&
-        COVERING(c).some((p) => p.id === staffId),
-    )
+  const mine = seeded(now).letters.filter((c) =>
+    c.covered.some((p) => p.id === staffId),
+  );
+  const best = mine
+    .filter((c) => c.status === "active" && c.end_date >= today)
     .sort((a, b) => (a.end_date < b.end_date ? 1 : -1))[0];
-  return best
-    ? { clearance_id: best.id, until: best.end_date, version: best.version }
-    : null;
+  if (best)
+    return {
+      covered: true,
+      clearance_id: best.id,
+      until: endOfHospitalDay(best.end_date),
+      version: best.version,
+    };
+  // When access stopped, for each letter that stopped it.
+  const stopped = mine.flatMap((c) => {
+    if (c.status === "revoked" && c.revocation)
+      return [Date.parse(c.revocation.at)];
+    if ((c.status === "active" || c.status === "ended") && c.end_date < today)
+      return [Date.parse(endOfHospitalDay(c.end_date))];
+    return [];
+  });
+  const last = Math.max(-Infinity, ...stopped);
+  return {
+    covered: false,
+    reason: now - last >= 0 && now - last <= DAY ? "ended" : "not_cleared",
+  };
 }
 
 type FileKind = "pdf" | "png" | "jpeg";
@@ -356,6 +385,8 @@ export function createMockClearances({
         if (!u.signed_by.trim() || !u.signer_title.trim()) fail(422, "invalid");
 
         const ids = [...new Set(u.covered)];
+        if (u.renews !== undefined && !/^[A-Za-z0-9_-]{1,128}$/.test(u.renews))
+          fail(422, "invalid");
         const emails = [
           ...new Set(
             (u.covered_platform ?? []).map((e) => e.trim().toLowerCase()),

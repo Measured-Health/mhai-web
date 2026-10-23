@@ -1,3 +1,4 @@
+import { POSITION_ORDER } from "@mhai/ui/clearances";
 import type { ClearanceClient } from "./clearances";
 import type { StepUp } from "./clearances-contract";
 import type { WriteOpts } from "./contract";
@@ -33,7 +34,14 @@ export function createLiveClearances({
       // 404: the key is off, so nothing about names exists here.
       if (res.status === 404) return { position: "off", since: null };
       if (!res.ok) throw refusal(res.status, data);
-      return data as never;
+      // Anything unexpected fails closed to Off.
+      const position = POSITION_ORDER.find((p) => p === data?.position);
+      return position
+        ? {
+            position,
+            since: typeof data?.since === "string" ? data.since : null,
+          }
+        : { position: "off", since: null };
     },
     listClearances: () => apiOk(fetchImpl, "/hospital/clearances"),
     getClearance: (c) => apiOk(fetchImpl, `/hospital/clearances/${id(c)}`),

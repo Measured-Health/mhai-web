@@ -113,6 +113,14 @@ describe("live clearance client", () => {
     });
   });
 
+  it("fails closed to Off on a position it doesn't know", async () => {
+    reply(() => Response.json({ position: "everyone", since: 5 }));
+    await expect(client().getNamedAccess()).resolves.toEqual({
+      position: "off",
+      since: null,
+    });
+  });
+
   it("returns the position the API sent", async () => {
     reply(() =>
       Response.json({

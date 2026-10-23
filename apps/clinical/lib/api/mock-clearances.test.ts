@@ -9,6 +9,7 @@ import { auditEvents, resetAudit } from "./mock-audit";
 import {
   CHECK_MS,
   coverFor,
+  endOfHospitalDay,
   createMockClearances,
   resetClearances,
 } from "./mock-clearances";
@@ -157,7 +158,7 @@ describe("uploading", () => {
     expect(auditEvents()[0]!.actor).toEqual({ display_name: "Grace Nwosu" });
   });
 
-  it("checks the first bytes: a .pdf name with PNG bytes is accepted; a text file named .pdf is 415", async () => {
+  it("checks the first bytes: a .pdf name with PNG bytes is accepted (the name doesn't count); a text file named .pdf is 415", async () => {
     const c = as();
     const png = new File([bytes(PNG)], "scan.pdf");
     expect(await code(c.uploadClearance(upload({ file: png }), key()))).toBe(
@@ -252,6 +253,18 @@ describe("uploading", () => {
     expect(await code(c.uploadClearance(upload({ covered: [] }), key()))).toBe(
       "422 invalid",
     );
+    // 20 in total gets past the count and fails on who they are instead.
+    expect(
+      await code(
+        c.uploadClearance(upload({ covered: many.slice(0, 20) }), key()),
+      ),
+    ).toBe("422 not_eligible");
+  });
+
+  it("refuses a renews that isn't an opaque id", async () => {
+    expect(
+      await code(as().uploadClearance(upload({ renews: "../x" }), key())),
+    ).toBe("422 invalid");
   });
 
   it("may cover Tunde Okafor by email, and he comes back in covered_platform with his name", async () => {
@@ -523,27 +536,70 @@ describe("named access off", () => {
 });
 
 describe("coverFor", () => {
-  it("returns cl_act for Grace Nwosu, and null after it is revoked", async () => {
+  it("returns cl_act for Grace Nwosu, and not covered after it is revoked", async () => {
     expect(coverFor("s-nwosu", ADMIN_NOW)).toMatchObject({
+      covered: true,
       clearance_id: "cl_act",
-      until: "2027-03-02",
+      // 2 Mar 2027, end of the hospital's day (23:59:59.999 at UTC+1)
+      until: "2027-03-02T22:59:59.999Z",
     });
     await as().revokeClearance("cl_act", { reason: "other", ...GOOD }, key());
-    expect(coverFor("s-nwosu", ADMIN_NOW)).toBeNull();
+    expect(coverFor("s-nwosu", ADMIN_NOW).covered).toBe(false);
   });
 
   it("covers Kemi by cl_soon, and Dr. Obi by nothing (his letter is waiting)", () => {
     expect(coverFor("s-kemi", ADMIN_NOW)).toMatchObject({
+      covered: true,
       clearance_id: "cl_soon",
-      until: "2026-10-28",
+      until: "2026-10-28T22:59:59.999Z",
     });
-    expect(coverFor("s-obi", ADMIN_NOW)).toBeNull();
-    expect(coverFor("s-eze", ADMIN_NOW)).toBeNull();
+    expect(coverFor("s-obi", ADMIN_NOW)).toEqual({
+      covered: false,
+      reason: "not_cleared",
+    });
+    // Revoked 20 days ago: long gone.
+    expect(coverFor("s-eze", ADMIN_NOW)).toEqual({
+      covered: false,
+      reason: "not_cleared",
+    });
   });
 
-  it("stops at the hospital's end of day", () => {
+  it("stops the instant the hospital's day ends, not the UTC day", () => {
     coverFor("s-kemi", ADMIN_NOW); // the sample is dated from the first look
-    expect(coverFor("s-kemi", ADMIN_NOW + 12 * DAY)?.until).toBe("2026-10-28");
-    expect(coverFor("s-kemi", ADMIN_NOW + 13 * DAY)).toBeNull();
+    const end = Date.parse("2026-10-28T22:59:59.999Z");
+    expect(coverFor("s-kemi", end).covered).toBe(true);
+    expect(coverFor("s-kemi", end + 1)).toEqual({
+      covered: false,
+      reason: "ended",
+    });
+  });
+
+  it("says ended for 24 hours after a letter ends, then not_cleared", () => {
+    coverFor("s-kemi", ADMIN_NOW);
+    const end = Date.parse("2026-10-28T22:59:59.999Z");
+    expect(coverFor("s-kemi", end + DAY)).toMatchObject({ reason: "ended" });
+    expect(coverFor("s-kemi", end + DAY + 2)).toMatchObject({
+      reason: "not_cleared",
+    });
+  });
+
+  it("says ended for 24 hours after a revoke, then not_cleared", async () => {
+    await as().revokeClearance("cl_act", { reason: "other", ...GOOD }, key());
+    expect(coverFor("s-nwosu", ADMIN_NOW + 23 * 3_600_000)).toEqual({
+      covered: false,
+      reason: "ended",
+    });
+    expect(coverFor("s-nwosu", ADMIN_NOW + 25 * 3_600_000)).toEqual({
+      covered: false,
+      reason: "not_cleared",
+    });
+  });
+});
+
+describe("endOfHospitalDay", () => {
+  it("is the last millisecond of that day at the hospital, at a month end too", () => {
+    expect(endOfHospitalDay("2026-10-31")).toBe("2026-10-31T22:59:59.999Z");
+    expect(endOfHospitalDay("2026-12-31")).toBe("2026-12-31T22:59:59.999Z");
+    expect(endOfHospitalDay("2028-02-29")).toBe("2028-02-29T22:59:59.999Z");
   });
 });
