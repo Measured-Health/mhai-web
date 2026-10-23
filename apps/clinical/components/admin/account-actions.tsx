@@ -12,6 +12,7 @@ import { adminError, type AdminError } from "@/lib/admin/errors";
 import { INVITE_DAYS } from "@/lib/admin/invite";
 import { guardFor } from "@/lib/admin/staff";
 import { useAuth } from "@/lib/auth/auth-context";
+import { ENDS_NAMED } from "@/lib/clearances/summary";
 import { useNetwork } from "@mhai/api-client/network";
 import { BACKUP_FAILED_BODY } from "@mhai/ui/auth/backup-code-toggle";
 import { Banner } from "@mhai/ui/banner";
@@ -25,7 +26,14 @@ export type Confirmable =
 
 type Copy = { title: string; body: string; keep: string; confirm: string };
 
-function copyFor(c: Confirmable, s: StaffOut, hospital: string): Copy {
+/** With named access, deactivating, resetting two-step and removing also end it (Plan 11). */
+function copyFor(
+  c: Confirmable,
+  s: StaffOut,
+  hospital: string,
+  named = false,
+): Copy {
+  const ends = named ? ` ${ENDS_NAMED}` : "";
   switch (c) {
     case "password-reset":
       return {
@@ -37,14 +45,14 @@ function copyFor(c: Confirmable, s: StaffOut, hospital: string): Copy {
     case "reset-mfa":
       return {
         title: "Reset two-step verification?",
-        body: `Use this when ${s.full_name} has lost their phone. They're signed out now and set up two-step again at their next sign-in.`,
+        body: `Use this when ${s.full_name} has lost their phone. They're signed out now and set up two-step again at their next sign-in.${ends}`,
         keep: "Cancel",
         confirm: "Reset two-step",
       };
     case "deactivate":
       return {
         title: "Deactivate this account?",
-        body: `${s.full_name} can't sign in from now on. Their feedback, corrections and the activity log are kept, and you can reactivate them later.`,
+        body: `${s.full_name} can't sign in from now on. Their feedback, corrections and the activity log are kept, and you can reactivate them later.${ends}`,
         keep: "Keep account",
         confirm: "Deactivate",
       };
@@ -58,7 +66,7 @@ function copyFor(c: Confirmable, s: StaffOut, hospital: string): Copy {
           }
         : {
             title: "Remove this account?",
-            body: `${s.full_name} (${s.email}) is removed from ${hospital}. This can't be undone. Past consultations, feedback and the activity log are kept.`,
+            body: `${s.full_name} (${s.email}) is removed from ${hospital}. This can't be undone. Past consultations, feedback and the activity log are kept.${ends}`,
             keep: "Keep account",
             confirm: "Remove account",
           };
@@ -143,6 +151,7 @@ export function RemindButton({ row }: { row: StaffOut }) {
 function RemoveDialog({
   row,
   hospital,
+  named,
   offline,
   busy,
   error,
@@ -153,6 +162,8 @@ function RemoveDialog({
 }: {
   row: StaffOut;
   hospital: string;
+  /** A letter gives this person named access now (Plan 11). */
+  named: boolean;
   offline: boolean;
   busy: boolean;
   error: AdminError | null;
@@ -165,7 +176,7 @@ function RemoveDialog({
 }) {
   const { user } = useAuth();
   const step = useStepUp();
-  const copy = copyFor("remove", row, hospital);
+  const copy = copyFor("remove", row, hospital, named);
   // Every admin has two-step (amendment 3), so this is only ever stale state.
   const blocked = required || user?.mfaEnabled === false;
 
@@ -205,10 +216,13 @@ export function AccountActions({
   row,
   list,
   onRemoved,
+  named = false,
 }: {
   row: StaffOut;
   list: StaffOut[];
   onRemoved(): void;
+  /** A letter gives this person named access now (Plan 11). */
+  named?: boolean;
 }) {
   const act = useStaffAction();
   const remove = useRemoveStaff();
@@ -328,7 +342,9 @@ export function AccountActions({
     setPending(c);
   };
   const copy =
-    pending && pending !== "remove" ? copyFor(pending, row, hospital) : null;
+    pending && pending !== "remove"
+      ? copyFor(pending, row, hospital, named)
+      : null;
 
   return (
     <section aria-labelledby={heading}>
@@ -460,6 +476,7 @@ export function AccountActions({
         <RemoveDialog
           row={row}
           hospital={hospital}
+          named={named}
           offline={!online}
           busy={remove.isPending}
           error={removeError}

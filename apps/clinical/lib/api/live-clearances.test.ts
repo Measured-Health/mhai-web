@@ -59,6 +59,20 @@ describe("live clearance client", () => {
     expect(call(3)[1].headers).toMatchObject({ "Idempotency-Key": "k" });
   });
 
+  it("sends the letter's version with a revoke when it has one", async () => {
+    reply(() => Response.json({}));
+    await client().revokeClearance(
+      "cl_1",
+      { reason: "no_longer_needed", version: 4, mfaCode: "123456" },
+      { idempotencyKey: "k" },
+    );
+    expect(JSON.parse(call()[1].body as string)).toEqual({
+      reason: "no_longer_needed",
+      version: 4,
+      mfa_code: "123456",
+    });
+  });
+
   it("sends the upload as multipart with the exact field names and an Idempotency-Key", async () => {
     reply(() => Response.json({ id: "cl_new" }));
     const file = new File(["%PDF-1.7"], "letter.pdf", {

@@ -32,11 +32,17 @@ export const CLEARANCE_KEYS = {
   named: ["clearances", "named-access"] as const,
 };
 
-/** The hospital's effective switch position (Off when the key is off). */
-export const useNamedAccess = () =>
+/**
+ * The hospital's effective switch position (Off when the key is off).
+ * `enabled: false` asks nothing (someone without named access).
+ */
+export const useNamedAccess = ({
+  enabled = true,
+}: { enabled?: boolean } = {}) =>
   useQuery({
     queryKey: CLEARANCE_KEYS.named,
     queryFn: () => getClearanceClient().getNamedAccess(),
+    enabled,
     ...READ_RETRY,
   });
 

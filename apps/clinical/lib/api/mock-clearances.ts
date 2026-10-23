@@ -461,6 +461,8 @@ export function createMockClearances({
         const c = find(s, id);
         if (c.status !== "waiting" && c.status !== "active")
           fail(409, "conflict");
+        if (body.version !== undefined && body.version !== c.version)
+          fail(409, "conflict");
         const by = await myName();
         const note = body.note?.trim() || null;
         c.status = "revoked";

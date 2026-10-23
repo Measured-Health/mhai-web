@@ -10,7 +10,7 @@ import {
   fileProblem,
   letterDateProblem,
 } from "@/lib/clearances/file-check";
-import { errorText } from "@/lib/clearances/summary";
+import { errorText, listNames } from "@/lib/clearances/summary";
 import { useNetwork } from "@mhai/api-client/network";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
@@ -27,6 +27,10 @@ export type UploadPrefill = {
   signed_by: string;
   signer_title: string;
   renews: string;
+  /** The old letter's names for its people, for anyone no longer on the staff list. */
+  names?: Record<string, string>;
+  /** Measured Health staff the old letter named; only their emails can be sent, so they are entered again. */
+  platform?: string[];
 };
 
 const ACCEPT = ".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg";
@@ -78,22 +82,32 @@ export function UploadDialog({
   open,
   onClose,
   prefill,
+  overPanel = false,
 }: {
   open: boolean;
   onClose(): void;
   prefill?: UploadPrefill;
+  /**
+   * Opened from a side panel: below `md` it is a full-width modal dialog,
+   * never a sheet on the panel's sheet (ruling 13).
+   */
+  overPanel?: boolean;
 }) {
   // Mounted only while open, so closing forgets the file and every field.
   if (!open) return null;
-  return <UploadForm onClose={onClose} prefill={prefill} />;
+  return (
+    <UploadForm onClose={onClose} prefill={prefill} overPanel={overPanel} />
+  );
 }
 
 function UploadForm({
   onClose,
   prefill,
+  overPanel,
 }: {
   onClose(): void;
   prefill?: UploadPrefill;
+  overPanel: boolean;
 }) {
   const desktop = useIsDesktop();
   const letters = useClearances();
@@ -152,6 +166,13 @@ function UploadForm({
   const blocked = required || user?.mfaEnabled === false;
   const busy = upload.isPending;
   const nameOf = (id: string) => people.find((s) => s.id === id)?.full_name;
+  // A renewal's people who can't be covered any more are left off, and said so.
+  const leftOff =
+    prefill && staff.isSuccess
+      ? prefill.covered
+          .filter((id) => !ok.has(id))
+          .map((id) => nameOf(id) ?? prefill.names?.[id] ?? "Someone")
+      : [];
 
   const ready =
     !!file &&
@@ -348,6 +369,13 @@ function UploadForm({
         )}
       </div>
 
+      {leftOff.length > 0 && (
+        <p role="status" className="text-[13px] text-ink-2">
+          {leftOff.length === 1
+            ? `${leftOff[0]} can't be covered any more and was left off.`
+            : `${listNames(leftOff)} can't be covered any more and were left off.`}
+        </p>
+      )}
       {staff.isError ? (
         <Banner tone="bad" title="Couldn't load the staff list">
           <Button
@@ -373,6 +401,12 @@ function UploadForm({
         <label htmlFor={ids.email} className={labelText}>
           Measured Health staff named in the letter (optional)
         </label>
+        {prefill?.platform && prefill.platform.length > 0 && (
+          <p className="mt-1 text-[12px] text-ink-3">
+            The old letter also named {listNames(prefill.platform)} from
+            Measured Health. Add their email again if this letter names them.
+          </p>
+        )}
         <div className="mt-1 flex gap-2">
           <input
             id={ids.email}
@@ -520,8 +554,17 @@ function UploadForm({
     </form>
   );
 
-  return desktop ? (
-    <Dialog open onClose={close} title={TITLE} className="w-[min(600px,92vw)]">
+  return desktop || overPanel ? (
+    <Dialog
+      open
+      onClose={close}
+      title={TITLE}
+      className={
+        overPanel
+          ? "max-md:h-dvh max-md:max-h-none max-md:w-full max-md:max-w-none max-md:rounded-none max-md:p-4 md:w-[min(600px,92vw)]"
+          : "w-[min(600px,92vw)]"
+      }
+    >
       {body}
     </Dialog>
   ) : (

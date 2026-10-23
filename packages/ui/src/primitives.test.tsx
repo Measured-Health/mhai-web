@@ -1,7 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Button } from "./button";
 import { Banner } from "./banner";
 import { Dialog } from "./dialog";
@@ -75,6 +75,68 @@ describe("Dialog", () => {
     const d = screen.getByRole("dialog");
     expect(d).toHaveClass("w-full", "print:hidden");
     expect(d).not.toHaveClass("w-[min(440px,92vw)]");
+  });
+});
+
+describe("Dialog focus return (Plan 11 Task 6, I1)", () => {
+  function Opener({ unmount }: { unmount: boolean }) {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setOpen(true)}>Open it</button>
+        <button>Elsewhere</button>
+        {(open || !unmount) && (
+          <Dialog open={open} onClose={() => setOpen(false)} title="Asked">
+            <button onClick={() => setOpen(false)}>Done</button>
+          </Dialog>
+        )}
+      </>
+    );
+  }
+
+  it("gives the focus back to its opener when unmounted while open", async () => {
+    render(<Opener unmount />);
+    await userEvent.click(screen.getByText("Open it"));
+    expect(screen.getByText("Done")).toHaveFocus();
+    await userEvent.click(screen.getByText("Done"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("Open it")).toHaveFocus();
+  });
+
+  it("gives the focus back to its opener when closed", async () => {
+    render(<Opener unmount={false} />);
+    await userEvent.click(screen.getByText("Open it"));
+    expect(screen.getByText("Done")).toHaveFocus();
+    await userEvent.click(screen.getByText("Done"));
+    expect(screen.getByRole("dialog", { hidden: true })).not.toHaveAttribute(
+      "open",
+    );
+    expect(screen.getByText("Open it")).toHaveFocus();
+  });
+
+  it("moves no focus when the opener has gone", () => {
+    function Gone() {
+      const [step, setStep] = useState<"button" | "dialog" | "none">("button");
+      return (
+        <>
+          <button>Stays</button>
+          {step === "button" && (
+            <button onClick={() => setStep("dialog")}>Open it</button>
+          )}
+          {step === "dialog" && (
+            <Dialog open onClose={() => {}} title="Asked">
+              <button onClick={() => setStep("none")}>Done</button>
+            </Dialog>
+          )}
+        </>
+      );
+    }
+    render(<Gone />);
+    act(() => screen.getByText("Open it").focus());
+    act(() => screen.getByText("Open it").click());
+    act(() => screen.getByText("Done").click());
+    expect(screen.queryByText("Open it")).toBeNull();
+    expect(screen.getByText("Stays")).not.toHaveFocus();
   });
 });
 

@@ -24,6 +24,9 @@ function latestEnds(list: ClearanceOut[], today: string): Map<string, string> {
   return ends;
 }
 
+/** Added to a change that takes away what a letter needs (Plan 11, ruling 8). */
+export const ENDS_NAMED = "This also ends their named access at once.";
+
 /** The latest end among the active letters covering this person, or null. */
 export function namedAccessFor(
   staffId: string,
@@ -47,7 +50,8 @@ export function accessSummary(list: ClearanceOut[], today: string): string {
   return `${ends.length} people have named access; the earliest ends ${dayLabel(earliest)}`;
 }
 
-const join = (names: string[]) =>
+/** "A", "A and B", "A, B and C". */
+export const listNames = (names: string[]) =>
   names.length < 2
     ? names.join("")
     : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
@@ -65,7 +69,7 @@ export function errorText(
       return `These aren't Measured Health platform admins with two-step: ${e.emails.join(", ")}`;
     const names = nameOf ? e.ids.map(nameOf) : [];
     if (nameOf && e.ids.length > 0 && names.every((n): n is string => !!n))
-      return `${join(names)} can't be covered. Check the list and try again.`;
+      return `${listNames(names)} can't be covered. Check the list and try again.`;
     return "Someone you picked can't be covered. Check the list and try again.";
   }
   if (e instanceof ApiError) {
