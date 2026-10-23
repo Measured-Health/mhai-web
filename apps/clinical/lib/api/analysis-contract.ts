@@ -3,8 +3,10 @@
 // is computed and hidden by the server under the small-group rule (a count of
 // 1 to 4 is `{ value: null, suppressed: true }`), and every set that adds up
 // is hidden as a set so no hidden member can be worked out. Nothing here can
-// carry a name, an MRN, a date of birth or an address; patient rows are
-// de-identified. EMR-agnostic: sources are display labels only.
+// carry a date of birth or an address. Patient rows are de-identified, except
+// the named list (Plan 11c), which adds only a name and an MRN, and only for
+// a person a verified clearance letter covers. EMR-agnostic: sources are
+// display labels only.
 
 import type { ConfidenceLevel, GuardedOut } from "./admin-contract";
 import type {
@@ -18,8 +20,8 @@ export type ViewId =
 export type AgeBand = "0-17" | "18-39" | "40-64" | "65-79" | "80+";
 export type Sex = "female" | "male" | "other" | "not_recorded";
 export type Setting = "admitted" | "outpatient" | "emergency";
-/** "named" is a later plan. */
-export type PatientLevel = "deidentified";
+/** "named" needs the switch On, a covering letter and a purpose (Plan 11c). */
+export type PatientLevel = "deidentified" | "named";
 /** Why a person asked to see names (Plan 11c). */
 export type NamedPurpose =
   "clinical_follow_up" | "quality_improvement" | "audit" | "other";
@@ -154,9 +156,45 @@ export type PatientRowOut = {
   }[];
 };
 
+/** A row of the named list: the de-identified row, plus a name and an MRN only. */
+export type NamedPatientRowOut = PatientRowOut & { name: string; mrn: string };
+
 /** `patients` is at most 200 rows. */
-export type PatientsOut = {
-  level: PatientLevel;
+export type DeidentifiedPatientsOut = {
+  level: "deidentified";
   count: number;
   patients: PatientRowOut[];
+};
+
+/** Names until `named_until` (ISO), and never past the letter's end. */
+export type NamedPatientsOut = {
+  level: "named";
+  count: number;
+  patients: NamedPatientRowOut[];
+  named_until: string;
+  /** `end_date` is the hospital's day. */
+  clearance: { id: string; end_date: string };
+};
+
+export type PatientsOut = DeidentifiedPatientsOut | NamedPatientsOut;
+
+/**
+ * `GET /analysis/clearance/me`: whether this person may see names right now.
+ * `until` is the ISO instant their letter's end day ends; the app does no
+ * time-zone sum. Any change to `named`, `clearance_id` or `version` ends a
+ * named view.
+ */
+export type ClearanceMeOut = {
+  named: boolean;
+  until: string | null;
+  clearance_id: string | null;
+  version: number;
+  reason:
+    | "none"
+    | "ended"
+    | "revoked"
+    | "removed_from_letter"
+    | "role_or_account"
+    | "switched_off"
+    | null;
 };

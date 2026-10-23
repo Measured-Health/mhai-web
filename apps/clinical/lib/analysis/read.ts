@@ -5,17 +5,24 @@
 // complement, a set whose hidden members can be worked out, a drill on a
 // count under 5, or a series point that isn't a real day. A failed view
 // never shows zeros and never takes the others down. The patient list is
-// de-identified only, and fails closed on any field outside its row.
+// read only at the level asked for, and fails closed on any field outside
+// its row: a de-identified row has no name or MRN, and a named row (Plan
+// 11c) adds only those two, with a `named_until` still in the future.
 import { SMALL_GROUP_MIN, isSmallCount } from "@mhai/ui/small-groups";
 import type { GuardedOut } from "../api/admin-contract";
 import type { DismissReason, FindingFlag } from "../api/alerts-contract";
 import type {
   AgeBand,
+  ClearanceMeOut,
   ConditionRef,
   Drillable,
   FilterOptionsOut,
   LocationRef,
+  DeidentifiedPatientsOut,
   Meta,
+  NamedPatientRowOut,
+  NamedPatientsOut,
+  PatientLevel,
   PatientRowOut,
   PatientsOut,
   Setting,
@@ -562,7 +569,7 @@ export function readFilterOptions(raw: unknown): ViewState<FilterOptionsOut> {
   };
 }
 
-// ---- The de-identified patient list ----------------------------------------------
+// ---- The patient list ------------------------------------------------------------
 
 const ROW_KEYS = [
   "pid",
@@ -572,19 +579,29 @@ const ROW_KEYS = [
   "conditions",
   "findings",
 ] as const satisfies readonly (keyof PatientRowOut)[];
+const NAMED_ROW_KEYS = [
+  ...ROW_KEYS,
+  "name",
+  "mrn",
+] as const satisfies readonly (keyof NamedPatientRowOut)[];
 const CONDITION_KEYS = ["id", "name", "icd10"] as const;
 const FINDING_KEYS = ["name", "flag", "source_label"] as const;
 const REPLY_KEYS = ["level", "count", "patients"] as const;
+const NAMED_REPLY_KEYS = [...REPLY_KEYS, "named_until", "clearance"] as const;
+const CLEARANCE_KEYS = ["id", "end_date"] as const;
 
 /** Exactly these keys: none missing, none other (a name, an MRN, a date of birth, an address). */
 const exactKeys = (o: Obj, keys: readonly string[]) => {
   const own = Object.keys(o);
   return own.length === keys.length && keys.every((k) => Object.hasOwn(o, k));
 };
+/** A name or an MRN: words, not blank, not a paragraph. */
+const isLabel = (v: unknown): v is string =>
+  isStr(v) && v.trim() !== "" && v.length <= 200;
 
-function patientRowOk(r: Obj): boolean {
+function patientRowOk(r: Obj, keys: readonly string[]): boolean {
   return (
-    exactKeys(r, ROW_KEYS) &&
+    exactKeys(r, keys) &&
     isStr(r.pid) &&
     PID.test(r.pid) &&
     oneOf(AGE_BANDS, r.age_band) &&
@@ -601,40 +618,124 @@ function patientRowOk(r: Obj): boolean {
     )
   );
 }
+const namedRowOk = (r: Obj) =>
+  patientRowOk(r, NAMED_ROW_KEYS) && isLabel(r.name) && isLabel(r.mrn);
+
+const rowOf = (r: PatientRowOut): PatientRowOut => ({
+  pid: r.pid,
+  age_band: r.age_band,
+  sex: r.sex,
+  setting: r.setting,
+  conditions: r.conditions.map((c) => ({
+    id: c.id,
+    name: c.name,
+    icd10: c.icd10,
+  })),
+  findings: r.findings.map((f) => ({
+    name: f.name,
+    flag: f.flag,
+    source_label: f.source_label,
+  })),
+});
 
 /**
- * The patients behind a shown count: de-identified only, at most 200 rows,
- * a count of 5 or more, and no field outside the row.
+ * The patients behind a shown count, read only at the level asked for: at
+ * most 200 rows, a count of 5 or more, and no field outside the row. A named
+ * reply also needs a `named_until` after `now` and the clearance it rests on.
  */
-export function readPatients(raw: unknown): ViewState<PatientsOut> {
-  if (!isObj(raw) || !exactKeys(raw, REPLY_KEYS)) return FAILED;
-  if (raw.level !== "deidentified") return FAILED;
+export function readPatients(
+  raw: unknown,
+  expected: "deidentified",
+  now: number,
+): ViewState<DeidentifiedPatientsOut>;
+export function readPatients(
+  raw: unknown,
+  expected: "named",
+  now: number,
+): ViewState<NamedPatientsOut>;
+export function readPatients(
+  raw: unknown,
+  expected: PatientLevel,
+  now: number,
+): ViewState<PatientsOut>;
+export function readPatients(
+  raw: unknown,
+  expected: PatientLevel,
+  now: number,
+): ViewState<PatientsOut> {
+  if (!isObj(raw) || raw.level !== expected) return FAILED;
+  const named = expected === "named";
+  if (!exactKeys(raw, named ? NAMED_REPLY_KEYS : REPLY_KEYS)) return FAILED;
   const list = raw.patients;
-  if (!rows(list, patientRowOk) || list.length > PATIENTS_MAX) return FAILED;
+  const rowOk = named ? namedRowOk : (r: Obj) => patientRowOk(r, ROW_KEYS);
+  if (!rows(list, rowOk) || list.length > PATIENTS_MAX) return FAILED;
   const n = raw.count;
   if (!isCount(n) || isSmallCount(n) || n < list.length) return FAILED;
   if (new Set(list.map((r) => r.pid)).size !== list.length) return FAILED;
+  if (!named)
+    return {
+      status: "ok",
+      data: {
+        level: "deidentified",
+        count: n,
+        patients: (list as PatientRowOut[]).map(rowOf),
+      },
+    };
+  const until = raw.named_until;
+  if (!isTime(until) || !(Date.parse(until) > now)) return FAILED;
+  const c = raw.clearance;
+  if (!isObj(c) || !exactKeys(c, CLEARANCE_KEYS)) return FAILED;
+  if (!isId(c.id) || !isDay(c.end_date)) return FAILED;
   return {
     status: "ok",
     data: {
-      level: "deidentified",
+      level: "named",
       count: n,
-      patients: (list as PatientRowOut[]).map((r) => ({
-        pid: r.pid,
-        age_band: r.age_band,
-        sex: r.sex,
-        setting: r.setting,
-        conditions: r.conditions.map((c) => ({
-          id: c.id,
-          name: c.name,
-          icd10: c.icd10,
-        })),
-        findings: r.findings.map((f) => ({
-          name: f.name,
-          flag: f.flag,
-          source_label: f.source_label,
-        })),
+      patients: (list as NamedPatientRowOut[]).map((r) => ({
+        ...rowOf(r),
+        name: r.name,
+        mrn: r.mrn,
       })),
+      named_until: until,
+      clearance: { id: c.id, end_date: c.end_date },
     },
+  };
+}
+
+// ---- Whether names may show right now ------------------------------------------
+
+const ME_KEYS = [
+  "named",
+  "until",
+  "clearance_id",
+  "version",
+  "reason",
+] as const satisfies readonly (keyof ClearanceMeOut)[];
+const ME_REASONS = [
+  "none",
+  "ended",
+  "revoked",
+  "removed_from_letter",
+  "role_or_account",
+  "switched_off",
+] as const satisfies readonly ClearanceMeOut["reason"][];
+
+/** `clearance/me`, or null on a wrong shape (which ends a named view). */
+export function readClearanceMe(raw: unknown): ClearanceMeOut | null {
+  if (!isObj(raw) || !exactKeys(raw, ME_KEYS)) return null;
+  const { named, until, clearance_id, version, reason } = raw;
+  if (!isCount(version)) return null;
+  if (named === true) {
+    if (!isTime(until) || !isId(clearance_id) || reason !== null) return null;
+    return { named, until, clearance_id, version, reason };
+  }
+  if (named !== false || until !== null || clearance_id !== null) return null;
+  if (reason !== null && !oneOf(ME_REASONS, reason)) return null;
+  return {
+    named,
+    until,
+    clearance_id,
+    version,
+    reason: reason as ClearanceMeOut["reason"],
   };
 }

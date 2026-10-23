@@ -44,11 +44,12 @@ import type { TableColumn } from "./data-table";
 import { SMALL_GROUP_MIN } from "@mhai/ui/small-groups";
 
 /**
- * What each level of list says about itself. The level is the one place a
- * later named list plugs in; today there is only the de-identified one.
+ * What each level of list says about itself. The level is the one place the
+ * named list (Plan 11c) plugs in.
  */
 const LEVEL_NOTE: Record<PatientLevel, string> = {
   deidentified: "De-identified: no names or record numbers",
+  named: "Named view · this view is recorded",
 };
 
 const OFFLINE_REASON = "You're offline. Reconnect to see patients.";

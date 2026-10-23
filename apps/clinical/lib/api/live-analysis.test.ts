@@ -68,4 +68,71 @@ describe("live analysis client", () => {
     expect(e).toBeInstanceOf(ApiError);
     expect(e).toMatchObject({ status: 422, code: "too_small" });
   });
+
+  it("asks for names with the purpose and note, and reads clearance/me", async () => {
+    await client().listPatients({
+      drill: "cond-e11",
+      level: "named",
+      filters: empty,
+      purpose: "other",
+      note: "Ward 4 follow-up & recall",
+    });
+    await client().listPatients({
+      drill: "cond-e11",
+      level: "named",
+      filters: empty,
+      purpose: "audit",
+    });
+    // A purpose is never sent with the de-identified list.
+    await client().listPatients({
+      drill: "cond-e11",
+      level: "deidentified",
+      filters: empty,
+      purpose: "audit",
+      note: "x",
+    });
+    await client().getClearanceMe();
+    expect(urls()).toEqual([
+      "/api/v1/analysis/patients?drill=cond-e11&level=named&from=2026-01-01&to=2026-03-31&purpose=other&note=Ward+4+follow-up+%26+recall",
+      "/api/v1/analysis/patients?drill=cond-e11&level=named&from=2026-01-01&to=2026-03-31&purpose=audit",
+      "/api/v1/analysis/patients?drill=cond-e11&level=deidentified&from=2026-01-01&to=2026-03-31",
+      "/api/v1/analysis/clearance/me",
+    ]);
+  });
+
+  it("reads the switch through named-access, a 404 as Off", async () => {
+    fetchImpl.mockImplementationOnce(async () =>
+      Response.json({ position: "on", since: "2026-09-16T10:00:00.000Z" }),
+    );
+    expect(await client().getNamedAccess()).toEqual({
+      position: "on",
+      since: "2026-09-16T10:00:00.000Z",
+    });
+    fetchImpl.mockImplementationOnce(async () =>
+      Response.json({ code: "not_found" }, { status: 404 }),
+    );
+    expect(await client().getNamedAccess()).toEqual({
+      position: "off",
+      since: null,
+    });
+    expect(urls()).toEqual([
+      "/api/v1/analysis/named-access",
+      "/api/v1/analysis/named-access",
+    ]);
+  });
+
+  it("turns a named refusal into its code", async () => {
+    fetchImpl.mockImplementationOnce(async () =>
+      Response.json({ code: "not_cleared" }, { status: 403 }),
+    );
+    const e = await client()
+      .listPatients({
+        drill: "x",
+        level: "named",
+        filters: empty,
+        purpose: "audit",
+      })
+      .catch((x) => x);
+    expect(e).toMatchObject({ status: 403, code: "not_cleared" });
+  });
 });

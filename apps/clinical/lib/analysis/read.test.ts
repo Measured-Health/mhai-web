@@ -16,7 +16,12 @@ import type {
 } from "../api/analysis-contract";
 import { FILTER_OPTIONS } from "../api/analysis-fixtures";
 import { createMockAnalysis } from "../api/mock-analysis";
-import { readFilterOptions, readPatients, readView } from "./read";
+import {
+  readClearanceMe,
+  readFilterOptions,
+  readPatients,
+  readView,
+} from "./read";
 
 const S = (value: number): GuardedOut => ({ value, suppressed: false });
 const H: GuardedOut = { value: null, suppressed: true };
@@ -45,6 +50,8 @@ const VIEWS: ViewId[] = [
   "quality",
 ];
 const mock = createMockAnalysis({ delayMs: 0 });
+/** The reader's clock in these tests. */
+const NOW = Date.parse("2026-10-22T09:00:00.000Z");
 
 const meta = (patients: GuardedOut): Meta => ({
   updated_at: "2026-10-22T06:00:00.000Z",
@@ -799,7 +806,10 @@ describe("readPatients", () => {
   });
 
   it("reads de-identified rows", () => {
-    expect(readPatients(reply())).toEqual({ status: "ok", data: reply() });
+    expect(readPatients(reply(), "deidentified", NOW)).toEqual({
+      status: "ok",
+      data: reply(),
+    });
   });
 
   it("reads the mock's patients behind a shown count", async () => {
@@ -810,40 +820,55 @@ describe("readPatients", () => {
       level: "deidentified",
       filters: F,
     });
-    expect(readPatients(raw).status).toBe("ok");
+    expect(readPatients(raw, "deidentified", NOW).status).toBe("ok");
   });
 
   it("a row with name, mrn, dob, address or an unknown key fails", () => {
     for (const key of ["name", "mrn", "dob", "address", "nickname"])
       expect(
-        readPatients(reply({}, [{ ...row, [key]: "x" }])).status,
+        readPatients(reply({}, [{ ...row, [key]: "x" }]), "deidentified", NOW)
+          .status,
         key,
       ).toBe("failed");
     expect(
-      readPatients(reply({}, [{ ...row, conditions: [{ ...E11, mrn: "1" }] }]))
-        .status,
+      readPatients(
+        reply({}, [{ ...row, conditions: [{ ...E11, mrn: "1" }] }]),
+        "deidentified",
+        NOW,
+      ).status,
     ).toBe("failed");
     expect(
       readPatients(
         reply({}, [{ ...row, findings: [{ ...row.findings[0], dob: "x" }] }]),
+        "deidentified",
+        NOW,
       ).status,
     ).toBe("failed");
-    expect(readPatients(reply({ names: ["x"] })).status).toBe("failed");
+    expect(
+      readPatients(reply({ names: ["x"] }), "deidentified", NOW).status,
+    ).toBe("failed");
     const missing: Record<string, unknown> = { ...row };
     delete missing.sex;
-    expect(readPatients(reply({}, [missing])).status).toBe("failed");
+    expect(readPatients(reply({}, [missing]), "deidentified", NOW).status).toBe(
+      "failed",
+    );
   });
 
   it("level named fails", () => {
-    expect(readPatients(reply({ level: "named" })).status).toBe("failed");
-    expect(readPatients(reply({ level: undefined })).status).toBe("failed");
+    expect(
+      readPatients(reply({ level: "named" }), "deidentified", NOW).status,
+    ).toBe("failed");
+    expect(
+      readPatients(reply({ level: undefined }), "deidentified", NOW).status,
+    ).toBe("failed");
   });
 
   it("a pid shaped like an MRN fails", () => {
     for (const pid of ["12345678", "MRN-00123", "P-12", "p-ABCDE", "P-ABCDE "])
-      expect(readPatients(reply({}, [{ ...row, pid }])).status, pid).toBe(
-        "failed",
-      );
+      expect(
+        readPatients(reply({}, [{ ...row, pid }]), "deidentified", NOW).status,
+        pid,
+      ).toBe("failed");
   });
 
   it("201 rows fail", () => {
@@ -852,14 +877,217 @@ describe("readPatients", () => {
         ...row,
         pid: `P-${String(i).padStart(5, "0")}`,
       }));
-    expect(readPatients(reply({ count: 300 }, rows(200))).status).toBe("ok");
-    expect(readPatients(reply({ count: 300 }, rows(201))).status).toBe(
+    expect(
+      readPatients(reply({ count: 300 }, rows(200)), "deidentified", NOW)
+        .status,
+    ).toBe("ok");
+    expect(
+      readPatients(reply({ count: 300 }, rows(201)), "deidentified", NOW)
+        .status,
+    ).toBe("failed");
+  });
+
+  it("a count under 5, or under the rows sent, fails", () => {
+    expect(readPatients(reply({ count: 3 }), "deidentified", NOW).status).toBe(
+      "failed",
+    );
+    expect(
+      readPatients(reply({ count: 0 }, [row]), "deidentified", NOW).status,
+    ).toBe("failed");
+  });
+});
+
+describe("readPatients, named", () => {
+  const row = {
+    pid: "P-7K2Q9",
+    age_band: "40-64",
+    sex: "female",
+    setting: "admitted",
+    conditions: [E11],
+    findings: [
+      { name: "Potassium", flag: "high", source_label: "Results system" },
+    ],
+  };
+  const named = { ...row, name: "Ifeoma Chukwu", mrn: "HH-104233" };
+  const UNTIL = "2026-10-22T10:00:00.000Z";
+  const reply = (
+    over: Record<string, unknown> = {},
+    rows: unknown[] = [named],
+  ) => ({
+    level: "named",
+    count: 12,
+    patients: rows,
+    named_until: UNTIL,
+    clearance: { id: "cl_act", end_date: "2027-03-08" },
+    ...over,
+  });
+
+  it("a named reply reads with name and mrn", () => {
+    expect(readPatients(reply(), "named", NOW)).toEqual({
+      status: "ok",
+      data: reply(),
+    });
+  });
+
+  it("a de-identified request answered with names fails closed", () => {
+    expect(readPatients(reply(), "deidentified", NOW).status).toBe("failed");
+    // Names on a reply that calls itself de-identified fail too.
+    expect(
+      readPatients(
+        { level: "deidentified", count: 12, patients: [named] },
+        "deidentified",
+        NOW,
+      ).status,
+    ).toBe("failed");
+    // And a de-identified reply to a named request is not what was asked.
+    expect(
+      readPatients(
+        { level: "deidentified", count: 12, patients: [row] },
+        "named",
+        NOW,
+      ).status,
+    ).toBe("failed");
+  });
+
+  it("a named reply without named_until fails", () => {
+    const raw: Record<string, unknown> = reply();
+    delete raw.named_until;
+    expect(readPatients(raw, "named", NOW).status).toBe("failed");
+    for (const named_until of [null, "", "soon", 1_800_000_000_000])
+      expect(
+        readPatients(reply({ named_until }), "named", NOW).status,
+        String(named_until),
+      ).toBe("failed");
+  });
+
+  it("a named reply with named_until in the past fails", () => {
+    expect(
+      readPatients(
+        reply({ named_until: new Date(NOW).toISOString() }),
+        "named",
+        NOW,
+      ).status,
+    ).toBe("failed");
+    expect(
+      readPatients(
+        reply({ named_until: "2026-10-22T08:59:59.000Z" }),
+        "named",
+        NOW,
+      ).status,
+    ).toBe("failed");
+  });
+
+  it("a named reply needs a clearance with an opaque id and a day", () => {
+    const raw: Record<string, unknown> = reply();
+    delete raw.clearance;
+    expect(readPatients(raw, "named", NOW).status).toBe("failed");
+    for (const clearance of [
+      null,
+      { id: "cl act", end_date: "2027-03-08" },
+      { id: "cl_act", end_date: "8 Mar 2027" },
+      { id: "cl_act", end_date: "2027-03-08", by: "x" },
+      { id: "cl_act" },
+    ])
+      expect(
+        readPatients(reply({ clearance }), "named", NOW).status,
+        JSON.stringify(clearance),
+      ).toBe("failed");
+    expect(readPatients(reply({ extra: 1 }), "named", NOW).status).toBe(
       "failed",
     );
   });
 
-  it("a count under 5, or under the rows sent, fails", () => {
-    expect(readPatients(reply({ count: 3 })).status).toBe("failed");
-    expect(readPatients(reply({ count: 0 }, [row])).status).toBe("failed");
+  it("a named row with dob or address fails", () => {
+    for (const key of ["dob", "address", "phone", "nickname"])
+      expect(
+        readPatients(reply({}, [{ ...named, [key]: "x" }]), "named", NOW)
+          .status,
+        key,
+      ).toBe("failed");
+    // A named row needs both, as words.
+    for (const over of [
+      { name: "" },
+      { name: null },
+      { mrn: "" },
+      { mrn: 104233 },
+    ])
+      expect(
+        readPatients(reply({}, [{ ...named, ...over }]), "named", NOW).status,
+        JSON.stringify(over),
+      ).toBe("failed");
+    const noMrn: Record<string, unknown> = { ...named };
+    delete noMrn.mrn;
+    expect(readPatients(reply({}, [noMrn]), "named", NOW).status).toBe(
+      "failed",
+    );
+  });
+
+  it("more than 200 named rows fail", () => {
+    const rows = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        ...named,
+        pid: `P-${String(i).padStart(5, "0")}`,
+      }));
+    expect(
+      readPatients(reply({ count: 300 }, rows(200)), "named", NOW).status,
+    ).toBe("ok");
+    expect(
+      readPatients(reply({ count: 300 }, rows(201)), "named", NOW).status,
+    ).toBe("failed");
+  });
+});
+
+describe("readClearanceMe", () => {
+  const me = {
+    named: true,
+    until: "2027-03-08T22:59:59.999Z",
+    clearance_id: "cl_act",
+    version: 2,
+    reason: null,
+  };
+  const off = {
+    named: false,
+    until: null,
+    clearance_id: null,
+    version: 0,
+    reason: "revoked",
+  };
+
+  it("reads named and not named", () => {
+    expect(readClearanceMe(me)).toEqual(me);
+    expect(readClearanceMe(off)).toEqual(off);
+    for (const reason of [
+      "none",
+      "ended",
+      "removed_from_letter",
+      "role_or_account",
+      "switched_off",
+      null,
+    ])
+      expect(readClearanceMe({ ...off, reason }), String(reason)).toEqual({
+        ...off,
+        reason,
+      });
+  });
+
+  it("is null on a wrong shape", () => {
+    for (const raw of [
+      null,
+      "named",
+      {},
+      { ...me, named: "true" },
+      { ...me, until: null },
+      { ...me, until: "soon" },
+      { ...me, clearance_id: "cl act" },
+      { ...me, clearance_id: null },
+      { ...me, version: -1 },
+      { ...me, version: 1.5 },
+      { ...me, reason: "revoked" },
+      { ...me, extra: 1 },
+      { ...off, reason: "because" },
+      { ...off, until: "2027-03-08T22:59:59.999Z" },
+      { ...off, clearance_id: "cl_act" },
+    ])
+      expect(readClearanceMe(raw), JSON.stringify(raw)).toBeNull();
   });
 });
