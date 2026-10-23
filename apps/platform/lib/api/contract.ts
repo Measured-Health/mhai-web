@@ -9,9 +9,11 @@ import type {
   Period,
   SeriesOut,
 } from "./analytics-contract";
+import type { AuditClient } from "./audit-contract";
 import type { HoldShort, HoldsClient } from "./holds-contract";
 import type { EmailPref, NotificationsOut } from "./notifications-contract";
 import type { OpsClient } from "./ops-contract";
+import type { SettingsClient } from "./settings-contract";
 
 export type HospitalStatus =
   | "active"
@@ -238,7 +240,8 @@ export class BlockedError extends ApiError {
  * Each area (legal holds, operations, settings, the audit log) keeps its
  * client in its own contract file and adds its name to `extends` here.
  */
-export interface PlatformClient extends HoldsClient, OpsClient {
+export interface PlatformClient
+  extends HoldsClient, OpsClient, AuditClient, SettingsClient {
   listHospitals(
     q: HospitalQuery,
   ): Promise<{ hospitals: HospitalSummary[]; next_cursor: string | null }>;

@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import { ApiError } from "@mhai/api-client/errors";
-import type { StepUp } from "@/lib/api/contract";
 import {
   LIFT_REASONS,
   type HoldLift,
@@ -25,7 +24,11 @@ import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { useToast } from "@mhai/ui/toast";
 import { Section } from "../hospitals/section";
-import { StepUpDialog, type StepUpInput } from "../hospitals/step-up-dialog";
+import {
+  codeOf,
+  StepUpDialog,
+  type StepUpInput,
+} from "../hospitals/step-up-dialog";
 import { TwoPersonActions } from "../shared/two-person";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 
@@ -42,11 +45,6 @@ const REFUSED = ["expired", "same_person", "conflict", "not_found"];
 /** What approving does, in the server's numbers (a whole-hospital count). */
 export const liftEffect = (l: HoldLift) =>
   `When this hold is lifted, records it alone was keeping become due for the daily clean-up. About ${l.records_due} records are already past their retention period and would be deleted in the clean-up after ${dateLabel(l.due_after)}.`;
-
-const codeOf = (input: StepUpInput): StepUp =>
-  "backup_code" in input
-    ? { backup_code: input.backup_code }
-    : { mfa_code: input.mfa_code };
 
 type Asking = "request" | "approve" | "undo" | null;
 

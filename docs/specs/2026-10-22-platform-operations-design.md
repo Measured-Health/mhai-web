@@ -497,29 +497,47 @@ paused, paused_by, paused_at}`.
 **Settings**
 
 - `GET /platform/settings` → `{retention, triage, feedback_buffer, pending}`:
-  - `retention`: `{paused, paused_by, paused_at, confirmed, items: [{type, days, minimum_days,
+  - `retention`: `{paused, paused_by, paused_at, version, confirmed, items: [{type, days, minimum_days,
 last_run: {at, ok, deleted, kept_for_holds}, next_run_at, changed_by, changed_at, version}]}`,
     with `type` one of `records`, `documents`, `pending_corrections` or `audit_log`, and
-    `confirmed` false until the compliance lead has confirmed the periods;
+    `confirmed` false until the compliance lead has confirmed the periods, and `version` the
+    pause's own;
   - `triage`: `{enabled, ready, not_ready_reason, changed_by, changed_at, version}`, with
     `not_ready_reason` one of `missing_report`, `missing_files` or `checksum_mismatch` (null
     when ready);
   - `feedback_buffer`: `{waiting, running, failed_job_id, last_reset: {by, at, reason,
 cleared}}`: `running` while a reset is under way, `failed_job_id` the failed reset's job (or
     null);
-  - `pending`: the two-person requests, each with `from` and `to`.
+  - `pending`: the two-person requests, each `{id, kind, requested_by, requested_at, reason,
+requested_by_you, expires_at, version, from, to}`, plus `type` on a `retention_shorten`
+    and `clinical_signoff` on a `triage_on`. `version` is the version of the setting the
+    request is about (the retention item's or the triage's), which approving and cancelling
+    send.
 - `GET /platform/settings/retention/{type}/preview?days` → `{would_delete}`.
 - `PUT /platform/settings/retention/{type} {days, reason, mfa_code, version}`: longer applies
   at once; shorter returns **202** with the pending request; **422** `below_minimum`.
-- `PUT /platform/settings/retention-pause {paused, reason, mfa_code}` (optional).
+- `PUT /platform/settings/retention-pause {paused, reason, mfa_code, version}` (optional):
+  `version` is `retention.version`, the pause's own, which every pause and resume bumps. A
+  different `version`, or a pause already in the state asked for, is **409** `conflict`, so a
+  stale Resume can't lift another admin's newer pause.
 - `PUT /platform/settings/triage {enabled, reason, clinical_signoff?, mfa_code, version}`:
   off applies at once; on returns **202** with the pending request, **409** `not_ready`; the
   approval re-checks readiness (**409** `not_ready`).
-- `POST /platform/settings/requests/{id}/approve {mfa_code}`, `POST …/cancel`.
+- `POST /platform/settings/requests/{id}/approve {version, mfa_code}`, `POST …/cancel
+{version}` (no step-up). A different `version` is **409** `conflict`, and so is a request
+  already approved, cancelled or replaced; approving a lapsed one is **409** `expired`; the
+  requester approving is **409** `same_person`. Creating, approving, cancelling or lapsing a
+  request bumps the setting's `version`.
 - `POST /platform/settings/feedback-buffer/reset {reason, mfa_code}` → **202** `{job_id}`; the
   backend supplies its own confirm word.
-- Every other settings write answers with the whole `SettingsOut` (the `GET` shape), whether
-  it is **200** (applied) or **202** (a pending request).
+- Every settings write answers with the whole `SettingsOut` (the `GET` shape), whether it is
+  **200** (applied) or **202** (a pending request); the reset answers `{job_id}`.
+- Further refusals (**409** `conflict` unless noted): a second pending shorten for the same
+  type; triage on when already on or already requested; triage off when already off; pausing
+  when already paused (and resuming when not); a reset while one runs; a period equal to the
+  current one (**422** `invalid`); an unknown type or request id (**404**). A longer period
+  replaces a shorten waiting on the same type. A wrong code is **403** `mfa_invalid` and a
+  missing one **422** `invalid`.
 
 **Activity** gains the events above, with the hold's reference but never its note.
 

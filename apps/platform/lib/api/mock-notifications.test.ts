@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
 import type { AnalyticsOut } from "./analytics-contract";
+import { isChange } from "./notifications-contract";
 import { TEAM_EMAILS } from "./fixtures";
 import { createMockPlatform } from "./mock";
 
@@ -58,7 +59,7 @@ describe("mock notifications", () => {
     expect(times).toEqual([...times].sort((a, b) => b - a));
     expect(times.every((t) => t <= START)).toBe(true);
     expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
-    for (const i of items) {
+    for (const i of items.filter(isChange)) {
       const c = changes.find((x) => x.id === i.change_id)!;
       expect(c).toBeDefined();
       expect(i).toMatchObject({
@@ -79,8 +80,10 @@ describe("mock notifications", () => {
   it("follows the current changes ('guard' has no serious one)", async () => {
     const { m } = setup({ analytics: "guard" });
     const { items } = await m.listNotifications();
-    expect(items.some((i) => i.serious)).toBe(false);
-    expect(items.map((i) => i.change_id)).not.toContain("chg_ngh_critical_ack");
+    expect(items.filter(isChange).some((i) => i.serious)).toBe(false);
+    expect(items.filter(isChange).map((i) => i.change_id)).not.toContain(
+      "chg_ngh_critical_ack",
+    );
   });
 
   it("seen is per person (Ada marks seen, Tunde still sees new)", async () => {
@@ -222,5 +225,30 @@ describe("mock analytics email preference", () => {
     const before = (await m.listActivity({})).events.length;
     await m.setEmailPref({ mode: "critical", version: 1 }, KEY());
     expect((await m.listActivity({})).events.length).toBe(before);
+  });
+
+  it("a broken audit log puts an integrity item first, per person, outside the 20 cap", async () => {
+    const m = createMockPlatform({
+      now: () => START,
+      me: () => TEAM_EMAILS.ada,
+      delayMs: 0,
+      audit: { integrity: "broken" },
+    });
+    const { items, unseen } = await m.listNotifications();
+    expect(items[0]).toMatchObject({ kind: "audit_integrity", seen: false });
+    expect(unseen).toBe(items.length);
+    await m.markSeen({}, KEY());
+    const after = await m.listNotifications();
+    expect(after.unseen).toBe(0);
+    expect(after.items[0]).toMatchObject({
+      kind: "audit_integrity",
+      seen: true,
+    });
+  });
+
+  it("an intact audit log adds no integrity item", async () => {
+    const { m } = setup();
+    const { items } = await m.listNotifications();
+    expect(items.some((i) => i.kind === "audit_integrity")).toBe(false);
   });
 });

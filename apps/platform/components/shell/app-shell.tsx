@@ -1,6 +1,9 @@
 "use client";
+import { usePathname } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
+import { IntegrityBanner } from "../audit/integrity-banner";
 import { OfflineStrip } from "../states/offline-strip";
+import { HealthBanner } from "./health-banner";
 import { MobileDrawer } from "./mobile-drawer";
 import { ShellContext, type ShellCtx } from "./shell-context";
 import { Sidebar } from "./sidebar";
@@ -13,6 +16,7 @@ export { useShell } from "./shell-context";
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
+  const pathname = usePathname();
   const ctx = useMemo<ShellCtx>(
     () => ({
       openDrawer: () => setDrawer(true),
@@ -28,6 +32,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <main className="canvas-v3 relative flex min-w-0 flex-col overflow-hidden">
           <OfflineStrip />
+          {/* The home page (spec §8.3); the audit view shows its own. */}
+          {pathname === "/hospitals" && (
+            <IntegrityBanner className="border-b px-4 py-2.5 md:px-[26px]" />
+          )}
+          <HealthBanner />
           {children}
         </main>
       </div>

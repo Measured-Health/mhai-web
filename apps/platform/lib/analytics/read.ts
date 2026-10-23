@@ -18,6 +18,7 @@ import {
   type UseRow,
 } from "../api/analytics-contract";
 import type { Person } from "../api/contract";
+import { integrityNotificationOk } from "../audit/read";
 import type { Notification } from "../api/notifications-contract";
 import { rankChanges, type RankedChange } from "./changes";
 import { MEASURE_AREA, MEASURE_KIND, type MeasureKind } from "./measures";
@@ -371,8 +372,11 @@ function sidesOk(c: Obj): boolean {
 
 /** A notification reads under the same rules as a change in What changed. */
 export function notificationOk(n: unknown): n is Notification {
+  if (isObj(n) && n.kind === "audit_integrity")
+    return integrityNotificationOk(n);
   return (
     isObj(n) &&
+    (n.kind === undefined || n.kind === "analytics_change") &&
     typeof n.id === "string" &&
     ID.test(n.id) &&
     typeof n.change_id === "string" &&

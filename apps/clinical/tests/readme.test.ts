@@ -107,6 +107,10 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(/\*\*Analytics\.\*\*/);
   });
 
+  it("documents the platform audit log demo", () => {
+    expect(readme).toMatch(/\*\*Audit log\.\*\*/);
+  });
+
   it("documents the platform system demo", () => {
     expect(readme).toMatch(/\*\*System\s+health\s+and\s+failed\s+jobs\.\*\*/);
   });
@@ -123,6 +127,10 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(
       /lifting\s+a\s+hold\s+needs\s+two\s+platform\s+admins/i,
     );
+  });
+
+  it("documents the platform settings demo", () => {
+    expect(readme).toMatch(/\*\*Settings\.\*\*/);
   });
 
   it("says the 403 page has no link, and no longer sets its address", () => {

@@ -1,3 +1,4 @@
+import { createMockAudit, type AuditMockOptions } from "./mock-audit";
 import { ApiError } from "@mhai/api-client/errors";
 import {
   BlockedError,
@@ -42,6 +43,7 @@ import {
 } from "./analytics-fixtures";
 import { createMockOps } from "./mock-ops";
 import type { HealthMode } from "./ops-fixtures";
+import { settingsMock, type SettingsMockOptions } from "./mock-settings";
 import {
   EMAIL_MODES,
   NOTIFICATIONS_MAX,
@@ -210,8 +212,11 @@ export function createMockPlatform({
   twoStep,
   analytics = "normal",
   notifications = "normal",
+  audit,
   health = "normal",
   removalStarted,
+  triage,
+  resetFails,
   onCore,
 }: {
   now?: () => number;
@@ -226,6 +231,8 @@ export function createMockPlatform({
   analytics?: AnalyticsMode;
   /** "unavailable": the notifications list and marking seen fail with 503. */
   notifications?: "normal" | "unavailable";
+  /** The sample audit log's state and faults (see `AuditMockOptions`). */
+  audit?: AuditMockOptions;
   /** Which sample health reading to serve (see `HealthMode`). */
   health?: HealthMode;
   /**
@@ -233,6 +240,10 @@ export function createMockPlatform({
    * there is refused with 409 `removal_started`.
    */
   removalStarted?: string[];
+  /** Whether triage can be switched on (see `SettingsMockOptions`). */
+  triage?: SettingsMockOptions["triage"];
+  /** The learning-data reset fails (see `SettingsMockOptions`). */
+  resetFails?: boolean | (() => boolean);
   /** For tests: the core the areas are built on, once it exists. */
   onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
@@ -480,7 +491,10 @@ export function createMockPlatform({
   function notificationsFor(m: TeamMember): Notification[] {
     if (notifications === "unavailable") fail(503, "unavailable");
     const seen = seenBy.get(m.id);
-    return changes
+    const integrity = auditPart
+      .notifications()
+      .map((i): Notification => ({ ...i, seen: seen?.has(i.id) ?? false }));
+    const mine = changes
       .map((c): Notification => ({
         id: `ntf_${c.id}`,
         change_id: c.id,
@@ -494,8 +508,10 @@ export function createMockPlatform({
         at: changeFlaggedAt(c.id, now()),
         seen: seen?.has(`ntf_${c.id}`) ?? false,
       }))
-      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
-      .slice(0, NOTIFICATIONS_MAX);
+      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    // Integrity items come first; `unseen` counts the whole list, before the
+    // 20-item slice.
+    return [...integrity, ...mine];
   }
   const unseenOf = (items: Notification[]) =>
     items.filter((i) => !i.seen).length;
@@ -539,6 +555,7 @@ export function createMockPlatform({
     shared: {},
   };
   onCore?.(core);
+  const auditPart = createMockAudit(core, audit);
 
   const hospitalsPart = {
     listHospitals: (q) =>
@@ -1014,8 +1031,11 @@ export function createMockPlatform({
 
     listNotifications: () =>
       read((m) => {
-        const items = notificationsFor(m);
-        return { items, unseen: unseenOf(items) };
+        const all = notificationsFor(m);
+        return {
+          items: all.slice(0, NOTIFICATIONS_MAX),
+          unseen: unseenOf(all),
+        };
       }),
 
     markSeen: (body, opts) =>
@@ -1056,7 +1076,9 @@ export function createMockPlatform({
   // Each area adds one spread, built on the same core.
   return {
     ...hospitalsPart,
+    ...auditPart,
     ...createMockOps(core, { health }),
     ...holdsMock(core, { removalStarted }),
+    ...settingsMock(core, { triage, resetFails }),
   };
 }

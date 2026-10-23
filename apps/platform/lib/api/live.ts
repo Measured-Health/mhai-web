@@ -1,6 +1,8 @@
 import { ApiError } from "@mhai/api-client/errors";
 import { createApiRequest, keyHeader } from "@mhai/api-client/request";
 import { reportUnauthorized } from "@/lib/auth/events";
+import { TooManyRowsError } from "./audit-contract";
+import { liveAudit } from "./live-audit";
 import {
   BlockedError,
   type PlatformClient,
@@ -8,6 +10,7 @@ import {
   type WriteOpts,
 } from "./contract";
 import type { HoldsClient } from "./holds-contract";
+import type { SettingsClient } from "./settings-contract";
 
 const { apiRequest } = createApiRequest({
   prefix: "/api/v1",
@@ -68,6 +71,28 @@ function holdsLive(ok: LiveOk): HoldsClient {
   };
 }
 
+/** Platform settings (Plan 8c): rows `platform/settings…` of the shape table. */
+function settingsLive(ok: LiveOk): SettingsClient {
+  const id = encodeURIComponent;
+  const request = (x: string, rest: string) =>
+    `/settings/requests/${id(x)}${rest}`;
+  return {
+    getSettings: () => ok("/settings"),
+    previewRetention: (type, days) =>
+      ok(
+        `/settings/retention/${id(type)}/preview${query({ days: String(days) })}`,
+      ),
+    setRetention: (type, b, o) =>
+      ok(`/settings/retention/${id(type)}`, "PUT", b, o),
+    setCleanUpPaused: (b, o) => ok("/settings/retention-pause", "PUT", b, o),
+    setTriage: (b, o) => ok("/settings/triage", "PUT", b, o),
+    approveRequest: (x, b, o) => ok(request(x, "/approve"), "POST", b, o),
+    cancelRequest: (x, b, o) => ok(request(x, "/cancel"), "POST", b, o),
+    resetFeedbackBuffer: (b, o) =>
+      ok("/settings/feedback-buffer/reset", "POST", b, o),
+  };
+}
+
 /**
  * The platform API through this app's /api/v1 proxy (the token stays
  * server-side). Every path is a row of the proxy's shape table.
@@ -97,6 +122,14 @@ export function createLivePlatformClient({
           ),
         );
       }
+      if (
+        res.status === 422 &&
+        code === "too_many_rows" &&
+        typeof data?.rows === "number" &&
+        Number.isSafeInteger(data.rows) &&
+        data.rows >= 0
+      )
+        throw new TooManyRowsError(data.rows);
       throw new ApiError(res.status, code);
     }
     return data as T;
@@ -147,6 +180,7 @@ export function createLivePlatformClient({
     markSeen: (b, o) => ok("/notifications/seen", "POST", b, o),
     getEmailPref: () => ok("/me/analytics-email"),
     setEmailPref: (b, o) => ok("/me/analytics-email", "PUT", b, o),
+    ...liveAudit(ok, fetchImpl),
     // The health poll is background too: it must not keep a session alive.
     getHealth: (o) =>
       ok(
@@ -169,5 +203,6 @@ export function createLivePlatformClient({
     retryJobs: (b, o) => ok("/jobs/retry", "POST", b, o),
     cancelJobs: (b, o) => ok("/jobs/cancel", "POST", b, o),
     ...holdsLive(ok),
+    ...settingsLive(ok),
   };
 }

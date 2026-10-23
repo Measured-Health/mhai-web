@@ -20,11 +20,23 @@ export class SessionEnded extends ApiError {
   }
 }
 
+/** Module state that must not outlive the person (see `onSessionEnd`). */
+const forgets = new Set<() => void>();
+
+/** Registers what to forget at sign-out (a hand-off, ids already sent). */
+export function onSessionEnd(forget: () => void): void {
+  forgets.add(forget);
+}
+
 /**
- * Sign-out: cancel the notification queries still in flight and mark every
- * write begun so far as belonging to a finished session.
+ * Sign-out: cancel the notification and audit queries still in flight (the
+ * background polls among them), forget the module state that belongs to the
+ * person, and mark every write begun so far as belonging to a finished
+ * session.
  */
 export function endSessionRequests(qc: QueryClient) {
   epoch += 1;
   void qc.cancelQueries({ queryKey: queryKeys.notifications });
+  void qc.cancelQueries({ queryKey: queryKeys.audit });
+  for (const forget of forgets) forget();
 }

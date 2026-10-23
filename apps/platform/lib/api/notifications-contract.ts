@@ -7,7 +7,9 @@ import type { Person } from "./contract";
 /** At most this many notifications come back, newest first. */
 export const NOTIFICATIONS_MAX = 20;
 
-export type Notification = {
+export type ChangeNotification = {
+  /** Missing reads as an analytics change. */
+  kind?: "analytics_change";
   id: string;
   /** The analytics change it is about. */
   change_id: string;
@@ -27,6 +29,23 @@ export type Notification = {
   /** Whether the signed-in person has seen it (per person, set by the server). */
   seen: boolean;
 };
+
+/** The audit log failed its integrity check (counts and ids only). */
+export type IntegrityNotification = {
+  kind: "audit_integrity";
+  id: string;
+  run_id: string;
+  first_broken_seq: number;
+  first_broken_id: string;
+  at: string;
+  seen: boolean;
+};
+
+export type Notification = ChangeNotification | IntegrityNotification;
+
+/** An item that is an analytics change (a missing kind reads as one). */
+export const isChange = (n: Notification): n is ChangeNotification =>
+  n.kind !== "audit_integrity";
 
 /**
  * `unseen` is the count of ALL of this person's unseen notifications, which

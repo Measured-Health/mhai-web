@@ -1,14 +1,9 @@
 "use client";
 import { useIsFetching } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
-import {
-  readHealth,
-  STALE_MS,
-  timeLabel,
-  waitLabel,
-  type Block,
-} from "@/lib/ops/health";
+import type { ReactNode } from "react";
+import { useNow } from "@/lib/ops/use-now";
+import { readHealth, timeLabel, waitLabel, type Block } from "@/lib/ops/health";
 import { healthKey, useHealth, useRefreshHealth } from "@/lib/queries/ops";
 import { Button } from "@mhai/ui/button";
 import { CouldntLoad } from "../states/couldnt-load";
@@ -20,37 +15,6 @@ import { OverallStatus } from "./overall-status";
 import { PartsList } from "./parts-list";
 import { TimingBlock } from "./timing-block";
 import { VersionsBlock } from "./versions-block";
-
-/**
- * Date.now(), so an old reading ages without a fetch. It renders again at the
- * exact instant the reading turns stale, when the tab is shown again and when
- * the connection changes; a 15 s tick stays as a backstop.
- */
-function useNow(updatedAt: string | undefined, everyMs = 15_000) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const refresh = () => setNow(Date.now());
-    const id = setInterval(refresh, everyMs);
-    document.addEventListener("visibilitychange", refresh);
-    window.addEventListener("online", refresh);
-    window.addEventListener("offline", refresh);
-    return () => {
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", refresh);
-      window.removeEventListener("online", refresh);
-      window.removeEventListener("offline", refresh);
-    };
-  }, [everyMs]);
-  useEffect(() => {
-    const at = Date.parse(String(updatedAt));
-    if (Number.isNaN(at)) return;
-    const ms = at + STALE_MS + 1 - Date.now();
-    if (ms <= 0) return;
-    const id = setTimeout(() => setNow(Date.now()), ms);
-    return () => clearTimeout(id);
-  }, [updatedAt, now]);
-  return now;
-}
 
 function Section<T>({
   title,
