@@ -12,22 +12,10 @@ import type {
 } from "./analysis-contract";
 import { buildCohort, COHORT, FILTER_OPTIONS } from "./analysis-fixtures";
 import { ApiError } from "./errors";
+import { VENDOR_NAMES } from "../../../../scripts/vendor-names.mjs";
 import { createMockAnalysis, share } from "./mock-analysis";
 import { auditEvents, resetAudit } from "./mock-audit";
 
-const VENDORS = [
-  "epic",
-  "cerner",
-  "oracle",
-  "openmrs",
-  "meditech",
-  "athena",
-  "allscripts",
-  "nextgen",
-  "eclinicalworks",
-  "dhis",
-  "bahmni",
-];
 const F: AnalysisFilters = {
   from: "2025-10-22",
   to: "2026-10-21",
@@ -76,7 +64,7 @@ describe("sample cohort", () => {
 
   it("names no vendor anywhere in the fixtures", () => {
     const text = JSON.stringify({ COHORT, FILTER_OPTIONS }).toLowerCase();
-    for (const v of VENDORS) expect(text).not.toContain(v);
+    for (const v of VENDOR_NAMES) expect(text).not.toContain(v);
     expect(text).not.toMatch(/\blab\b/);
   });
 

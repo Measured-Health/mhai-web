@@ -1,0 +1,57 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { VENDOR_NAMES } from "./vendor-names.mjs";
+
+export { VENDOR_NAMES };
+
+// No product or vendor names in the apps' code, tests and fixtures, or in the
+// packages' sources (spec §3, Plan 13). Connector types are named by standard
+// or method only.
+const root = fileURLToPath(new URL("..", import.meta.url));
+const self = fileURLToPath(import.meta.url);
+const skip = new Set(["node_modules", ".next", "test-results", "coverage"]);
+const WORDS = new RegExp(`\\b(?:${VENDOR_NAMES.join("|")})\\b`, "i");
+
+const dirs = (parent, inner) =>
+  readdirSync(join(root, parent), { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .flatMap((e) => inner.map((i) => join(root, parent, e.name, i)))
+    .filter((d) => {
+      try {
+        return statSync(d).isDirectory();
+      } catch {
+        return false;
+      }
+    });
+
+function* files(dir) {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (skip.has(e.name)) continue;
+    const p = join(dir, e.name);
+    if (e.isDirectory()) yield* files(p);
+    else if (p !== self && /\.(tsx?|jsx?|mjs|cjs|json|css|md)$/.test(e.name))
+      yield p;
+  }
+}
+
+test("no vendor or product name appears in apps or packages", () => {
+  const hits = [];
+  const places = [
+    ...dirs("apps", ["app", "components", "lib", "tests"]),
+    ...dirs("packages", ["src"]),
+  ];
+  assert.ok(places.length > 0, "found nothing to check");
+  for (const d of places)
+    for (const f of files(d)) {
+      const m = WORDS.exec(readFileSync(f, "utf8"));
+      if (m) hits.push(`${relative(root, f)}: ${m[0]}`);
+    }
+  assert.deepEqual(hits, []);
+});
+
+test("the list itself is lower case, whole words", () => {
+  for (const v of VENDOR_NAMES) assert.match(v, /^[a-z]+$/);
+});

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
 import { platformError } from "@/lib/errors";
 import {
@@ -111,6 +112,7 @@ function AddForm({
   const toast = useToast();
   const types = useConnectorTypes();
   const add = useStepUpCall(useAddConnection(hospitalId));
+  const [saved, setSaved] = useState(0);
 
   if (types.isError && !types.data)
     return (
@@ -129,6 +131,7 @@ function AddForm({
         mode="add"
         types={types.data}
         hospitalName={hospitalName}
+        savedCount={saved}
         busy={add.busy}
         error={add.error}
         onCloseDialog={add.clear}
@@ -137,6 +140,7 @@ function AddForm({
             { ...addInput(draft), ...code },
             {
               onSuccess: (c) => {
+                setSaved((n) => n + 1);
                 toast.show({
                   title: "Connection added. Test it next.",
                   tone: "ok",

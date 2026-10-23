@@ -8,6 +8,7 @@ import { TopBar } from "../shell/top-bar";
 import { CouldntLoad } from "../states/couldnt-load";
 import { Empty } from "../states/empty";
 import { Loading } from "../states/loading";
+import { OFFLINE_NOTE } from "../states/offline-strip";
 import {
   asFilter,
   CONNECTION_FILTERS,
@@ -90,7 +91,7 @@ export function ConnectionsView() {
               role="status"
               className="card-v3 p-6 text-center text-[14px] text-ink-2"
             >
-              You&apos;re offline. Connections will load when you reconnect.
+              {OFFLINE_NOTE}
             </div>
           ) : !data ? (
             <Loading label="Loading connections" />

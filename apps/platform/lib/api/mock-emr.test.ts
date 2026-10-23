@@ -499,6 +499,27 @@ describe("mock record connections", () => {
     expect((await m.testConnection("emr_wf1", KEY())).last_test?.ok).toBe(true);
   });
 
+  it("a passing test clears the recent errors, so Northgate can be fixed in the demo", async () => {
+    const { m } = setup();
+    const ng = await m.getConnection("emr_ng1");
+    expect(ng.errors.length).toBeGreaterThan(0);
+    expect((await m.testConnection("emr_ng1", KEY())).errors.length).toBe(
+      ng.errors.length,
+    );
+    await m.updateConnection(
+      ng.id,
+      { credentials: { private_key: SECRET2 }, version: ng.version, ...CODE },
+      KEY(),
+    );
+    const t = await m.testConnection("emr_ng1", KEY());
+    expect(t.last_test?.ok).toBe(true);
+    expect(t.errors).toEqual([]);
+    expect(t.errors_24h).toBe(0);
+    expect(t.health).toBe("ok");
+    const on = await m.listConnections({ state: "needs_attention" });
+    expect(on.connections).toEqual([]);
+  });
+
   it("no reply ever contains a credential", async () => {
     const { m } = setup();
     const replies: unknown[] = [];

@@ -87,3 +87,4 @@ when a new hospital or a new EMR vendor is added.
 - Plans 5a and 6 build the frontend against the canonical contract on sample data now; the
   backend connectors and pipeline come in the EMR/EHR integration plan.
 - Credentials and patient data never reach the browser; the existing privacy rules hold.
+- Plan 13 builds the connection screens (platform admin app) and alert settings (hospital admin side) against this decision, on sample data.

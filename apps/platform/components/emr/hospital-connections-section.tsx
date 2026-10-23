@@ -10,6 +10,7 @@ import { useConnectionList } from "@/lib/queries/connection-list";
 import { Section } from "../hospitals/section";
 import { CouldntLoad } from "../states/couldnt-load";
 import { Loading } from "../states/loading";
+import { OFFLINE_NOTE } from "../states/offline-strip";
 import { ConnectionChip } from "./connection-chip";
 import { addHref } from "./connections-table";
 
@@ -26,6 +27,7 @@ export function HospitalConnectionsSection({
   const q = useConnectionList(h.id);
   const [now] = useState(() => Date.now());
   const canAdd = isPlatformAdmin(user) && h.status !== "removed";
+  const waiting = q.isPending && q.fetchStatus === "paused";
   const rows = q.data?.connections ?? [];
   const add = canAdd && q.data && (
     <Link
@@ -43,6 +45,10 @@ export function HospitalConnectionsSection({
           what="patient record connections"
           onRetry={() => void q.refetch()}
         />
+      ) : waiting ? (
+        <p role="status" className="text-[13.5px] text-ink-2">
+          {OFFLINE_NOTE}
+        </p>
       ) : !q.data ? (
         <Loading label="Loading patient record connections" />
       ) : rows.length === 0 ? (

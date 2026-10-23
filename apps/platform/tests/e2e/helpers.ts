@@ -51,6 +51,7 @@ export async function openNav(
   page: Page,
   name:
     | "Hospitals"
+    | "Connections"
     | "Analytics"
     | "Legal holds"
     | "System"

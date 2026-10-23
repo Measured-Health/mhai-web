@@ -1,3 +1,4 @@
+import { onlineManager } from "@tanstack/react-query";
 import { screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -23,7 +24,10 @@ beforeEach(() => {
   });
   __setPlatformClientForTests(api);
 });
-afterEach(() => __resetPlatformClientForTests());
+afterEach(() => {
+  onlineManager.setOnline(true);
+  __resetPlatformClientForTests();
+});
 
 const show = async (id: string, user = ADA, over?: Partial<Hospital>) => {
   const h = { ...(await api.getHospital(id)), ...over };
@@ -52,6 +56,19 @@ describe("a hospital's record connections", () => {
     expect(
       screen.getByRole("link", { name: "Add a connection" }),
     ).toHaveAttribute("href", "/connections/new?hospital=h_havana");
+  });
+
+  it("offline it says so instead of loading forever", async () => {
+    onlineManager.setOnline(false);
+    await show("h_havana");
+    expect(
+      await screen.findByText("You're offline. This needs a connection."),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("status", {
+        name: "Loading patient record connections",
+      }),
+    ).toBeNull();
   });
 
   it("Eastbrook reads Not connected", async () => {

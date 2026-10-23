@@ -1,3 +1,4 @@
+import { onlineManager } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useSyncExternalStore } from "react";
@@ -48,9 +49,21 @@ beforeEach(() => {
     }),
   );
 });
-afterEach(() => __resetPlatformClientForTests());
+afterEach(() => {
+  onlineManager.setOnline(true);
+  __resetPlatformClientForTests();
+});
 
 describe("the connections list", () => {
+  it("offline it says so in the standard words", async () => {
+    onlineManager.setOnline(false);
+    renderWithAuth(<ConnectionsView />);
+    expect(
+      await screen.findByText("You're offline. This needs a connection."),
+    ).toBeVisible();
+    expect(screen.queryByText(/will load when you reconnect/)).toBeNull();
+  });
+
   it("lists Havana's two connections as Connected", async () => {
     renderWithAuth(<ConnectionsView />);
     const table = await screen.findByRole("table");

@@ -116,6 +116,7 @@ export function ConnectionForm({
   onSend,
   onCloseDialog,
   onNothingChanged,
+  savedCount = 0,
 }: {
   mode: "add" | "edit";
   /** Add: the choices. Edit: only needed to find the connection's type. */
@@ -131,6 +132,8 @@ export function ConnectionForm({
   onCloseDialog(): void;
   /** Edit, with nothing different from the saved connection. */
   onNothingChanged?(): void;
+  /** Goes up by one each time a save works: the typed secrets are cleared. */
+  savedCount?: number;
 }) {
   const id = useId();
   const net = useNeedsConnection(`${id}-offline`);
@@ -144,6 +147,12 @@ export function ConnectionForm({
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [asking, setAsking] = useState(false);
   const [focusReq, setFocusReq] = useState<{ k: string } | null>(null);
+  // A save worked: drop the typed secrets (adjusted during render).
+  const [seenSaves, setSeenSaves] = useState(savedCount);
+  if (savedCount !== seenSaves) {
+    setSeenSaves(savedCount);
+    setCredentials({});
+  }
   useEffect(() => {
     if (focusReq) document.getElementById(focusReq.k)?.focus();
   }, [focusReq]);
@@ -275,74 +284,81 @@ export function ConnectionForm({
         : undefined;
 
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-      <UnsavedGuard when={dirty} />
-      {mode === "add" && (
-        <fieldset aria-describedby={errors.type ? `${id}-type-err` : undefined}>
-          <legend className="mb-2 text-[13px] font-semibold">
-            Connection type
-          </legend>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {types.map((t, i) => (
-              <label key={t.id} className="cursor-pointer">
-                <input
-                  id={i === 0 ? `${id}-type` : undefined}
-                  type="radio"
-                  name={`${id}-type`}
-                  value={t.id}
-                  checked={typeId === t.id}
-                  onChange={() => {
-                    pickType(t.id);
-                    clear("type");
-                  }}
-                  className="peer sr-only"
-                />
-                <span className="flex min-h-11 flex-col gap-0.5 rounded-2xl border border-line bg-white px-4 py-3 peer-checked:border-ink peer-checked:ring-1 peer-checked:ring-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-mint-deep">
-                  <span className="text-[14px] font-semibold">{t.label}</span>
-                  <span className="text-[12.5px] text-ink-3">{t.summary}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-          {errors.type && (
-            <p id={`${id}-type-err`} className="mt-1.5 text-[13px] text-bad">
-              {errors.type}
-            </p>
-          )}
-        </fieldset>
-      )}
-      {(mode === "edit" || type) && (
-        <>
-          {textField(
-            "source_label",
-            label,
-            setLabel,
-            "Name the hospital sees",
-            LABEL_HINT,
-          )}
-          {textField("base_url", baseUrl, setBaseUrl, "Base address")}
-          {type && (
-            <ConnectorFields
-              key={type.id}
-              type={type}
-              values={settings}
-              secrets={credentials}
-              savedCredentials={connection?.credentials ?? []}
-              errors={errors}
-              onChange={change}
-              mode={mode}
-              idPrefix={id}
-            />
-          )}
-        </>
-      )}
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {cancel}
-        <Button type="submit" {...net.props}>
-          {mode === "add" ? "Continue" : "Save changes"}
-        </Button>
-      </div>
-      <OfflineNote id={`${id}-offline`} />
+    <>
+      <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+        <UnsavedGuard when={dirty} />
+        {mode === "add" && (
+          <fieldset
+            aria-describedby={errors.type ? `${id}-type-err` : undefined}
+          >
+            <legend className="mb-2 text-[13px] font-semibold">
+              Connection type
+            </legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {types.map((t, i) => (
+                <label key={t.id} className="cursor-pointer">
+                  <input
+                    id={i === 0 ? `${id}-type` : undefined}
+                    type="radio"
+                    name={`${id}-type`}
+                    value={t.id}
+                    checked={typeId === t.id}
+                    onChange={() => {
+                      pickType(t.id);
+                      clear("type");
+                    }}
+                    className="peer sr-only"
+                  />
+                  <span className="flex min-h-11 flex-col gap-0.5 rounded-2xl border border-line bg-white px-4 py-3 peer-checked:border-ink peer-checked:ring-1 peer-checked:ring-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-mint-deep">
+                    <span className="text-[14px] font-semibold">{t.label}</span>
+                    <span className="text-[12.5px] text-ink-3">
+                      {t.summary}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {errors.type && (
+              <p id={`${id}-type-err`} className="mt-1.5 text-[13px] text-bad">
+                {errors.type}
+              </p>
+            )}
+          </fieldset>
+        )}
+        {(mode === "edit" || type) && (
+          <>
+            {textField(
+              "source_label",
+              label,
+              setLabel,
+              "Name the hospital sees",
+              LABEL_HINT,
+            )}
+            {textField("base_url", baseUrl, setBaseUrl, "Base address")}
+            {type && (
+              <ConnectorFields
+                key={type.id}
+                type={type}
+                values={settings}
+                secrets={credentials}
+                savedCredentials={connection?.credentials ?? []}
+                errors={errors}
+                onChange={change}
+                mode={mode}
+                idPrefix={id}
+              />
+            )}
+          </>
+        )}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {cancel}
+          <Button type="submit" {...net.props}>
+            {mode === "add" ? "Continue" : "Save changes"}
+          </Button>
+        </div>
+        <OfflineNote id={`${id}-offline`} />
+      </form>
+      {/* Outside the form: the dialog has a form of its own. */}
       <StepUpDialog
         open={asking}
         title={title}
@@ -356,6 +372,6 @@ export function ConnectionForm({
           if (type) onSend(draft(type), codeOf(input));
         }}
       />
-    </form>
+    </>
   );
 }
