@@ -9,13 +9,7 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
-import {
-  useId,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type RefObject,
-} from "react";
+import { useId, useRef, type KeyboardEvent, type RefObject } from "react";
 import { dayLabel } from "@mhai/ui/clearances";
 import type { Clearance, ClearanceTab } from "@/lib/api/clearances-contract";
 import { platformError } from "@/lib/errors";
@@ -76,7 +70,6 @@ export const coveredCount = (c: Clearance) =>
 function Row({
   c,
   tab,
-  today,
   now,
   selected,
   onSelect,
@@ -84,7 +77,6 @@ function Row({
 }: {
   c: Clearance;
   tab: ClearanceTab;
-  today: string;
   now: number;
   selected: boolean;
   onSelect(): void;
@@ -94,7 +86,7 @@ function Row({
   const status =
     tab === "waiting" && c.status === "waiting"
       ? { icon: "hourglass" as const, words: waitingText(c, now) }
-      : statusText(c, today);
+      : statusText(c, c.today);
   return (
     <button
       ref={rowRef}
@@ -138,22 +130,20 @@ export function ClearanceQueue({
   onTab,
   selected,
   onSelect,
-  today,
   rowRefs,
 }: {
   tab: ClearanceTab;
   onTab(t: ClearanceTab): void;
   selected: string | null;
   onSelect(id: string): void;
-  /** The viewer's day, for the status words. */
-  today: string;
   /** The rows' buttons by letter id, so Back can refocus one. */
   rowRefs: RefObject<Map<string, HTMLButtonElement>>;
 }) {
   const base = useId();
   const tabRefs = useRef(new Map<ClearanceTab, HTMLButtonElement>());
-  const [now] = useState(() => Date.now());
   const list = useClearances(tab);
+  // "Waiting 3 days" counts to when the list was last fetched.
+  const now = list.dataUpdatedAt;
 
   function move(e: KeyboardEvent, i: number) {
     const n = TABS.length;
@@ -238,7 +228,6 @@ export function ClearanceQueue({
                 <Row
                   c={c}
                   tab={tab}
-                  today={today}
                   now={now}
                   selected={selected === c.id}
                   onSelect={() => onSelect(c.id)}

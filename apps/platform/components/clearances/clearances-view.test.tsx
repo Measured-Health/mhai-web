@@ -1,4 +1,5 @@
 import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
@@ -8,11 +9,13 @@ import {
 } from "@/lib/api/client";
 import type { PlatformClient } from "@/lib/api/contract";
 import { TEAM_EMAILS } from "@/lib/api/fixtures";
+import { shiftDay } from "@/lib/api/clearances-fixtures";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp, MOCK_CODE } from "@/lib/api/step-up";
 import type { User } from "@/lib/auth/types";
 import { CHECKLIST } from "@/lib/clearances/labels";
 import { ADA, AMARA, renderWithAuth } from "@/tests/render";
+import { safeDay } from "./clearance-queue";
 import { ClearancesView } from "./clearances-view";
 
 const env = vi.hoisted(() => ({ online: true, desktop: true }));
@@ -43,6 +46,9 @@ const COVERS_YOU = "You can't verify a letter that covers you";
 const OFFLINE = "You're offline. This needs a connection.";
 
 let api: PlatformClient;
+let qc: QueryClient;
+/** The mock's clock; the real one unless a test sets it. */
+let clock: (() => number) | undefined;
 let made: string[];
 let revoked: string[];
 const original = [URL.createObjectURL, URL.revokeObjectURL] as const;
@@ -56,11 +62,13 @@ function install(
     me: () => user.email,
     stepUp: createStepUp(),
     clearances,
+    ...(clock ? { now: clock } : {}),
   });
   __setPlatformClientForTests(api);
 }
 
 beforeEach(() => {
+  qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   made = [];
   revoked = [];
   URL.createObjectURL = vi.fn(() => {
@@ -73,6 +81,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  clock = undefined;
   env.online = true;
   env.desktop = true;
   [URL.createObjectURL, URL.revokeObjectURL] = original;
@@ -85,7 +94,7 @@ async function open(
   clearances?: "normal" | "unavailable" | "off",
 ) {
   install(user, clearances);
-  renderWithAuth(<ClearancesView />, { user });
+  renderWithAuth(<ClearancesView />, { user, queryClient: qc });
   if (clearances === "off") return;
   await screen.findByRole("list", { name: "Letters" });
 }
@@ -103,6 +112,15 @@ async function pick(hospital: string, tabName?: string) {
   await userEvent.click(row(hospital));
   await within(detail()).findByText("What to check");
 }
+/** The letter's heading and status, where the focus goes after acting. */
+const top = () =>
+  within(detail()).getByRole("heading", { level: 2 }).parentElement!;
+/** Mutations still holding the two-step code: there must be none. */
+const holding = (code: string) =>
+  qc
+    .getMutationCache()
+    .getAll()
+    .filter((m) => JSON.stringify(m.state.variables ?? {}).includes(code));
 const btn = (name: string) => within(detail()).getByRole("button", { name });
 const noBtn = (name: string) =>
   expect(within(detail()).queryByRole("button", { name })).toBeNull();
@@ -146,6 +164,23 @@ describe("the queue", () => {
       "Ends in 20 days",
     );
     expect(tab("Ending soon")).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("a letter's status counts to its hospital's day, not the viewer's: at 23:30 UTC Lagos is a day ahead", async () => {
+    // Tests run in UTC: the viewer's day is 22 Oct, Riverside's (Lagos) 23 Oct.
+    clock = () => Date.parse("2026-10-22T23:30:00Z");
+    await open();
+    await userEvent.click(tab("Ending soon"));
+    await waitFor(() =>
+      expect(row("Riverside Children's Hospital")).toBeDefined(),
+    );
+    // cl_river ends 20 days after its hospital's day (21 after the viewer's).
+    expect(row("Riverside Children's Hospital")).toHaveTextContent(
+      "Ends in 20 days",
+    );
+    await userEvent.click(row("Riverside Children's Hospital"));
+    await within(detail()).findByText("What to check");
+    expect(within(detail()).getByText("Ends in 20 days")).toBeVisible();
   });
 
   it("Couldn't load letters with Try again", async () => {
@@ -243,11 +278,13 @@ describe("the detail", () => {
     await userEvent.click(btn("View letter"));
     const viewer = screen.getByRole("dialog");
     await within(viewer).findByAltText("Page 1 of 3");
+    expect(viewer).toHaveClass("print:hidden");
     await userEvent.click(
       within(viewer).getByRole("button", { name: "Close" }),
     );
     await waitFor(() => expect(screen.queryByAltText(/^Page/)).toBeNull());
     expect(revoked).toContain("blob:test/1");
+    expect(btn("View letter")).toHaveFocus();
   });
 
   it("the auditor sees the letter and the viewer but no Verify, Reject or Revoke", async () => {
@@ -305,6 +342,65 @@ describe("verify and reject", () => {
       await within(detail()).findByText(/^Active until/),
     ).toBeInTheDocument();
     noBtn("Verify");
+    // The Verify button has gone: the focus stays in the letter.
+    await waitFor(() => expect(top()).toHaveFocus());
+    expect(holding(MOCK_CODE)).toEqual([]);
+  });
+
+  it("a refusal whose reload takes the buttons away keeps the focus in the letter, and says it once", async () => {
+    await open();
+    await pick("Havana Hospital");
+    vi.spyOn(api, "verifyClearance").mockRejectedValueOnce(
+      new ApiError(409, "same_side"),
+    );
+    // The server now says this admin is linked to Havana.
+    const real = api.getClearance.bind(api);
+    vi.spyOn(api, "getClearance").mockImplementation(async (id) => ({
+      ...(await real(id)),
+      verifiable_by_you: false,
+    }));
+    await verifyWithCode();
+    await waitFor(() => noBtn("Verify"));
+    expect(within(detail()).getAllByText(SAME_SIDE)).toHaveLength(1);
+    await waitFor(() => expect(top()).toHaveFocus());
+    expect(holding(MOCK_CODE)).toEqual([]);
+  });
+
+  it("a letter removed meanwhile says so, with nothing to act on", async () => {
+    await open();
+    await pick("Northgate General Hospital");
+    vi.spyOn(api, "verifyClearance").mockRejectedValueOnce(
+      new ApiError(404, "not_found"),
+    );
+    vi.spyOn(api, "getClearance").mockRejectedValue(
+      new ApiError(404, "not_found"),
+    );
+    await verifyWithCode();
+    expect(
+      await within(detail()).findByText(
+        "This was removed or no longer exists.",
+      ),
+    ).toBeInTheDocument();
+    noBtn("Verify");
+    noBtn("View letter");
+  });
+
+  it("a wrong code on Reject stays in the dialog, and the code is let go", async () => {
+    await open();
+    await pick("Northgate General Hospital");
+    await userEvent.click(btn("Reject"));
+    const d = screen.getByRole("dialog", { name: /^Reject/ });
+    await userEvent.click(within(d).getByLabelText("Can't read it"));
+    await typeCode(d, "000000");
+    await userEvent.click(within(d).getByRole("button", { name: "Reject" }));
+    expect(
+      await within(d).findByText("That code didn't work. Try again."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /^Reject/ })).toBeVisible();
+    expect(holding("000000")).toEqual([]);
+    await userEvent.click(within(d).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(btn("Reject")).toHaveFocus();
   });
 
   it("Bola sees You can't verify letters from a hospital you're linked to on Havana, and no buttons", async () => {
@@ -371,6 +467,7 @@ describe("verify and reject", () => {
       mfa_code: MOCK_CODE,
     });
     expect(await within(detail()).findByText("Rejected")).toBeInTheDocument();
+    await waitFor(() => expect(top()).toHaveFocus());
   });
 
   it("a stale verify shows Changed by someone else", async () => {
@@ -412,6 +509,23 @@ describe("revoke", () => {
     expect(
       await within(detail()).findByText(/^Revoked \d+ \w{3} \d{4}$/),
     ).toBeInTheDocument();
+    noBtn("Revoke");
+    await waitFor(() => expect(top()).toHaveFocus());
+    expect(holding(MOCK_CODE)).toEqual([]);
+  });
+
+  it("an active letter past its end by the server's today has no Revoke", async () => {
+    await open();
+    const real = api.getClearance.bind(api);
+    vi.spyOn(api, "getClearance").mockImplementation(async (id) => {
+      const c = await real(id);
+      return { ...c, today: shiftDay(c.end_date, 1) };
+    });
+    await pick("Riverside Children's Hospital", "Active");
+    const c = await real("cl_river");
+    expect(
+      within(detail()).getByText(`Ended ${safeDay(c.end_date)}`),
+    ).toBeVisible();
     noBtn("Revoke");
   });
 

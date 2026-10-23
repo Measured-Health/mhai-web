@@ -35,7 +35,7 @@ type Row = [
   method: string,
   path: string,
   body: unknown,
-  /** A file's reply, of a type it accepts; JSON otherwise. */
+  /** The reply when `{}` won't do: a file of a type it accepts, or JSON. */
   file?: () => Response,
 ];
 const csv = () =>
@@ -43,6 +43,13 @@ const csv = () =>
 const png = () =>
   new Response(new Uint8Array([137, 80, 78, 71]), {
     headers: { "Content-Type": "image/png" },
+  });
+/** A letter as the server sends it: with its hospital's day. */
+const LETTER = () => Response.json({ id: "cl_wait", today: "2026-10-23" });
+const LETTERS = () =>
+  Response.json({
+    clearances: [{ id: "cl_wait", today: "2026-10-23" }],
+    next_cursor: null,
   });
 const SIGNOFFS = {
   clinical: { by: "Dr. A. Musa", at: "2026-02-01", ref: "CS-014" },
@@ -627,6 +634,7 @@ const ROWS: Row[] = [
     "GET",
     "/api/v1/platform/clearances?status=waiting&hospital=h_havana&covers=me&cursor=50",
     undefined,
+    LETTERS,
   ],
   [
     "getClearance",
@@ -634,6 +642,7 @@ const ROWS: Row[] = [
     "GET",
     "/api/v1/platform/clearances/cl_wait",
     undefined,
+    LETTER,
   ],
   [
     "getClearancePage",
@@ -649,6 +658,7 @@ const ROWS: Row[] = [
     "POST",
     "/api/v1/platform/clearances/cl_wait/verify",
     { version: 2, mfa_code: "123456" },
+    LETTER,
   ],
   [
     "rejectClearance",
@@ -661,6 +671,7 @@ const ROWS: Row[] = [
     "POST",
     "/api/v1/platform/clearances/cl_wait/reject",
     { reason: "other", note: "No signature", version: 2, mfa_code: "123456" },
+    LETTER,
   ],
   [
     "revokeClearance",
@@ -673,6 +684,7 @@ const ROWS: Row[] = [
     "POST",
     "/api/v1/platform/clearances/cl_act/revoke",
     { reason: "security_concern", version: 3, backup_code: "4F7K-92QX" },
+    LETTER,
   ],
   [
     "getNamedAccess",
@@ -1005,6 +1017,13 @@ describe("live platform client", () => {
 
   describe("clearances and the switch", () => {
     it('listClearances({ covers: "me" }) sends covers=me, and leaves out the rest', async () => {
+      reply(() =>
+        Response.json({
+          clearances: [],
+          next_cursor: null,
+          today: "2026-10-23",
+        }),
+      );
       await client().listClearances({ covers: "me" });
       await client().listClearances({});
       await client().getClearance("a/b");
@@ -1013,6 +1032,42 @@ describe("live platform client", () => {
         "/api/v1/platform/clearances",
         "/api/v1/platform/clearances/a%2Fb",
       ]);
+    });
+
+    it("a letter without its hospital's day is refused, in a list or alone", async () => {
+      const refused = { status: 502, code: "bad_gateway" };
+      for (const today of [
+        undefined,
+        "",
+        "23 Oct 2026",
+        "2026-02-30",
+        20261023,
+      ]) {
+        reply(() => Response.json({ id: "cl_wait", today }));
+        await expect(client().getClearance("cl_wait")).rejects.toMatchObject(
+          refused,
+        );
+        await expect(
+          client().verifyClearance("cl_wait", { version: 1, ...CODE }, K),
+        ).rejects.toMatchObject(refused);
+        reply(() =>
+          Response.json({
+            clearances: [
+              { id: "cl_a", today: "2026-10-23" },
+              { id: "cl_b", today },
+            ],
+            next_cursor: null,
+          }),
+        );
+        await expect(client().listClearances({})).rejects.toMatchObject(
+          refused,
+        );
+      }
+      reply(() => Response.json({ next_cursor: null }));
+      await expect(client().listClearances({})).rejects.toMatchObject(refused);
+      reply(LETTERS);
+      const { clearances } = await client().listClearances({});
+      expect(clearances[0]!.today).toBe("2026-10-23");
     });
 
     it("a page is fetched with apiBlob: an image Accept, no-store, and only PNG or JPEG", async () => {
@@ -1041,6 +1096,8 @@ describe("live platform client", () => {
     });
 
     it("every write carries its Idempotency-Key", async () => {
+      // A letter reply carries its hospital's day; the switch replies needn't.
+      reply(LETTER);
       const c = client();
       await c.verifyClearance(
         "x",

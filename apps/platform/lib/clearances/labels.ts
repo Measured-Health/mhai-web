@@ -96,14 +96,3 @@ export function verifiedToast(c: Clearance, effective: NamedPosition): string {
   const n = c.covered.length + c.covered_platform.length;
   return `Verified. ${n} ${n === 1 ? "person" : "people"} can now see names`;
 }
-
-/**
- * The viewer's own calendar day, as YYYY-MM-DD: what the queue's status
- * words count to. Display only; the server decides when access ends, and
- * the platform list carries no hospital day.
- */
-export function viewerDay(ms: number): string {
-  const d = new Date(ms);
-  const two = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
-}

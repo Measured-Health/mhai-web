@@ -59,6 +59,18 @@ const switchOf = async (m: Mock, hospital: string) =>
   (await m.getNamedAccess()).hospitals.find((h) => h.hospital.id === hospital)!;
 
 describe("mock clearances: the letters", () => {
+  it("every letter carries its hospital's day: at 23:30 UTC, Lagos is already the next day", async () => {
+    const { m, advance } = setup();
+    expect((await m.getClearance("cl_river")).today).toBe("2026-10-22");
+    advance(14 * 3_600_000); // 23:30 UTC on 22 Oct
+    const { clearances } = await m.listClearances({ status: "all" });
+    expect(clearances.length).toBeGreaterThan(5);
+    expect(new Set(clearances.map((c) => c.today))).toEqual(
+      new Set(["2026-10-23"]),
+    );
+    expect((await m.getClearance("cl_river")).today).toBe("2026-10-23");
+  });
+
   it("the queue's To verify is waiting letters, oldest first", async () => {
     const { m } = setup();
     const { clearances } = await m.listClearances({ status: "waiting" });

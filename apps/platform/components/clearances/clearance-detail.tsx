@@ -1,11 +1,13 @@
 "use client";
 import { Eye } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { ApiError } from "@mhai/api-client/errors";
 import { REFUSED_TEXT, REJECT_LABEL, REVOKE_LABEL } from "@mhai/ui/clearances";
 import { getPlatformClient } from "@/lib/api/client";
 import type { Clearance, ClearanceEvent } from "@/lib/api/clearances-contract";
 import { CHECKLIST, statusText } from "@/lib/clearances/labels";
 import { instantDay } from "@/lib/clearances/switch";
+import { platformError } from "@/lib/errors";
 import { useClearance } from "@/lib/queries/clearances";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
@@ -105,22 +107,19 @@ function People({ title, names }: { title: string; names: string[] }) {
  * (page images only, through `LetterViewer`), what to check, then Verify,
  * Reject and Revoke. Never put in the URL.
  */
-export function ClearanceDetail({
-  id,
-  today,
-}: {
-  id: string;
-  /** The viewer's day, for the status words. */
-  today: string;
-}) {
+export function ClearanceDetail({ id }: { id: string }) {
   const q = useClearance(id);
+  // A letter removed meanwhile: never keep showing it, or its buttons.
+  const gone = q.error instanceof ApiError && q.error.code === "not_found";
   return (
     <section
       aria-label="Clearance letter"
       className="card-v3 flex min-w-0 flex-col gap-5 px-5 py-5"
     >
-      {q.data ? (
-        <Letter c={q.data} today={today} />
+      {gone ? (
+        <Banner tone="bad" title={platformError(q.error).title} />
+      ) : q.data ? (
+        <Letter c={q.data} />
       ) : q.isError ? (
         <Banner tone="bad" title="Couldn't load the letter">
           <span className="mt-2 block">
@@ -140,7 +139,7 @@ export function ClearanceDetail({
   );
 }
 
-function Letter({ c, today }: { c: Clearance; today: string }) {
+function Letter({ c }: { c: Clearance }) {
   const offlineId = useId();
   const checklistId = useId();
   const historyId = useId();
@@ -148,15 +147,34 @@ function Letter({ c, today }: { c: Clearance; today: string }) {
   const [viewing, setViewing] = useState(false);
   const uploaded = instantDay(c.uploaded_at);
   const verified = c.verified_at ? instantDay(c.verified_at) : "";
+  // After Verify, Reject or Revoke the button that opened it may be gone:
+  // the focus goes to the letter's heading and status, not the page.
+  const top = useRef<HTMLDivElement>(null);
+  const [acted, setActed] = useState(0);
+  useEffect(() => {
+    if (acted) top.current?.focus();
+  }, [acted]);
+  // After a refusal the letter reloads; if that takes the focused button
+  // away, the same.
+  const reloading = useRef(false);
+  useEffect(() => {
+    if (!reloading.current) return;
+    reloading.current = false;
+    if (document.activeElement === document.body) top.current?.focus();
+  }, [c]);
 
   return (
     <>
-      <div className="flex flex-col gap-1">
+      <div
+        ref={top}
+        tabIndex={-1}
+        className="flex flex-col gap-1 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mint-deep"
+      >
         <h2 className="font-display text-[22px] font-black leading-tight [overflow-wrap:anywhere]">
           {c.hospital.name}
         </h2>
         <StatusWords
-          {...statusText(c, today)}
+          {...statusText(c, c.today)}
           className="text-[14px] font-semibold"
         />
       </div>
@@ -247,7 +265,14 @@ function Letter({ c, today }: { c: Clearance; today: string }) {
         </ol>
       </section>
 
-      <VerifyActions key={c.id} letter={c} today={today} />
+      <VerifyActions
+        key={c.id}
+        letter={c}
+        onSettled={(how) => {
+          if (how === "done") setActed((n) => n + 1);
+          else reloading.current = true;
+        }}
+      />
 
       {viewing && (
         <LetterViewer

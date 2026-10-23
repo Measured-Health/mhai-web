@@ -61,16 +61,20 @@ type Asking = "verify" | "reject" | "revoke" | null;
  * `verifyBlock` over the server's `covers_you` and `verifiable_by_you`:
  * a covered admin and a linked admin see why (and no buttons), an auditor
  * sees nothing. Revoke is for platform admins, on a waiting or active
- * letter. Each sends the version the person saw, with their two-step code;
- * offline, all are off.
+ * letter (by its hospital's `today`). Each sends the version the person
+ * saw, with their two-step code; offline, all are off. After an answer the
+ * caller keeps the focus in the letter (`onSettled`).
  */
 export function VerifyActions({
   letter: c,
-  today,
+  onSettled,
 }: {
   letter: Clearance;
-  /** The viewer's day, to tell an active letter from one past its end. */
-  today: string;
+  /**
+   * "done": the action went through, and its button may be gone; "refused":
+   * the letter is being loaded again, which may take the buttons away.
+   */
+  onSettled(how: "done" | "refused"): void;
 }) {
   const { user } = useAuth();
   const isAdmin = isPlatformAdmin(user);
@@ -93,7 +97,7 @@ export function VerifyActions({
   const block = verifyBlock(c, isAdmin);
   const live =
     c.status === "waiting" ||
-    (c.status === "active" && statusText(c, today).icon !== "calendar-x");
+    (c.status === "active" && statusText(c, c.today).icon !== "calendar-x");
   // A covered or linked admin sees their line only, with no buttons.
   const canRevoke = live && (block === null || block === "done");
   if (!isAdmin) return null;
@@ -122,11 +126,13 @@ export function VerifyActions({
       title: w.title,
       body: w.stale ? "The letter has been loaded again." : "",
     });
+    onSettled("refused");
     void refresh(c.id);
     return true;
   };
   const done = (title: string) => {
     close();
+    onSettled("done");
     toast.show({ title, tone: "ok", live: "polite" });
   };
 
@@ -167,7 +173,8 @@ export function VerifyActions({
 
   return (
     <div className="flex flex-col gap-3">
-      {refusal && (
+      {/* Not said twice: the reloaded letter's own line may already say it. */}
+      {refusal && !(blocked && refusal.title === BLOCK_TEXT[block]) && (
         <Banner tone="bad" title={refusal.title}>
           {refusal.body}
         </Banner>

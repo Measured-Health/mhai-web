@@ -2,7 +2,6 @@
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ClearanceTab } from "@/lib/api/clearances-contract";
-import { viewerDay } from "@/lib/clearances/labels";
 import { useNamedAccessState } from "@/lib/queries/clearances";
 import { Button } from "@mhai/ui/button";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
@@ -26,7 +25,6 @@ export function ClearancesView({ switchPanel }: { switchPanel?: ReactNode }) {
   const named = useNamedAccessState();
   const [tab, setTab] = useState<ClearanceTab>("waiting");
   const [selected, setSelected] = useState<string | null>(null);
-  const [today] = useState(() => viewerDay(Date.now()));
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   // After Back on a phone, the row the person came from gets the focus.
   const backTo = useRef<string | null>(null);
@@ -56,7 +54,6 @@ export function ClearancesView({ switchPanel }: { switchPanel?: ReactNode }) {
         focusBack.current = !desktop;
         setSelected(id);
       }}
-      today={today}
       rowRefs={rowRefs}
     />
   );
@@ -90,7 +87,7 @@ export function ClearancesView({ switchPanel }: { switchPanel?: ReactNode }) {
       <div className="grid gap-5 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:items-start">
         {queue}
         {selected ? (
-          <ClearanceDetail key={selected} id={selected} today={today} />
+          <ClearanceDetail key={selected} id={selected} />
         ) : (
           <div className="rounded-2xl border border-dashed border-lilac-2 bg-white px-6 py-10 text-center text-[13.5px] text-ink-3">
             Choose a letter to see what was entered
@@ -114,7 +111,7 @@ export function ClearancesView({ switchPanel }: { switchPanel?: ReactNode }) {
             Back
           </Button>
         </div>
-        <ClearanceDetail key={selected} id={selected} today={today} />
+        <ClearanceDetail key={selected} id={selected} />
       </div>
     ) : (
       queue

@@ -76,10 +76,13 @@ const event = (
   reason: string | null = null,
 ): ClearanceEvent => ({ at: iso(at), kind, by, side, reason, note: null });
 
-/** A letter as the store keeps it; `covers_you` and `verifiable_by_you` are set per caller. */
+/**
+ * A letter as the store keeps it; `covers_you` and `verifiable_by_you` are
+ * set per caller, and `today` when it is sent.
+ */
 export type ClearanceRecord = Omit<
   Clearance,
-  "covers_you" | "verifiable_by_you"
+  "covers_you" | "verifiable_by_you" | "today"
 >;
 
 function letter(
