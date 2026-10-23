@@ -107,6 +107,10 @@ describe("README demo instructions", () => {
     expect(readme).toMatch(/\*\*Analytics\.\*\*/);
   });
 
+  it("documents the platform clearances demo", () => {
+    expect(readme).toMatch(/\*\*Clearances\.\*\*/);
+  });
+
   it("documents the platform audit log demo", () => {
     expect(readme).toMatch(/\*\*Audit log\.\*\*/);
   });

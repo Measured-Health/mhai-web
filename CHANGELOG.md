@@ -39,6 +39,16 @@ All notable changes to this project are documented here. The format follows
   access line and warnings on the Staff panel. It stays off in live mode
   until clinical, privacy and legal sign-off, `NAMED_ACCESS_SIGNED_OFF=true`
   and the backend switch. End-to-end tests cover it on desktop and phone.
+- Clearances in the platform admin app, on sample data: a Clearances page
+  with the queue of hospitals' clearance letters (To verify, Active, Ending
+  soon, All), a safe page-by-page viewer with no download or print, and
+  Verify, Reject and Revoke with the admin's two-step code. A platform admin
+  linked to the hospital, or covered by the letter, is told why they can't
+  verify it. The named-access switch (global and per hospital: Off, Letters
+  only, On) is raised with three sign-offs and a different platform admin's
+  approval, and lowered at once by one admin. Auditors read it all. A fifth
+  sample team member, Bola Hassan, is linked to Havana Hospital. End-to-end
+  tests cover it on desktop and phone.
 - Legal holds in the platform admin app, on sample data: a Legal holds page
   with filters, a hold on a hospital's records (all of them or a date range)
   that blocks its removal, a Hold tag on the hospitals list, a Legal holds
