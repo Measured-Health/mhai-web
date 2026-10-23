@@ -9,6 +9,7 @@ import {
   type RemovalBlock,
   type WriteOpts,
 } from "./contract";
+import type { EmrClient } from "./emr-contract";
 import type { HoldsClient } from "./holds-contract";
 import type { SettingsClient } from "./settings-contract";
 
@@ -90,6 +91,25 @@ function settingsLive(ok: LiveOk): SettingsClient {
     cancelRequest: (x, b, o) => ok(request(x, "/cancel"), "POST", b, o),
     resetFeedbackBuffer: (b, o) =>
       ok("/settings/feedback-buffer/reset", "POST", b, o),
+  };
+}
+
+/** Record connections (Plan 13): rows `platform/emr…` of the shape table. */
+function emrLive(ok: LiveOk): EmrClient {
+  const id = encodeURIComponent;
+  const connection = (x: string, rest = "") =>
+    `/emr/connections/${id(x)}${rest}`;
+  return {
+    listConnectorTypes: () => ok("/emr/connector-types"),
+    listConnections: (q) =>
+      ok(`/emr/connections${query({ hospital: q.hospital, state: q.state })}`),
+    getConnection: (x) => ok(connection(x)),
+    addConnection: (hospital, b, o) =>
+      ok(`/hospitals/${id(hospital)}/emr/connections`, "POST", b, o),
+    updateConnection: (x, b, o) => ok(connection(x), "PATCH", b, o),
+    setConnectionEnabled: (x, b, o) =>
+      ok(connection(x, "/enabled"), "PUT", b, o),
+    testConnection: (x, o) => ok(connection(x, "/test"), "POST", undefined, o),
   };
 }
 
@@ -204,5 +224,6 @@ export function createLivePlatformClient({
     cancelJobs: (b, o) => ok("/jobs/cancel", "POST", b, o),
     ...holdsLive(ok),
     ...settingsLive(ok),
+    ...emrLive(ok),
   };
 }

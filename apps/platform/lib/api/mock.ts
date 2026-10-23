@@ -44,6 +44,7 @@ import {
 import { createMockOps } from "./mock-ops";
 import type { HealthMode } from "./ops-fixtures";
 import { settingsMock, type SettingsMockOptions } from "./mock-settings";
+import { emrMock } from "./mock-emr";
 import {
   EMAIL_MODES,
   NOTIFICATIONS_MAX,
@@ -1080,5 +1081,6 @@ export function createMockPlatform({
     ...createMockOps(core, { health }),
     ...holdsMock(core, { removalStarted }),
     ...settingsMock(core, { triage, resetFails }),
+    ...emrMock(core),
   };
 }

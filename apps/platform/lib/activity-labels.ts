@@ -1,5 +1,9 @@
 import type { ActivityAction } from "@/lib/api/contract";
 
+/** "the record connection “Main record”", or without a name. */
+const connection = (t: string | null) =>
+  t ? `the record connection “${t}”` : "the record connection";
+
 /** What was done, as the end of a sentence after the person's name. */
 export function actionLabel(a: ActivityAction, target?: string | null): string {
   const t = target?.trim() || null;
@@ -104,6 +108,16 @@ export function actionLabel(a: ActivityAction, target?: string | null): string {
       return t
         ? `cleared unapproved learning data: ${t}`
         : "cleared unapproved learning data";
+    case "emr_connection_added":
+      return `added ${connection(t)}`;
+    case "emr_connection_changed":
+      return `changed ${connection(t)}`;
+    case "emr_connection_switched_on":
+      return `switched on ${connection(t)}`;
+    case "emr_connection_switched_off":
+      return `switched off ${connection(t)}`;
+    case "emr_connection_tested":
+      return `tested ${connection(t)}`;
   }
 }
 

@@ -41,6 +41,11 @@ const WITH: Record<ActivityAction, string> = {
   clean_up_resumed: "resumed the records clean-up",
   triage_switched_off: "switched triage off",
   feedback_buffer_cleared: "cleared unapproved learning data: Kemi",
+  emr_connection_added: "added the record connection “Kemi”",
+  emr_connection_changed: "changed the record connection “Kemi”",
+  emr_connection_switched_on: "switched on the record connection “Kemi”",
+  emr_connection_switched_off: "switched off the record connection “Kemi”",
+  emr_connection_tested: "tested the record connection “Kemi”",
 };
 const WITHOUT: Partial<Record<ActivityAction, string>> = {
   admin_invited: "invited the first hospital admin",
@@ -70,6 +75,11 @@ const WITHOUT: Partial<Record<ActivityAction, string>> = {
   clean_up_resumed: "resumed the records clean-up",
   triage_switched_off: "switched triage off",
   feedback_buffer_cleared: "cleared unapproved learning data",
+  emr_connection_added: "added the record connection",
+  emr_connection_changed: "changed the record connection",
+  emr_connection_switched_on: "switched on the record connection",
+  emr_connection_switched_off: "switched off the record connection",
+  emr_connection_tested: "tested the record connection",
 };
 
 describe("actionLabel", () => {

@@ -10,6 +10,7 @@ import type {
   SeriesOut,
 } from "./analytics-contract";
 import type { AuditClient } from "./audit-contract";
+import type { EmrClient } from "./emr-contract";
 import type { HoldShort, HoldsClient } from "./holds-contract";
 import type { EmailPref, NotificationsOut } from "./notifications-contract";
 import type { OpsClient } from "./ops-contract";
@@ -186,7 +187,14 @@ export type ActivityAction =
   | "clean_up_paused"
   | "clean_up_resumed"
   | "triage_switched_off"
-  | "feedback_buffer_cleared";
+  | "feedback_buffer_cleared"
+  // Record connections (Plan 13); the target is the source label, never a
+  // credential.
+  | "emr_connection_added"
+  | "emr_connection_changed"
+  | "emr_connection_switched_on"
+  | "emr_connection_switched_off"
+  | "emr_connection_tested";
 export type ActivityEvent = {
   id: string;
   at: string;
@@ -241,7 +249,7 @@ export class BlockedError extends ApiError {
  * client in its own contract file and adds its name to `extends` here.
  */
 export interface PlatformClient
-  extends HoldsClient, OpsClient, AuditClient, SettingsClient {
+  extends HoldsClient, OpsClient, AuditClient, SettingsClient, EmrClient {
   listHospitals(
     q: HospitalQuery,
   ): Promise<{ hospitals: HospitalSummary[]; next_cursor: string | null }>;

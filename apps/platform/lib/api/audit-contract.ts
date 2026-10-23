@@ -46,7 +46,8 @@ export type AuditTarget =
         | "clearance"
         | "team_member"
         | "change"
-        | "hold";
+        | "hold"
+        | "connection";
       id: string;
       name?: string;
     }
