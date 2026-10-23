@@ -1,6 +1,7 @@
 "use client";
 import { Eye, OctagonAlert, WifiOff } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type { FindingFlag } from "@/lib/api/alerts-contract";
 import type {
   AnalysisFilters,
@@ -39,6 +40,18 @@ const clockText = (ms: number) => {
   const d = new Date(ms);
   return `${two(d.getHours())}:${two(d.getMinutes())}`;
 };
+
+/** The real clock, read afresh when rendering decides whether names show. */
+const wallClock = () => Date.now();
+
+/**
+ * Whether moving the focus would take nothing from the person: it is in
+ * this element, or nowhere (on the body, as after the dialog closed).
+ */
+export function focusIsOurs(el: Element | null): boolean {
+  const a = document.activeElement;
+  return !a || a === document.body || (el !== null && el.contains(a));
+}
 
 /** Stable text for filters, so a new object with the same filters isn't a change. */
 const filtersText = (f: AnalysisFilters) =>
@@ -131,6 +144,9 @@ export function NamedView({
   }, [sameAsAsked]);
 
   const d = q.data?.status === "ok" ? q.data.data : null;
+  const bannerText = d
+    ? `Named view · letter until ${dayLabel(d.clearance.end_date)} · this view is recorded`
+    : "";
   const until = d?.named_until ?? null;
   // Names go at named_until without waiting for the server. A timer alone
   // can outlive it (sleep, a restored page, a frozen tab: timers pause), so
@@ -141,11 +157,19 @@ export function NamedView({
     const check = () => {
       const t = Date.now();
       const over = msUntil(until, t) === 0;
-      // Re-render only when the watermark's minute moves, or names are over.
+      if (over) {
+        // Hide the rows now, before the browser paints again (a restored
+        // page or a wake runs this first).
+        flushSync(() => {
+          setNow(t);
+          end("until");
+        });
+        return;
+      }
+      // Re-render only when the watermark's minute moves.
       setNow((was) =>
-        over || Math.floor(was / 60_000) !== Math.floor(t / 60_000) ? t : was,
+        Math.floor(was / 60_000) !== Math.floor(t / 60_000) ? t : was,
       );
-      if (over) end("until");
     };
     const back = () => {
       if (document.visibilityState === "visible") check();
@@ -169,13 +193,29 @@ export function NamedView({
     };
   }, [until]);
 
-  // Focus: the view while it loads (the dialog's opener has gone), then the
-  // named banner once names show. Said politely too.
+  // Focus and what is said, once each: the view takes the focus while it
+  // loads (the dialog's opener has gone) and the banner once names show,
+  // but only if the focus is still ours (in the view, or nowhere). Never
+  // pulled from the filters or the search: then the polite region says it.
   const root = useRef<HTMLDivElement>(null);
   const banner = useRef<HTMLParagraphElement>(null);
+  const said = useRef<HTMLParagraphElement>(null);
   const loaded = d !== null;
+  const settle = useEffectEvent(() => {
+    const say = (text: string) => {
+      if (said.current) said.current.textContent = text;
+    };
+    if (!loaded) {
+      if (focusIsOurs(root.current)) root.current?.focus();
+      say("Loading named patients…");
+    } else if (banner.current && focusIsOurs(root.current)) {
+      // The focused banner is read; the region stays quiet.
+      say("");
+      banner.current.focus();
+    } else if (banner.current) say(`Names shown. ${bannerText}`);
+  });
   useEffect(() => {
-    (loaded ? banner : root).current?.focus();
+    settle();
   }, [loaded]);
 
   // A refusal that ends access, from the list.
@@ -203,30 +243,23 @@ export function NamedView({
     else if (meChanged(first.current, m)) end(endReasonFrom(m) ?? "changed");
   }, [me.data]);
 
-  // Never a frame of old names: other filters, or past named_until.
+  // Never a frame of old names: other filters, or past named_until (read
+  // afresh, not only the last tick).
   if (!user || !sameAsAsked) return null;
-  const live = d !== null && now < Date.parse(d.named_until);
+  const live =
+    d !== null && Math.max(now, wallClock()) < Date.parse(d.named_until);
   const mark = `${user.fullName ?? user.displayName} · ${clockText(now)}`;
   const failed = q.data?.status === "failed" || (q.isError && !d);
-  const bannerText = d
-    ? `Named view · letter until ${dayLabel(d.clearance.end_date)} · this view is recorded`
-    : "";
 
   return (
     <div
       ref={root}
       tabIndex={-1}
-      aria-busy={d === null && !failed}
       data-named-view
       className="print:hidden focus:outline-none"
     >
-      <p role="status" className="sr-only">
-        {live
-          ? `Names shown. ${bannerText}`
-          : d === null && !failed
-            ? "Loading named patients…"
-            : ""}
-      </p>
+      {/* Written once per change by `settle`; React gives it no children. */}
+      <p ref={said} role="status" className="sr-only" />
       {d && !live ? null : d ? (
         <>
           <p

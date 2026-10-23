@@ -94,12 +94,25 @@ const cached = () =>
   );
 
 /** The ended notice: said politely, with the focus, and the reason. */
-async function ended(reason: string) {
+/**
+ * The ended notice, with the reason, said once: focused (and read) when the
+ * focus was in the view, else spoken by the panel's polite region.
+ */
+async function ended(reason: string, { focused = true } = {}) {
   const title = await screen.findByText("Named access has ended");
   const notice = title.closest<HTMLElement>("[data-named-ended]")!;
-  expect(notice).toHaveAttribute("role", "status");
+  // Not itself a live region: never read twice.
+  expect(notice).not.toHaveAttribute("role");
+  expect(notice).not.toHaveAttribute("aria-live");
   expect(notice).toHaveTextContent(reason);
-  await waitFor(() => expect(notice).toHaveFocus());
+  const spoken = `Named access has ended. ${reason}`;
+  if (focused) {
+    await waitFor(() => expect(notice).toHaveFocus());
+    expect(screen.queryByText(spoken)).toBeNull();
+  } else {
+    expect(notice).not.toHaveFocus();
+    expect(screen.getByText(spoken)).toHaveAttribute("role", "status");
+  }
   expect(screen.queryByRole("table", { name: /^Named patients/ })).toBeNull();
   // Back to the de-identified rows.
   expect(
@@ -163,16 +176,85 @@ describe("NamedView", () => {
     expect(tile).not.toContain("<b>");
   });
 
-  it("after showing names the focus is on the named banner, and it is said", async () => {
+  it("after showing names the focus is on the named banner, read once", async () => {
     open(GRACE);
     await showNames();
     const banner = document.querySelector<HTMLElement>("[data-named-banner]")!;
     await waitFor(() => expect(banner).toHaveFocus());
-    expect(
-      within(document.querySelector("[data-named-view]")!).getByRole("status"),
-    ).toHaveTextContent(
+    // The focused banner is read; the polite region doesn't repeat it, and
+    // nothing marks the view busy (which would hide the region).
+    const view = document.querySelector<HTMLElement>("[data-named-view]")!;
+    expect(within(view).getByRole("status")).toHaveTextContent(/^$/);
+    expect(view).not.toHaveAttribute("aria-busy");
+  });
+
+  it("names loading while you type in a filter: the focus stays, and the region says it", async () => {
+    const user = userEvent.setup();
+    open(
+      GRACE,
+      <>
+        {panel()}
+        <input aria-label="Search conditions" />
+      </>,
+    );
+    const real = holder.client.listNamedPatients;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    vi.spyOn(holder.client, "listNamedPatients").mockImplementation(
+      async (b, o) => {
+        await gate;
+        return real(b, o);
+      },
+    );
+    await user.click(await screen.findByRole("button", { name: "Show names" }));
+    const dialog = await screen.findByRole("dialog", { name: "Show names" });
+    await user.click(within(dialog).getByRole("radio", { name: "Audit" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Show names" }),
+    );
+    const view = await waitFor(() =>
+      document.querySelector<HTMLElement>("[data-named-view]")!,
+    );
+    // Loading: the view has the focus, and the region says so.
+    await waitFor(() => expect(view).toHaveFocus());
+    expect(within(view).getByRole("status")).toHaveTextContent(
+      "Loading named patients…",
+    );
+    const search = screen.getByLabelText("Search conditions");
+    act(() => search.focus());
+    await user.keyboard("diab");
+    await act(async () => release());
+    await screen.findByRole("table", { name: /^Named patients/ });
+    expect(search).toHaveFocus();
+    expect(search).toHaveValue("diab");
+    expect(within(view).getByRole("status")).toHaveTextContent(
       /^Names shown\. Named view · letter until .+ · this view is recorded$/,
     );
+  });
+
+  it("typing in a filter isn't interrupted when a view ends", async () => {
+    const user = userEvent.setup();
+    open(
+      GRACE,
+      <>
+        {panel()}
+        <input aria-label="Search conditions" />
+      </>,
+    );
+    await showNames("Audit", undefined, user);
+    const search = screen.getByLabelText("Search conditions");
+    act(() => search.focus());
+    await user.keyboard("dia");
+    vi.spyOn(holder.client, "listNamedPatients").mockRejectedValue(
+      new ApiError(403, "clearance_ended"),
+    );
+    await act(() =>
+      qc.refetchQueries({ queryKey: ["analysis", "patients", "named"] }),
+    );
+    await ended("The clearance letter has ended.", { focused: false });
+    await user.keyboard("betes");
+    expect(search).toHaveFocus();
+    expect(search).toHaveValue("diabetes");
   });
 
   it.each([

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -57,7 +58,7 @@ import { useOnline } from "@mhai/ui/hooks/use-online";
 import { SidePanel } from "@mhai/ui/side-panel";
 import { Skeleton } from "@mhai/ui/skeleton";
 import type { TableColumn } from "./data-table";
-import { NamedView } from "./named-view";
+import { NamedView, focusIsOurs } from "./named-view";
 import { PurposeDialog } from "./purpose-dialog";
 import { SMALL_GROUP_MIN } from "@mhai/ui/small-groups";
 
@@ -162,10 +163,16 @@ export function PatientsPanel({
 
   const named = useNames();
   const showing = named.view !== null;
+  const said = useRef<HTMLParagraphElement>(null);
+  const say = useCallback((text: string) => {
+    if (said.current) said.current.textContent = text;
+  }, []);
 
   return (
     <SidePanel open onClose={onClose} title={title} className="print:hidden">
-      {named.ended && <EndedNotice reason={named.ended} />}
+      {/* Polite, and quiet when the notice itself takes the focus. */}
+      <p ref={said} role="status" className="sr-only" />
+      {named.ended && <EndedNotice reason={named.ended} say={say} />}
       {d && !showing && <NamesOffer named={named} />}
       {showing ? (
         <NamedView
@@ -245,17 +252,27 @@ function useNames() {
  * "Named access has ended" and why. It takes the focus when it appears (the
  * named view it replaces had it) and is said politely.
  */
-function EndedNotice({ reason }: { reason: EndReason }) {
+function EndedNotice({
+  reason,
+  say,
+}: {
+  reason: EndReason;
+  say(text: string): void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    ref.current?.focus();
-  }, [reason]);
+    // The view it replaces had the focus (now on the body): take it, and
+    // the notice is read. Anywhere else (a filter, the search): leave it,
+    // and the panel's polite region says it instead. Never both.
+    if (focusIsOurs(ref.current)) {
+      say("");
+      ref.current?.focus();
+    } else say(`Named access has ended. ${END_TEXT[reason]}`);
+  }, [reason, say]);
   return (
     <div
       ref={ref}
       tabIndex={-1}
-      role="status"
-      aria-live="polite"
       data-named-ended
       className="mb-3 flex gap-3 rounded-2xl border border-warn-line bg-warn-wash px-4 py-3.5 text-[13.5px] leading-normal text-warn-deep focus-visible:outline-2 focus-visible:outline-mint-deep"
     >
