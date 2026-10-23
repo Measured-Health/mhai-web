@@ -10,7 +10,11 @@ import {
   type WriteOpts,
 } from "./contract";
 import { dayLabel } from "@mhai/ui/clearances";
-import type { Clearance, ClearancesClient } from "./clearances-contract";
+import type {
+  Clearance,
+  ClearancesClient,
+  NamedAccessOut,
+} from "./clearances-contract";
 import type { HoldsClient } from "./holds-contract";
 import type { SettingsClient } from "./settings-contract";
 
@@ -108,11 +112,12 @@ export type LiveBlob = (
 const PAGE_TYPES = ["image/png", "image/jpeg"] as const;
 
 /**
- * A letter must carry its hospital's day: one without a real `today`
+ * A letter must carry its hospital's day, and the switch Measured Health's
+ * (what a sign-off date is checked against): one without a real `today`
  * (YYYY-MM-DD) fails closed, as a bad reply, rather than have the browser
  * guess the day.
  */
-function withDay(c: Clearance): Clearance {
+function withDay<T extends { today: string }>(c: T): T {
   const today = (c as { today?: unknown } | null)?.today;
   try {
     if (typeof today === "string" && dayLabel(today)) return c;
@@ -154,11 +159,15 @@ function clearancesLive(ok: LiveOk, blob: LiveBlob): ClearancesClient {
       ok<Clearance>(letter(x, "/reject"), "POST", b, o).then(withDay),
     revokeClearance: (x, b, o) =>
       ok<Clearance>(letter(x, "/revoke"), "POST", b, o).then(withDay),
-    getNamedAccess: () => ok("/named-access"),
-    requestNamedAccess: (b, o) => ok("/named-access/requests", "POST", b, o),
-    approveNamedAccess: (x, b, o) => ok(request(x, "/approve"), "POST", b, o),
-    cancelNamedAccess: (x, b, o) => ok(request(x, "/cancel"), "POST", b, o),
-    lowerNamedAccess: (b, o) => ok("/named-access/lower", "POST", b, o),
+    getNamedAccess: () => ok<NamedAccessOut>("/named-access").then(withDay),
+    requestNamedAccess: (b, o) =>
+      ok<NamedAccessOut>("/named-access/requests", "POST", b, o).then(withDay),
+    approveNamedAccess: (x, b, o) =>
+      ok<NamedAccessOut>(request(x, "/approve"), "POST", b, o).then(withDay),
+    cancelNamedAccess: (x, b, o) =>
+      ok<NamedAccessOut>(request(x, "/cancel"), "POST", b, o).then(withDay),
+    lowerNamedAccess: (b, o) =>
+      ok<NamedAccessOut>("/named-access/lower", "POST", b, o).then(withDay),
   };
 }
 

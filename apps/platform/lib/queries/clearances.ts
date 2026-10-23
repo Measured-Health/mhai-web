@@ -11,6 +11,7 @@ import type {
   Clearance,
   ClearancesClient,
   ClearanceTab,
+  NamedAccessOut,
 } from "../api/clearances-contract";
 import { queryKeys } from "./keys";
 
@@ -119,5 +120,77 @@ export function useRevoke() {
     getPlatformClient().revokeClearance(id, body as RevokeBody, {
       idempotencyKey: key,
     }),
+  );
+}
+
+/**
+ * After a change to the switch: it shows the reply; the queue (which gives
+ * way when global is Off) and Activity refetch.
+ */
+export function switchSaved(qc: QueryClient, r: NamedAccessOut) {
+  qc.setQueryData(queryKeys.namedAccess, r);
+  for (const queryKey of [clearanceListKey, queryKeys.activity])
+    void qc.invalidateQueries({ queryKey });
+}
+
+/** Reads the switch again, e.g. after a refusal that says it changed. */
+export function useRefreshNamedAccess() {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: queryKeys.namedAccess });
+}
+
+type RequestBody = Parameters<Client["requestNamedAccess"]>[0];
+type ApproveBody = Parameters<Client["approveNamedAccess"]>[1];
+type CancelBody = Parameters<Client["cancelNamedAccess"]>[1];
+type LowerBody = Parameters<Client["lowerNamedAccess"]>[0];
+export type RequestSwitchInput = RequestBody;
+export type ApproveSwitchInput = { id: string } & ApproveBody;
+export type CancelSwitchInput = { id: string } & CancelBody;
+export type LowerSwitchInput = LowerBody;
+
+/*
+ * A raise, its approval and a lowering carry the person's two-step code at
+ * the top of their variables, as the letter writes do: the cache forgets
+ * each call once nothing watches it (gcTime 0), and `useStepUpCall` resets
+ * it after every answer. Cancel has no code, and is forgotten the same way.
+ */
+function useSwitchWrite<V>(
+  send: (v: V, key: string) => Promise<NamedAccessOut>,
+) {
+  const qc = useQueryClient();
+  return useKeyedMutation(
+    send,
+    { onSuccess: (r) => switchSaved(qc, r) },
+    { gcTime: 0 },
+  );
+}
+
+/** Ask for a raise, global (`hospital: null`) or for one hospital. */
+export function useRequestNamedAccess() {
+  return useSwitchWrite((body: RequestSwitchInput, key) =>
+    getPlatformClient().requestNamedAccess(body, { idempotencyKey: key }),
+  );
+}
+
+/** Approve someone else's raise. */
+export function useApproveNamedAccess() {
+  return useSwitchWrite(({ id, ...body }: ApproveSwitchInput, key) =>
+    getPlatformClient().approveNamedAccess(id, body as ApproveBody, {
+      idempotencyKey: key,
+    }),
+  );
+}
+
+/** Cancel a raise waiting for approval: any platform admin, no code. */
+export function useCancelNamedAccess() {
+  return useSwitchWrite(({ id, ...body }: CancelSwitchInput, key) =>
+    getPlatformClient().cancelNamedAccess(id, body, { idempotencyKey: key }),
+  );
+}
+
+/** Turn a switch down, at once. */
+export function useLowerNamedAccess() {
+  return useSwitchWrite((body: LowerSwitchInput, key) =>
+    getPlatformClient().lowerNamedAccess(body, { idempotencyKey: key }),
   );
 }

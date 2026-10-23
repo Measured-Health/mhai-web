@@ -11,16 +11,17 @@ import { Empty } from "../states/empty";
 import { Loading } from "../states/loading";
 import { ClearanceDetail } from "./clearance-detail";
 import { ClearanceQueue } from "./clearance-queue";
+import { SwitchPanel } from "./switch-panel";
 
 /**
- * The Clearances page: the hospitals' clearance letters, to verify, reject
- * or revoke, beside the named-access switch (Task 11's panel goes in
- * `switchPanel`). With the global switch Off there is nothing to verify, so
- * the queue gives way to a line saying so. On a phone the queue shows alone
- * and a letter opens in its place, with Back. The open letter lives in this
- * component's state, never in the URL.
+ * The Clearances page: the named-access switch at the top, then the
+ * hospitals' clearance letters, to verify, reject or revoke. With the global
+ * switch Off there is nothing to verify, so the queue gives way to a line
+ * saying so. On a phone the queue shows alone and a letter opens in its
+ * place, with Back. The open letter lives in this component's state, never
+ * in the URL.
  */
-export function ClearancesView({ switchPanel }: { switchPanel?: ReactNode }) {
+export function ClearancesView() {
   const desktop = useIsDesktop();
   const named = useNamedAccessState();
   const [tab, setTab] = useState<ClearanceTab>("waiting");
@@ -125,7 +126,7 @@ export function ClearancesView({ switchPanel }: { switchPanel?: ReactNode }) {
       />
       <div className="flex-1 overflow-auto px-4 pb-10 pt-6 md:px-[26px]">
         <div className="mx-auto flex max-w-[1100px] flex-col gap-5">
-          {switchPanel}
+          <SwitchPanel />
           {body}
         </div>
       </div>

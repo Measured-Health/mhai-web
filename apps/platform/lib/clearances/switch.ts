@@ -70,7 +70,8 @@ export function requestLine(r: SwitchRequest): string {
     : line;
 }
 
-const FILL_IN =
+/** What a missing sign-off reads, here and for a 409 `signoff_missing`. */
+export const FILL_IN =
   "Fill in who signed, when, and the document for clinical, privacy and legal";
 
 /**
