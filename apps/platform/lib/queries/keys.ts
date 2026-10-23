@@ -15,6 +15,8 @@ export const queryKeys = {
   ops: ["ops"] as const,
   holds: ["holds"] as const,
   settings: ["settings"] as const,
+  clearances: ["clearances"] as const,
+  namedAccess: ["named-access"] as const,
 };
 
 /** The query client's defaults: memory-only cache, no retry on a 4xx. */

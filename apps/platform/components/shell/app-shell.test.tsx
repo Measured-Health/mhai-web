@@ -32,7 +32,7 @@ const shell = (user?: User) =>
   );
 
 describe("the platform shell", () => {
-  it("the sidebar shows Platform and the nine links in order", () => {
+  it("the sidebar shows Platform and the ten links in order", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     expect(within(nav).getByText("Platform")).toBeInTheDocument();
@@ -42,6 +42,7 @@ describe("the platform shell", () => {
     expect(links).toEqual([
       ["Hospitals", "/hospitals"],
       ["Analytics", "/analytics"],
+      ["Clearances", "/clearances"],
       ["Legal holds", "/legal-holds"],
       ["System", "/system"],
       ["Settings", "/settings"],
@@ -67,14 +68,14 @@ describe("the platform shell", () => {
     }
   });
 
-  it("the sidebar shows Legal holds between Analytics and System", () => {
+  it("the sidebar shows Legal holds between Clearances and System", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     const names = within(nav)
       .getAllByRole("link")
       .map((l) => l.textContent);
     const at = names.indexOf("Legal holds");
-    expect(names[at - 1]).toBe("Analytics");
+    expect(names[at - 1]).toBe("Clearances");
     expect(names[at + 1]).toBe("System");
     expect(
       within(nav).getByRole("link", { name: "Legal holds" }),
@@ -89,10 +90,28 @@ describe("the platform shell", () => {
       .map((l) => l.textContent);
     const at = names.indexOf("Analytics");
     expect(names[at - 1]).toBe("Hospitals");
-    expect(names[at + 1]).toBe("Legal holds");
+    expect(names[at + 1]).toBe("Clearances");
     expect(
       within(nav).getByRole("link", { name: "Analytics" }),
     ).toHaveAttribute("href", "/analytics");
+  });
+
+  it("the sidebar shows Clearances straight after Analytics; active on /clearances", () => {
+    pathname.value = "/clearances";
+    for (const user of [undefined, AMARA]) {
+      const { unmount } = shell(user);
+      const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+      const names = within(nav)
+        .getAllByRole("link")
+        .map((l) => l.textContent);
+      const at = names.indexOf("Clearances");
+      expect(names[at - 1]).toBe("Analytics");
+      expect(names[at + 1]).toBe("Legal holds");
+      const link = within(nav).getByRole("link", { name: "Clearances" });
+      expect(link).toHaveAttribute("href", "/clearances");
+      expect(link).toHaveAttribute("aria-current", "page");
+      unmount();
+    }
   });
 
   it("System sits after Legal holds, before Settings; active on /system/jobs", () => {

@@ -85,7 +85,7 @@ export const BLOCK_TEXT: Record<VerifyBlock, string> = {
   auditor: "Auditors can read letters but not change them",
   covers_you: "You can't verify a letter that covers you",
   same_side: "You can't verify letters from a hospital you're linked to",
-  not_ready: "Still checking the file",
+  not_ready: "Can't verify while the file is being checked",
   done: "This letter has been dealt with",
 };
 
@@ -95,4 +95,15 @@ export function verifiedToast(c: Clearance, effective: NamedPosition): string {
     return "Verified. Names stay hidden until named access is switched on";
   const n = c.covered.length + c.covered_platform.length;
   return `Verified. ${n} ${n === 1 ? "person" : "people"} can now see names`;
+}
+
+/**
+ * The viewer's own calendar day, as YYYY-MM-DD: what the queue's status
+ * words count to. Display only; the server decides when access ends, and
+ * the platform list carries no hospital day.
+ */
+export function viewerDay(ms: number): string {
+  const d = new Date(ms);
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
 }

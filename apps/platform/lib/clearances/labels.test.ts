@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { letter } from "@/tests/clearance-fixture";
-import { BLOCK_TEXT, CHECKLIST, statusText, verifiedToast } from "./labels";
+import {
+  BLOCK_TEXT,
+  CHECKLIST,
+  statusText,
+  verifiedToast,
+  viewerDay,
+} from "./labels";
 
 const TODAY = "2026-10-23";
 
@@ -85,6 +91,9 @@ describe("BLOCK_TEXT", () => {
     expect(BLOCK_TEXT.same_side).toBe(
       "You can't verify letters from a hospital you're linked to",
     );
+    expect(BLOCK_TEXT.not_ready).toBe(
+      "Can't verify while the file is being checked",
+    );
   });
 });
 
@@ -107,5 +116,14 @@ describe("verifiedToast", () => {
       "Verified. Names stay hidden until named access is switched on";
     expect(verifiedToast(letter(), "letters_only")).toBe(hidden);
     expect(verifiedToast(letter(), "off")).toBe(hidden);
+  });
+});
+
+describe("viewerDay", () => {
+  it("is the viewer's own calendar day, near midnight either side", () => {
+    // Tests run in UTC (vitest.config.mts).
+    expect(viewerDay(Date.parse("2026-10-23T00:00:30Z"))).toBe("2026-10-23");
+    expect(viewerDay(Date.parse("2026-10-23T23:59:30Z"))).toBe("2026-10-23");
+    expect(viewerDay(Date.parse("2027-01-01T00:00:00Z"))).toBe("2027-01-01");
   });
 });
