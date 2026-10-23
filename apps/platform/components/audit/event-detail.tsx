@@ -184,6 +184,16 @@ function Fields({
           </>
         )}
         {target && <Field term="Target">{target}</Field>}
+        {e.kind === "audit_searched" && e.facts.searched !== undefined && (
+          <Field term="Searched for">
+            {typeof e.facts.searched === "object" ? (
+              // The pseudonym is behind Show patient ids, below.
+              "a patient id"
+            ) : (
+              <Mono>{e.facts.searched}</Mono>
+            )}
+          </Field>
+        )}
         <Field term="Outcome">{outcomeWords(e.outcome, e.reason)}</Field>
         <Field term="From where">{where || "Not recorded"}</Field>
         <Field term="Flags">

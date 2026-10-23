@@ -51,7 +51,18 @@ export type AuditTarget =
       name?: string;
     }
   | { kind: "export" | "run" | "event" | "session"; id: string }
-  | { kind: "patient"; pseudonym: string };
+  // A patient target never carries the pseudonym: the ids are only ever
+  // sent by GET /platform/audit/{id}/patients, which is recorded.
+  | { kind: "patient" };
+/**
+ * A hospital's pseudonymous patient id starts `p_`, and no other id does.
+ * Outside the recorded reveal, a pseudonym is never sent: where one was
+ * searched or filtered on, the server sends this marker instead.
+ */
+export const PSEUDONYM_PREFIX = "p_";
+export type PatientIdMarker = { kind: "patient_id" };
+/** The list a read was of: Events or Named access. */
+export type AuditListName = "events" | "named_access";
 export type SearchedKind =
   "event" | "request" | "export" | "clearance" | "pseudonym";
 export type RunState = "running" | "intact" | "broken" | "error";
@@ -64,6 +75,13 @@ export type AuditFilters = {
   from?: string; // ISO instants, [from, to)
   to?: string;
   q?: string; // an exact id or pseudonym
+};
+/**
+ * Filters as recorded (in an entry's facts and an export record): a
+ * pseudonym searched is the marker, never the value.
+ */
+export type RecordedFilters = Omit<AuditFilters, "q"> & {
+  q?: string | PatientIdMarker;
 };
 export type AuditFacts = {
   specialty?: string;
@@ -78,14 +96,19 @@ export type AuditFacts = {
   before?: string;
   checkpoint_id?: string;
   incident_ref?: string;
-  filters?: AuditFilters;
-  searched?: string;
+  filters?: RecordedFilters;
+  /** The id searched; for a pseudonym, the marker (spec §13). */
+  searched?: string | PatientIdMarker;
   searched_kind?: SearchedKind;
   rows?: number;
   capped?: boolean;
   checksum?: string;
   state?: RunState;
   first_broken_seq?: number;
+  /** On `audit_viewed`: which list was read. */
+  list?: AuditListName;
+  /** On `jobs_retried` and `jobs_cancelled`: how many jobs. */
+  job_count?: number;
 };
 export type AuditEvent = {
   id: string;
@@ -197,7 +220,7 @@ export type ExportRecord = {
   reason: ExportReason;
   note: string | null;
   reference: string | null;
-  filters: AuditFilters | NamedAccessFilters;
+  filters: RecordedFilters | NamedAccessFilters;
   filter_names: {
     hospital: string | null;
     person: string | null;

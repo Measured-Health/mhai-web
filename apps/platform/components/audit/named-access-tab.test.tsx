@@ -183,6 +183,8 @@ describe("the Named access tab", () => {
           LETTER,
     );
     expect(seen).toHaveLength(1);
+    // It names its list: Named access, not Events.
+    expect(seen[0]!.facts.list).toBe("named_access");
   });
 
   it("an unusable letter id is refused", async () => {

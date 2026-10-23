@@ -280,9 +280,68 @@ describe("reading the log", () => {
     const [p] = (await m.getAuditPatients(named.id)).pseudonyms;
     await m.listAudit({ q: p });
     const { events } = await m.listAudit({ type: ["audit"] });
-    const s = events.find((e) => e.kind === "audit_searched");
-    expect(s?.facts).toMatchObject({ searched: p, searched_kind: "pseudonym" });
-    expect(s?.facts.filters).toBeUndefined();
+    const s = events.find((e) => e.kind === "audit_searched")!;
+    // The pseudonym is never in the entry: only the marker.
+    expect(s.facts).toMatchObject({
+      searched: { kind: "patient_id" },
+      searched_kind: "pseudonym",
+    });
+    expect(s.facts.filters).toBeUndefined();
+    expect(JSON.stringify(s)).not.toContain(p);
+    // It is behind the entry's recorded Show patient ids.
+    expect((await m.getAuditEvent(s.id)).patients).toEqual({ count: 1 });
+    expect((await m.getAuditPatients(s.id)).pseudonyms).toEqual([p]);
+  });
+
+  it("Events and Named access each record their own read, naming the list", async () => {
+    const { m } = setup();
+    const range = {
+      from: new Date(START - 30 * 86_400_000).toISOString(),
+      to: new Date(START).toISOString(),
+    };
+    await m.listAudit(range);
+    await m.listNamedAccess(range);
+    // The same sets again: nothing new.
+    await m.listAudit(range);
+    await m.listNamedAccess(range);
+    const views = (await m.listAudit({ type: ["audit"] })).events.filter(
+      (e) =>
+        e.kind === "audit_viewed" && e.at === new Date(START).toISOString(),
+    );
+    expect(views.map((e) => e.facts.list)).toEqual(["named_access", "events"]);
+    expect(views.every((e) => readAuditEvent(e).ok)).toBe(true);
+  });
+
+  it("no list, detail or export record carries a pseudonym outside the reveal", async () => {
+    const { m } = setup();
+    const named = (await m.listAudit({ type: ["named_access"] })).events.find(
+      (e) => e.kind === "drilldown_named",
+    )!;
+    const [p] = (await m.getAuditPatients(named.id)).pseudonyms;
+    await m.listAudit({ q: p });
+    await m.createExport(
+      {
+        kind: "events",
+        filters: { q: p },
+        reason: "legal_request",
+        ...CODE,
+      },
+      KEY(),
+    );
+    const sent: unknown[] = [
+      await m.listAudit({}),
+      await m.listAudit({ type: ["audit"] }),
+      await m.listAudit({ q: p }),
+      await m.listNamedAccess({ hospital: "h_northgate" }),
+      await m.listExports(),
+    ];
+    for (const e of (await m.listAudit({})).events.slice(0, 30))
+      sent.push(await m.getAuditEvent(e.id));
+    sent.push(await m.getAuditEvent(named.id));
+    expect(JSON.stringify(sent)).not.toMatch(/p_ng_/);
+    const rec = (await m.listExports()).exports[0]!;
+    expect(rec.filters).toEqual({ q: { kind: "patient_id" } });
+    expect(readExportList(await m.listExports()).exports[0]!.ok).toBe(true);
   });
 
   it("opening an event and showing patient ids each add an entry", async () => {

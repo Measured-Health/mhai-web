@@ -77,7 +77,11 @@ export function liveAudit(ok: LiveOk, fetchImpl: typeof fetch): AuditClient {
           typeof data?.code === "string" ? data.code : "error",
         );
       }
-      return res.blob();
+      // The server has answered: the file is spent. A drop mid-body is not
+      // retried (a 4xx-like code), and says so.
+      return res.blob().catch(() => {
+        throw new ApiError(200, "interrupted");
+      });
     },
     listExports: (cursor) => ok(`/audit/exports${query({ cursor })}`),
     startCheck: (o) => ok("/audit/verify", "POST", undefined, o),

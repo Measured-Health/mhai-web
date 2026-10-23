@@ -592,6 +592,7 @@ export function seedAudit(
       kind: "audit_viewed",
       actor: i % 2 ? AMARA : ADA,
       facts: {
+        list: "events",
         filters: {
           hospital: i % 3 === 0 ? "h_northgate" : "platform",
           from: iso(ago(34 + i * 31)),

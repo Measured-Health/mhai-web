@@ -433,8 +433,17 @@ export const KINDS: Record<string, Kind> = {
   ),
   analytics_email_changed: k("platform", "Changed their analytics email"),
   // Failed jobs and platform settings (Plan 8).
-  jobs_retried: k("platform", "Retried failed jobs"),
-  jobs_cancelled: k("platform", "Cancelled failed jobs"),
+  // No target: the count, when sent, is `facts.job_count`.
+  jobs_retried: k("platform", (e) =>
+    e.facts.job_count === undefined
+      ? "Retried failed jobs"
+      : `Retried ${plural(e.facts.job_count, "failed job", "failed jobs")}`,
+  ),
+  jobs_cancelled: k("platform", (e) =>
+    e.facts.job_count === undefined
+      ? "Cancelled failed jobs"
+      : `Cancelled ${plural(e.facts.job_count, "failed job", "failed jobs")}`,
+  ),
   retention_changed: k(
     "platform",
     named(
@@ -508,7 +517,13 @@ export const KINDS: Record<string, Kind> = {
     targets: ["export", "hospital"],
   }),
   // Audit.
-  audit_viewed: k("audit", "Viewed the audit log"),
+  // Each list's reads are recorded on their own (`facts.list`).
+  audit_viewed: k("audit", (e) =>
+    e.facts.list === "named_access"
+      ? "Viewed Named access in the audit log"
+      : "Viewed the audit log",
+  ),
+  // A pseudonym searched is never sent: it reads "a patient id".
   audit_searched: k("audit", (e) =>
     e.facts.searched_kind
       ? `Searched the audit log by ${SEARCHED_WORDS[e.facts.searched_kind]}`

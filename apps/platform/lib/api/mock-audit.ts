@@ -18,12 +18,14 @@ import {
   type AuditEvent,
   type AuditFacts,
   type AuditFilters,
+  type AuditListName,
   type AuditTarget,
   type ExportKind,
   type ExportReason,
   type ExportRecord,
   type IntegrityStatus,
   type NamedAccessFilters,
+  type RecordedFilters,
   type SearchedKind,
   type VerifyRun,
 } from "./audit-contract";
@@ -152,7 +154,7 @@ export function createMockAudit(
     toSeq: number;
   };
   let pending: Pending | null = null;
-  /** Each person's last filter set, as a string. */
+  /** Each person's last filter set on each list, as a string. */
   const lastView = new Map<string, string>();
 
   const up = () => {
@@ -178,7 +180,7 @@ export function createMockAudit(
       refs?: Partial<AuditEvent["refs"]>;
       facts?: AuditFacts;
     } = {},
-  ) {
+  ): AuditEvent {
     const seq = log[0].seq + 1;
     const id = `ev_${seq}`;
     const newest = Date.parse(log[0].at);
@@ -208,6 +210,7 @@ export function createMockAudit(
       after_break: false,
     };
     log = [e, ...log];
+    return e;
   }
 
   const brokenAt = seed.firstBrokenSeq;
@@ -240,8 +243,7 @@ export function createMockAudit(
         e.refs.request_id === q ||
         e.refs.export_id === q ||
         e.refs.clearance_id === q ||
-        (pseudonyms[e.id]?.includes(q) ?? false) ||
-        (e.target?.kind === "patient" && e.target.pseudonym === q);
+        (pseudonyms[e.id]?.includes(q) ?? false);
       if (!hit) return false;
     }
     return true;
@@ -262,21 +264,42 @@ export function createMockAudit(
     return "event";
   }
 
-  /** A read of the log is itself recorded, when the filter set is new. */
-  function noteView(m: TeamMember, f: Filters) {
+  /**
+   * A read of a list is itself recorded, when its filter set is new for
+   * that person on that list: Events and Named access each record their
+   * own, naming the list. A pseudonym searched is never put in the entry:
+   * the entry says "a patient id", and the pseudonym is behind its recorded
+   * Show patient ids.
+   */
+  function noteView(m: TeamMember, list: AuditListName, f: Filters) {
     const key = JSON.stringify(
       Object.entries(f).sort(([a], [b]) => idCompare(a, b)),
     );
-    if (lastView.get(m.id) === key) return;
-    lastView.set(m.id, key);
+    const who = `${m.id}|${list}`;
+    if (lastView.get(who) === key) return;
+    lastView.set(who, key);
     const { q, ...rest } = f;
     const filters = Object.keys(rest).length ? { filters: rest } : {};
-    if (q)
-      record(actorOf(m), "audit_searched", {
-        facts: { searched: q, searched_kind: searchedKind(q), ...filters },
+    if (q) {
+      const kind = searchedKind(q);
+      const pseudonym = kind === "pseudonym";
+      const e = record(actorOf(m), "audit_searched", {
+        facts: {
+          searched: pseudonym ? { kind: "patient_id" as const } : q,
+          searched_kind: kind,
+          ...filters,
+        },
       });
-    else record(actorOf(m), "audit_viewed", { facts: { filters: rest } });
+      if (pseudonym) pseudonyms[e.id] = [q];
+    } else
+      record(actorOf(m), "audit_viewed", { facts: { list, filters: rest } });
   }
+
+  /** Filters as recorded: a pseudonym searched becomes the marker. */
+  const recorded = (f: Filters): RecordedFilters & { clearance?: string } =>
+    f.q !== undefined && searchedKind(f.q) === "pseudonym"
+      ? { ...f, q: { kind: "patient_id" as const } }
+      : f;
 
   function pageOf<T extends { seq: number }>(
     rows: T[],
@@ -523,7 +546,7 @@ export function createMockAudit(
         reason: x.reason,
         note: x.note,
         reference: x.reference,
-        filters: x.filters,
+        filters: recorded(x.filters),
         filter_names: names,
         rows,
         capped,
@@ -577,7 +600,7 @@ export function createMockAudit(
           oldest_kept_at: cp.before,
           last_checkpoint: cp,
         };
-        if (cursor === undefined) noteView(m, flt);
+        if (cursor === undefined) noteView(m, "events", flt);
         return reply;
       }),
 
@@ -658,7 +681,7 @@ export function createMockAudit(
             return letter ? [{ ...shown(e), letter }] : [];
           });
         const { page, next } = pageOf(rows, cursor);
-        if (cursor === undefined) noteView(m, flt);
+        if (cursor === undefined) noteView(m, "named_access", flt);
         return { events: page, next_cursor: next };
       }),
 

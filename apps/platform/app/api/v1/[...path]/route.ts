@@ -218,7 +218,8 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     res = await platformFetch(url, {
       method,
       headers: {
-        Accept: "application/json",
+        Accept:
+          shape === FILE_SHAPE ? FILE_TYPES.join(", ") : "application/json",
         Authorization: `Bearer ${s.token}`,
         ...(body ? { "Content-Type": "application/json" } : {}),
         ...(key && IDEMPOTENCY_KEY.test(key) ? { "Idempotency-Key": key } : {}),

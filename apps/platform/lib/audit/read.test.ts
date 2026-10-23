@@ -34,7 +34,7 @@ describe("readAuditEvent", () => {
       auditEvent({
         type: "named_access",
         kind: "drilldown_named",
-        target: { kind: "patient", pseudonym: "p_ng_7f3a2c" },
+        target: { kind: "patient" },
         reason: "clinical_follow_up",
         facts: {
           view: "abnormal_results",
@@ -90,14 +90,14 @@ describe("readAuditEvent", () => {
         }),
       ),
     ).toBe(true);
-    // A pseudonym that isn't an opaque id.
+    // A patient target that carries anything but its kind.
     expect(
       bad(
         auditEvent({
           type: "named_access",
           kind: "drilldown_named",
           reason: null,
-          target: { kind: "patient", pseudonym: "Jane Doe" },
+          target: { kind: "patient", pseudonym: "Jane Doe" } as never,
         }),
       ),
     ).toBe(true);
@@ -117,6 +117,80 @@ describe("readAuditEvent", () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it("a pseudonym search reads only as the marker", () => {
+    const search = (facts: object) =>
+      auditEvent({
+        type: "audit",
+        kind: "audit_searched",
+        target: null,
+        reason: null,
+        hospital: null,
+        facts,
+      });
+    expect(
+      bad(
+        search({
+          searched: { kind: "patient_id" },
+          searched_kind: "pseudonym",
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      bad(search({ searched: "req_9f3a2c11", searched_kind: "request" })),
+    ).toBe(false);
+    // The value itself, or an id passed off as one, fails closed.
+    expect(
+      bad(search({ searched: "p_ng_7f3a2c", searched_kind: "pseudonym" })),
+    ).toBe(true);
+    expect(bad(search({ searched: "ev_1", searched_kind: "pseudonym" }))).toBe(
+      true,
+    );
+    // The marker only for a pseudonym search.
+    expect(
+      bad(search({ searched: { kind: "patient_id" }, searched_kind: "event" })),
+    ).toBe(true);
+    expect(bad(search({ searched: { kind: "other" } }))).toBe(true);
+  });
+
+  it("a pseudonym anywhere outside the reveal is undisplayable", () => {
+    const p = "p_ng_7f3a2c";
+    expect(bad(auditEvent({ note: `Looked at ${p}` }))).toBe(true);
+    expect(
+      bad(
+        auditEvent({
+          refs: { clearance_id: null, export_id: null, request_id: p },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      bad(
+        auditEvent({
+          type: "audit",
+          kind: "audit_viewed",
+          target: null,
+          reason: null,
+          facts: { filters: { q: p } },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      readDetail({ ...auditEvent({ note: p }), patients: null, letter: null })
+        .ok,
+    ).toBe(false);
+    // Ids that merely contain "p_" read.
+    expect(
+      bad(
+        auditEvent({
+          refs: {
+            clearance_id: null,
+            export_id: null,
+            request_id: "step_up_1",
+          },
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("a note on signed_in is undisplayable", () => {
@@ -400,6 +474,35 @@ describe("the other readers", () => {
     );
     expect(readExportRecord({ ...rec, note: "x".repeat(201) }).ok).toBe(false);
     expect(readExportRecord({ ...rec, checksum: "abc" }).ok).toBe(false);
+  });
+
+  it("an export record's pseudonym search is the marker; the value fails closed", () => {
+    const rec = {
+      id: "exp_1",
+      kind: "events",
+      by: { id: "u_ada", name: "Ada Bakare" },
+      at: "2026-10-22T09:00:00Z",
+      reason: "legal_request",
+      note: null,
+      reference: null,
+      filters: { q: { kind: "patient_id" } },
+      filter_names: { hospital: null, person: null, clearance: null },
+      rows: 3,
+      capped: false,
+      checksum: "b".repeat(64),
+      expires_at: "2026-10-22T09:15:00Z",
+      downloaded_at: null,
+    };
+    expect(readExportRecord(rec).ok).toBe(true);
+    expect(readExportRecord({ ...rec, filters: { q: "p_ng_7f3a2c" } })).toEqual(
+      { ok: false, id: "exp_1" },
+    );
+    expect(
+      readExportRecord({ ...rec, reference: "about p_ng_7f3a2c" }).ok,
+    ).toBe(false);
+    expect(
+      readExportRecord({ ...rec, filters: { q: { kind: "name" } } }).ok,
+    ).toBe(false);
   });
 
   it("a run of the wrong shape reads as error with unexpected_reply", () => {

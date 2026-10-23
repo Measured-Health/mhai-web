@@ -108,7 +108,7 @@ describe("auditFile", () => {
       type: "named_access",
       kind: "drilldown_named",
       reason: null,
-      target: { kind: "patient", pseudonym: "p_ng_7f3a2c" },
+      target: { kind: "patient" },
       facts: { patient_count: 3 },
     });
     const csv = auditFile({
@@ -118,7 +118,7 @@ describe("auditFile", () => {
         {
           ...named,
           id: "ev_2",
-          target: { kind: "patient", pseudonym: "p_x", name: "Jane Doe" },
+          target: { kind: "patient", name: "Jane Doe" } as never,
         },
       ],
     });

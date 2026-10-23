@@ -1,4 +1,6 @@
+import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
+import { endSessionRequests } from "@/lib/queries/session-end";
 import { openAuditAt, takeAuditTab } from "./nav";
 
 describe("the audit tab hand-off", () => {
@@ -16,5 +18,11 @@ describe("the audit tab hand-off", () => {
       tab: "named",
       named: { hospital: "h_ng", clearance: "cl_1" },
     });
+  });
+
+  it("a hand-off is forgotten at sign-out", () => {
+    openAuditAt("integrity");
+    endSessionRequests(new QueryClient());
+    expect(takeAuditTab()).toBeNull();
   });
 });

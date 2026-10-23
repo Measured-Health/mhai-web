@@ -154,6 +154,23 @@ describe("the event detail", () => {
     );
   });
 
+  it("a pseudonym search reads 'a patient id', with the id only behind Show patient ids", async () => {
+    const m = setup();
+    const named = (await m.listAudit({ type: ["named_access"] })).events.find(
+      (e) => e.kind === "drilldown_named",
+    )!;
+    const [p] = (await m.getAuditPatients(named.id)).pseudonyms;
+    await m.listAudit({ q: p! });
+    const { u } = await openRow(/^Searched the audit log by patient id/);
+    const d = await dialog();
+    expect(await within(d).findByText("a patient id")).toBeVisible();
+    expect(within(d).getByText("Patients: 1")).toBeVisible();
+    expect(screen.queryByText(p!)).toBeNull();
+    await u.click(within(d).getByRole("button", { name: "Show patient ids" }));
+    expect(await within(d).findByText(p!)).toBeVisible();
+    expect(within(d).getByText("Shown to you and recorded.")).toBeVisible();
+  });
+
   it("a named drill-down shows the letter and Open in Named access", async () => {
     const m = setup();
     const list = await m.listAudit({ type: ["named_access"] });
@@ -500,7 +517,7 @@ describe("what the detail will not show", () => {
       ...d,
       kind: "drilldown_deidentified",
       type: "analysis",
-      target: { kind: "patient", pseudonym: "p_zz_secret1" },
+      target: { kind: "patient" },
       facts: { patient_count: 2 },
       patients: { count: 2 },
       letter: null,
@@ -513,6 +530,21 @@ describe("what the detail will not show", () => {
     expect(
       within(d).getByText("Patients (ids shown on request)"),
     ).toBeVisible();
-    expect(screen.queryByText(/p_zz_secret1/)).toBeNull();
+    expect(screen.queryByText(/^p_[a-z]+_/)).toBeNull();
+  });
+
+  it("a pseudonym anywhere in the entry makes it undisplayable", async () => {
+    override((d) => ({
+      ...d,
+      kind: "drilldown_deidentified",
+      type: "analysis",
+      target: { kind: "patient", pseudonym: "p_zz_secret1" } as never,
+      facts: { patient_count: 2 },
+      patients: { count: 2 },
+      letter: null,
+      reason: null,
+      refs: { clearance_id: null, export_id: null, request_id: null },
+    }));
+    await cantShow(/p_zz_secret1/);
   });
 });

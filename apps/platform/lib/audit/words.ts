@@ -1,13 +1,15 @@
 // The audit log's words: lines, people, hospitals, outcomes, counts,
 // filters and gaps. Built from fields only; dates use fixed English months.
-import type {
-  AuditActor,
-  AuditEvent,
-  AuditFilters,
-  AuditHospital,
-  Checkpoint,
-  NamedAccessFilters,
-  Outcome,
+import {
+  PSEUDONYM_PREFIX,
+  type AuditActor,
+  type AuditEvent,
+  type AuditFilters,
+  type AuditHospital,
+  type Checkpoint,
+  type NamedAccessFilters,
+  type Outcome,
+  type RecordedFilters,
 } from "@/lib/api/audit-contract";
 import { MONTHS, dateLabel, dayMonthLabel, num } from "@/lib/format";
 import { REASON_WORDS, ROLE_WORDS, TYPE_WORDS, kindOf } from "./kinds";
@@ -82,7 +84,7 @@ export type FilterNames = {
  * searched (it may be a patient's pseudonym).
  */
 export function filtersInWords(
-  f: AuditFilters | NamedAccessFilters,
+  f: AuditFilters | RecordedFilters | NamedAccessFilters,
   names: FilterNames,
 ): string {
   const parts: string[] = [];
@@ -101,7 +103,12 @@ export function filtersInWords(
     parts.push(f.type.map((t) => TYPE_WORDS[t]).join(", "));
   if ("outcome" in f && f.outcome) parts.push(OUTCOME_WORDS[f.outcome]);
   if ("flagged" in f && f.flagged) parts.push("Flagged only");
-  if ("q" in f && f.q) parts.push("Searched for one id");
+  if ("q" in f && f.q)
+    parts.push(
+      typeof f.q === "object" || f.q.startsWith(PSEUDONYM_PREFIX)
+        ? "Searched for a patient id"
+        : "Searched for one id",
+    );
   return parts.join(" · ");
 }
 

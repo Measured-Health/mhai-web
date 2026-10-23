@@ -9,13 +9,15 @@ import { num } from "@/lib/format";
 import { useDownloadExport } from "@/lib/queries/audit";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
-import { downloadBlob } from "@mhai/ui/csv";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { CopyButton } from "./copy-button";
 
 /** The download's own refusal (410): scoped here, never a global code. */
 export const GONE_WORDS =
   "This file was already downloaded or has expired. Make a new export.";
+/** The server answered, then the file stopped coming: it is spent. */
+export const INTERRUPTED_WORDS =
+  "The download was interrupted and can't be fetched again. Make a new export.";
 /** A 403 here means someone else made it (only its maker may download). */
 export const NOT_YOURS_WORDS =
   "Only the person who made this export can download it.";
@@ -94,8 +96,9 @@ export function ExportReady({
   const download = useDownloadExport();
   const pending = download.isPending;
   useEffect(() => onBusy?.(pending), [pending, onBusy]);
-  // While the file is on its way, leaving the page (reload, Back, closing
-  // the tab) would lose the once-only file: the browser asks first.
+  // While the file is on its way, leaving the page (reload, closing the
+  // tab) would lose the once-only file: the browser asks first. In-app
+  // navigation can't lose it: the hook saves it whatever happens here.
   useEffect(() => {
     if (!pending) return;
     const guard = (e: BeforeUnloadEvent) => {
@@ -113,22 +116,28 @@ export function ExportReady({
   function save() {
     if (!ok || clicked) return;
     setClicked(true);
-    download.mutate(out.export_id, {
-      onSuccess: (blob) => {
-        downloadBlob(safeName(out.file_name, out.export_id, kind), blob);
-        // The file is in the browser's hands now: not kept here.
-        download.reset();
-        setSaved(true);
+    // The hook saves the file, even if this step has gone by then.
+    download.mutate(
+      {
+        id: out.export_id,
+        name: safeName(out.file_name, out.export_id, kind),
       },
-      onError: (e) => {
-        if (mayRetry(e)) setClicked(false);
+      {
+        onSuccess: () => {
+          download.reset();
+          setSaved(true);
+        },
+        onError: (e) => {
+          if (mayRetry(e)) setClicked(false);
+        },
       },
-    });
+    );
   }
 
   const words = download.error
     ? platformError(download.error, {
         gone: GONE_WORDS,
+        interrupted: INTERRUPTED_WORDS,
         forbidden: NOT_YOURS_WORDS,
       })
     : null;

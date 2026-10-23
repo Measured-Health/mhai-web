@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { useKeyedMutation } from "@mhai/api-client/keyed-mutation";
+import { downloadBlob } from "@mhai/ui/csv";
 import { useOnline } from "@mhai/ui/hooks/use-online";
 import { getPlatformClient } from "@/lib/api/client";
 import type {
@@ -41,6 +42,7 @@ import {
 } from "@/lib/audit/read";
 import { queryKeys } from "./keys";
 import { POLL_MS, useTabVisible } from "./notifications";
+import { onSessionEnd } from "./session-end";
 import { useStepUpCall } from "./step-up-call";
 
 /** While a check runs, its status is read this often. */
@@ -66,7 +68,8 @@ const readPages = (
  * The events for one filter set, newest first, 50 a page. Each page is read
  * strictly (a bad envelope fails the query). A new filter set is a new key,
  * so a Load more still in flight for the old set is dropped. Recording the
- * read is the server's job; Load more sends only the cursor.
+ * read is the server's job; Load more sends the filters with the cursor,
+ * and the server records nothing for it.
  */
 export function useAuditEvents(f: AuditFilters, enabled = true) {
   return useInfiniteQuery({
@@ -329,8 +332,9 @@ export function useAddOutcome() {
   );
 }
 
-/** Ids already reported from this tab. */
+/** Ids already reported from this tab (forgotten at sign-out). */
 const reported = new Set<string>();
+onSessionEnd(() => reported.clear());
 
 export function __resetReportedForTests() {
   reported.clear();
@@ -383,11 +387,20 @@ export function useCreateExport() {
   );
 }
 
-/** Fetches an export's file: once, by its maker, within 15 minutes. */
+/**
+ * Fetches an export's file (once, by its maker, within 15 minutes) and
+ * hands it to the browser. The save is part of the call itself, not a
+ * callback of the screen: once the server has spent the file, it is saved
+ * even if the dialog has gone (in-app Back, the phone's back gesture). The
+ * file is never kept here.
+ */
 export function useDownloadExport() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => getPlatformClient().downloadExport(id),
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const blob = await getPlatformClient().downloadExport(id);
+      downloadBlob(name, blob);
+    },
     retry: false,
     gcTime: 0,
     onSettled: () => void qc.invalidateQueries({ queryKey: exportsKey }),

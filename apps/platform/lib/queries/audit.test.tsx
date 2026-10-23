@@ -16,6 +16,8 @@ import { ApiError } from "@mhai/api-client/errors";
 import type { AuditRow } from "@/lib/audit/read";
 
 const auth = vi.hoisted(() => ({ updateUser: vi.fn() }));
+const saved = vi.hoisted(() => ({ downloadBlob: vi.fn() }));
+vi.mock("@mhai/ui/csv", () => ({ downloadBlob: saved.downloadBlob }));
 vi.mock("@/lib/auth/auth-context", () => ({
   useAuth: () => ({
     user: { backupCodesLeft: 3 },
@@ -26,6 +28,7 @@ import { auditEvent } from "@/tests/audit-event";
 import {
   __resetReportedForTests,
   useCreateExport,
+  useDownloadExport,
   useReportUndisplayable,
 } from "./audit";
 
@@ -178,5 +181,43 @@ describe("useCreateExport", () => {
     expect(auth.updateUser).toHaveBeenCalledTimes(1);
     expect(auth.updateUser).toHaveBeenCalledWith({ backupCodesLeft: 2 });
     expect(leaked()).not.toContain("AAAA-BBBB");
+  });
+});
+
+describe("useDownloadExport", () => {
+  it("saves the file even when the screen unmounts while it is on its way", async () => {
+    saved.downloadBlob.mockClear();
+    let answer!: (b: Blob) => void;
+    const downloadExport = vi.fn(() => new Promise<Blob>((r) => (answer = r)));
+    __setPlatformClientForTests({
+      downloadExport,
+    } as unknown as PlatformClient);
+    const qc = new QueryClient();
+    const hook = renderHook(() => useDownloadExport(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+      ),
+    });
+    const onSuccess = vi.fn();
+    act(() =>
+      hook.result.current.mutate(
+        { id: "exp_1", name: "audit-events-exp_1.csv" },
+        { onSuccess },
+      ),
+    );
+    await waitFor(() => expect(downloadExport).toHaveBeenCalledWith("exp_1"));
+    // In-app Back or the phone's back gesture: the dialog is gone.
+    hook.unmount();
+    const blob = new Blob(["Demo"], { type: "text/csv" });
+    answer(blob);
+    await waitFor(() =>
+      expect(saved.downloadBlob).toHaveBeenCalledWith(
+        "audit-events-exp_1.csv",
+        blob,
+      ),
+    );
+    expect(saved.downloadBlob).toHaveBeenCalledTimes(1);
+    // The screen's own callback is gone with it; the file was saved anyway.
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 });

@@ -117,7 +117,7 @@ describe("the audit words", () => {
         { hospital: "Northgate General Hospital", person: "Ada Bakare" },
       ),
     ).toBe(
-      "Northgate General Hospital · Ada Bakare · 1 Dec 2025–1 Jan 2026 · Searched for one id",
+      "Northgate General Hospital · Ada Bakare · 1 Dec 2025–1 Jan 2026 · Searched for a patient id",
     );
     expect(
       filtersInWords(
@@ -142,5 +142,11 @@ describe("the audit words", () => {
     );
     // The pseudonym searched never shows.
     expect(filtersInWords({ q: "p_ng_7f3a2c" }, {})).not.toContain("p_ng");
+    expect(filtersInWords({ q: { kind: "patient_id" } }, {})).toBe(
+      "All hospitals · All dates · Searched for a patient id",
+    );
+    expect(filtersInWords({ q: "req_1" }, {})).toBe(
+      "All hospitals · All dates · Searched for one id",
+    );
   });
 });

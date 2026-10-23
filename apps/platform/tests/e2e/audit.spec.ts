@@ -121,7 +121,7 @@ test("searching a Northgate pseudonym finds the named drill-downs; opening one, 
   ).toBeVisible();
 });
 
-test("Ada exports with Legal request and code 123456: the export id and checksum show, the download is a CSV whose first line says Demo, the Exports tab lists it, and a second Download file is refused", async ({
+test("Ada exports with Legal request and code 123456: the export id and checksum show, the download is a CSV whose first line says Demo, the Exports tab lists it, and Download file is then spent", async ({
   page,
 }) => {
   await openAudit(page, ADA);

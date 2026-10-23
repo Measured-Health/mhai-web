@@ -10,6 +10,7 @@ import {
   EXPORT_NOTE_MAX,
   EXPORT_REFERENCE_MAX,
   OUTCOME_NOTE_MAX,
+  PSEUDONYM_PREFIX,
   type AuditDetail,
   type AuditEvent,
   type AuditList,
@@ -111,6 +112,32 @@ const OUTCOMES = ["succeeded", "refused", "failed"] as const;
 const isTypes = (v: unknown) =>
   Array.isArray(v) && v.every(oneOf(...AUDIT_TYPES));
 
+/** A pseudonym searched, as sent outside the reveal: never the value. */
+const isMarker = exact({ kind: oneOf("patient_id") });
+
+/**
+ * A pseudonym anywhere in a string: `p_` at the start, or after anything
+ * but a letter, digit, `_` or `-`.
+ */
+const PSEUDONYM_IN = new RegExp(
+  `(^|[^A-Za-z0-9_-])${PSEUDONYM_PREFIX}[A-Za-z0-9]`,
+);
+/**
+ * Whether a pseudonym appears anywhere in a value, at any depth. Outside
+ * the recorded reveal (`/patients`) one never may: the entry then fails
+ * closed, whatever field it is in.
+ */
+export function hasPseudonym(v: unknown, depth = 0): boolean {
+  if (typeof v === "string") return PSEUDONYM_IN.test(v);
+  if (depth > 8) return true;
+  if (Array.isArray(v)) return v.some((x) => hasPseudonym(x, depth + 1));
+  if (isObj(v))
+    return Object.entries(v).some(
+      ([k, x]) => hasPseudonym(k, depth + 1) || hasPseudonym(x, depth + 1),
+    );
+  return false;
+}
+
 const isFilters = some({
   hospital: isId,
   person: isId,
@@ -120,7 +147,7 @@ const isFilters = some({
   flagged: isBool,
   from: isTime,
   to: isTime,
-  q: isId,
+  q: (v) => isId(v) || isMarker(v),
 });
 
 const isCheckpoint = exact({
@@ -147,21 +174,25 @@ const isFacts = some({
   checkpoint_id: isId,
   incident_ref: isId,
   filters: isFilters,
-  searched: isId,
+  searched: (v) => isId(v) || isMarker(v),
   searched_kind: oneOf("event", "request", "export", "clearance", "pseudonym"),
   rows: isCount,
   capped: isBool,
   checksum: (v) => typeof v === "string" && HASH.test(v),
   state: oneOf("running", "intact", "broken", "error"),
   first_broken_seq: isPos,
+  list: oneOf("events", "named_access"),
+  job_count: isCount,
 });
 
-/** A patient is only ever a pseudonym; other targets are an id and a name. */
+/**
+ * A patient target is only its kind: the pseudonyms come from the recorded
+ * reveal alone. Other targets are an id and a name.
+ */
 function isTarget(v: unknown): boolean {
   if (v === null) return true;
   if (!isObj(v)) return false;
-  if (v.kind === "patient")
-    return exact({ kind: () => true, pseudonym: isId })(v);
+  if (v.kind === "patient") return exact({ kind: () => true })(v);
   return "name" in v
     ? exact({ kind: () => true, id: isId, name: text(1, NAME_MAX) })(v)
     : exact({ kind: () => true, id: isId })(v);
@@ -203,16 +234,28 @@ const EVENT: Record<string, Check> = {
 const isEventShape = exact(EVENT);
 
 /**
- * The rules across fields: the kind's type; a note only where the kind
- * allows one; a target only of a kind it lists, named only where its words
- * use the name.
+ * A pseudonym search is sent as the marker, and the marker only for one;
+ * a filters' `q` likewise.
+ */
+function searchedOk(f: AuditEvent["facts"]): boolean {
+  const marker = typeof f.searched === "object";
+  if (f.searched_kind === "pseudonym")
+    return f.searched === undefined || marker;
+  return !marker;
+}
+
+/**
+ * The rules across fields: no pseudonym anywhere; the kind's type; a note
+ * only where the kind allows one; a target only of a kind it lists, named
+ * only where its words use the name.
  */
 function isEvent(v: unknown): v is AuditEvent {
-  if (!isEventShape(v)) return false;
+  if (!isEventShape(v) || hasPseudonym(v)) return false;
   const e = v as AuditEvent;
   const kind = kindOf(e.kind)!;
   const t = e.target;
   return (
+    searchedOk(e.facts) &&
     kind.type === e.type &&
     (e.note === null || kind.note) &&
     (t === null ||
@@ -249,7 +292,10 @@ function readWith<T extends AuditEvent>(
     if (!Object.hasOwn(extra, k)) rest[k] = v;
   const ok =
     Object.entries(extra).every(
-      ([k, c]) => Object.hasOwn(raw, k) && c(raw[k]),
+      ([k, c]) =>
+        Object.hasOwn(raw, k) &&
+        c(raw[k]) &&
+        (k === "pseudonyms" || !hasPseudonym(raw[k])),
     ) && isEvent(rest);
   return ok ? { ok: true, event: raw as T } : undisplayable(raw);
 }
@@ -339,7 +385,7 @@ const isExportRecord = exact({
 export type ExportRow =
   { ok: true; record: ExportRecord } | { ok: false; id: string | null };
 export function readExportRecord(raw: unknown): ExportRow {
-  return isExportRecord(raw)
+  return isExportRecord(raw) && !hasPseudonym(raw)
     ? { ok: true, record: raw as ExportRecord }
     : { ok: false, id: isObj(raw) && isId(raw.id) ? raw.id : null };
 }

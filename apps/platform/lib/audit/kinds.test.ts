@@ -132,7 +132,7 @@ describe("the audit kinds", () => {
         ...base,
         type: "audit",
         kind: "audit_searched",
-        facts: { searched: "p_ng_7f3a2c", searched_kind: "pseudonym" },
+        facts: { searched: { kind: "patient_id" }, searched_kind: "pseudonym" },
       }),
     ).toBe("Searched the audit log by patient id");
     expect(

@@ -388,15 +388,26 @@ of the gateway's `GET /security/audit` and `GET /security/audit/verify`, over th
   `{events, next_cursor, total, total_capped, oldest_kept_at, last_checkpoint}`. Each event: `id`,
   `seq`, `hash`, `at`, `actor` (`{id, name, role, kind: staff|platform|system}`), `hospital`
   (`{id, name, removed}` or null), `type`, `kind`, `target` (`{kind, id, name?}`; a patient
-  target has `pseudonym` only), `outcome` (`succeeded`, `refused`, `failed`), `ip`, `device`,
-  `flag`, `reason`, `note` (only on kinds that allow one), `refs` (`clearance_id`, `export_id`,
-  `request_id`), `facts` (typed, optional values, §4), `after_break` (boolean).
+  target is `{kind: "patient"}` only, with no pseudonym), `outcome` (`succeeded`, `refused`,
+  `failed`), `ip`, `device`, `flag`, `reason`, `note` (only on kinds that allow one), `refs`
+  (`clearance_id`, `export_id`, `request_id`), `facts` (typed, optional values, §4),
+  `after_break` (boolean).
   - `hospital=platform` selects platform-only events; `q` matches an id or pseudonym exactly,
     and **a `q` request is answered on `q` alone** (the app sends no other filter with it).
-  - **Reads are recorded:** the first page of a filter set writes one `audit_viewed` entry (an
-    id search writes `audit_searched`, with the id and its kind) per person per page load. A
-    request with a `cursor` (Load more) writes nothing. The same holds for
-    `GET /platform/audit/named-access`.
+  - **Reads are recorded, per list:** the first page of a filter set writes one `audit_viewed`
+    entry (an id search writes `audit_searched`, with the id and its kind) per person per list
+    per page load. A request with a `cursor` (Load more) writes nothing. Events and
+    `GET /platform/audit/named-access` dedupe separately (the key is the list and the filters),
+    and each `audit_viewed` names its list in `facts.list`: `"events"` or `"named_access"`. So
+    opening Named access is recorded even when its filters equal the Events filters.
+  - **Pseudonyms only through the recorded reveal.** No list, detail or export payload carries
+    a pseudonym (a hospital's pseudonymous id starts `p_`, and no other id does); only
+    `GET /platform/audit/{id}/patients` does, and it is recorded. Where a pseudonym was searched,
+    the server sends the marker `{kind: "patient_id"}` in its place: as `facts.searched` (with
+    `searched_kind: "pseudonym"`) and as `filters.q` in an entry's facts and in an export record.
+    A pseudonym search entry answers `patients: {count: 1}` on its detail, and its `/patients`
+    returns the pseudonym searched, so **Show patient ids** reveals it, recorded. The app fails
+    closed: an entry or export record with a pseudonym anywhere is "can't be displayed".
 - `GET /platform/audit/{id}` → the event, with `patients: {count}` for drill-downs.
   `GET /platform/audit/{id}/patients` → `{pseudonyms}`; writes `audit_patients_viewed`.
 - `GET /platform/audit/named-access?hospital&person&clearance&from&to&cursor` → named drill-down
@@ -406,7 +417,8 @@ mfa_code | backup_code}` → `{export_id, rows, capped, checksum, expires_at}`; 
   `too_many_rows` with `{rows}` over 50,000; the export entry is written before this returns.
   `ExportOut` also carries `file_name` (`^[A-Za-z0-9._-]{1,120}$`), and a past export carries
   `filter_names: {hospital, person, clearance}` so the filters can be put in words.
-  `GET /platform/audit/exports/{id}/file` → the file, once, before `expires_at` (**410** `gone`
+  `GET /platform/audit/exports/{id}/file` (asked upstream with
+  `Accept: text/csv, application/zip`) → the file, once, before `expires_at` (**410** `gone`
   after), **to the person who made the export only**: anyone else gets **403** `forbidden` and
   an `export_download_refused` entry with reason `not_owner` (a used or expired file writes the
   same kind with reason `gone`). `GET /platform/audit/exports?cursor` → past exports.
