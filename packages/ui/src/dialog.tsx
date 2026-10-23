@@ -2,6 +2,7 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   type ReactNode,
   type RefObject,
@@ -34,23 +35,54 @@ export function Dialog({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
-  useEscape(open, onClose);
+  // The latest initial-focus target, so opening reads it without re-running.
+  const first = useRef(initialFocus);
   useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (open && !d.open) {
-      if (typeof d.showModal === "function") d.showModal();
-      else d.setAttribute("open", "");
-      (
-        initialFocus?.current ??
-        d.querySelector<HTMLElement>("button, [href], input, textarea, select")
-      )?.focus();
-    }
-    if (!open && d.open) {
+    first.current = initialFocus;
+  });
+  useEscape(open, onClose);
+  // What had the focus before the dialog opened; it gets it back when the
+  // dialog closes or unmounts while open, if it is still on the page. If it
+  // has gone, no new focus is set: the caller decides.
+  const opener = useRef<HTMLElement | null>(null);
+  const giveBack = useRef((d: HTMLDialogElement | null) => {
+    if (d?.open) {
       if (typeof d.close === "function") d.close();
       else d.removeAttribute("open");
     }
-  }, [open, initialFocus]);
+    const back = opener.current;
+    opener.current = null;
+    if (back && back.isConnected && !d?.contains(back)) back.focus();
+  });
+  // Layout effects. Closing is handled in the effect body, after React has
+  // put back the focus it had before the commit; unmounting in a cleanup,
+  // which runs before the <dialog> leaves the page.
+  useLayoutEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (!open) {
+      giveBack.current(d);
+      return;
+    }
+    const now = document.activeElement;
+    opener.current =
+      now instanceof HTMLElement && now !== document.body && !d.contains(now)
+        ? now
+        : null;
+    if (!d.open) {
+      if (typeof d.showModal === "function") d.showModal();
+      else d.setAttribute("open", "");
+    }
+    (
+      first.current?.current ??
+      d.querySelector<HTMLElement>("button, [href], input, textarea, select")
+    )?.focus();
+  }, [open]);
+  useLayoutEffect(() => {
+    const d = ref.current;
+    const back = giveBack.current;
+    return () => back(d);
+  }, []);
   return (
     <dialog
       ref={ref}

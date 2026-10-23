@@ -163,15 +163,18 @@ export function NarrowDialog({
           </label>
         ))}
       </fieldset>
-      {everyone && (
+      {/* The server's would_empty shows the same words in the error banner. */}
+      {(everyone || answer.error?.title === EVERYONE_TEXT) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <p
-            id={everyoneId}
-            role="alert"
-            className="text-[13px] font-semibold text-bad-deep"
-          >
-            {EVERYONE_TEXT}
-          </p>
+          {everyone && (
+            <p
+              id={everyoneId}
+              role="alert"
+              className="text-[13px] font-semibold text-bad-deep"
+            >
+              {EVERYONE_TEXT}
+            </p>
+          )}
           <Button
             size="sm"
             variant="ghost"

@@ -11,6 +11,7 @@ import { actorName, describeEvent } from "@/lib/admin/activity";
 import { useAuth } from "@/lib/auth/auth-context";
 import { canOpenNamedAccess } from "@/lib/auth/types";
 import { useClearances, useNamedAccess } from "@/lib/clearance-queries";
+import { eligibility } from "@/lib/clearances/eligibility";
 import { safeDayLabel } from "@/lib/clearances/status";
 import { namedAccessFor } from "@/lib/clearances/summary";
 import { eventClock } from "@/lib/time";
@@ -40,18 +41,20 @@ function joined(s: StaffOut): string | null {
 /**
  * This person's named access (Plan 11), from the hospital's letters:
  * `undefined` while there is nothing to show (the switch isn't On, or the
- * letters haven't loaded), `null` for none, or the latest end date.
+ * letters haven't loaded), `null` for none (no active letter, or no longer
+ * someone a letter can cover), or the latest end date.
  */
-function useNamedAccessOf(
-  staffId: string,
-): { until: string } | null | undefined {
+function useNamedAccessOf(row: StaffOut): { until: string } | null | undefined {
   const { user } = useAuth();
   const allowed = canOpenNamedAccess(user);
   const position = useNamedAccess({ enabled: allowed });
   const on = allowed && position.data?.position === "on";
   const letters = useClearances({ enabled: on });
   if (!on || !letters.data) return undefined;
-  return namedAccessFor(staffId, letters.data.clearances, letters.data.today);
+  // A letter still lists someone deactivated, without two-step or without a
+  // covering role, but their access has ended (spec §5.4, §8).
+  if (!eligibility(row).ok) return null;
+  return namedAccessFor(row.id, letters.data.clearances, letters.data.today);
 }
 
 function NamedAccessLine({ access }: { access: { until: string } | null }) {
@@ -137,7 +140,7 @@ function Member({
   const activity = useStaffActivity(row.id);
   const recentId = useId();
   const note = inviteNote(row, now);
-  const named = useNamedAccessOf(row.id);
+  const named = useNamedAccessOf(row);
   return (
     <div className="flex flex-col gap-5">
       <header className="flex items-start gap-3">

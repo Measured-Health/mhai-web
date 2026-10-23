@@ -26,7 +26,7 @@ export type Confirmable =
 
 type Copy = { title: string; body: string; keep: string; confirm: string };
 
-/** With named access, deactivating and resetting two-step also end it (Plan 11). */
+/** With named access, deactivating, resetting two-step and removing also end it (Plan 11). */
 function copyFor(
   c: Confirmable,
   s: StaffOut,
@@ -66,7 +66,7 @@ function copyFor(
           }
         : {
             title: "Remove this account?",
-            body: `${s.full_name} (${s.email}) is removed from ${hospital}. This can't be undone. Past consultations, feedback and the activity log are kept.`,
+            body: `${s.full_name} (${s.email}) is removed from ${hospital}. This can't be undone. Past consultations, feedback and the activity log are kept.${ends}`,
             keep: "Keep account",
             confirm: "Remove account",
           };
@@ -151,6 +151,7 @@ export function RemindButton({ row }: { row: StaffOut }) {
 function RemoveDialog({
   row,
   hospital,
+  named,
   offline,
   busy,
   error,
@@ -161,6 +162,8 @@ function RemoveDialog({
 }: {
   row: StaffOut;
   hospital: string;
+  /** A letter gives this person named access now (Plan 11). */
+  named: boolean;
   offline: boolean;
   busy: boolean;
   error: AdminError | null;
@@ -173,7 +176,7 @@ function RemoveDialog({
 }) {
   const { user } = useAuth();
   const step = useStepUp();
-  const copy = copyFor("remove", row, hospital);
+  const copy = copyFor("remove", row, hospital, named);
   // Every admin has two-step (amendment 3), so this is only ever stale state.
   const blocked = required || user?.mfaEnabled === false;
 
@@ -473,6 +476,7 @@ export function AccountActions({
         <RemoveDialog
           row={row}
           hospital={hospital}
+          named={named}
           offline={!online}
           busy={remove.isPending}
           error={removeError}

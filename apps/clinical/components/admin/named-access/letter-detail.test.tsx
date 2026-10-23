@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dayLabel } from "@mhai/ui/clearances";
 import type { AdminClient } from "@/lib/api/admin";
 import type { ClearanceClient } from "@/lib/api/clearances";
+import { ApiError } from "@/lib/api/errors";
 import { resetClearances } from "@/lib/api/mock-clearances";
 import { MOCK_CODE } from "@/lib/auth/mock";
 import { instantLabel } from "@/lib/clearances/status";
@@ -378,6 +379,36 @@ describe("LetterDetail", () => {
   });
 
   it("a stale narrow shows Changed by someone else and reloads", async () => {
+    // Another hospital admin changed the letter first: the server says 409.
+    const narrow = vi
+      .spyOn(holder.clearances, "narrowClearance")
+      .mockRejectedValueOnce(new ApiError(409, "conflict"));
+    const panel = await openLetter("cl_wait");
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "Remove a person" }),
+    );
+    const d = await narrowDialog();
+    const get = vi.spyOn(holder.clearances, "getClearance");
+    await userEvent.click(within(d).getByRole("checkbox", { name: "Dr. Obi" }));
+    await userEvent.click(
+      within(d).getByRole("radio", { name: "No longer needed" }),
+    );
+    await typeCode(d);
+    await userEvent.click(within(d).getByRole("button", { name: "Remove" }));
+    expect(
+      await within(d).findByText("Changed by someone else"),
+    ).toBeInTheDocument();
+    expect(narrow).toHaveBeenCalledWith(
+      "cl_wait",
+      expect.objectContaining({ version: 1 }),
+      expect.anything(),
+    );
+    // The code is gone after the answer, and the letter is loaded again.
+    expect(within(d).getByLabelText("Digit 1 of 6")).toHaveValue("");
+    await waitFor(() => expect(get).toHaveBeenCalledWith("cl_wait"));
+  });
+
+  it("when the reloaded letter has nobody left to remove, the dialog goes and the panel says why", async () => {
     const panel = await openLetter("cl_wait");
     await userEvent.click(
       within(panel).getByRole("button", { name: "Remove a person" }),
@@ -394,31 +425,29 @@ describe("LetterDetail", () => {
       },
       { idempotencyKey: "k-other" },
     );
-    const get = vi.spyOn(holder.clearances, "getClearance");
     await userEvent.click(within(d).getByRole("checkbox", { name: "Dr. Obi" }));
     await userEvent.click(
       within(d).getByRole("radio", { name: "No longer needed" }),
     );
     await typeCode(d);
     await userEvent.click(within(d).getByRole("button", { name: "Remove" }));
-    expect(
-      await within(d).findByText("Changed by someone else"),
-    ).toBeInTheDocument();
-    // The code is gone after the answer, and the letter is loaded again.
-    expect(within(d).getByLabelText("Digit 1 of 6")).toHaveValue("");
-    await waitFor(() => expect(get).toHaveBeenCalledWith("cl_wait"));
     await waitFor(() =>
       expect(
-        within(d).queryByRole("checkbox", {
-          name: "Tunde Okafor (Measured Health)",
+        screen.queryByRole("dialog", {
+          name: "Remove people from this letter?",
         }),
       ).toBeNull(),
     );
-    await waitFor(() =>
-      expect(
-        within(panel).queryByRole("list", { name: "Measured Health staff" }),
-      ).toBeNull(),
-    );
+    expect(
+      within(panel).getByText("Changed by someone else"),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("list", { name: "Measured Health staff" }),
+    ).toBeNull();
+    expect(
+      within(panel).queryByRole("button", { name: "Remove a person" }),
+    ).toBeNull();
+    expect(panel).toContainElement(document.activeElement as HTMLElement);
   });
 
   it("a revoke after someone else's change shows Changed by someone else", async () => {
@@ -558,6 +587,85 @@ describe("LetterDetail", () => {
         expect(b.getAttribute("aria-describedby"), name).toBe(note.id);
       }
     }
+  });
+
+  it("closing the viewer gives the focus back to View letter; after a revoke it stays in the panel", async () => {
+    const panel = await openLetter("cl_act");
+    const view = within(panel).getByRole("button", { name: "View letter" });
+    await userEvent.click(view);
+    const viewer = await screen.findByRole("dialog", { name: "The letter" });
+    await within(viewer).findByAltText("Page 1 of 2");
+    await userEvent.click(
+      within(viewer).getByRole("button", { name: "Close" }),
+    );
+    expect(view).toHaveFocus();
+
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "Revoke" }),
+    );
+    const d = await revokeDialog();
+    await userEvent.click(
+      within(d).getByRole("radio", { name: "No longer needed" }),
+    );
+    await typeCode(d);
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Revoke letter" }),
+    );
+    await screen.findByText("Letter revoked");
+    // The Revoke button has gone with the revoke.
+    await waitFor(() =>
+      expect(
+        within(panel).queryByRole("button", { name: "Revoke" }),
+      ).toBeNull(),
+    );
+    await waitFor(() =>
+      expect(panel).toContainElement(document.activeElement as HTMLElement),
+    );
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it("an active letter past its end date reads Ended and offers no Revoke or Remove", async () => {
+    // cl_wait covers two people; say it is "active" with an end date passed.
+    const get = holder.clearances.getClearance.bind(holder.clearances);
+    vi.spyOn(holder.clearances, "getClearance").mockImplementation(
+      async (id) => ({
+        ...(await get(id)),
+        status: "active",
+        end_date: dayAfter(t, -1),
+      }),
+    );
+    const ended = await openLetter("cl_wait");
+    expect(
+      within(ended).getByText(`Ended ${dayLabel(dayAfter(t, -1))}`),
+    ).toBeInTheDocument();
+    expect(within(ended).queryByRole("button", { name: "Revoke" })).toBeNull();
+    expect(
+      within(ended).queryByRole("button", { name: "Remove a person" }),
+    ).toBeNull();
+    expect(within(ended).getByRole("button", { name: "Renew" })).toBeEnabled();
+  });
+
+  it("a server answer that narrowing would leave nobody also offers Revoke instead", async () => {
+    vi.spyOn(holder.clearances, "narrowClearance").mockRejectedValueOnce(
+      new ApiError(422, "would_empty"),
+    );
+    const panel = await openLetter("cl_wait");
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "Remove a person" }),
+    );
+    const d = await narrowDialog();
+    await userEvent.click(within(d).getByRole("checkbox", { name: "Dr. Obi" }));
+    await userEvent.click(
+      within(d).getByRole("radio", { name: "No longer needed" }),
+    );
+    await typeCode(d);
+    await userEvent.click(within(d).getByRole("button", { name: "Remove" }));
+    expect(
+      await within(d).findByText("To remove everyone, revoke the letter"),
+    ).toBeInTheDocument();
+    expect(
+      within(d).getByRole("button", { name: "Revoke the letter instead" }),
+    ).toBeEnabled();
   });
 
   it("at phone width the detail is a sheet and Renew opens as a full-width dialog, not a sheet on a sheet", async () => {

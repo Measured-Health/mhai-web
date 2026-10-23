@@ -1,6 +1,6 @@
 "use client";
 import { Eye, RefreshCw, UserMinus, Ban } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   REFUSED_TEXT,
   REJECT_LABEL,
@@ -153,6 +153,24 @@ export function LetterDetail({
   );
 }
 
+/** What can be done with a letter now. */
+function abilities(c: ClearanceOut, today: string) {
+  const line = statusLine(c, today);
+  // An "active" letter past its end date reads as ended: nothing to change.
+  const live =
+    c.status === "waiting" ||
+    (c.status === "active" && line.icon !== "calendar-x");
+  const people = c.covered.length + c.covered_platform.length;
+  return {
+    line,
+    view: c.pages > 0,
+    revoke: live,
+    narrow: live && people >= 2,
+    renew:
+      c.status === "active" || c.status === "ended" || c.status === "revoked",
+  };
+}
+
 function Detail({ id }: { id: string }) {
   const q = useClearance(id);
   const list = useClearances();
@@ -161,6 +179,23 @@ function Detail({ id }: { id: string }) {
   const historyId = useId();
   const [open, setOpen] = useState<Open>(null);
   const close = () => setOpen(null);
+  // A closed dialog gives the focus back to its button (Dialog). If that
+  // button has gone (after a revoke, or the last removal), the focus stays
+  // in the panel rather than falling to the page.
+  const can = q.data && list.data ? abilities(q.data, list.data.today) : null;
+  // A reload (after "Changed by someone else") can leave nothing to revoke
+  // or remove: the dialog goes, and the panel says why.
+  const moot =
+    can !== null &&
+    ((open === "revoke" && !can.revoke) || (open === "narrow" && !can.narrow));
+  const root = useRef<HTMLDivElement>(null);
+  const was = useRef<Open>(null);
+  useEffect(() => {
+    const closed = was.current !== null && open === null;
+    was.current = open;
+    if ((closed || moot) && document.activeElement === document.body)
+      root.current?.focus();
+  }, [open, moot]);
 
   if (q.isError || list.isError)
     return (
@@ -179,7 +214,7 @@ function Detail({ id }: { id: string }) {
         </span>
       </Banner>
     );
-  if (!q.data || !list.data)
+  if (!q.data || !list.data || !can)
     return q.fetchStatus === "paused" || list.fetchStatus === "paused" ? (
       <p role="status" className="text-[13.5px] text-ink-2">
         You&apos;re offline. The letter will load when you reconnect.
@@ -189,15 +224,7 @@ function Detail({ id }: { id: string }) {
     );
 
   const c = q.data;
-  const live = c.status === "waiting" || c.status === "active";
-  const people = c.covered.length + c.covered_platform.length;
-  const can = {
-    view: c.pages > 0,
-    revoke: live,
-    narrow: live && people >= 2,
-    renew:
-      c.status === "active" || c.status === "ended" || c.status === "revoked",
-  };
+  const line = can.line;
   const any = can.view || can.revoke || can.narrow || can.renew;
   const off = {
     disabled: !online,
@@ -207,8 +234,13 @@ function Detail({ id }: { id: string }) {
   const verified = c.verified_at ? instantLabel(c.verified_at) : null;
 
   return (
-    <div className="flex flex-col gap-5">
-      <LetterStatus line={statusLine(c, list.data.today)} />
+    <div
+      ref={root}
+      tabIndex={-1}
+      aria-label="The letter's details"
+      className="flex flex-col gap-5 focus:outline-none"
+    >
+      <LetterStatus line={line} />
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
         <Fact term="Signed by">{c.signed_by}</Fact>
@@ -285,6 +317,13 @@ function Detail({ id }: { id: string }) {
         </div>
       )}
 
+      {moot && (
+        <Banner tone="warn" title="Changed by someone else">
+          This letter can&apos;t be changed that way now. Its details have been
+          loaded again.
+        </Banner>
+      )}
+
       <section aria-labelledby={historyId}>
         <h3 id={historyId} className="mb-2 text-[13px] font-semibold">
           History
@@ -312,8 +351,10 @@ function Detail({ id }: { id: string }) {
           onClose={close}
         />
       )}
-      {open === "revoke" && <RevokeDialog letter={c} onClose={close} />}
-      {open === "narrow" && (
+      {open === "revoke" && can.revoke && (
+        <RevokeDialog letter={c} onClose={close} />
+      )}
+      {open === "narrow" && can.narrow && (
         <NarrowDialog
           letter={c}
           onClose={close}
