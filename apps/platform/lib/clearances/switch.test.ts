@@ -83,6 +83,20 @@ describe("positionLine", () => {
   });
 });
 
+describe("instants", () => {
+  it("show the viewer's own day, near midnight either side", () => {
+    for (const [h, m] of [
+      [23, 30],
+      [0, 30],
+    ]) {
+      const at = new Date(2027, 1, 3, h, m).toISOString();
+      expect(positionLine(state({ since: at }))).toContain(
+        "On since 3 Feb 2027",
+      );
+    }
+  });
+});
+
 describe("options", () => {
   it("stops a hospital's raise at the global position", () => {
     expect(raiseOptions("off", "letters_only")).toEqual(["letters_only"]);
@@ -131,22 +145,36 @@ describe("signoffProblem", () => {
     expect(signoffProblem(signoffs, "2026-10-23")).toBeNull();
   });
   it("asks for legal when it is missing", () => {
-    expect(signoffProblem({ clinical: ok, privacy: ok })).toBe(FILL);
-  });
-  it("asks when a field is blank or the date is malformed", () => {
-    expect(signoffProblem({ ...signoffs, legal: { ...ok, ref: "  " } })).toBe(
+    expect(signoffProblem({ clinical: ok, privacy: ok }, "2026-10-23")).toBe(
       FILL,
     );
+  });
+  it("asks when a field is blank or the date is malformed", () => {
     expect(
-      signoffProblem({ ...signoffs, legal: { ...ok, at: "yesterday" } }),
+      signoffProblem(
+        { ...signoffs, legal: { ...ok, ref: "  " } },
+        "2026-10-23",
+      ),
+    ).toBe(FILL);
+    expect(
+      signoffProblem(
+        { ...signoffs, legal: { ...ok, at: "yesterday" } },
+        "2026-10-23",
+      ),
     ).toBe(FILL);
   });
   it("limits each field to 200 characters", () => {
     expect(
-      signoffProblem({ ...signoffs, privacy: { ...ok, ref: "x".repeat(201) } }),
+      signoffProblem(
+        { ...signoffs, privacy: { ...ok, ref: "x".repeat(201) } },
+        "2026-10-23",
+      ),
     ).toBe("Keep each sign-off entry to 200 characters or fewer");
     expect(
-      signoffProblem({ ...signoffs, privacy: { ...ok, ref: "x".repeat(200) } }),
+      signoffProblem(
+        { ...signoffs, privacy: { ...ok, ref: "x".repeat(200) } },
+        "2026-10-23",
+      ),
     ).toBeNull();
   });
   it("refuses a date in the future", () => {

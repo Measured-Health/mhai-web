@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { letter } from "./fixture";
+import { letter } from "@/tests/clearance-fixture";
 import { TABS, verifyBlock, waitingText } from "./queue";
 
 const H = 3_600_000;

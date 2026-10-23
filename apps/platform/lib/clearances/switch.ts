@@ -13,13 +13,17 @@ import { SIGNOFF_KINDS } from "@/lib/api/clearances-contract";
 export const SIGNOFF_MAX = 200;
 
 /**
- * An instant as its calendar day, "3 Feb 2027". The day is the instant's
- * UTC day, read from the text (no local zone), or "" if it isn't a time.
+ * An instant as the viewer's own calendar day, "3 Feb 2027" (display only:
+ * no access decision depends on it), or "" if it isn't a time.
  */
 function instantDay(iso: string | null): string {
   const ms = iso ? Date.parse(iso) : NaN;
   if (!Number.isFinite(ms)) return "";
-  return dayLabel(new Date(ms).toISOString().slice(0, 10));
+  const d = new Date(ms);
+  const two = (n: number) => String(n).padStart(2, "0");
+  return dayLabel(
+    `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`,
+  );
 }
 
 /** Where a switch stands, and how it got there. */
@@ -70,13 +74,14 @@ const FILL_IN =
   "Fill in who signed, when, and the document for clinical, privacy and legal";
 
 /**
- * What stops a raise being asked for, or null. `today` (the server's day)
- * lets it refuse a future date; leave it out and the server decides.
+ * What stops a raise being asked for, or null. `today` is the server's day;
+ * a sign-off dated after it is refused. A bad `today` throws.
  */
 export function signoffProblem(
   s: Partial<Signoffs>,
-  today?: string,
+  today: string,
 ): string | null {
+  dayLabel(today);
   let tooLong = false;
   let future = false;
   for (const kind of SIGNOFF_KINDS) {
@@ -91,7 +96,7 @@ export function signoffProblem(
       return FILL_IN;
     }
     if (by.length > SIGNOFF_MAX || ref.length > SIGNOFF_MAX) tooLong = true;
-    if (today && at > today) future = true;
+    if (at > today) future = true;
   }
   if (tooLong) return "Keep each sign-off entry to 200 characters or fewer";
   if (future) return "A sign-off date can't be in the future";

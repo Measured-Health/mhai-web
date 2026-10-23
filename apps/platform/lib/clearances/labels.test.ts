@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { letter } from "./fixture";
+import { letter } from "@/tests/clearance-fixture";
 import { BLOCK_TEXT, CHECKLIST, statusText, verifiedToast } from "./labels";
 
 const TODAY = "2026-10-23";
@@ -93,6 +93,14 @@ describe("verifiedToast", () => {
     expect(verifiedToast(letter(), "on")).toBe(
       "Verified. 3 people can now see names",
     );
+  });
+  it("says person for one", () => {
+    expect(
+      verifiedToast(
+        letter({ covered: [{ id: "s1", name: "Kemi" }], covered_platform: [] }),
+        "on",
+      ),
+    ).toBe("Verified. 1 person can now see names");
   });
   it("says names stay hidden otherwise", () => {
     const hidden =

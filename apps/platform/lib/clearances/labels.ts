@@ -89,7 +89,7 @@ export const BLOCK_TEXT: Record<VerifyBlock, string> = {
   done: "This letter has been dealt with",
 };
 
-/** Everyone the letter names, staff and platform admins together. */
+/** `n` is everyone the letter names, staff and platform admins together. */
 export function verifiedToast(c: Clearance, effective: NamedPosition): string {
   if (effective !== "on")
     return "Verified. Names stay hidden until named access is switched on";
