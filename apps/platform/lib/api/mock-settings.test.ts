@@ -547,6 +547,38 @@ describe("mock settings", () => {
     expect(await actions(f.m)).not.toContain("feedback_buffer_cleared");
   });
 
+  it("a failed reset adds a real failed job to the System jobs list", async () => {
+    const f = setup({ resetFails: true });
+    const before = (await f.m.listJobs({ status: "failed" })).jobs.length;
+    const r = await f.m.resetFeedbackBuffer({ reason, ...CODE }, KEY());
+    // Still running: nothing failed yet.
+    expect((await f.m.listJobs({ status: "failed" })).jobs).toHaveLength(
+      before,
+    );
+    f.advance(3000);
+    const jobs = (await f.m.listJobs({ status: "failed" })).jobs;
+    expect(jobs).toHaveLength(before + 1);
+    const j = jobs.find((x) => x.id === r.job_id)!;
+    expect(j.type).toBe("feedback_buffer_reset");
+    expect(j.status).toBe("failed");
+    expect(j.hospital).toBeNull();
+    // Listed once, however often it is read.
+    expect((await f.m.listJobs({ status: "failed" })).jobs).toHaveLength(
+      before + 1,
+    );
+    // Retrying it works like any other.
+    const out = await f.m.retryJobs({ ids: [r.job_id] }, KEY());
+    expect(out.retried).toEqual([r.job_id]);
+    // A reset that works adds none.
+    const g = setup();
+    await g.m.resetFeedbackBuffer({ reason, ...CODE }, KEY());
+    g.advance(3000);
+    await g.m.getSettings();
+    expect((await g.m.listJobs({ status: "failed" })).jobs).toHaveLength(
+      before,
+    );
+  });
+
   it("every write except cancelRequest needs the code", async () => {
     const { m } = setup();
     const v = (await item(m, "records")).version;

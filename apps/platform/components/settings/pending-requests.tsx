@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import { ApiError } from "@mhai/api-client/errors";
-import type { StepUp } from "@/lib/api/contract";
 import type { SettingsOut, SettingsRequest } from "@/lib/api/settings-contract";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
 import { platformError } from "@/lib/errors";
@@ -17,7 +16,11 @@ import { daysLabel, previewLine } from "@/lib/settings/rules";
 import { Banner } from "@mhai/ui/banner";
 import { useToast } from "@mhai/ui/toast";
 import { Section } from "../hospitals/section";
-import { StepUpDialog, type StepUpInput } from "../hospitals/step-up-dialog";
+import {
+  codeOf,
+  StepUpDialog,
+  type StepUpInput,
+} from "../hospitals/step-up-dialog";
 import { TwoPersonActions } from "../shared/two-person";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { SectionFailed } from "./section-failed";
@@ -36,11 +39,6 @@ const REFUSED = [
   "conflict",
   "not_found",
 ];
-
-const codeOf = (input: StepUpInput): StepUp =>
-  "backup_code" in input
-    ? { backup_code: input.backup_code }
-    : { mfa_code: input.mfa_code };
 
 /** The request being approved, the version seen, and its fresh preview. */
 type Asking = { r: SettingsRequest; version: number; wouldDelete: number };

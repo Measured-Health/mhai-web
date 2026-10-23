@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ApiError } from "@mhai/api-client/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetPlatformClientForTests,
@@ -314,6 +315,33 @@ describe("records retention", () => {
     ).toBeInTheDocument();
     expect(row("Documents")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
+  });
+
+  it("no code is asked for when the preview fails; Continue reads it again", async () => {
+    const preview = vi
+      .spyOn(api, "previewRetention")
+      .mockRejectedValueOnce(new ApiError(503, "unavailable"));
+    await open();
+    await userEvent.click(
+      within(row("Questions and answers")).getByRole("button", {
+        name: "Change",
+      }),
+    );
+    const d = screen.getByRole("dialog", {
+      name: "How long to keep Questions and answers",
+    });
+    await userEvent.selectOptions(
+      within(d).getByLabelText("Keep for"),
+      "3 years",
+    );
+    await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
+    expect(
+      await screen.findByText("Couldn't check what would be deleted."),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Digit 1 of 6")).toBeNull();
+    await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
+    expect(await screen.findByLabelText("Digit 1 of 6")).toBeInTheDocument();
+    expect(preview).toHaveBeenCalledTimes(2);
   });
 
   it("offline disables Change with the reason", async () => {

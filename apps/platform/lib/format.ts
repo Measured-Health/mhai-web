@@ -29,3 +29,10 @@ export function dateLabel(value: string) {
 /** "21 Oct": `dateLabel` without the year (same local-date rule). */
 export const dayMonthLabel = (value: string) =>
   dateLabel(value).replace(/ \d{4}$/, "");
+
+/** "14:05": the viewer's local time of day, 24-hour. */
+export function timeLabel(value: string) {
+  const t = new Date(value);
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${two(t.getHours())}:${two(t.getMinutes())}`;
+}

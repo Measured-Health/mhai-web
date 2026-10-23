@@ -14,7 +14,13 @@ import {
   RETENTION_WHAT,
   RetentionSection,
 } from "./retention-section";
+import {
+  LEARNING_TITLE,
+  LEARNING_WHAT,
+  LearningDataSection,
+} from "./learning-data-section";
 import { SectionFailed } from "./section-failed";
+import { TRIAGE_TITLE, TRIAGE_WHAT, TriageSection } from "./triage-section";
 
 /**
  * One section of the page: its own Couldn't load when the settings can't be
@@ -26,10 +32,7 @@ type Part = {
   render(s: SettingsOut): ReactNode;
 };
 
-/**
- * The sections, in order. The triage and learning data sections (Task 12)
- * are added here.
- */
+/** The sections, in order. */
 const PARTS: Part[] = [
   {
     title: PENDING_TITLE,
@@ -41,11 +44,22 @@ const PARTS: Part[] = [
     what: RETENTION_WHAT,
     render: (s) => <RetentionSection settings={s} />,
   },
+  {
+    title: TRIAGE_TITLE,
+    what: TRIAGE_WHAT,
+    render: (s) => <TriageSection settings={s} />,
+  },
+  {
+    title: LEARNING_TITLE,
+    what: LEARNING_WHAT,
+    render: (s) => <LearningDataSection settings={s} />,
+  },
 ];
 
 /**
  * Platform settings: the changes waiting for a second admin, then how long
- * records are kept. Platform admins change them; auditors read them.
+ * records are kept, triage and the unapproved learning data. Platform
+ * admins change them; auditors read them.
  */
 export function SettingsView() {
   const q = useSettings();

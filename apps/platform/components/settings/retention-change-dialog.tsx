@@ -1,7 +1,6 @@
 "use client";
 import { useId, useState, type FormEvent } from "react";
 import { ApiError } from "@mhai/api-client/errors";
-import type { StepUp } from "@/lib/api/contract";
 import type { RetentionItem } from "@/lib/api/settings-contract";
 import { retentionTypeLabel } from "@/lib/settings/labels";
 import {
@@ -16,18 +15,17 @@ import { inputClass } from "@mhai/ui/auth/password-fields";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { useToast } from "@mhai/ui/toast";
-import { StepUpDialog, type StepUpInput } from "../hospitals/step-up-dialog";
+import {
+  codeOf,
+  StepUpDialog,
+  type StepUpInput,
+} from "../hospitals/step-up-dialog";
 import { WAITING } from "../shared/two-person";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { Modal } from "../team/modal";
 
 /** Refusals that mean the setting isn't as the person saw it: close, reload. */
 const REFUSED = ["conflict", "not_found"];
-
-const codeOf = (input: StepUpInput): StepUp =>
-  "backup_code" in input
-    ? { backup_code: input.backup_code }
-    : { mfa_code: input.mfa_code };
 
 /**
  * Change how long one type is kept: choose a period (never below the

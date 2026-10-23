@@ -3,6 +3,7 @@
 import { ApiError } from "@mhai/api-client/errors";
 import type { Person, TeamMember, TwoPersonRequest } from "./contract";
 import type { MockCore } from "./mock";
+import type { Job } from "./ops-contract";
 import {
   RESET_MS,
   RETENTION_TYPES,
@@ -18,11 +19,13 @@ import {
   PREVIEW_PER_YEAR,
   RETENTION_WORDS,
   SHARED_CLEAN_UP,
+  SHARED_JOB_SOURCE,
   SHARED_TRIAGE,
   daysWords,
   seedFeedbackBuffer,
   seedRetention,
   type SharedCleanUp,
+  type SharedJobSource,
   type SharedTriage,
   type TriageMode,
 } from "./settings-fixtures";
@@ -87,6 +90,8 @@ export function settingsMock(
   const buffer = seedFeedbackBuffer(now());
   let resetBy: Person | null = null;
   let resetReason = "";
+  /** The failed job a failed reset leaves in System's list. */
+  let failedJob: Job | null = null;
   let pending: SettingsRequest[] = [];
   /** Requests that lapsed, so a late approval says `expired`, not 404. */
   const lapsed = new Set<string>();
@@ -97,6 +102,15 @@ export function settingsMock(
   core.shared[SHARED_CLEAN_UP] = cleanUp;
   const sharedTriage: SharedTriage = { enabled: false };
   core.shared[SHARED_TRIAGE] = sharedTriage;
+  // System's jobs list adds a failed reset's job (once) when it looks.
+  const jobSource: SharedJobSource = {
+    sync(jobs) {
+      settle();
+      if (failedJob && !jobs.some((j) => j.id === failedJob!.id))
+        jobs.push(failedJob);
+    },
+  };
+  core.shared[SHARED_JOB_SOURCE] = jobSource;
 
   const ready = () =>
     (typeof triageMode === "function" ? triageMode() : triageMode) === "ready";
@@ -129,6 +143,19 @@ export function settingsMock(
       buffer.running = null;
       if (resetFails) {
         buffer.failed_job_id = run.job_id;
+        const failedAt = iso(Date.parse(run.started_at) + RESET_MS);
+        failedJob = {
+          id: run.job_id,
+          type: "feedback_buffer_reset",
+          hospital: null,
+          created_at: run.started_at,
+          failed_at: failedAt,
+          attempts: 1,
+          kind: "other",
+          status: "failed",
+          cancelled_by: null,
+          cancelled_at: null,
+        };
       } else if (resetBy) {
         buffer.last_reset = {
           by: resetBy,

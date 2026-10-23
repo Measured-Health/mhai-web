@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 describe("the Settings page", () => {
-  it("the top bar reads Settings, then the changes waiting, then records retention", async () => {
+  it("the top bar reads Settings, then the changes waiting, records retention, triage and the learning data", async () => {
     install();
     renderWithAuth(<SettingsView />);
     expect(
@@ -42,7 +42,12 @@ describe("the Settings page", () => {
     await screen.findByRole("region", { name: "Records retention" });
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent),
-    ).toEqual(["Changes waiting for approval", "Records retention"]);
+    ).toEqual([
+      "Changes waiting for approval",
+      "Records retention",
+      "Triage",
+      "Clear unapproved learning data",
+    ]);
   });
 
   it("a failed read shows each section's own Couldn't load, and Try again reads again", async () => {
@@ -61,6 +66,10 @@ describe("the Settings page", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText("Couldn't load records retention."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Couldn't load triage.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Couldn't load the learning data."),
     ).toBeInTheDocument();
     fail = false;
     await userEvent.click(

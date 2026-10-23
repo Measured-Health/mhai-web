@@ -3,6 +3,7 @@
 // content.
 import type { Person } from "./contract";
 import { nextCleanUp } from "./holds-fixtures";
+import type { Job } from "./ops-contract";
 import type {
   NotReadyReason,
   RetentionItem,
@@ -88,6 +89,12 @@ export function seedFeedbackBuffer(
  */
 export const SHARED_CLEAN_UP = "clean_up";
 export const SHARED_TRIAGE = "triage";
+/**
+ * The jobs list asks this to add the job a failed learning-data reset left
+ * behind (`sync` adds it to the list it is given, once).
+ */
+export const SHARED_JOB_SOURCE = "job_source";
+export type SharedJobSource = { sync(jobs: Job[]): void };
 export type SharedCleanUp = {
   paused: boolean;
   paused_by: Person | null;
