@@ -463,6 +463,8 @@ platform endpoints; the contract it assumes is in
 | Activity    | Every platform action, newest first, by hospital                                                                                                                                          | both                           |
 | Account     | Password, backup codes, signed-in devices                                                                                                                                                 | both                           |
 
+When the service is having problems, a warning with **View health** shows on every page except Health itself.
+
 ```text
 browser ──> platforms.<domain> (IP allow list)
               Next.js: pages + /api/auth/* + /api/v1/[...path] proxy

@@ -259,7 +259,9 @@ guidelines are not touched), asks for a reason and a code, and says
 **Changes waiting for approval** lists the requests, which lapse after 7
 days; either admin can cancel one, and the person who asked can never approve
 it. A platform admin can also **Pause clean-up**, which Health then shows.
-Auditors see all of it and change nothing. The retention periods are
+Auditors see all of it and change nothing. When the service is having
+problems, a warning with **View health** shows on every page except Health
+itself. The retention periods are
 placeholders until Measured Health's compliance lead confirms them.
 
 **The auditor** (Amara Eze) sees every hospital, the team and the activity,

@@ -117,8 +117,10 @@ export function useSetRetention() {
 
 export function useSetCleanUpPaused() {
   return useSettingsWrite(
-    (body: { paused: boolean; reason: string } & StepUp, key) =>
-      getPlatformClient().setCleanUpPaused(body, { idempotencyKey: key }),
+    (
+      body: { paused: boolean; reason: string; version: number } & StepUp,
+      key,
+    ) => getPlatformClient().setCleanUpPaused(body, { idempotencyKey: key }),
     { gcTime: 0 },
   );
 }

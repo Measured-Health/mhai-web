@@ -51,11 +51,13 @@ async function typeCode(d: HTMLElement) {
   await userEvent.click(within(d).getByLabelText("Digit 1 of 6"));
   await userEvent.keyboard(MOCK_CODE);
 }
-const pauseNow = () =>
+const write = (paused: boolean, version: number) =>
   api.setCleanUpPaused(
-    { paused: true, reason: "x", mfa_code: MOCK_CODE },
+    { paused, reason: "x", version, mfa_code: MOCK_CODE },
     { idempotencyKey: crypto.randomUUID() },
   );
+const pauseNow = async () =>
+  write(true, (await api.getSettings()).retention.version);
 const LINE = /^Records clean-up paused by Ada Bakare since /;
 
 describe("pausing the records clean-up", () => {
@@ -150,6 +152,53 @@ describe("pausing the records clean-up", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(reads).toHaveBeenCalled();
+  });
+
+  it("sends the version the screen showed with the pause", async () => {
+    await open();
+    const seen = (await api.getSettings()).retention.version;
+    const send = vi.spyOn(api, "setCleanUpPaused");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Pause clean-up" }),
+    );
+    const d = await screen.findByRole("dialog", { name: /Pause/ });
+    await userEvent.type(within(d).getByLabelText(/^Reason/), "Audit");
+    await typeCode(d);
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Pause clean-up" }),
+    );
+    await screen.findByText(LINE);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ paused: true, version: seen }),
+      expect.anything(),
+    );
+  });
+
+  it("a stale resume shows Changed by someone else and leaves the newer pause", async () => {
+    await pauseNow();
+    await open();
+    await screen.findByText(LINE);
+    // Meanwhile another admin resumes and pauses again.
+    const v = (await api.getSettings()).retention.version;
+    await write(false, v);
+    await write(true, v + 1);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Resume clean-up" }),
+    );
+    const d = await screen.findByRole("dialog", { name: /Resume/ });
+    await userEvent.type(within(d).getByLabelText(/^Reason/), "Done");
+    await typeCode(d);
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Resume clean-up" }),
+    );
+    expect(
+      await screen.findByText("Changed by someone else"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect((await api.getSettings()).retention.paused).toBe(true);
+    expect(
+      await screen.findByRole("button", { name: "Resume clean-up" }),
+    ).toBeInTheDocument();
   });
 
   it("pausing makes Health look again (its reading is invalidated)", async () => {

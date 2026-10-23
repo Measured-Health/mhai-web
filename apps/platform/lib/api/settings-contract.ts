@@ -65,6 +65,8 @@ export type SettingsOut = {
     paused: boolean;
     paused_by: Person | null;
     paused_at: string | null;
+    /** The pause's own version; pause and resume send the one they saw. */
+    version: number;
     items: RetentionItem[];
   };
   triage: {
@@ -105,8 +107,9 @@ export interface SettingsClient {
     body: { days: number; reason: string; version: number } & StepUp,
     opts: WriteOpts,
   ): Promise<SettingsOut>;
+  /** 409 `conflict` when `version` isn't the pause's, or it is already so. */
   setCleanUpPaused(
-    body: { paused: boolean; reason: string } & StepUp,
+    body: { paused: boolean; reason: string; version: number } & StepUp,
     opts: WriteOpts,
   ): Promise<SettingsOut>;
   /**

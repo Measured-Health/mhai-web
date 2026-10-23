@@ -477,7 +477,7 @@ describe("mock settings", () => {
   it("pausing the clean-up is at once and shows in health", async () => {
     const { m } = setup();
     const s = await m.setCleanUpPaused(
-      { paused: true, reason, ...CODE },
+      { paused: true, reason, version: 1, ...CODE },
       KEY(),
     );
     expect(s.retention).toMatchObject({
@@ -492,11 +492,14 @@ describe("mock settings", () => {
     });
     expect(
       await failure(
-        m.setCleanUpPaused({ paused: true, reason, ...CODE }, KEY()),
+        m.setCleanUpPaused(
+          { paused: true, reason, version: 1, ...CODE },
+          KEY(),
+        ),
       ),
     ).toEqual([409, "conflict"]);
     const back = await m.setCleanUpPaused(
-      { paused: false, reason, ...CODE },
+      { paused: false, reason, version: 2, ...CODE },
       KEY(),
     );
     expect(back.retention).toMatchObject({
@@ -506,6 +509,31 @@ describe("mock settings", () => {
     });
     expect((await actions(m))[0]).toBe("clean_up_resumed");
     expect((await m.getHealth()).clean_up.paused).toBe(false);
+  });
+
+  it("a stale pause or resume is a conflict and changes nothing", async () => {
+    const { m } = setup();
+    const v = (await m.getSettings()).retention.version;
+    await m.setCleanUpPaused(
+      { paused: true, reason, version: v, ...CODE },
+      KEY(),
+    );
+    expect((await m.getSettings()).retention.version).toBe(v + 1);
+    // A resume that was written against the older screen.
+    expect(
+      await failure(
+        m.setCleanUpPaused(
+          { paused: false, reason, version: v, ...CODE },
+          KEY(),
+        ),
+      ),
+    ).toEqual([409, "conflict"]);
+    expect((await m.getSettings()).retention.paused).toBe(true);
+    expect(
+      await failure(
+        m.setCleanUpPaused({ paused: false, reason, ...CODE } as never, KEY()),
+      ),
+    ).toEqual([422, "invalid"]);
   });
 
   it("the reset runs, then clears; resetFails sets failed_job_id", async () => {
@@ -534,7 +562,7 @@ describe("mock settings", () => {
     });
     const ev = (await m.listActivity({})).events[0]!;
     expect(ev.action).toBe("feedback_buffer_cleared");
-    expect(ev.target).toBe("37");
+    expect(ev.target).toBe("37 items");
 
     const f = setup({ resetFails: true });
     const r = await f.m.resetFeedbackBuffer({ reason, ...CODE }, KEY());
@@ -661,7 +689,11 @@ describe("mock settings", () => {
           { days: 2555, reason, version: v, ...WRONG },
           KEY(),
         ),
-      () => m.setCleanUpPaused({ paused: true, reason, ...WRONG }, KEY()),
+      () =>
+        m.setCleanUpPaused(
+          { paused: true, reason, version: 1, ...WRONG },
+          KEY(),
+        ),
       () =>
         m.setTriage(
           {
@@ -723,7 +755,11 @@ describe("mock settings", () => {
           { days: 2555, reason, version: v, ...CODE },
           KEY(),
         ),
-      () => m.setCleanUpPaused({ paused: true, reason, ...CODE }, KEY()),
+      () =>
+        m.setCleanUpPaused(
+          { paused: true, reason, version: 1, ...CODE },
+          KEY(),
+        ),
       () =>
         m.setTriage(
           { enabled: true, reason, clinical_signoff: "r", version: t, ...CODE },
@@ -810,8 +846,14 @@ describe("mock settings", () => {
       )
     ).pending[0]!;
     await m.cancelRequest(r3.id, { version: r3.version }, KEY());
-    await m.setCleanUpPaused({ paused: true, reason, ...CODE }, KEY());
-    await m.setCleanUpPaused({ paused: false, reason, ...CODE }, KEY());
+    await m.setCleanUpPaused(
+      { paused: true, reason, version: 1, ...CODE },
+      KEY(),
+    );
+    await m.setCleanUpPaused(
+      { paused: false, reason, version: 2, ...CODE },
+      KEY(),
+    );
     const tv = (await m.getSettings()).triage.version;
     const tr = (
       await m.setTriage(
@@ -943,7 +985,10 @@ describe("mock settings", () => {
     as(TEAM_EMAILS.tunde);
     expect((await q).pending).toEqual([]);
     as(TEAM_EMAILS.ada);
-    const w = m.setCleanUpPaused({ paused: true, reason, ...CODE }, KEY());
+    const w = m.setCleanUpPaused(
+      { paused: true, reason, version: 1, ...CODE },
+      KEY(),
+    );
     as(TEAM_EMAILS.amara);
     expect((await w).retention.paused_by!.id).toBe("tm_ada");
   });

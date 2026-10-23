@@ -497,10 +497,11 @@ paused, paused_by, paused_at}`.
 **Settings**
 
 - `GET /platform/settings` → `{retention, triage, feedback_buffer, pending}`:
-  - `retention`: `{paused, paused_by, paused_at, confirmed, items: [{type, days, minimum_days,
+  - `retention`: `{paused, paused_by, paused_at, version, confirmed, items: [{type, days, minimum_days,
 last_run: {at, ok, deleted, kept_for_holds}, next_run_at, changed_by, changed_at, version}]}`,
     with `type` one of `records`, `documents`, `pending_corrections` or `audit_log`, and
-    `confirmed` false until the compliance lead has confirmed the periods;
+    `confirmed` false until the compliance lead has confirmed the periods, and `version` the
+    pause's own;
   - `triage`: `{enabled, ready, not_ready_reason, changed_by, changed_at, version}`, with
     `not_ready_reason` one of `missing_report`, `missing_files` or `checksum_mismatch` (null
     when ready);
@@ -515,7 +516,10 @@ requested_by_you, expires_at, version, from, to}`, plus `type` on a `retention_s
 - `GET /platform/settings/retention/{type}/preview?days` → `{would_delete}`.
 - `PUT /platform/settings/retention/{type} {days, reason, mfa_code, version}`: longer applies
   at once; shorter returns **202** with the pending request; **422** `below_minimum`.
-- `PUT /platform/settings/retention-pause {paused, reason, mfa_code}` (optional).
+- `PUT /platform/settings/retention-pause {paused, reason, mfa_code, version}` (optional):
+  `version` is `retention.version`, the pause's own, which every pause and resume bumps. A
+  different `version`, or a pause already in the state asked for, is **409** `conflict`, so a
+  stale Resume can't lift another admin's newer pause.
 - `PUT /platform/settings/triage {enabled, reason, clinical_signoff?, mfa_code, version}`:
   off applies at once; on returns **202** with the pending request, **409** `not_ready`; the
   approval re-checks readiness (**409** `not_ready`).

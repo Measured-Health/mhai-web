@@ -424,10 +424,14 @@ const ROWS: Row[] = [
   ],
   [
     "setCleanUpPaused",
-    (c) => c.setCleanUpPaused({ paused: true, reason: "Audit", ...CODE }, K),
+    (c) =>
+      c.setCleanUpPaused(
+        { paused: true, reason: "Audit", version: 1, ...CODE },
+        K,
+      ),
     "PUT",
     "/api/v1/platform/settings/retention-pause",
-    { paused: true, reason: "Audit", mfa_code: "123456" },
+    { paused: true, reason: "Audit", version: 1, mfa_code: "123456" },
   ],
   [
     "setTriage",

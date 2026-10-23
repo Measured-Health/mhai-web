@@ -81,6 +81,8 @@ export function settingsMock(
     paused_by: null,
     paused_at: null,
   };
+  /** Bumped by every pause and resume. */
+  let pauseVersion = 1;
   const triage = {
     enabled: false,
     changed_by: null as Person | null,
@@ -166,7 +168,7 @@ export function settingsMock(
           cleared: buffer.waiting,
         };
         log(resetBy, "feedback_buffer_cleared", {
-          target: String(buffer.waiting),
+          target: `${buffer.waiting} items`,
         });
         buffer.waiting = 0;
       }
@@ -184,6 +186,7 @@ export function settingsMock(
         paused: cleanUp.paused,
         paused_by: cleanUp.paused_by,
         paused_at: cleanUp.paused_at,
+        version: pauseVersion,
         items,
       },
       triage: {
@@ -282,9 +285,12 @@ export function settingsMock(
         const b = (body ?? {}) as Record<string, unknown>;
         if (typeof b.paused !== "boolean") invalid();
         text(b.reason, REASON_MAX);
-        // Someone else already did it: a clash.
+        const version = versionOf(b);
+        // Changed since the person looked, or already so: a clash.
+        if (version !== pauseVersion) fail(409, "conflict");
         if (b.paused === cleanUp.paused) fail(409, "conflict");
         await core.checkCode(m, body);
+        pauseVersion++;
         cleanUp.paused = b.paused as boolean;
         cleanUp.paused_by = cleanUp.paused ? person(m) : null;
         cleanUp.paused_at = cleanUp.paused ? iso(now()) : null;

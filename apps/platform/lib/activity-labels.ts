@@ -102,7 +102,7 @@ export function actionLabel(a: ActivityAction, target?: string | null): string {
       return "switched triage off";
     case "feedback_buffer_cleared":
       return t
-        ? `cleared ${t} of unapproved learning data`
+        ? `cleared unapproved learning data: ${t}`
         : "cleared unapproved learning data";
   }
 }

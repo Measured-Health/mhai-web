@@ -41,7 +41,7 @@ export function PauseCleanUp({ settings }: { settings: SettingsOut }) {
   const net = useNeedsConnection(OFFLINE_ID);
   const refresh = useRefreshSettings();
   const save = useStepUpCall(useSetCleanUpPaused());
-  const [asking, setAsking] = useState<{ pause: boolean }>();
+  const [asking, setAsking] = useState<{ pause: boolean; version: number }>();
   const [refusal, setRefusal] = useState<string | null>(null);
   const r = settings.retention;
   const pause = asking?.pause ?? !r.paused;
@@ -54,7 +54,12 @@ export function PauseCleanUp({ settings }: { settings: SettingsOut }) {
     if (!asking) return;
     const want = asking.pause;
     save.run(
-      { paused: want, reason: input.reason ?? "", ...codeOf(input) },
+      {
+        paused: want,
+        reason: input.reason ?? "",
+        version: asking.version,
+        ...codeOf(input),
+      },
       {
         onSuccess: () => {
           close();
@@ -101,7 +106,7 @@ export function PauseCleanUp({ settings }: { settings: SettingsOut }) {
             {...net.props}
             onClick={() => {
               setRefusal(null);
-              setAsking({ pause: !r.paused });
+              setAsking({ pause: !r.paused, version: r.version });
             }}
           >
             {r.paused ? "Resume clean-up" : "Pause clean-up"}
