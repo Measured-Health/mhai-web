@@ -4,6 +4,7 @@ import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
 import { platformError } from "@/lib/errors";
 import { useHospital } from "@/lib/queries/hospitals";
 import { Banner } from "@mhai/ui/banner";
+import { HospitalConnectionsSection } from "../emr/hospital-connections-section";
 import { HospitalHoldsSection } from "../holds/hospital-holds-section";
 import { TopBar } from "../shell/top-bar";
 import { CouldntLoad } from "../states/couldnt-load";
@@ -72,6 +73,7 @@ export function HospitalView({ id }: { id: string }) {
                 onGone={() => void refetch()}
               />
               <SsoSection hospitalId={h.id} hospitalName={h.name} />
+              <HospitalConnectionsSection hospital={h} />
               <RecentActions hospitalId={h.id} />
               <DangerZone hospital={h} />
             </>
