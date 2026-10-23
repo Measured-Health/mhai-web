@@ -51,16 +51,17 @@ describe("Activity", () => {
     renderWithAuth(<ActivityView />);
     await screen.findByRole("list");
     const items = rows();
-    expect(items).toHaveLength(12);
+    expect(items).toHaveLength(13);
     expect(items[0].textContent).toMatch(
       /^Tunde .* requested removal · Southpoint Hospital · \d{2} \w{3} 2026, \d{2}:\d{2}/,
     );
-    expect(items[5].textContent).toContain(
+    expect(items[6].textContent).toContain(
       "invited chiamaka.obi@eastbrook.example as first hospital admin · Eastbrook Medical Centre",
     );
     expect(items[4].textContent).toContain("invited ");
-    expect(items[10].textContent).toContain("changed Amara Eze's role");
-    expect(items[10].textContent).not.toContain("·  ·");
+    expect(items[5].textContent).toContain("Ada Bakare turned Analysis on");
+    expect(items[11].textContent).toContain("changed Amara Eze's role");
+    expect(items[11].textContent).not.toContain("·  ·");
   });
 
   it("filters by hospital from the query string", async () => {
@@ -102,7 +103,7 @@ describe("Activity", () => {
     await userEvent
       .setup()
       .click(screen.getByRole("button", { name: "Load more" }));
-    await waitFor(() => expect(rows()).toHaveLength(12));
+    await waitFor(() => expect(rows()).toHaveLength(13));
     expect(listActivity).toHaveBeenLastCalledWith({ cursor: "5" });
     expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
   });
@@ -123,7 +124,7 @@ describe("Activity", () => {
     };
     await m.addHospital(body, { idempotencyKey: "t14-1" });
     renderWithAuth(<ActivityView />, { queryClient: client });
-    await waitFor(() => expect(rows()).toHaveLength(13));
+    await waitFor(() => expect(rows()).toHaveLength(14));
     expect(rows()[0].textContent).toContain(
       "Ada Bakare added the hospital · Lakeside Community Hospital",
     );
@@ -182,7 +183,7 @@ describe("Activity", () => {
     expect(screen.queryByText("Couldn't load activity.")).toBeNull();
     fail = false;
     await u.click(screen.getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(rows()).toHaveLength(12));
+    await waitFor(() => expect(rows()).toHaveLength(13));
   });
 
   it("Load more is busy while the next page loads", async () => {
@@ -208,7 +209,7 @@ describe("Activity", () => {
     expect(busy).toBeDisabled();
     expect(busy).toHaveAttribute("aria-busy", "true");
     release();
-    await waitFor(() => expect(rows()).toHaveLength(12));
+    await waitFor(() => expect(rows()).toHaveLength(13));
   });
 
   it("never shows a raw id in the hospital select", async () => {

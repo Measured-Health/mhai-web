@@ -114,6 +114,8 @@ export type AuditFacts = {
   list?: AuditListName;
   /** On `jobs_retried` and `jobs_cancelled`: how many jobs. */
   job_count?: number;
+  /** On `analysis_switched` and `patient_views_switched`: the new position. */
+  switched?: "on" | "off";
 };
 export type AuditEvent = {
   id: string;

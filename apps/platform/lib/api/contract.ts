@@ -9,6 +9,7 @@ import type {
   Period,
   SeriesOut,
 } from "./analytics-contract";
+import type { AnalysisClient } from "./analysis-contract";
 import type { AuditClient } from "./audit-contract";
 import type { EmrClient } from "./emr-contract";
 import type { ClearancesClient } from "./clearances-contract";
@@ -207,7 +208,11 @@ export type ActivityAction =
   | "named_access_requested"
   | "named_access_approved"
   | "named_access_cancelled"
-  | "named_access_lowered";
+  | "named_access_lowered"
+  // The two Analysis switches (Plan 12), flipped by Measured Health in the
+  // backend: `detail` is "on" or "off".
+  | "analysis_switched"
+  | "patient_views_switched";
 export type ActivityEvent = {
   id: string;
   at: string;
@@ -275,7 +280,8 @@ export interface PlatformClient
     AuditClient,
     SettingsClient,
     EmrClient,
-    ClearancesClient {
+    ClearancesClient,
+    AnalysisClient {
   listHospitals(
     q: HospitalQuery,
   ): Promise<{ hospitals: HospitalSummary[]; next_cursor: string | null }>;

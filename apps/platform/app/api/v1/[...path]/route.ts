@@ -1,3 +1,4 @@
+import { analysisSignedOff } from "@/lib/server/features";
 import { refreshOnce } from "@/lib/server/refresh";
 import {
   apiBase,
@@ -108,6 +109,16 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["POST", "platform/named-access/requests/{id}/approve"],
   ["POST", "platform/named-access/requests/{id}/cancel"],
   ["POST", "platform/named-access/lower"],
+  ["GET", "platform/analysis/status"],
+  ["GET", "platform/analysis/filters"],
+  ["GET", "platform/analysis/prevalence"],
+  ["GET", "platform/analysis/affected"],
+  ["GET", "platform/analysis/co-occurring"],
+  ["GET", "platform/analysis/findings"],
+  ["GET", "platform/analysis/quality"],
+  ["POST", "platform/analysis/downloads"],
+  ["GET", "platform/audit/analysis-access"],
+  ["GET", "platform/audit/analysis-access/export"],
 ];
 
 /**
@@ -121,6 +132,11 @@ const FILES: ReadonlyMap<
 > = new Map([
   [
     "GET platform/audit/exports/{id}/file",
+    { types: ["text/csv", "application/zip"], inline: false },
+  ],
+  // The access trail's export: the file as the server built it.
+  [
+    "GET platform/audit/analysis-access/export",
     { types: ["text/csv", "application/zip"], inline: false },
   ],
   // A letter's page, drawn by the server: never the letter's file itself.
@@ -144,6 +160,29 @@ const AUDITOR_WRITES: ReadonlySet<string> = new Set([
   "POST platform/audit/verify",
   "POST platform/audit/verify/runs/{id}/outcome",
 ]);
+
+/**
+ * The Analysis shapes (Plan 12): for platform admins only. An auditor is
+ * refused with 403 before anything goes upstream, though they read the
+ * access trail (`platform/audit/analysis-access`) like any other audit read.
+ */
+const ADMIN_ONLY_READS: ReadonlySet<string> = new Set([
+  "GET platform/analysis/status",
+  "GET platform/analysis/filters",
+  "GET platform/analysis/prevalence",
+  "GET platform/analysis/affected",
+  "GET platform/analysis/co-occurring",
+  "GET platform/analysis/findings",
+  "GET platform/analysis/quality",
+  "POST platform/analysis/downloads",
+]);
+
+/**
+ * The same set is off until sign-off (`ANALYSIS_SIGNED_OFF`): the deployment
+ * keeps it dark whatever the server says, with 404, as if it did not exist.
+ * It can only keep Analysis off, never turn it on.
+ */
+const SIGNED_OFF_GATE: ReadonlySet<string> = ADMIN_ONLY_READS;
 
 const PATTERNS = SHAPES.map(([method, shape]) => ({
   method,
@@ -216,6 +255,9 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   // 1. Only the listed shapes (method and path).
   const shape = shapeOf(method, path);
   if (shape === null) return json(404, { code: "not_found" });
+  // 1b. Analysis is dark until it is signed off, before anyone is asked.
+  if (SIGNED_OFF_GATE.has(shape) && !analysisSignedOff())
+    return json(404, { code: "not_found" });
   // 2. Writes must come from this app's pages.
   if (method !== "GET" && !sameOrigin(req)) return forbidden();
   // 3. A live session, else it's over (an idle token only revokes itself).
@@ -231,6 +273,9 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   // 6. A platform role.
   const roles = s.user.roles;
   if (!Array.isArray(roles) || roles.length === 0) return forbidden();
+  // 6b. Analysis is for platform admins: an auditor never reaches upstream.
+  if (ADMIN_ONLY_READS.has(shape) && !roles.includes("platform_admin"))
+    return forbidden();
   // 7. Auditors only read, except their own read state (AUDITOR_WRITES).
   if (
     method !== "GET" &&

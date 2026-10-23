@@ -1159,3 +1159,13 @@ These update the plan for what merged after it was written (Plans 6, 7d, 8, 9, 1
 - **New sample hospitals** (Ridgeway, Marlow, Fairhaven) also appear in Plan 13's connections sample as "Not connected". Update any pinned counts in the connections tests.
 - **The vendor-name guard** (`scripts/no-vendor-names.test.mjs`) and the "no lab wording" rule apply.
 - **CI:** agents run lint, typecheck, `prettier --check .`, the unit tests, and only the e2e specs they add or change. CI runs the full e2e suite.
+
+### Server requirement for §14.12: consistent hiding across scopes
+
+From the Task 3 review (findings C1 to C3). The sample mock (`apps/platform/lib/api/mock-analysis.ts`, `familyOf` and `closeSums`) is the reference.
+
+- **One cell, one answer.** A hospital's figure for a query is one cell. It reads the same (value and suppression) in its All hospitals row, in every One hospital view of the same query, and in every view. The same query in One hospital means the same period and filters, with the condition mapped to its 3-character code and only the "80 and over" band shared.
+- **Hide over every sum together.** Over the all-hospitals query and each hospital's twin query, the server hides as one: each set and its total (age, sex, setting, specialty, ward or clinic, severities, confidence, corrections, rated and agreed over the conditions), figures that are the same under two names (patients seen and the group with no condition; the group, the headline count and the condition's cases with one), and each all-hospitals figure as the sum of the hospitals' own. Every published number is covered: headline count and base, `size` and `patients`, and each set total.
+- **The rule for every sum:** either nothing is hidden, or at least two figures are and, while the total shows, the hidden parts add up to 0 or 5 or more. Otherwise, hide the next-smallest shown part (with none left, the total), and repeat over all sums until nothing changes. A pair or finding cut from a list of 20 counts as hidden.
+- **Too few hospitals** counts as shown in a sum across hospitals (each hospital's own figure is shown anyway), and as hidden inside one reply.
+- **Not covered here:** the same patients reached by a filter in one query and a breakdown row in another (for example "Sex: Other" as a filter against the Other row), and inference that combines several sums at once. Raise both with the backend before sign-off.

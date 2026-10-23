@@ -460,6 +460,75 @@ export function seedHospitals(now: number): HospitalRecord[] {
       sso: NO_SSO,
       ...clear,
     },
+    // The three general hospitals Analysis needs for a fair comparison
+    // (Plan 12): without them no hospital has 5 similar ones.
+    {
+      hospital: base(
+        "h_ridgeway",
+        "Ridgeway General Hospital",
+        "RGH",
+        "ridgeway.example",
+        {
+          staff_count: 131,
+          created_at: iso(now - 220 * D),
+          last_activity_at: iso(now - 25 * MIN),
+          first_admin: accepted(
+            "inv_ridgeway1",
+            "Aisha Mohammed",
+            "aisha.mohammed@ridgeway.example",
+            220 * D,
+          ),
+        },
+      ),
+      admins: [admin("Aisha Mohammed", "aisha.mohammed@ridgeway.example")],
+      sso: NO_SSO,
+      ...clear,
+    },
+    {
+      hospital: base(
+        "h_marlow",
+        "Marlow District Hospital",
+        "MDH",
+        "marlow.example",
+        {
+          staff_count: 88,
+          created_at: iso(now - 140 * D),
+          last_activity_at: iso(now - 50 * MIN),
+          first_admin: accepted(
+            "inv_marlow1",
+            "Sola Ibrahim",
+            "sola.ibrahim@marlow.example",
+            140 * D,
+          ),
+        },
+      ),
+      admins: [admin("Sola Ibrahim", "sola.ibrahim@marlow.example")],
+      sso: NO_SSO,
+      ...clear,
+    },
+    {
+      // Joined two months ago: too little history to be compared.
+      hospital: base(
+        "h_fairhaven",
+        "Fairhaven General Hospital",
+        "FGH",
+        "fairhaven.example",
+        {
+          staff_count: 44,
+          created_at: iso(now - 62 * D),
+          last_activity_at: iso(now - 6 * H),
+          first_admin: accepted(
+            "inv_fairhaven1",
+            "Ngozi Eze",
+            "ngozi.eze@fairhaven.example",
+            62 * D,
+          ),
+        },
+      ),
+      admins: [admin("Ngozi Eze", "ngozi.eze@fairhaven.example")],
+      sso: NO_SSO,
+      ...clear,
+    },
   ].map((r) => {
     // Each hospital its own list: the demo's changes stick per hospital.
     const holds = allHolds.filter((h) => h.hospital.id === r.hospital.id);
@@ -492,7 +561,7 @@ export function seedHospitals(now: number): HospitalRecord[] {
   });
 }
 
-/** 12 past events, newest first. */
+/** 13 past events, newest first. */
 export function seedActivity(now: number): ActivityEvent[] {
   const hosp = (id: string, name: string): Person => ({ id, name });
   const NGH = hosp("h_northgate", "Northgate General Hospital");
@@ -521,6 +590,7 @@ export function seedActivity(now: number): ActivityEvent[] {
     [3 * D, ADA, "sso_tested", NGH, null, "Sign-in works."],
     [3 * D + 5 * MIN, ADA, "sso_updated", NGH, null, null],
     [4 * D, ADA, "team_invited", null, TEAM_EMAILS.kemi, "Auditor"],
+    [5 * D, ADA, "analysis_switched", null, null, "on"],
     [9 * D, ADA, "admin_invited", EMC, "chiamaka.obi@eastbrook.example", null],
     [9 * D + MIN, ADA, "hospital_added", EMC, null, null],
     [
