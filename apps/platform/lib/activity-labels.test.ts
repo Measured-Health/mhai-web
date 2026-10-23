@@ -55,6 +55,8 @@ const WITH: Record<ActivityAction, string> = {
   named_access_approved: "approved turning named access to Kemi",
   named_access_cancelled: "cancelled turning named access to Kemi",
   named_access_lowered: "turned named access down to Kemi",
+  analysis_switched: "turned Analysis on or off",
+  patient_views_switched: "turned patient lists in Analysis on or off",
 };
 const WITHOUT: Partial<Record<ActivityAction, string>> = {
   admin_invited: "invited the first hospital admin",
@@ -98,6 +100,8 @@ const WITHOUT: Partial<Record<ActivityAction, string>> = {
   named_access_approved: "approved a change to named access",
   named_access_cancelled: "cancelled a change to named access",
   named_access_lowered: "turned named access down",
+  analysis_switched: "turned Analysis on or off",
+  patient_views_switched: "turned patient lists in Analysis on or off",
 };
 
 describe("actionLabel", () => {
@@ -162,6 +166,24 @@ describe("actionLabel", () => {
     );
     expect(actionLabel("named_access_lowered", "Off for every hospital")).toBe(
       "turned named access down to Off for every hospital",
+    );
+  });
+  it("the Analysis switches say which way, from the detail", () => {
+    expect(actionLabel("analysis_switched", null, null, "on")).toBe(
+      "turned Analysis on",
+    );
+    expect(actionLabel("analysis_switched", null, null, "off")).toBe(
+      "turned Analysis off",
+    );
+    expect(actionLabel("patient_views_switched", null, null, "on")).toBe(
+      "turned patient lists in Analysis on",
+    );
+    expect(actionLabel("patient_views_switched", null, null, "off")).toBe(
+      "turned patient lists in Analysis off",
+    );
+    // Anything else says nothing about the position.
+    expect(actionLabel("analysis_switched", null, null, "maybe")).toBe(
+      "turned Analysis on or off",
     );
   });
   it("formats a time plainly", () => {

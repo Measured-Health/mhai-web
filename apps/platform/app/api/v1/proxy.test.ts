@@ -974,3 +974,262 @@ describe("platform API proxy", () => {
     expect((await readSession())!.token).toBe("tok2");
   });
 });
+
+/** The 10 Analysis shapes (Plan 12): the trail's two are open to auditors. */
+const ANALYSIS_SHAPES: [Method, string][] = [
+  ["GET", "platform/analysis/status"],
+  ["GET", "platform/analysis/filters"],
+  ["GET", "platform/analysis/prevalence"],
+  ["GET", "platform/analysis/affected"],
+  ["GET", "platform/analysis/co-occurring"],
+  ["GET", "platform/analysis/findings"],
+  ["GET", "platform/analysis/quality"],
+  ["POST", "platform/analysis/downloads"],
+  ["GET", "platform/audit/analysis-access"],
+  ["GET", "platform/audit/analysis-access/export"],
+];
+const ANALYSIS_ONLY = ANALYSIS_SHAPES.slice(0, 8);
+const TRAIL_SHAPES = ANALYSIS_SHAPES.slice(8);
+const EXPORT = "platform/audit/analysis-access/export";
+
+describe("the Analysis shapes", () => {
+  const signedOff = () => vi.stubEnv("ANALYSIS_SIGNED_OFF", "true");
+  const reply = (shape: string) =>
+    fetchMock.mockResolvedValueOnce(
+      shape === EXPORT
+        ? new Response("a,b\n", { headers: { "Content-Type": "text/csv" } })
+        : Response.json({ ok: true }),
+    );
+
+  it("the ten new shapes are accepted (status, filters, the five views, downloads, the trail, its export)", async () => {
+    signedOff();
+    expect(ANALYSIS_SHAPES).toHaveLength(10);
+    for (const [method, shape] of ANALYSIS_SHAPES) {
+      fetchMock.mockReset();
+      await session();
+      reply(shape);
+      const path = shape.split("/");
+      const res = await call(method, path, {
+        body: '{"view":"quality"}',
+        query: method === "GET" ? "?scope=all&period=12m" : undefined,
+      });
+      expect([method, shape, res.status]).toEqual([method, shape, 200]);
+      expect(res.headers.get("Cache-Control")).toBe("no-store");
+      const [url, init] = calls()[0]!;
+      expect(url).toBe(
+        `http://api.test/api/v1/${shape}${method === "GET" ? "?scope=all&period=12m" : ""}`,
+      );
+      expect(init.method).toBe(method);
+      expect(headersOf(calls()[0]!).get("Authorization")).toBe("Bearer tok");
+      expect(headersOf(calls()[0]!).get("X-MHAI-Audience")).toBe("platform");
+    }
+  });
+
+  it("a write passes its Idempotency-Key and body, and never a query", async () => {
+    signedOff();
+    await session();
+    reply("platform/analysis/downloads");
+    const res = await call("POST", ["platform", "analysis", "downloads"], {
+      body: '{"view":"quality","query":{}}',
+      query: "?hospital=h_x",
+      headers: { "idempotency-key": "dl-1" },
+    });
+    expect(res.status).toBe(200);
+    const [url, init] = calls()[0]!;
+    expect(url).toBe("http://api.test/api/v1/platform/analysis/downloads");
+    expect(init.body).toBe('{"view":"quality","query":{}}');
+    expect(headersOf(calls()[0]!).get("Idempotency-Key")).toBe("dl-1");
+  });
+
+  it("platform/analysis/x and POST platform/analysis/status are 404", async () => {
+    signedOff();
+    await session();
+    for (const [method, path] of [
+      ["GET", ["platform", "analysis", "x"]],
+      ["GET", ["platform", "analysis"]],
+      ["GET", ["platform", "analysis", "x", "y"]],
+      ["GET", ["platform", "analysis", "prevalence", "extra"]],
+      ["GET", ["platform", "analysis", "downloads"]],
+      ["GET", ["platform", "analysis", "Prevalence"]],
+      ["GET", ["platform", "analysis", "hospitals", "h_x", "patients"]],
+      ["POST", ["platform", "analysis", "status"]],
+      ["POST", ["platform", "analysis", "prevalence"]],
+      ["PUT", ["platform", "analysis", "downloads"]],
+      ["DELETE", ["platform", "analysis", "downloads"]],
+      ["POST", ["platform", "audit", "analysis-access"]],
+      ["PATCH", ["platform", "audit", "analysis-access"]],
+      ["POST", ["platform", "audit", "analysis-access", "export"]],
+      // The trail's word is not an audit event id.
+      ["GET", ["platform", "audit", "analysis-access", "patients"]],
+    ] as [Method, string[]][]) {
+      const res = await call(method, path);
+      expect([method, path.join("/"), res.status]).toEqual([
+        method,
+        path.join("/"),
+        404,
+      ]);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("ANALYSIS_SIGNED_OFF unset gives 404 on every analysis shape before the session, and the trail still works", async () => {
+    // No session at all: the answer is still 404, not 401.
+    for (const value of [
+      undefined,
+      "",
+      "TRUE",
+      "True",
+      "1",
+      "yes",
+      "false",
+      " true",
+    ]) {
+      vi.unstubAllEnvs();
+      vi.stubEnv("PLATFORM_SESSION_SECRET", "p".repeat(40));
+      vi.stubEnv("MHAI_API_URL", "http://api.test/");
+      if (value === undefined) delete process.env.ANALYSIS_SIGNED_OFF;
+      else vi.stubEnv("ANALYSIS_SIGNED_OFF", value);
+      for (const [method, shape] of ANALYSIS_ONLY) {
+        const res = await call(method, shape.split("/"), {
+          // Even from another origin: the gate is first.
+          origin: "http://evil.test",
+        });
+        expect([value, method, shape, res.status]).toEqual([
+          value,
+          method,
+          shape,
+          404,
+        ]);
+        expect(await res.json()).toEqual({ code: "not_found" });
+      }
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    // With a session, an admin and an auditor are 404 too, and nothing goes up.
+    vi.unstubAllEnvs();
+    vi.stubEnv("PLATFORM_SESSION_SECRET", "p".repeat(40));
+    vi.stubEnv("MHAI_API_URL", "http://api.test/");
+    delete process.env.ANALYSIS_SIGNED_OFF;
+    for (const roles of [["platform_admin"], ["auditor"]] as PlatformRole[][]) {
+      await session({ roles });
+      for (const [method, shape] of ANALYSIS_ONLY) {
+        const res = await call(method, shape.split("/"));
+        expect([roles[0], shape, res.status]).toEqual([roles[0], shape, 404]);
+      }
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    // The access trail is not part of the gate: both roles read it.
+    for (const roles of [["platform_admin"], ["auditor"]] as PlatformRole[][]) {
+      await session({ roles });
+      for (const [method, shape] of TRAIL_SHAPES) {
+        reply(shape);
+        const res = await call(method, shape.split("/"));
+        expect([roles[0], shape, res.status]).toEqual([roles[0], shape, 200]);
+      }
+    }
+    expect(calls()).toHaveLength(4);
+  });
+
+  it("an auditor's GET platform/analysis/prevalence is 403 before upstream, and so is every other analysis read", async () => {
+    signedOff();
+    await session({ roles: ["auditor"] });
+    for (const [method, shape] of ANALYSIS_ONLY.filter(([m]) => m === "GET")) {
+      const res = await call(method, shape.split("/"), {
+        query: "?scope=all&period=12m",
+      });
+      expect([shape, res.status]).toEqual([shape, 403]);
+      expect(await res.json()).toEqual({ code: "forbidden" });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("an auditor's POST downloads is 403", async () => {
+    signedOff();
+    await session({ roles: ["auditor"] });
+    const res = await call("POST", ["platform", "analysis", "downloads"], {
+      body: '{"view":"quality"}',
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ code: "forbidden" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("an auditor can read the trail and its export, but not write to it", async () => {
+    signedOff();
+    await session({ roles: ["auditor"] });
+    for (const [method, shape] of TRAIL_SHAPES) {
+      reply(shape);
+      const res = await call(method, shape.split("/"), {
+        query: "?kind=visit",
+      });
+      expect([shape, res.status]).toEqual([shape, 200]);
+    }
+    expect(calls().map((c) => c[0])).toEqual([
+      "http://api.test/api/v1/platform/audit/analysis-access?kind=visit",
+      "http://api.test/api/v1/platform/audit/analysis-access/export?kind=visit",
+    ]);
+  });
+
+  it("an admin who is also an auditor reads Analysis", async () => {
+    signedOff();
+    await session({ roles: ["auditor", "platform_admin"] });
+    reply("platform/analysis/status");
+    const res = await call("GET", ["platform", "analysis", "status"]);
+    expect(res.status).toBe(200);
+  });
+
+  it("the signed-off gate is checked before the session", async () => {
+    signedOff();
+    // Signed off, but nobody is signed in: 401 as for any other shape.
+    const res = await call("GET", ["platform", "analysis", "status"]);
+    expect(res.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("the export's Content-Type is passed through", async () => {
+    signedOff();
+    await session();
+    fetchMock.mockResolvedValueOnce(
+      new Response("a,b\n", {
+        headers: { "Content-Type": "text/csv; charset=utf-8" },
+      }),
+    );
+    const csv = await call("GET", EXPORT.split("/"));
+    expect(csv.status).toBe(200);
+    expect(csv.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
+    expect(await csv.text()).toBe("a,b\n");
+    expect(headersOf(calls()[0]!).get("Accept")).toBe(
+      "text/csv, application/zip",
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(new Uint8Array([80, 75, 3, 4]), {
+        headers: { "Content-Type": "application/zip" },
+      }),
+    );
+    const zip = await call("GET", EXPORT.split("/"));
+    expect(zip.headers.get("Content-Type")).toBe("application/zip");
+    expect(new Uint8Array(await zip.arrayBuffer())).toEqual(
+      new Uint8Array([80, 75, 3, 4]),
+    );
+    // Any other type is refused, not passed along.
+    fetchMock.mockResolvedValueOnce(
+      new Response("<html>", { headers: { "Content-Type": "text/html" } }),
+    );
+    const html = await call("GET", EXPORT.split("/"));
+    expect(html.status).toBe(502);
+    expect(await html.json()).toEqual({ code: "bad_gateway" });
+  });
+
+  it("an upstream refusal keeps only its code", async () => {
+    signedOff();
+    await session();
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { code: "analysis_off", detail: "Southpoint has 3 cases" },
+        { status: 403 },
+      ),
+    );
+    const res = await call("GET", ["platform", "analysis", "findings"]);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ code: "analysis_off" });
+  });
+});

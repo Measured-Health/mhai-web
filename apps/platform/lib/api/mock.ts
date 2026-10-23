@@ -45,6 +45,7 @@ import { createMockOps } from "./mock-ops";
 import type { HealthMode } from "./ops-fixtures";
 import { settingsMock, type SettingsMockOptions } from "./mock-settings";
 import { emrMock } from "./mock-emr";
+import { analysisMock, type AnalysisMode } from "./mock-analysis";
 import {
   createClearanceMock,
   type ClearanceMockOptions,
@@ -224,6 +225,7 @@ export function createMockPlatform({
   triage,
   resetFails,
   clearances,
+  analysis,
   onCore,
 }: {
   now?: () => number;
@@ -253,6 +255,8 @@ export function createMockPlatform({
   resetFails?: boolean | (() => boolean);
   /** The sample letters and switch: normal, failing, or the switch Off. */
   clearances?: ClearanceMockOptions["clearances"];
+  /** Which sample Analysis to serve (see `AnalysisMode`). */
+  analysis?: AnalysisMode;
   /** For tests: the core the areas are built on, once it exists. */
   onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
@@ -1095,5 +1099,6 @@ export function createMockPlatform({
     ...settingsMock(core, { triage, resetFails }),
     ...emrMock(core),
     ...createClearanceMock(core, { clearances }),
+    ...analysisMock(core, { analysis }),
   };
 }

@@ -185,6 +185,7 @@ const isFacts = some({
   first_broken_seq: isPos,
   list: oneOf("events", "named_access"),
   job_count: isCount,
+  switched: oneOf("on", "off"),
 });
 
 /**

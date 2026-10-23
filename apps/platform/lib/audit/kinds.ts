@@ -525,6 +525,18 @@ export const KINDS: Record<string, Kind> = {
     { targets: ["change"], named: true },
   ),
   analytics_email_changed: k("platform", "Changed their analytics email"),
+  // The two Analysis switches (Plan 12), one name per event, the same as the
+  // Activity actions: Measured Health flips them in the backend.
+  analysis_switched: k("platform", (e) =>
+    e.facts.switched
+      ? `Turned Analysis ${e.facts.switched}`
+      : "Switched Analysis on or off",
+  ),
+  patient_views_switched: k("platform", (e) =>
+    e.facts.switched
+      ? `Turned patient lists in Analysis ${e.facts.switched}`
+      : "Switched patient lists in Analysis on or off",
+  ),
   // Failed jobs and platform settings (Plan 8).
   // No target: the count, when sent, is `facts.job_count`.
   jobs_retried: k("platform", (e) =>
