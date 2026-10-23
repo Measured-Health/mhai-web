@@ -57,11 +57,9 @@ describe("guardedOk", () => {
     expect(guardedOk(g(-1), "count")).toBe(false);
     expect(guardedOk(g(Number.NaN), "count")).toBe(false);
   });
-  it("a loose count may be a half", () => {
-    expect(guardedOk(g(125.5), "count")).toBe(false);
-    expect(guardedOk(g(125.5), "count", true)).toBe(true);
-    expect(guardedOk(g(2.5), "count", true)).toBe(false);
-    expect(guardedOk(g(3), "count", true)).toBe(false);
+  it("loose allows null only: a count stays whole", () => {
+    expect(guardedOk(g(125.5), "count", true)).toBe(false);
+    expect(guardedOk(g(null), "count", true)).toBe(true);
   });
   it("a share is 0-1", () => {
     expect(guardedOk(g(0), "share")).toBe(true);
@@ -69,17 +67,24 @@ describe("guardedOk", () => {
     expect(guardedOk(g(1.01), "share")).toBe(false);
     expect(guardedOk(g(-0.1), "share")).toBe(false);
   });
-  it("rates, minutes and hours are 0 or more", () => {
-    for (const k of ["rate", "minutes", "hours"] as const) {
-      expect(guardedOk(g(12.5), k)).toBe(true);
+  it("rates and hours are 0 or more; minutes are whole or a half", () => {
+    for (const k of ["rate", "hours"] as const) {
+      expect(guardedOk(g(12.3), k)).toBe(true);
       expect(guardedOk(g(-1), k)).toBe(false);
     }
+    expect(guardedOk(g(12.5), "minutes")).toBe(true);
+    expect(guardedOk(g(12.3), "minutes")).toBe(false);
+    expect(guardedOk(g(-1), "minutes")).toBe(false);
   });
-  it("null is readable only where loose; hidden always reads", () => {
+  it("null reads only where loose; hidden reads only without a number", () => {
     expect(guardedOk(g(null), "share")).toBe(false);
     expect(guardedOk(g(null), "share", true)).toBe(true);
     expect(guardedOk(H, "count")).toBe(true);
-    expect(guardedOk({ value: 3, suppressed: true }, "count")).toBe(true);
+  });
+  it("a hidden value that carries a number is unreadable", () => {
+    for (const k of ["count", "share", "minutes"] as const)
+      expect(guardedOk({ value: 3, suppressed: true }, k, true)).toBe(false);
+    expect(guardedOk({ value: 0, suppressed: true }, "count")).toBe(false);
   });
   it("refuses a wrong shape", () => {
     expect(guardedOk(null, "count")).toBe(false);
@@ -96,6 +101,14 @@ describe("numeratorLeaks", () => {
     expect(numeratorLeaks(g(100), g(0.5))).toBe(false);
     expect(numeratorLeaks(g(100), g(0))).toBe(false);
     expect(numeratorLeaks(g(100), g(1))).toBe(false);
+  });
+  it("reads a share to the places it was sent with", () => {
+    // 0.04 of 100 could be 3.5 to 4.5 people: only 4 rounds to it
+    expect(numeratorLeaks(g(100), g(0.04))).toBe(true);
+    // 0.05 of 100 could be 4.5 to 5.5: 5 is not small, but nor can 4 be ruled out
+    expect(numeratorLeaks(g(100), g(0.05))).toBe(false);
+    // a coarse share of a large total can't tell 4 from 5
+    expect(numeratorLeaks(g(1000), g(0.005))).toBe(false);
   });
   it("only a shown total and a shown share can leak", () => {
     expect(numeratorLeaks(H, g(0.03))).toBe(false);
@@ -157,6 +170,28 @@ describe("scrub", () => {
     expect(scrub({ value: 3, suppressed: true })).toEqual({
       value: null,
       suppressed: true,
+    });
+  });
+  it("keeps a drill only while shown, 5 or more and opaque", () => {
+    expect(scrub({ value: 9, suppressed: false, drill: "ab_1" })).toEqual({
+      value: 9,
+      suppressed: false,
+      drill: "ab_1",
+    });
+    expect(scrub({ value: 9, suppressed: false, drill: "a b" })).toEqual({
+      value: 9,
+      suppressed: false,
+      drill: null,
+    });
+    expect(scrub({ value: 3, suppressed: true, drill: "ab" })).toEqual({
+      value: null,
+      suppressed: true,
+      drill: null,
+    });
+    expect(scrub({ value: 3, suppressed: false, drill: "ab" })).toEqual({
+      value: 3,
+      suppressed: false,
+      drill: null,
     });
   });
   it("goes deep and keeps shown values", () => {

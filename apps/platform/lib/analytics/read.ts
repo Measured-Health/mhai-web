@@ -23,19 +23,21 @@ import type { Notification } from "../api/notifications-contract";
 import { rankChanges, type RankedChange } from "./changes";
 import { MEASURE_AREA, MEASURE_KIND, type MeasureKind } from "./measures";
 import {
-  guardedOk,
   isCount,
   isHiddenValue as hidden,
   isId,
   isNum,
   isObj,
   isTime,
-  numeratorLeaks,
-  scrub,
-  setGivesAway,
   shows,
   type Obj,
 } from "@mhai/ui/guards";
+import {
+  usageGuardedOk as guardedOk,
+  usageNumeratorLeaks as numeratorLeaks,
+  usageScrub as scrub,
+  usageSetGivesAway as setGivesAway,
+} from "./usage-guards";
 
 export const NOTHING_UNUSUAL = "Nothing unusual this period";
 export const NOT_ENOUGH_TO_COMPARE = "Not enough data to compare yet";
