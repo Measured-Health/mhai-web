@@ -3,6 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
+  Eye,
+  FileX2,
   OctagonAlert,
   TriangleAlert,
   Users,
@@ -10,6 +12,7 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -20,14 +23,21 @@ import {
 import type { FindingFlag } from "@/lib/api/alerts-contract";
 import type {
   AnalysisFilters,
+  DeidentifiedPatientsOut,
   Drillable,
+  NamedPurpose,
   PatientLevel,
   PatientRowOut,
   Sex,
 } from "@/lib/api/analysis-contract";
 import { ApiError } from "@/lib/api/errors";
 import { countLabel } from "@/lib/admin/report";
-import { ANALYSIS_KEYS, usePatients } from "@/lib/analysis-queries";
+import {
+  ANALYSIS_KEYS,
+  useClearanceMe,
+  useNamedAccessOn,
+  usePatients,
+} from "@/lib/analysis-queries";
 import { shows } from "@/lib/analysis/guards";
 import {
   AGE_LABEL,
@@ -36,11 +46,20 @@ import {
   conditionText,
   settingText,
 } from "@/lib/analysis/labels";
+import {
+  END_TEXT,
+  namedNow,
+  networkDown,
+  type EndReason,
+} from "@/lib/analysis/named";
+import { useOptionalAuth } from "@/lib/auth/auth-context";
 import { Button } from "@mhai/ui/button";
 import { useOnline } from "@mhai/ui/hooks/use-online";
 import { SidePanel } from "@mhai/ui/side-panel";
 import { Skeleton } from "@mhai/ui/skeleton";
 import type { TableColumn } from "./data-table";
+import { NamedView, focusIsOurs } from "./named-view";
+import { PurposeDialog } from "./purpose-dialog";
 import { SMALL_GROUP_MIN } from "@mhai/ui/small-groups";
 
 /**
@@ -53,6 +72,9 @@ const LEVEL_NOTE: Record<PatientLevel, string> = {
 };
 
 const OFFLINE_REASON = "You're offline. Reconnect to see patients.";
+const NAMES_OFFLINE = "You're offline. Reconnect to show names.";
+const NEEDS_LETTER =
+  "Named access needs a clearance letter. Ask your hospital admin.";
 
 const FLAG_TEXT: Record<FindingFlag, { word: string; Icon: typeof ArrowUp }> = {
   high: { word: "High", Icon: ArrowUp },
@@ -128,7 +150,7 @@ export function PatientsPanel({
   drill: string;
   label: string;
   filters: AnalysisFilters;
-  level?: PatientLevel;
+  level?: "deidentified";
   onClose(): void;
 }) {
   const q = usePatients({ drill, level, filters });
@@ -139,8 +161,202 @@ export function PatientsPanel({
   const failed =
     q.data?.status === "failed" || (q.isError && !tooSmall(q.error));
 
+  const named = useNames();
+  const showing = named.view !== null;
+  const said = useRef<HTMLParagraphElement>(null);
+  const say = useCallback((text: string) => {
+    if (said.current) said.current.textContent = text;
+  }, []);
+
   return (
     <SidePanel open onClose={onClose} title={title} className="print:hidden">
+      {/* Polite, and quiet when the notice itself takes the focus. */}
+      <p ref={said} role="status" className="sr-only" />
+      {named.ended && <EndedNotice reason={named.ended} say={say} />}
+      {d && !showing && <NamesOffer named={named} />}
+      {showing ? (
+        <NamedView
+          key={named.view!.n}
+          drill={drill}
+          filters={filters}
+          purpose={named.view!.purpose}
+          note={named.view!.note}
+          onEnd={named.end}
+        />
+      ) : (
+        <PlainList level={level} d={d} q={q} failed={failed} />
+      )}
+      <PurposeDialog
+        open={named.asking}
+        online={named.online}
+        onClose={() => named.setAsking(false)}
+        onSubmit={named.start}
+      />
+    </SidePanel>
+  );
+}
+
+/** One named view while it lasts: its purpose, and a number that makes it new. */
+type NamedChoice = { purpose: NamedPurpose; note?: string; n: number };
+
+/**
+ * Names in the panel (Plan 11c): offered only while the switch is On, to a
+ * person `clearance/me` says is covered now. A view ends by `end`, and its
+ * rows leave the cache; signing out ends it too.
+ */
+function useNames() {
+  const qc = useQueryClient();
+  const user = useOptionalAuth()?.user ?? null;
+  const on = useNamedAccessOn();
+  const me = useClearanceMe({ poll: false });
+  const online = useOnline();
+  const [asking, setAsking] = useState(false);
+  const [choice, setChoice] = useState<NamedChoice | null>(null);
+  const [ended, setEnded] = useState<EndReason | null>(null);
+  // Nothing named shows without a signed-in person and the switch On; a
+  // view lost that way is over, never picked up again without a purpose.
+  if (choice && !(on && user)) {
+    setChoice(null);
+    // The switch went down: say so. Signed out: the page is leaving anyway.
+    if (user) setEnded("switched_off");
+  }
+  const view = choice && on && user ? choice : null;
+
+  useEffect(() => {
+    if (view) return;
+    // The view has gone (ended, switched, signed out): drop its rows now.
+    qc.removeQueries({ queryKey: ANALYSIS_KEYS.namedAll });
+  }, [view, qc]);
+
+  return {
+    on,
+    me,
+    online,
+    view,
+    ended,
+    asking: asking && on,
+    setAsking,
+    start(purpose: NamedPurpose, note: string | undefined) {
+      setAsking(false);
+      setEnded(null);
+      setChoice((c) => ({ purpose, note, n: (c?.n ?? 0) + 1 }));
+    },
+    end(reason: EndReason) {
+      setChoice(null);
+      setEnded(reason);
+    },
+  };
+}
+
+/**
+ * "Named access has ended" and why. It takes the focus when it appears (the
+ * named view it replaces had it) and is said politely.
+ */
+function EndedNotice({
+  reason,
+  say,
+}: {
+  reason: EndReason;
+  say(text: string): void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // The view it replaces had the focus (now on the body): take it, and
+    // the notice is read. Anywhere else (a filter, the search): leave it,
+    // and the panel's polite region says it instead. Never both.
+    if (focusIsOurs(ref.current)) {
+      say("");
+      ref.current?.focus();
+    } else say(`Named access has ended. ${END_TEXT[reason]}`);
+  }, [reason, say]);
+  return (
+    <div
+      ref={ref}
+      tabIndex={-1}
+      data-named-ended
+      className="mb-3 flex gap-3 rounded-2xl border border-warn-line bg-warn-wash px-4 py-3.5 text-[13.5px] leading-normal text-warn-deep focus-visible:outline-2 focus-visible:outline-mint-deep"
+    >
+      <TriangleAlert aria-hidden className="mt-0.5 size-5 shrink-0" />
+      <div>
+        <b className="block text-sm">Named access has ended</b>
+        {END_TEXT[reason]}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Show names, or why not: nothing below On; the needs-a-letter line when
+ * not covered; a failed check offers nothing but Try again; disabled
+ * offline, with the reason.
+ */
+function NamesOffer({ named }: { named: ReturnType<typeof useNames> }) {
+  const reasonId = useId();
+  if (!named.on) return null;
+  // The last check failed (not just the network): don't offer names on an
+  // older reply, which would record a view that ends at once.
+  if (named.me.isError && !networkDown(named.me.error))
+    return (
+      <p className="mb-3 flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
+        <OctagonAlert aria-hidden className="size-4 shrink-0 text-bad-deep" />
+        <span>Couldn&apos;t load your named access</span>
+        <Button
+          variant="ghost"
+          className="min-h-11"
+          onClick={() => void named.me.refetch()}
+        >
+          Try again
+        </Button>
+      </p>
+    );
+  if (named.me.data === undefined) return null;
+  // An `until` already past when the reply was read: not covered.
+  if (!namedNow(named.me.data, named.me.dataUpdatedAt))
+    return (
+      <p className="mb-3 flex items-center gap-1.5 text-[13px] text-ink-2">
+        <FileX2 aria-hidden className="size-4 shrink-0" />
+        {NEEDS_LETTER}
+      </p>
+    );
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <Button
+        variant="ghost"
+        className="min-h-11"
+        disabled={!named.online}
+        aria-describedby={named.online ? undefined : reasonId}
+        onClick={() => named.setAsking(true)}
+      >
+        <Eye aria-hidden className="size-4" />
+        Show names
+      </Button>
+      {!named.online && (
+        <span
+          id={reasonId}
+          className="flex items-center gap-1.5 text-[12.5px] text-ink-3"
+        >
+          <WifiOff aria-hidden className="size-3.5 shrink-0" />
+          {NAMES_OFFLINE}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Plan 6's de-identified list, as it was. */
+function PlainList({
+  level,
+  d,
+  q,
+  failed,
+}: {
+  level: PatientLevel;
+  d: DeidentifiedPatientsOut | null;
+  q: ReturnType<typeof usePatients>;
+  failed: boolean;
+}) {
+  return (
+    <>
       <p className="mb-3 flex items-center gap-1.5 text-[13px] text-ink-2">
         <Users aria-hidden className="size-4 shrink-0" />
         {LEVEL_NOTE[level]}
@@ -190,7 +406,7 @@ export function PatientsPanel({
       ) : (
         <Skeleton className="h-40 rounded-2xl" />
       )}
-    </SidePanel>
+    </>
   );
 }
 

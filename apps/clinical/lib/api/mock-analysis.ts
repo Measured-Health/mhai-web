@@ -21,7 +21,7 @@ import type {
   NamedPatientsOut,
   NamedPurpose,
   PatientRowOut,
-  PatientsOut,
+  DeidentifiedPatientsOut,
   PrevalenceOut,
   QualityOut,
   Setting,
@@ -862,7 +862,11 @@ export function createMockAnalysis({
       checkRange(f);
       return VIEW_FNS[view](f) as ViewOut[V];
     },
-    async listPatients({ drill, level, filters }): Promise<PatientsOut> {
+    async listPatients({
+      drill,
+      level,
+      filters,
+    }): Promise<DeidentifiedPatientsOut> {
       await wait();
       if (analysis === "unavailable") unavailable();
       checkRange(filters);

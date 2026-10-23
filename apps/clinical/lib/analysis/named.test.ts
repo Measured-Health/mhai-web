@@ -31,7 +31,7 @@ describe("named access words", () => {
 
   it("END_TEXT exact", () => {
     expect(END_TEXT).toEqual({
-      until: "The clearance letter's end date has passed.",
+      until: "This named view has ended. Show names again to continue.",
       changed: "Your clearance changed.",
       ended: "The clearance letter has ended.",
       revoked: "The clearance letter was revoked.",

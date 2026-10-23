@@ -28,7 +28,7 @@ export type EndReason =
 
 /** Each shown after "Named access has ended". */
 export const END_TEXT: Record<EndReason, string> = {
-  until: "The clearance letter's end date has passed.",
+  until: "This named view has ended. Show names again to continue.",
   changed: "Your clearance changed.",
   ended: "The clearance letter has ended.",
   revoked: "The clearance letter was revoked.",
@@ -83,3 +83,18 @@ export function msUntil(namedUntil: string, now: number): number {
   const t = Date.parse(namedUntil);
   return Number.isNaN(t) ? 0 : Math.max(0, t - now);
 }
+
+/**
+ * True when a `clearance/me` reply says names may show now: named, with an
+ * `until` still ahead. A named reply whose `until` has passed ends names.
+ */
+export function namedNow(
+  me: ClearanceMeOut | null | undefined,
+  now: number,
+): boolean {
+  return !!me?.named && me.until !== null && msUntil(me.until, now) > 0;
+}
+
+/** No answer at all (offline, or the network failed): not a reason to end names. */
+export const networkDown = (e: unknown): boolean =>
+  e instanceof ApiError && e.status === 0;

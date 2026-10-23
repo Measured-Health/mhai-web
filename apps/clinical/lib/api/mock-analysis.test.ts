@@ -894,7 +894,12 @@ describe("named patients", () => {
 
   it("names are never a GET: level named there is 422 level_not_supported", async () => {
     const e = await as(GRACE)
-      .listPatients({ drill: "sex-female", level: "named", filters: F })
+      .listPatients({
+        drill: "sex-female",
+        // Only a de-identified level type-checks; a caller that forces one is refused.
+        level: "named" as unknown as "deidentified",
+        filters: F,
+      })
       .catch((x) => x);
     expect(e).toMatchObject({ status: 422, code: "level_not_supported" });
     expect(auditEvents()).toHaveLength(0);
