@@ -178,6 +178,66 @@ describe("clearing unapproved learning data", () => {
     );
   });
 
+  it("the failed line goes once System has cancelled the job", async () => {
+    install(true);
+    await open();
+    await clear();
+    await within(region()).findByText("Clearing…");
+    clock += RESET_MS;
+    await userEvent.click(screen.getByRole("button", { name: "Look again" }));
+    await within(region()).findByText(/^Couldn't clear/);
+    const { jobs } = await api.listJobs({ status: "failed" });
+    const job = jobs.find((j) => j.type === "feedback_buffer_reset")!;
+    await api.cancelJobs(
+      { ids: [job.id], reason: "no_longer_needed", mfa_code: MOCK_CODE },
+      { idempotencyKey: "c1" },
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Look again" }));
+    await waitFor(() =>
+      expect(within(region()).queryByText(/^Couldn't clear/)).toBeNull(),
+    );
+    expect(
+      within(region()).queryByRole("link", { name: "View in Failed jobs" }),
+    ).toBeNull();
+    // The last outcome is the earlier clear.
+    expect(within(region()).getByText(/· 112 items ·/)).toBeInTheDocument();
+  });
+
+  it("says 1 item for one, and offers no Clear for none", async () => {
+    for (const n of [1, 0]) {
+      const m = api;
+      api = {
+        ...m,
+        getSettings: async () => {
+          const s = await m.getSettings();
+          s.feedback_buffer.waiting = n;
+          return s;
+        },
+      } as PlatformClient;
+      __setPlatformClientForTests(api);
+      const { unmount } = renderWithAuth(<Page />, { user: ADA });
+      await screen.findByRole("region", { name: TITLE });
+      expect(
+        within(region()).getByText(
+          `${n} ${n === 1 ? "item" : "items"} waiting`,
+        ),
+      ).toBeInTheDocument();
+      if (n === 1) {
+        await userEvent.click(
+          within(region()).getByRole("button", { name: "Clear" }),
+        );
+        expect(
+          await screen.findByRole("dialog", { name: "Clear 1 item?" }),
+        ).toBeInTheDocument();
+      } else
+        expect(
+          within(region()).queryByRole("button", { name: "Clear" }),
+        ).toBeNull();
+      unmount();
+      api = m;
+    }
+  });
+
   it("offline disables Clear with the reason", async () => {
     net.online = false;
     await open();

@@ -64,7 +64,7 @@ export type SettingsMockOptions = {
    */
   triage?: TriageMode | (() => TriageMode);
   /** The learning-data reset fails: `failed_job_id` is set when it ends. */
-  resetFails?: boolean;
+  resetFails?: boolean | (() => boolean);
 };
 
 export function settingsMock(
@@ -90,8 +90,10 @@ export function settingsMock(
   const buffer = seedFeedbackBuffer(now());
   let resetBy: Person | null = null;
   let resetReason = "";
-  /** The failed job a failed reset leaves in System's list. */
-  let failedJob: Job | null = null;
+  /** Whether the reset now running will fail (asked when it starts). */
+  let runFails = false;
+  /** The failed jobs failed resets leave in System's list, oldest first. */
+  const failedJobs: Job[] = [];
   let pending: SettingsRequest[] = [];
   /** Requests that lapsed, so a late approval says `expired`, not 404. */
   const lapsed = new Set<string>();
@@ -106,8 +108,8 @@ export function settingsMock(
   const jobSource: SharedJobSource = {
     sync(jobs) {
       settle();
-      if (failedJob && !jobs.some((j) => j.id === failedJob!.id))
-        jobs.push(failedJob);
+      for (const f of failedJobs)
+        if (!jobs.some((j) => j.id === f.id)) jobs.push(f);
     },
   };
   core.shared[SHARED_JOB_SOURCE] = jobSource;
@@ -141,10 +143,10 @@ export function settingsMock(
     const run = buffer.running;
     if (run && t >= Date.parse(run.started_at) + RESET_MS) {
       buffer.running = null;
-      if (resetFails) {
+      if (runFails) {
         buffer.failed_job_id = run.job_id;
         const failedAt = iso(Date.parse(run.started_at) + RESET_MS);
-        failedJob = {
+        failedJobs.push({
           id: run.job_id,
           type: "feedback_buffer_reset",
           hospital: null,
@@ -155,7 +157,7 @@ export function settingsMock(
           status: "failed",
           cancelled_by: null,
           cancelled_at: null,
-        };
+        });
       } else if (resetBy) {
         buffer.last_reset = {
           by: resetBy,
@@ -173,6 +175,9 @@ export function settingsMock(
 
   function out(): SettingsOut {
     settle();
+    // Once System has retried or cancelled the failed job, it isn't failed.
+    const f = failedJobs.find((j) => j.id === buffer.failed_job_id);
+    if (f && f.status !== "failed") buffer.failed_job_id = null;
     return {
       retention: {
         confirmed: false,
@@ -389,6 +394,7 @@ export function settingsMock(
         const job_id = core.newId("job");
         buffer.running = { job_id, started_at: iso(now()) };
         buffer.failed_job_id = null;
+        runFails = typeof resetFails === "function" ? resetFails() : resetFails;
         resetBy = person(m);
         resetReason = reason;
         return { job_id };

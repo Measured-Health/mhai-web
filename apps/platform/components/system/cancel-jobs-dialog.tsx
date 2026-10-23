@@ -9,7 +9,11 @@ import {
 import { useCancelJobs } from "@/lib/queries/ops";
 import { useStepUpCall } from "@/lib/queries/step-up-call";
 import { useToast } from "@mhai/ui/toast";
-import { StepUpDialog, type StepUpInput } from "../hospitals/step-up-dialog";
+import {
+  codeOf,
+  StepUpDialog,
+  type StepUpInput,
+} from "../hospitals/step-up-dialog";
 
 const REASONS: { code: CancelReason; label: string }[] = [
   { code: "no_longer_needed", label: "No longer needed" },
@@ -36,10 +40,7 @@ export function CancelJobsDialog({
     onClose();
   };
   const confirm = (input: StepUpInput) => {
-    const code =
-      "backup_code" in input
-        ? { backup_code: input.backup_code }
-        : { mfa_code: input.mfa_code };
+    const code = codeOf(input);
     run.run(
       {
         ids: jobs.map((j) => j.id),

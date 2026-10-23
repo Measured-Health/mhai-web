@@ -8,7 +8,11 @@ import { useRemoveMember, useTeam } from "@/lib/queries/team";
 import { Button } from "@mhai/ui/button";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
 import { useToast } from "@mhai/ui/toast";
-import { StepUpDialog, type StepUpInput } from "../hospitals/step-up-dialog";
+import {
+  codeOf,
+  StepUpDialog,
+  type StepUpInput,
+} from "../hospitals/step-up-dialog";
 import { TopBar } from "../shell/top-bar";
 import { CouldntLoad } from "../states/couldnt-load";
 import { Empty } from "../states/empty";
@@ -43,10 +47,7 @@ export function TeamView() {
   };
   const confirmRemove = (input: StepUpInput) => {
     if (!removing) return;
-    const code =
-      "backup_code" in input
-        ? { backup_code: input.backup_code }
-        : { mfa_code: input.mfa_code };
+    const code = codeOf(input);
     const backup = "backup_code" in code;
     remove.mutate(
       { id: removing.id, ...code },
