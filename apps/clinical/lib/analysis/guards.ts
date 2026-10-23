@@ -1,8 +1,7 @@
-// The small-group guards for Analysis (spec §4), modelled on the platform
-// app's analytics reader. The server computes and hides every number; these
-// check it did, so a reader can fail a view closed ("Couldn't load {view}")
-// rather than show a value it should have hidden. Neither app imports the
-// other; sharing this code is a later clean-up.
+// The small-group guards for Analysis (spec §4). The server computes and
+// hides every number; these check it did, so a reader can fail a view closed
+// ("Couldn't load {view}") rather than show a value it should have hidden.
+import { isNum, isObj, shows, type Obj } from "@mhai/ui/guards";
 import { SMALL_GROUP_MIN, isSmallCount } from "@mhai/ui/small-groups";
 import type { GuardedOut } from "../api/admin-contract";
 
@@ -10,18 +9,15 @@ export type GuardKind = "count" | "share" | "minutes";
 
 const HIDDEN: GuardedOut = { value: null, suppressed: true };
 
-type Obj = Record<string, unknown>;
-export const isObj = (v: unknown): v is Obj =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-export const isNum = (v: unknown): v is number =>
-  typeof v === "number" && Number.isFinite(v);
+// The shared shape checks live in the package. The value checks below are
+// Analysis' own, stricter than Usage's (a hidden value that carries a number
+// is unreadable, a share is read to the places it was sent with), so they stay.
+export { isObj, isNum, shows } from "@mhai/ui/guards";
 
 export const hidden = (g: GuardedOut) => g.suppressed;
 /** Shaped like a guarded number (a `value` and a `suppressed` flag). */
 export const isGuardedOut = (v: unknown): v is GuardedOut =>
   isObj(v) && "suppressed" in v && "value" in v;
-/** Shown with a number: neither hidden nor "nothing to measure". */
-export const shows = (g: GuardedOut) => !g.suppressed && g.value !== null;
 
 /**
  * A readable value of its kind. Hidden reads when it carries no number.

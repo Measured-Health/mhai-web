@@ -4,7 +4,7 @@
 // hidden, a wrong shape, or a What changed list the Critical guard can't
 // vouch for. An area that fails never shows zeros and never takes the
 // others down.
-import { SMALL_GROUP_MIN, isSmallCount } from "@mhai/ui/small-groups";
+import { SMALL_GROUP_MIN } from "@mhai/ui/small-groups";
 import {
   MEASURES,
   type AlertsRow,
@@ -22,6 +22,20 @@ import { integrityNotificationOk } from "../audit/read";
 import type { Notification } from "../api/notifications-contract";
 import { rankChanges, type RankedChange } from "./changes";
 import { MEASURE_AREA, MEASURE_KIND, type MeasureKind } from "./measures";
+import {
+  guardedOk,
+  isCount,
+  isHiddenValue as hidden,
+  isId,
+  isNum,
+  isObj,
+  isTime,
+  numeratorLeaks,
+  scrub,
+  setGivesAway,
+  shows,
+  type Obj,
+} from "@mhai/ui/guards";
 
 export const NOTHING_UNUSUAL = "Nothing unusual this period";
 export const NOT_ENOUGH_TO_COMPARE = "Not enough data to compare yet";
@@ -67,95 +81,24 @@ export type AnalyticsState = {
 
 const FAILED: Failed = { status: "failed" };
 const HIDDEN: Guarded = { value: null, suppressed: true };
-const ID = /^[A-Za-z0-9_-]+$/;
 const DIRECTIONS = new Set(["worse", "better", "rising", "falling"]);
 const CHANGE_AREAS = new Set(["use", "alerts", "quality"]);
 const MEASURE_IDS = new Set<string>(MEASURES);
 
 // ---- Shapes -------------------------------------------------------------------
 
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-const isNum = (v: unknown): v is number =>
-  typeof v === "number" && Number.isFinite(v);
-const isCount = (v: unknown): v is number =>
-  isNum(v) && Number.isInteger(v) && v >= 0;
-const isTime = (v: unknown): v is string =>
-  typeof v === "string" &&
-  /^\d{4}-\d{2}-\d{2}/.test(v) &&
-  !Number.isNaN(Date.parse(v));
 const isPerson = (v: unknown): v is Person =>
   isObj(v) &&
   typeof v.id === "string" &&
-  ID.test(v.id) &&
+  isId(v.id) &&
   typeof v.name === "string" &&
   v.name.trim() !== "";
-
-/**
- * A readable value of its kind. Hidden is always readable (its number, if
- * any, is dropped). Null is nothing to show, allowed where `loose`. A
- * count sent unhidden between 0 and 5 is not readable (a leak). A count is
- * a whole number, except where `loose`: a median of counts over an even
- * number of hospitals, or a weekly average in a change, can be 125.5.
- */
-function guardedOk(v: unknown, kind: MeasureKind, loose: boolean): boolean {
-  if (!isObj(v) || typeof v.suppressed !== "boolean") return false;
-  if (v.suppressed) return true;
-  if (v.value === null) return loose;
-  if (kind === "count") {
-    const n = v.value;
-    if (!isNum(n) || n < 0 || (!loose && !Number.isInteger(n))) return false;
-    return !(n > 0 && n < SMALL_GROUP_MIN);
-  }
-  if (kind === "share") return isNum(v.value) && v.value >= 0 && v.value <= 1;
-  return isNum(v.value) && v.value >= 0;
-}
-
-const hidden = (g: Guarded) => g.suppressed;
-const shows = (g: Guarded) => !g.suppressed && g.value !== null;
-
-/**
- * A share of a shown count gives its numerator away: `total × share`. It
- * must not come to 1–4, nor leave 1–4 outside it.
- */
-function numeratorLeaks(total: Guarded, share: Guarded) {
-  if (!shows(total) || !shows(share)) return false;
-  const n = Math.round(total.value! * share.value!);
-  return isSmallCount(n) || isSmallCount(total.value! - n);
-}
-
-/** Every hidden value as `{value: null, suppressed: true}`, deep. */
-function scrub<T>(v: T): T {
-  if (Array.isArray(v)) return v.map(scrub) as T;
-  if (!isObj(v)) return v;
-  if (typeof v.suppressed === "boolean" && "value" in v)
-    return (v.suppressed ? HIDDEN : { value: v.value, suppressed: false }) as T;
-  return Object.fromEntries(
-    Object.entries(v).map(([k, x]) => [k, scrub(x)]),
-  ) as T;
-}
 
 /** No two rows for the same hospital. */
 const uniqueHospitals = (rows: { hospital: Person }[]) =>
   new Set(rows.map((r) => r.hospital.id)).size === rows.length;
 
 // ---- Sets that add up -----------------------------------------------------------
-
-/**
- * In a set that adds up (a total and its members), exactly one hidden
- * value can be worked out from the others; with the total shown, hidden
- * members together are the total minus the shown ones, which under 5 (or
- * at or under 0) gives them away (the Plan 5b rule).
- */
-function setGivesAway(total: Guarded | null, members: Guarded[]): boolean {
-  const all = total ? [total, ...members] : members;
-  if (all.filter(hidden).length === 1) return true;
-  if (!total || !shows(total) || !members.some(hidden)) return false;
-  let rest = total.value!;
-  for (const m of members) if (shows(m)) rest -= m.value!;
-  return rest < SMALL_GROUP_MIN;
-}
 
 // ---- The areas ------------------------------------------------------------------
 
@@ -377,10 +320,8 @@ export function notificationOk(n: unknown): n is Notification {
   return (
     isObj(n) &&
     (n.kind === undefined || n.kind === "analytics_change") &&
-    typeof n.id === "string" &&
-    ID.test(n.id) &&
-    typeof n.change_id === "string" &&
-    ID.test(n.change_id) &&
+    isId(n.id) &&
+    isId(n.change_id) &&
     isTime(n.at) &&
     typeof n.seen === "boolean" &&
     sidesOk(n)
@@ -394,7 +335,7 @@ export function notificationOk(n: unknown): n is Notification {
  */
 function changeOk(c: unknown): c is Change {
   if (!isObj(c)) return false;
-  if (typeof c.id !== "string" || !ID.test(c.id)) return false;
+  if (!isId(c.id)) return false;
   if (!CHANGE_AREAS.has(c.area as string)) return false;
   if (!sidesOk(c)) return false;
   if (MEASURE_AREA[c.measure as Change["measure"]] !== c.area) return false;
