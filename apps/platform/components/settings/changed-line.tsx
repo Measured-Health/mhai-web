@@ -19,7 +19,7 @@ export function ChangedLine({
       Changed by {by.name} · {dateLabel(at)} ·{" "}
       <Link
         href="/activity"
-        className="font-semibold text-bloom underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-mint-deep"
+        className="inline-flex min-h-11 items-center font-semibold text-bloom md:min-h-0 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-mint-deep"
       >
         History
       </Link>

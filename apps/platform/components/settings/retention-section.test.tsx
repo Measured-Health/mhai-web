@@ -71,7 +71,7 @@ async function typeCode(d: HTMLElement, code = MOCK_CODE) {
 /** Change → a period → Continue; returns the step-up dialog. */
 async function choose(type: string, period: string, title: RegExp) {
   await userEvent.click(
-    within(row(type)).getByRole("button", { name: "Change" }),
+    within(row(type)).getByRole("button", { name: /^Change/ }),
   );
   const d = screen.getByRole("dialog", { name: `How long to keep ${type}` });
   await userEvent.selectOptions(within(d).getByLabelText("Keep for"), period);
@@ -230,7 +230,7 @@ describe("records retention", () => {
     ).toHaveTextContent("6 years");
     expect(
       within(row("Questions and answers")).queryByRole("button", {
-        name: "Change",
+        name: /^Change/,
       }),
     ).toBeNull();
   });
@@ -238,7 +238,7 @@ describe("records retention", () => {
   it("below-minimum periods aren't offered", async () => {
     await open();
     await userEvent.click(
-      within(row("Audit log")).getByRole("button", { name: "Change" }),
+      within(row("Audit log")).getByRole("button", { name: /^Change/ }),
     );
     let d = screen.getByRole("dialog", { name: "How long to keep Audit log" });
     expect(
@@ -248,7 +248,7 @@ describe("records retention", () => {
     ).toEqual(["6 years", "7 years", "8 years", "9 years", "10 years"]);
     await userEvent.click(within(d).getByRole("button", { name: "Cancel" }));
     await userEvent.click(
-      within(row("Documents")).getByRole("button", { name: "Change" }),
+      within(row("Documents")).getByRole("button", { name: /^Change/ }),
     );
     d = screen.getByRole("dialog", { name: "How long to keep Documents" });
     const options = within(within(d).getByLabelText("Keep for"))
@@ -262,7 +262,7 @@ describe("records retention", () => {
     const spy = vi.spyOn(api, "setRetention");
     await open();
     await userEvent.click(
-      within(row("Documents")).getByRole("button", { name: "Change" }),
+      within(row("Documents")).getByRole("button", { name: /^Change/ }),
     );
     const d = screen.getByRole("dialog", {
       name: "How long to keep Documents",
@@ -314,7 +314,7 @@ describe("records retention", () => {
       ),
     ).toBeInTheDocument();
     expect(row("Documents")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Change/ })).toBeNull();
   });
 
   it("no code is asked for when the preview fails; Continue reads it again", async () => {
@@ -324,7 +324,7 @@ describe("records retention", () => {
     await open();
     await userEvent.click(
       within(row("Questions and answers")).getByRole("button", {
-        name: "Change",
+        name: /^Change/,
       }),
     );
     const d = screen.getByRole("dialog", {
@@ -348,7 +348,7 @@ describe("records retention", () => {
     net.online = false;
     await open();
     expect(
-      within(row("Documents")).getByRole("button", { name: "Change" }),
+      within(row("Documents")).getByRole("button", { name: /^Change/ }),
     ).toBeDisabled();
     expect(
       screen.getByText("You're offline. This needs a connection."),

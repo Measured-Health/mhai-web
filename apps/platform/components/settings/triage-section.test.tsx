@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ApiError } from "@mhai/api-client/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetPlatformClientForTests,
@@ -277,5 +278,35 @@ describe("the triage gate", () => {
       await screen.findByText("Couldn't load triage."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/gpu_missing/)).toBeNull();
+  });
+
+  it("a clash (409 conflict) says Changed by someone else, closes and reloads", async () => {
+    await open();
+    const reads = vi.spyOn(api, "getSettings");
+    vi.spyOn(api, "setTriage").mockRejectedValueOnce(
+      new ApiError(409, "conflict"),
+    );
+    await userEvent.click(
+      within(region()).getByRole("button", { name: "Ask to switch on" }),
+    );
+    const d = await screen.findByRole("dialog", {
+      name: "Ask to switch triage on?",
+    });
+    await userEvent.type(within(d).getByLabelText(/^Reason/), "Validated");
+    await userEvent.type(
+      within(d).getByLabelText(
+        new RegExp(`^${SIGNOFF.replace(/[()]/g, "\\$&")}`),
+      ),
+      "Dr Nwosu, memo 12",
+    );
+    await typeCode(d);
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Ask to switch on" }),
+    );
+    expect(
+      await within(region()).findByText("Changed by someone else"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(reads).toHaveBeenCalled();
   });
 });

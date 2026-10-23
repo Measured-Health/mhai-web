@@ -20,6 +20,8 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/settings",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
+const net = vi.hoisted(() => ({ online: true }));
+vi.mock("@mhai/ui/hooks/use-online", () => ({ useOnline: () => net.online }));
 const TUNDE: User = {
   ...ADA,
   id: "tunde.okafor",
@@ -45,6 +47,7 @@ function install(email: string = ADA.email) {
 }
 beforeEach(() => install());
 afterEach(() => {
+  net.online = true;
   __resetPlatformClientForTests();
   vi.restoreAllMocks();
 });
@@ -281,5 +284,36 @@ describe("changes waiting for approval", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/pause_all/)).toBeNull();
+  });
+
+  it("a stale version on Approve shows Changed by someone else and reloads", async () => {
+    await tundeShortens();
+    await open();
+    const reads = vi.spyOn(api, "getSettings");
+    vi.spyOn(api, "approveRequest").mockRejectedValueOnce(
+      new ApiError(409, "conflict"),
+    );
+    await userEvent.click(btn("Approve"));
+    const d = await screen.findByRole("dialog", { name: /^Approve/ });
+    await typeCode(d);
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Approve change" }),
+    );
+    expect(
+      await within(region()).findByText("Changed by someone else"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(reads).toHaveBeenCalled();
+  });
+
+  it("offline disables Approve and Cancel request with the reason", async () => {
+    await tundeShortens();
+    net.online = false;
+    await open();
+    expect(btn("Approve")).toBeDisabled();
+    expect(btn("Cancel request")).toBeDisabled();
+    expect(
+      screen.getByText("You're offline. This needs a connection."),
+    ).toBeInTheDocument();
   });
 });

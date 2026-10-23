@@ -1,5 +1,4 @@
 // How long records are kept, in words and choices (spec §9, Plan 8c).
-import { dateLabel } from "@/lib/format";
 
 const MONTH = 30;
 const YEAR = 365;
@@ -21,6 +20,8 @@ const PERIODS: readonly number[] = [
 /**
  * The periods offered for a type, shortest first: never below its minimum,
  * and always the period in force (even one that isn't a whole month or year).
+ * If the period in force is below the minimum it is listed too; choosing it
+ * is refused in the dialog ("Choose a different period."), so it is harmless.
  */
 export function periodOptions(minimum_days: number, current: number): number[] {
   const set = new Set(PERIODS.filter((d) => d >= minimum_days));
@@ -34,13 +35,3 @@ export const previewLine = (days: number, n: number) =>
 
 /** A shorter period needs a different platform admin's approval. */
 export const isShorter = (days: number, current: number) => days < current;
-
-/** The words Settings and Health share while the clean-up is paused. */
-export function pausedLine(
-  by: { name: string } | null,
-  at: string | null,
-): string {
-  return `Records clean-up paused by ${by?.name ?? "a platform admin"}${
-    at ? ` since ${dateLabel(at)}` : ""
-  }`;
-}

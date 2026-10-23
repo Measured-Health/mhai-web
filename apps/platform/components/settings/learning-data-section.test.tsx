@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ApiError } from "@mhai/api-client/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetPlatformClientForTests,
@@ -270,5 +271,19 @@ describe("clearing unapproved learning data", () => {
     expect(
       await screen.findByText("Couldn't load the learning data."),
     ).toBeInTheDocument();
+  });
+
+  it("a clash (409 conflict) says Changed by someone else, closes and reloads", async () => {
+    await open();
+    const reads = vi.spyOn(api, "getSettings");
+    vi.spyOn(api, "resetFeedbackBuffer").mockRejectedValueOnce(
+      new ApiError(409, "conflict"),
+    );
+    await clear();
+    expect(
+      await within(region()).findByText("Changed by someone else"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(reads).toHaveBeenCalled();
   });
 });

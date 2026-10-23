@@ -9,7 +9,7 @@ import {
   useRefreshSettings,
   useSetCleanUpPaused,
 } from "@/lib/queries/settings";
-import { pausedLine } from "@/lib/settings/rules";
+import { pausedLine } from "@/lib/settings/labels";
 import { useStepUpCall } from "@/lib/queries/step-up-call";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";

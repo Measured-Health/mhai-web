@@ -166,7 +166,10 @@ export function PendingRequests({ settings }: { settings: SettingsOut }) {
                 approveLabel="Approve"
                 onApprove={() => void begin(r)}
                 onCancel={() => doCancel(r)}
-                busy={cancel.isPending || checking === r.id}
+                busy={
+                  (cancel.isPending && cancel.variables?.v.id === r.id) ||
+                  checking === r.id
+                }
                 offlineProps={net.props}
               />
             </li>
