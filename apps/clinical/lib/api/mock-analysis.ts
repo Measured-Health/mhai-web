@@ -17,6 +17,7 @@ import type {
   FindingsOut,
   Meta,
   NamedPatientRowOut,
+  NamedPatientsIn,
   NamedPatientsOut,
   NamedPurpose,
   PatientRowOut,
@@ -746,6 +747,21 @@ function lostCover(staffId: string, now: number): ClearanceMeOut["reason"] {
   return past.reduce((a, x) => (x.at >= a.at ? x : a)).reason;
 }
 
+/** The person and the request, in a stable form: what an Idempotency-Key is bound to. */
+function fingerprint(personId: string | null, q: NamedPatientsIn): string {
+  const f = q.filters as Record<string, unknown>;
+  const filters = Object.keys(f)
+    .sort()
+    .map((k) => [k, f[k] ?? null]);
+  return JSON.stringify([
+    personId,
+    q.drill,
+    filters,
+    q.purpose ?? null,
+    q.note ?? null,
+  ]);
+}
+
 const NOT_NAMED = (reason: ClearanceMeOut["reason"]): ClearanceMeOut => ({
   named: false,
   until: null,
@@ -803,8 +819,12 @@ export function createMockAnalysis({
     return (await staff()).find((s) => s.email.toLowerCase() === email);
   };
 
-  /** The Idempotency-Keys of views already recorded, until their named_until. */
-  const viewed = new Map<string, number>();
+  /**
+   * The Idempotency-Key of each recorded view: who asked for what, and its
+   * original named_until. Kept after expiry so a spent key stays spent (the
+   * demo's memory only; never rows).
+   */
+  const viewed = new Map<string, { print: string; namedUntil: number }>();
 
   /** Whether names may show for this person right now, read live. */
   async function clearanceMe(): Promise<ClearanceMeOut> {
@@ -877,19 +897,23 @@ export function createMockAnalysis({
       const key = opts?.idempotencyKey;
       if (!key) return fail(422, "invalid");
       checkRange(q.filters);
-      // Every call is checked afresh; a retry with the same key is the same
-      // view, so it records nothing new.
+      const p = await person();
       const t = now();
-      for (const [k, until] of viewed) if (until <= t) viewed.delete(k);
-      const out = await namedPatients(
-        q.drill,
-        q.filters,
-        q.purpose,
-        q.note,
-        !viewed.has(key),
-      );
-      viewed.set(key, Date.parse(out.named_until));
-      return out;
+      // A key is bound to the caller and the request. A replay is the same
+      // view: every check runs again, but it records nothing new and keeps
+      // the original named_until. A spent key is never renewed.
+      const print = fingerprint(p?.id ?? null, q);
+      const before = viewed.get(key);
+      if (before && before.print !== print)
+        return fail(422, "idempotency_mismatch");
+      if (before && before.namedUntil <= t) return fail(409, "expired");
+      const out = await namedPatients(p, q, !before);
+      if (!before) {
+        viewed.set(key, { print, namedUntil: Date.parse(out.named_until) });
+        return out;
+      }
+      const until = Math.min(before.namedUntil, Date.parse(out.named_until));
+      return { ...out, named_until: new Date(until).toISOString() };
     },
     async getClearanceMe() {
       await wait();
@@ -912,14 +936,11 @@ export function createMockAnalysis({
    * is one flagged security event with the count and purpose, never a name.
    */
   async function namedPatients(
-    drill: string,
-    filters: AnalysisFilters,
-    purpose: unknown,
-    note: unknown,
+    p: StaffOut | undefined,
+    { drill, filters, purpose, note }: NamedPatientsIn,
     record: boolean,
   ): Promise<NamedPatientsOut> {
     if (namedAccess !== "on") return fail(403, "named_access_off");
-    const p = await person();
     if (!eligible(p)) return fail(403, "not_cleared");
     const t = now();
     const cover = coverFor(p.id, t);

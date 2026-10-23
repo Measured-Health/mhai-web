@@ -3,6 +3,7 @@ import type {
   ClearanceMeOut,
   FilterOptionsOut,
   NamedPatientsIn,
+  NamedPatientsOut,
   PatientLevel,
   PatientsOut,
   ViewId,
@@ -30,7 +31,7 @@ export interface AnalysisClient {
   listNamedPatients(
     q: NamedPatientsIn,
     opts: WriteOpts & { idempotencyKey: string },
-  ): Promise<PatientsOut>;
+  ): Promise<NamedPatientsOut>;
   /** Whether this person may see names right now; never cached. */
   getClearanceMe(): Promise<ClearanceMeOut>;
   /** The clearance client's switch position, for the Analysis page. */

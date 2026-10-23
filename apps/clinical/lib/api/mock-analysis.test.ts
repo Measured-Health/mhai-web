@@ -883,6 +883,13 @@ describe("named patients", () => {
     }
     await named(GRACE, { purpose: "audit" });
     expect(auditEvents()).toHaveLength(2);
+    // The free-text note is never recorded.
+    await named(GRACE, { purpose: "other", note: "Ward 4 recall" });
+    expect(auditEvents()).toHaveLength(3);
+    expect(auditEvents()[2]).toMatchObject({ purpose: "other" });
+    const all = JSON.stringify(auditEvents());
+    expect(all).not.toContain("Ward 4 recall");
+    expect(all).not.toContain("note");
   });
 
   it("names are never a GET: level named there is 422 level_not_supported", async () => {
@@ -922,13 +929,70 @@ describe("named patients", () => {
     expect(await code(m.listNamedPatients(q, key))).toBe("403 not_cleared");
   });
 
-  it("no invented name matches a real-person list", () => {
+  it("a key is bound to the person and the request, and keeps its named_until", async () => {
+    const m = as(GRACE);
+    const q: NamedPatientsIn = {
+      drill: "sex-female",
+      filters: F,
+      purpose: "audit",
+    };
+    const key = { idempotencyKey: "k-bound" };
+    const first = await m.listNamedPatients(q, key);
+    expect(auditEvents()).toHaveLength(1);
+    // Another request under the same key: refused, and nothing recorded.
+    for (const other of [
+      { ...q, drill: "sex-male" },
+      { ...q, purpose: "clinical_follow_up" as const },
+      { ...q, filters: { ...F, sex: "female" as const } },
+      { ...q, purpose: "other" as const, note: "Ward 4 recall" },
+    ])
+      expect(
+        await code(m.listNamedPatients(other, key)),
+        JSON.stringify(other),
+      ).toBe("422 idempotency_mismatch");
+    // Another person under the same key, on the same client: refused.
+    const kemi = createMockAnalysis({
+      delayMs: 0,
+      now: () => clock,
+      me: async () => KEMI,
+      staff: () => admin.listStaff(),
+    });
+    expect(await code(kemi.listNamedPatients(q, key))).toBe("ok");
+    const shared = { idempotencyKey: "k-shared" };
+    let who: string = GRACE;
+    const either = createMockAnalysis({
+      delayMs: 0,
+      now: () => clock,
+      me: async () => who,
+      staff: () => admin.listStaff(),
+    });
+    await either.listNamedPatients(q, shared);
+    who = KEMI;
+    expect(await code(either.listNamedPatients(q, shared))).toBe(
+      "422 idempotency_mismatch",
+    );
+    expect(auditEvents()).toHaveLength(3);
+    // A replay later keeps the original named_until, and records nothing.
+    clock += 30 * 60_000;
+    const replay = await m.listNamedPatients(q, key);
+    expect(replay.named_until).toBe(first.named_until);
+    expect(auditEvents()).toHaveLength(3);
+    // Once named_until has passed, the key is spent: never renewed.
+    clock = Date.parse(first.named_until);
+    expect(await code(m.listNamedPatients(q, key))).toBe("409 expired");
+    clock += HOUR;
+    expect(await code(m.listNamedPatients(q, key))).toBe("409 expired");
+    expect(auditEvents()).toHaveLength(3);
+  });
+
+  it("no invented name matches a real-person list", async () => {
     const readme = readFileSync(
       path.join(import.meta.dirname, "../../../../README.md"),
       "utf8",
     );
-    // The demo's own people: the README's samples, the staff and the platform admins.
-    const people = [
+    // The demo's own people: the README's samples, every staff member in the
+    // fixtures, and the platform admins.
+    const readmeSamples = [
       "Dr. Reyes",
       "Dr. Okafor",
       "Nurse Bello",
@@ -938,15 +1002,15 @@ describe("named patients", () => {
       "Dr. Kemi Adeyemi",
       "Amara Eze",
       "Chidi Nwosu",
-      "Dr. Mensah",
-      "Dr. Sani",
-      "Dr. Udo",
-      "Dr. Owusu",
-      "Dr. Danjuma",
-      "Dr. Adebayo-Ogunleye-Fashola",
+    ];
+    for (const p of readmeSamples) expect(readme).toContain(p);
+    const staff = await admin.listStaff();
+    expect(staff.length).toBeGreaterThan(10);
+    const people = [
+      ...readmeSamples,
+      ...staff.flatMap((s) => [s.display_name, s.full_name]),
       ...Object.values(PLATFORM_ADMINS).map((p) => p.display_name),
     ];
-    for (const p of people.slice(0, 7)) expect(readme).toContain(p);
     const words = new Set(
       people
         .flatMap((p) => p.replace(/^(Dr|Nurse)\. /, "").split(/[ -]/))

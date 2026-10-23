@@ -953,7 +953,16 @@ describe("readPatients, named", () => {
     const raw: Record<string, unknown> = reply();
     delete raw.named_until;
     expect(readPatients(raw, "named", NOW).status).toBe("failed");
-    for (const named_until of [null, "", "soon", 1_800_000_000_000])
+    for (const named_until of [
+      null,
+      "",
+      "soon",
+      1_800_000_000_000,
+      // A bare date, or a time with no offset: read in the browser's zone.
+      "2026-10-23",
+      "2026-10-22T23:00:00",
+      "2026-10-22 23:00:00Z",
+    ])
       expect(
         readPatients(reply({ named_until }), "named", NOW).status,
         String(named_until),
@@ -1055,6 +1064,15 @@ describe("readClearanceMe", () => {
 
   it("reads named and not named", () => {
     expect(readClearanceMe(me)).toEqual(me);
+    for (const until of [
+      "2027-03-08T22:59:59Z",
+      "2027-03-08T23:59:59.999+01:00",
+      "2027-03-08T18:59:59-04:00",
+    ])
+      expect(readClearanceMe({ ...me, until }), until).toEqual({
+        ...me,
+        until,
+      });
     expect(readClearanceMe(off)).toEqual(off);
     for (const reason of [
       "none",
@@ -1078,6 +1096,9 @@ describe("readClearanceMe", () => {
       { ...me, named: "true" },
       { ...me, until: null },
       { ...me, until: "soon" },
+      { ...me, until: "2026-10-23" },
+      { ...me, until: "2026-10-22T23:00:00" },
+      { ...off, version: 3 },
       { ...me, clearance_id: "cl act" },
       { ...me, clearance_id: null },
       { ...me, version: -1 },

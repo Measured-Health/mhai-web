@@ -1131,7 +1131,10 @@ describe("clearance routes (Plan 11)", () => {
     const c = ctx(...path);
     if (method === "GET") return GET(get(`${BASE}/${path.join("/")}`), c);
     if (path.length === 2) return POST(upload(multipart(16)), c);
-    return POST(write(path), c);
+    const req = write(path);
+    // The named list needs its key (it records a view).
+    if (path[0] === "analysis") req.headers.set("Idempotency-Key", "k-shape");
+    return POST(req, c);
   };
   beforeEach(() => {
     vi.stubEnv("ANALYSIS_SIGNED_OFF", "true");
@@ -1297,6 +1300,23 @@ describe("clearance routes (Plan 11)", () => {
     expect(init.method).toBe("POST");
     expect(init.body).toBe(body);
     expect(init.headers).toMatchObject({ "Idempotency-Key": "k-named" });
+    // With no key, or a bad one, it never goes upstream.
+    for (const k of [null, "", "bad key!", "x".repeat(65)]) {
+      const r = new Request(`${BASE}/analysis/patients/named`, {
+        method: "POST",
+        headers: {
+          host: "demo.test",
+          origin: "http://demo.test",
+          "content-type": "application/json",
+          ...(k === null ? {} : { "Idempotency-Key": k }),
+        },
+        body,
+      });
+      const out = await POST(r, ctx("analysis", "patients", "named"));
+      expect([k, out.status]).toEqual([k, 422]);
+      expect(await out.json()).toEqual({ code: "invalid" });
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     // From another origin it is refused, as every write is.
     const cross = new Request(`${BASE}/analysis/patients/named`, {
       method: "POST",

@@ -130,6 +130,8 @@
   - the per-hospital switch fields;
   - `reason` on `GET /analysis/clearance/me`; when `named` is false, `until` and `clearance_id` are null and `version` is 0 (the app reads anything else there as a change);
   - the named list is `POST /analysis/patients/named` with an `Idempotency-Key` and the JSON body `{drill, purpose, note?, filters}`, so the purpose and its note are never in a URL; `GET /analysis/patients` is de-identified only, and the clinical proxy refuses a GET with any other `level` (**403** `named_access_off`);
+  - the named list's Idempotency-Key is bound to the caller and the body (`drill`, `filters`, `purpose`, `note`): a replay re-runs every check, records no new view and returns the original `named_until` (never extended); the same key with another caller or body is **422** `idempotency_mismatch`; a key whose `named_until` has passed is spent, **409** `expired`, never renewed; the clinical proxy answers **422** `invalid` to the POST with no valid key, before upstream;
+  - `until` (on `clearance/me`) and `named_until` are ISO instants with `Z` or a `±hh:mm` offset; the app reads a bare date or a time with no offset as a wrong shape;
   - after a revoke or a removal from the letter, a named request is **403** `not_cleared`; only a passed end date gives **403** `clearance_ended`;
   - **422** `would_empty` on narrow;
   - for Plan 12b: `covered_platform` on the letter (both apps) and on upload; `covers_you` on the platform letter; `covers=me` on the platform list ("my clearances"); **409** `same_person` on verify and reject when the caller is covered;

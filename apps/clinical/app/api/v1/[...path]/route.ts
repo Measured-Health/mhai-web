@@ -374,6 +374,14 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   // The key is on, but this person's named access may not be.
   if (!namedGateHolds(path, s.user))
     return json(403, { code: "named_access_off" });
+  // A named list records a view: never sent upstream without a valid key.
+  const key = req.headers.get("idempotency-key");
+  if (
+    req.method === "POST" &&
+    path[0] === "analysis" &&
+    !(key && IDEMPOTENCY_KEY.test(key))
+  )
+    return json(422, { code: "invalid" });
   if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
 
   let body: string | Uint8Array<ArrayBuffer> | undefined;
@@ -397,7 +405,6 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   }
   const files = fileTypes(req.method, path);
 
-  const key = req.headers.get("idempotency-key");
   // Only reads carry filters; a write's query string is never forwarded.
   const search = req.method === "GET" ? new URL(req.url).search : "";
   const url = `${apiBase()}/${path.map(encodeURIComponent).join("/")}${search}`;

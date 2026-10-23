@@ -92,6 +92,15 @@ const isTime = (v: unknown): v is string =>
   /^\d{4}-\d{2}-\d{2}/.test(v) &&
   !Number.isNaN(Date.parse(v));
 
+/**
+ * An ISO instant with its zone: "Z" or "±hh:mm". A bare date, or a time with
+ * no offset, would be read in the browser's own zone, so it fails.
+ */
+const INSTANT =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+const isInstant = (v: unknown): v is string =>
+  typeof v === "string" && INSTANT.test(v) && !Number.isNaN(Date.parse(v));
+
 const count = (v: unknown) => guardedOk(v, "count");
 const share = (v: unknown) => guardedOk(v, "share", true);
 const minutes = (v: unknown) => guardedOk(v, "minutes", true);
@@ -682,7 +691,7 @@ export function readPatients(
       },
     };
   const until = raw.named_until;
-  if (!isTime(until) || !(Date.parse(until) > now)) return FAILED;
+  if (!isInstant(until) || !(Date.parse(until) > now)) return FAILED;
   const c = raw.clearance;
   if (!isObj(c) || !exactKeys(c, CLEARANCE_KEYS)) return FAILED;
   if (!isId(c.id) || !isDay(c.end_date)) return FAILED;
@@ -726,10 +735,17 @@ export function readClearanceMe(raw: unknown): ClearanceMeOut | null {
   const { named, until, clearance_id, version, reason } = raw;
   if (!isCount(version)) return null;
   if (named === true) {
-    if (!isTime(until) || !isId(clearance_id) || reason !== null) return null;
+    if (!isInstant(until) || !isId(clearance_id) || reason !== null)
+      return null;
     return { named, until, clearance_id, version, reason };
   }
-  if (named !== false || until !== null || clearance_id !== null) return null;
+  if (
+    named !== false ||
+    until !== null ||
+    clearance_id !== null ||
+    version !== 0
+  )
+    return null;
   if (reason !== null && !oneOf(ME_REASONS, reason)) return null;
   return {
     named,
