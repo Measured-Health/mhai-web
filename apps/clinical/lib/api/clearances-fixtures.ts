@@ -245,6 +245,7 @@ export function sampleClearances(now: number, today: string): ClearanceOut[] {
         by: grace,
         side: "hospital",
         at: iso(up(20)),
+        day: shiftDay(today, -20),
         reason: "person_left",
         note: null,
       },

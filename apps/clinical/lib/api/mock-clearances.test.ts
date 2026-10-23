@@ -5,6 +5,7 @@ import { DEMO_EMAILS, MOCK_CODE, createStepUp } from "@/lib/auth/mock";
 import { ApiError } from "./errors";
 import type { ClearanceClient } from "./clearances";
 import type { ClearanceUpload } from "./clearances-contract";
+import { statusLine } from "@/lib/clearances/status";
 import { auditEvents, resetAudit } from "./mock-audit";
 import {
   CHECK_MS,
@@ -332,6 +333,10 @@ describe("revoking", () => {
       key(),
     );
     expect(out.status).toBe("revoked");
+    expect(out.revocation?.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(statusLine(out, out.revocation!.day).words).toMatch(
+      /^Revoked \d{1,2} \w{3} \d{4}$/,
+    );
     expect(out.revocation).toMatchObject({
       by: { display_name: "Dr. Obi" },
       side: "hospital",

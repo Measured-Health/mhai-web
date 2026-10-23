@@ -31,7 +31,10 @@ export function statusLine(c: ClearanceOut, today: string): StatusLine {
   } catch {
     // A malformed date from the server fails closed: no access, no date.
     return {
-      icon: "calendar-x",
+      icon:
+        c.status === "revoked" || c.status === "rejected"
+          ? "ban"
+          : "calendar-x",
       words: STATUS_LABEL[c.status === "active" ? "ended" : c.status],
       detail: null,
     };
@@ -71,7 +74,7 @@ function line(c: ClearanceOut, today: string): StatusLine {
       return {
         icon: "ban",
         // The hospital's day, as the server sends it; never cut from the instant.
-        words: v?.day ? revokedWords(v.day) : STATUS_LABEL.revoked,
+        words: v ? revokedWords(v.day) : STATUS_LABEL.revoked,
         detail: v
           ? `By ${v.by.display_name} · ${REVOKE_LABEL[v.reason]}`
           : null,

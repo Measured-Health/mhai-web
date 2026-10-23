@@ -146,14 +146,14 @@ describe("statusLine", () => {
   });
 
   it("revoked uses the server's hospital day, and never a cut instant", () => {
-    const rev = (day?: string) =>
+    const rev = (day: string) =>
       letter({
         status: "revoked",
         revocation: {
           by: { display_name: "Ada" },
           side: "hospital",
           at: "2026-10-02T23:30:00Z",
-          ...(day ? { day } : {}),
+          day,
           reason: "other",
           note: null,
         },
@@ -161,7 +161,11 @@ describe("statusLine", () => {
     expect(statusLine(rev("2026-10-03"), TODAY).words).toBe(
       "Revoked 3 Oct 2026",
     );
-    expect(statusLine(rev(), TODAY).words).toBe("Revoked");
+    expect(statusLine(rev("3 Oct"), TODAY)).toEqual({
+      icon: "ban",
+      words: "Revoked",
+      detail: null,
+    });
     expect(statusLine(letter({ status: "revoked" }), TODAY)).toEqual({
       icon: "ban",
       words: "Revoked",
