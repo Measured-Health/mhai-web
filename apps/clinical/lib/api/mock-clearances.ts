@@ -153,6 +153,20 @@ export function coverFor(staffId: string, now: number): Cover {
   };
 }
 
+/**
+ * Copies of every letter that names this person, or named them before they
+ * were removed from it, for the Analysis mock's reasons. Memory only.
+ */
+export function lettersFor(staffId: string, now: number): ClearanceOut[] {
+  return copy(
+    seeded(now).letters.filter(
+      (c) =>
+        c.covered.some((p) => p.id === staffId) ||
+        c.history.some((h) => h.removed?.some((p) => p.id === staffId)),
+    ),
+  );
+}
+
 type FileKind = "pdf" | "png" | "jpeg";
 /** The type a file really is, from its first bytes; its name and claimed type don't count. */
 async function fileKind(file: Blob): Promise<FileKind | null> {

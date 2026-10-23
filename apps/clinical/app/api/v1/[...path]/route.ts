@@ -103,13 +103,22 @@ function clearanceShape(method: string, path: string[]): boolean {
   }
 }
 
-/** Every path about named access: all 404 while the sign-off key is off. */
-const isClearancePath = ([first, second]: string[]) =>
+/**
+ * Every path about named access: all 404 while the sign-off key is off. The
+ * named list is `POST analysis/patients/named`, so its purpose and note are
+ * in the body, never in a URL.
+ */
+const isClearancePath = ([first, second, third]: string[]) =>
   (first === "hospital" && second === "clearances") ||
   (first === "analysis" &&
-    (second === "named-access" || second === "clearance"));
+    (second === "named-access" ||
+      second === "clearance" ||
+      (second === "patients" && third === "named")));
 
-/** A patient list asking for anything but the de-identified level. */
+/**
+ * A GET patient list asking for anything but the de-identified level:
+ * always refused, because names are only ever the POST above.
+ */
 const asksForNames = (req: Request, [first, second]: string[]) =>
   first === "analysis" &&
   second === "patients" &&
@@ -122,10 +131,10 @@ const asksForNames = (req: Request, [first, second]: string[]) =>
  * are for hospital admins with named access; the position, your clearance
  * and a named list for anyone with named access.
  */
-const namedGateHolds = (req: Request, path: string[], user: User) =>
+const namedGateHolds = (path: string[], user: User) =>
   path[0] === "hospital" && path[1] === "clearances"
     ? canOpenNamedAccess(user)
-    : isClearancePath(path) || asksForNames(req, path)
+    : isClearancePath(path)
       ? canUseNamedAccess(user)
       : true;
 
@@ -252,15 +261,18 @@ const ANALYSIS_VIEWS = new Set([
 ]);
 
 /**
- * Analysis reads only: the seven views the analysis client uses (Plan 6),
- * plus the named-access position and your clearance (Plan 11).
+ * Analysis reads: the seven views the analysis client uses (Plan 6), plus
+ * the named-access position, your clearance and the named list (Plan 11).
+ * The named list is the one POST: it records a view.
  */
 const analysisShape = (method: string, [, second, third, ...rest]: string[]) =>
-  method === "GET" &&
   rest.length === 0 &&
-  (third === undefined
-    ? ANALYSIS_VIEWS.has(second ?? "") || second === "named-access"
-    : second === "clearance" && third === "me");
+  (method === "POST"
+    ? second === "patients" && third === "named"
+    : method === "GET" &&
+      (third === undefined
+        ? ANALYSIS_VIEWS.has(second ?? "") || second === "named-access"
+        : second === "clearance" && third === "me"));
 
 const ALERT_ACTIONS = new Set(["acknowledge", "dismiss"]);
 
@@ -334,11 +346,10 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   if (path[0] === "analysis" && !analysisSignedOff())
     return json(404, { code: "not_found" });
   // Named access is off until it is signed off (Plan 11): everything about
-  // it is 404, and a patient list may only be de-identified.
-  if (!namedSignedOff()) {
-    if (isClearancePath(path)) return json(404, { code: "not_found" });
-    if (asksForNames(req, path)) return json(403, { code: "named_access_off" });
-  }
+  // it is 404. A GET list is only ever de-identified, key or no key.
+  if (!namedSignedOff() && isClearancePath(path))
+    return json(404, { code: "not_found" });
+  if (asksForNames(req, path)) return json(403, { code: "named_access_off" });
   if (req.method !== "GET" && !sameOrigin(req)) return forbidden();
 
   let s = await readSession();
@@ -361,8 +372,16 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   if (area !== "clinical" && s.user.mfaEnabled !== true)
     return json(403, { code: "mfa_required" });
   // The key is on, but this person's named access may not be.
-  if (!namedGateHolds(req, path, s.user))
+  if (!namedGateHolds(path, s.user))
     return json(403, { code: "named_access_off" });
+  // A named list records a view: never sent upstream without a valid key.
+  const key = req.headers.get("idempotency-key");
+  if (
+    req.method === "POST" &&
+    path[0] === "analysis" &&
+    !(key && IDEMPOTENCY_KEY.test(key))
+  )
+    return json(422, { code: "invalid" });
   if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
 
   let body: string | Uint8Array<ArrayBuffer> | undefined;
@@ -386,7 +405,6 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   }
   const files = fileTypes(req.method, path);
 
-  const key = req.headers.get("idempotency-key");
   // Only reads carry filters; a write's query string is never forwarded.
   const search = req.method === "GET" ? new URL(req.url).search : "";
   const url = `${apiBase()}/${path.map(encodeURIComponent).join("/")}${search}`;

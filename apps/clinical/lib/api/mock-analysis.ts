@@ -1,17 +1,25 @@
+import type { NamedPosition } from "@mhai/ui/clearances";
 import { SMALL_GROUP_MIN, isSmallCount } from "@mhai/ui/small-groups";
+import { getAuthClient } from "../auth/client";
 import { dismissReasonLabel } from "../notifications/alert-view";
-import type { ConfidenceLevel, GuardedOut } from "./admin-contract";
+import { getAdminClient } from "./admin";
+import type { ConfidenceLevel, GuardedOut, StaffOut } from "./admin-contract";
 import type { DismissReason } from "./alerts-contract";
 import type { AnalysisClient } from "./analysis";
 import type {
   AffectedOut,
   AgeBand,
   AnalysisFilters,
+  ClearanceMeOut,
   CoOccurringOut,
   ConditionRef,
   Drillable,
   FindingsOut,
   Meta,
+  NamedPatientRowOut,
+  NamedPatientsIn,
+  NamedPatientsOut,
+  NamedPurpose,
   PatientRowOut,
   PatientsOut,
   PrevalenceOut,
@@ -31,8 +39,23 @@ import {
 } from "./analysis-fixtures";
 import { ApiError } from "./errors";
 import { recordAudit } from "./mock-audit";
+import {
+  coverFor,
+  createMockClearances,
+  endOfHospitalDay,
+  lettersFor,
+} from "./mock-clearances";
 
 export const PATIENT_ROWS_MAX = 200;
+/** The demo's stand-in for the server's earliest-end rule: names for an hour at most. */
+export const NAMED_VIEW_MS = 3_600_000;
+const PURPOSES: readonly NamedPurpose[] = [
+  "clinical_follow_up",
+  "quality_improvement",
+  "audit",
+  "other",
+];
+const NOTE_MAX = 200;
 export type MockAnalysisMode = "normal" | "unavailable" | { failView: ViewId };
 
 // --- the small-group rule, the way the server must apply it ---
@@ -686,6 +709,67 @@ function rowOf(p: CohortPatient, f: AnalysisFilters): PatientRowOut {
   };
 }
 
+const namedRowOf = (
+  p: CohortPatient,
+  f: AnalysisFilters,
+): NamedPatientRowOut => ({ ...rowOf(p, f), name: p.name, mrn: p.mrn });
+
+/** May this person hold a letter's cover: active, a hospital admin or analyst, with two-step. */
+const eligible = (s: StaffOut | undefined): s is StaffOut =>
+  !!s &&
+  s.status === "active" &&
+  (s.roles.includes("hospital_admin") || s.roles.includes("analyst")) &&
+  !s.issues.includes("mfa_not_set_up");
+
+/**
+ * Why a person who held cover no longer does: the latest of their letters'
+ * revocation, their removal from a letter, or a letter's end date passing.
+ */
+function lostCover(staffId: string, now: number): ClearanceMeOut["reason"] {
+  const stops: { at: number; reason: ClearanceMeOut["reason"] }[] = [];
+  for (const c of lettersFor(staffId, now)) {
+    // A letter never verified never gave access, so it can't take it away.
+    if (c.verified_at === null) continue;
+    for (const h of c.history)
+      if (h.kind === "narrowed" && h.removed?.some((p) => p.id === staffId))
+        stops.push({ at: Date.parse(h.at), reason: "removed_from_letter" });
+    if (!c.covered.some((p) => p.id === staffId)) continue;
+    if (c.status === "revoked" && c.revocation)
+      stops.push({ at: Date.parse(c.revocation.at), reason: "revoked" });
+    else if (c.status === "active" || c.status === "ended")
+      stops.push({
+        at: Date.parse(endOfHospitalDay(c.end_date)),
+        reason: "ended",
+      });
+  }
+  const past = stops.filter((x) => x.at <= now);
+  if (past.length === 0) return "none";
+  return past.reduce((a, x) => (x.at >= a.at ? x : a)).reason;
+}
+
+/** The person and the request, in a stable form: what an Idempotency-Key is bound to. */
+function fingerprint(personId: string | null, q: NamedPatientsIn): string {
+  const f = q.filters as Record<string, unknown>;
+  const filters = Object.keys(f)
+    .sort()
+    .map((k) => [k, f[k] ?? null]);
+  return JSON.stringify([
+    personId,
+    q.drill,
+    filters,
+    q.purpose ?? null,
+    q.note ?? null,
+  ]);
+}
+
+const NOT_NAMED = (reason: ClearanceMeOut["reason"]): ClearanceMeOut => ({
+  named: false,
+  until: null,
+  clearance_id: null,
+  version: 0,
+  reason,
+});
+
 /**
  * The demo's Analysis API: one hospital, a fixed synthetic cohort, computed
  * fresh for every filter combination. It applies the same small-group rules
@@ -697,13 +781,26 @@ export function createMockAnalysis({
   analysis = "normal",
   now = () => Date.now(),
   actor = "Analyst",
+  me: meOpt,
+  staff: staffOpt,
+  namedAccess = "on",
 }: {
   delayMs?: number;
   analysis?: MockAnalysisMode;
   now?: () => number;
-  /** Who the audit trail says opened the patients. */
+  /** Who the audit trail says opened the de-identified patients. */
   actor?: string;
+  /** The signed-in person's email; by default the demo session's. */
+  me?: () => Promise<string | null>;
+  /** The hospital's staff, as the admin client lists them (roles change there). */
+  staff?: () => Promise<StaffOut[]>;
+  /** The effective named-access switch for this hospital. */
+  namedAccess?: NamedPosition;
 } = {}): AnalysisClient {
+  const me =
+    meOpt ??
+    (async () => (await getAuthClient().getSession())?.user.email ?? null);
+  const staff = staffOpt ?? (() => getAdminClient().listStaff());
   const wait = () =>
     delayMs > 0
       ? new Promise<void>((r) => setTimeout(r, delayMs))
@@ -711,6 +808,42 @@ export function createMockAnalysis({
   const unavailable = () => {
     throw new ApiError(503, "unavailable");
   };
+  const fail = (status: number, code: string): never => {
+    throw new ApiError(status, code);
+  };
+
+  /** Who is asking, from the staff list as it is now (never cached). */
+  const person = async () => {
+    const email = (await me())?.toLowerCase() ?? null;
+    if (email === null) return undefined;
+    return (await staff()).find((s) => s.email.toLowerCase() === email);
+  };
+
+  /**
+   * The Idempotency-Key of each recorded view: who asked for what, and its
+   * original named_until. Kept after expiry so a spent key stays spent (the
+   * demo's memory only; never rows).
+   */
+  const viewed = new Map<string, { print: string; namedUntil: number }>();
+
+  /** Whether names may show for this person right now, read live. */
+  async function clearanceMe(): Promise<ClearanceMeOut> {
+    if (namedAccess !== "on") return NOT_NAMED("switched_off");
+    const p = await person();
+    if (!eligible(p)) return NOT_NAMED("role_or_account");
+    const t = now();
+    const cover = coverFor(p.id, t);
+    if (cover.covered && Date.parse(cover.until) > t)
+      return {
+        named: true,
+        until: cover.until,
+        clearance_id: cover.clearance_id,
+        version: cover.version,
+        reason: null,
+      };
+    return NOT_NAMED(lostCover(p.id, t));
+  }
+
   return {
     async getFilterOptions() {
       await wait();
@@ -733,6 +866,7 @@ export function createMockAnalysis({
       await wait();
       if (analysis === "unavailable") unavailable();
       checkRange(filters);
+      // Names are only ever a POST (the purpose stays out of URLs).
       if (level !== "deidentified")
         throw new ApiError(422, "level_not_supported");
       if (!shownDrills(filters).has(drill))
@@ -757,5 +891,105 @@ export function createMockAnalysis({
       });
       return { level, count: hit.length, patients };
     },
+    async listNamedPatients(q, opts) {
+      await wait();
+      if (analysis === "unavailable") unavailable();
+      const key = opts?.idempotencyKey;
+      if (!key) return fail(422, "invalid");
+      checkRange(q.filters);
+      const p = await person();
+      const t = now();
+      // A key is bound to the caller and the request. A replay is the same
+      // view: every check runs again, but it records nothing new and keeps
+      // the original named_until. A spent key is never renewed.
+      const print = fingerprint(p?.id ?? null, q);
+      const before = viewed.get(key);
+      if (before && before.print !== print)
+        return fail(422, "idempotency_mismatch");
+      if (before && before.namedUntil <= t) return fail(409, "expired");
+      const out = await namedPatients(p, q, !before);
+      if (!before) {
+        viewed.set(key, { print, namedUntil: Date.parse(out.named_until) });
+        return out;
+      }
+      const until = Math.min(before.namedUntil, Date.parse(out.named_until));
+      return { ...out, named_until: new Date(until).toISOString() };
+    },
+    async getClearanceMe() {
+      await wait();
+      if (analysis === "unavailable") unavailable();
+      return clearanceMe();
+    },
+    getNamedAccess: () =>
+      createMockClearances({
+        now,
+        me,
+        delayMs,
+        staff,
+        namedAccess,
+      }).getNamedAccess(),
   };
+
+  /**
+   * Names, as the server must give them: the switch On, an eligible person a
+   * verified letter covers, and a purpose (with a note for Other). Each view
+   * is one flagged security event with the count and purpose, never a name.
+   */
+  async function namedPatients(
+    p: StaffOut | undefined,
+    { drill, filters, purpose, note }: NamedPatientsIn,
+    record: boolean,
+  ): Promise<NamedPatientsOut> {
+    if (namedAccess !== "on") return fail(403, "named_access_off");
+    if (!eligible(p)) return fail(403, "not_cleared");
+    const t = now();
+    const cover = coverFor(p.id, t);
+    // A letter whose end date has passed is "ended"; anything else is a change.
+    if (!cover.covered)
+      return fail(
+        403,
+        lostCover(p.id, t) === "ended" ? "clearance_ended" : "not_cleared",
+      );
+    if (Date.parse(cover.until) <= t) return fail(403, "clearance_ended");
+    const why = PURPOSES.find((x) => x === purpose);
+    const text = typeof note === "string" ? note.trim() : "";
+    if (
+      !why ||
+      (note !== undefined && typeof note !== "string") ||
+      text.length > NOTE_MAX ||
+      (why === "other" && text === "")
+    )
+      return fail(422, "invalid");
+    if (!shownDrills(filters).has(drill)) return fail(422, "too_small");
+    const letter = lettersFor(p.id, t).find((c) => c.id === cover.clearance_id);
+    if (!letter) return fail(403, "not_cleared");
+    const hit = population(filters).filter(matcher(drill, filters));
+    const patients = hit
+      .sort((a, b) => a.pid.localeCompare(b.pid))
+      .slice(0, PATIENT_ROWS_MAX)
+      .map((x) => namedRowOf(x, filters));
+    const until = Math.min(Date.parse(cover.until), t + NAMED_VIEW_MS);
+    if (record)
+      recordAudit({
+        at: new Date(t).toISOString(),
+        type: "security",
+        kind: "analysis_named_viewed",
+        actor: { display_name: p.display_name },
+        target: null,
+        specialty: null,
+        confidence: null,
+        device: null,
+        // The rows opened, and why: never a name, an MRN or a pid.
+        count: patients.length,
+        flag: "alert",
+        purpose: why,
+      });
+    return {
+      level: "named",
+      count: hit.length,
+      patients,
+      named_until: new Date(until).toISOString(),
+      clearance: { id: letter.id, end_date: letter.end_date },
+    };
+  }
 }

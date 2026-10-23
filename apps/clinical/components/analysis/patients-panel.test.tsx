@@ -19,6 +19,7 @@ import type { GuardedOut } from "@/lib/api/admin-contract";
 import type { AnalysisClient } from "@/lib/api/analysis";
 import type {
   CoOccurringOut,
+  DeidentifiedPatientsOut,
   Drillable,
   FindingsOut,
   Meta,
@@ -87,7 +88,10 @@ const row = (i: number, extra: Partial<PatientRowOut> = {}): PatientRowOut => ({
   findings: [{ name: "HbA1c", flag: "high", source_label: "Main lab" }],
   ...extra,
 });
-const reply = (count: number, rows: PatientRowOut[]): PatientsOut => ({
+const reply = (
+  count: number,
+  rows: PatientRowOut[],
+): DeidentifiedPatientsOut => ({
   level: "deidentified",
   count,
   patients: rows,

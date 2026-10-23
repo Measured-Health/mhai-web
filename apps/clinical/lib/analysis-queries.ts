@@ -118,7 +118,11 @@ export const usePatients = (q: PatientsQuery | null) =>
   useQuery({
     queryKey: ANALYSIS_KEYS.patients(q),
     queryFn: async () =>
-      readPatients(await getAnalysisClient().listPatients(q!)),
+      readPatients(
+        await getAnalysisClient().listPatients(q!),
+        "deidentified",
+        Date.now(),
+      ),
     enabled: q !== null,
     gcTime: 0,
     // Fetched once per opening: a refetch would log a second viewing.
