@@ -85,7 +85,7 @@ export const BLOCK_TEXT: Record<VerifyBlock, string> = {
   auditor: "Auditors can read letters but not change them",
   covers_you: "You can't verify a letter that covers you",
   same_side: "You can't verify letters from a hospital you're linked to",
-  not_ready: "Still checking the file",
+  not_ready: "Can't verify while the file is being checked",
   done: "This letter has been dealt with",
 };
 

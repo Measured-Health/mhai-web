@@ -1,6 +1,7 @@
 import {
   Building2,
   ChartColumn,
+  FileCheck2,
   HeartPulse,
   History,
   Scale,
@@ -13,6 +14,7 @@ import {
 export const NAV = [
   { href: "/hospitals", label: "Hospitals", Icon: Building2 },
   { href: "/analytics", label: "Analytics", Icon: ChartColumn },
+  { href: "/clearances", label: "Clearances", Icon: FileCheck2 },
   { href: "/legal-holds", label: "Legal holds", Icon: Scale },
   { href: "/system", label: "System", Icon: HeartPulse },
   { href: "/settings", label: "Settings", Icon: Settings },

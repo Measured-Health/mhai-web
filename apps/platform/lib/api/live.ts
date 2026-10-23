@@ -9,7 +9,8 @@ import {
   type RemovalBlock,
   type WriteOpts,
 } from "./contract";
-import type { ClearancesClient } from "./clearances-contract";
+import { dayLabel } from "@mhai/ui/clearances";
+import type { Clearance, ClearancesClient } from "./clearances-contract";
 import type { HoldsClient } from "./holds-contract";
 import type { SettingsClient } from "./settings-contract";
 
@@ -107,6 +108,21 @@ export type LiveBlob = (
 const PAGE_TYPES = ["image/png", "image/jpeg"] as const;
 
 /**
+ * A letter must carry its hospital's day: one without a real `today`
+ * (YYYY-MM-DD) fails closed, as a bad reply, rather than have the browser
+ * guess the day.
+ */
+function withDay(c: Clearance): Clearance {
+  const today = (c as { today?: unknown } | null)?.today;
+  try {
+    if (typeof today === "string" && dayLabel(today)) return c;
+  } catch {
+    // Not a calendar day: refused below.
+  }
+  throw new ApiError(502, "bad_gateway");
+}
+
+/**
  * Clearance letters and the named-access switch (Plan 11b): rows
  * `platform/clearances…` and `platform/named-access…` of the shape table.
  */
@@ -116,21 +132,28 @@ function clearancesLive(ok: LiveOk, blob: LiveBlob): ClearancesClient {
   const request = (x: string, rest: string) =>
     `/named-access/requests/${id(x)}${rest}`;
   return {
-    listClearances: (q) =>
-      ok(
-        `/clearances${query({
-          status: q.status,
-          hospital: q.hospital,
-          covers: q.covers,
-          cursor: q.cursor,
-        })}`,
-      ),
-    getClearance: (x) => ok(letter(x)),
+    listClearances: async (q) => {
+      const r: Awaited<ReturnType<ClearancesClient["listClearances"]>> =
+        await ok(
+          `/clearances${query({
+            status: q.status,
+            hospital: q.hospital,
+            covers: q.covers,
+            cursor: q.cursor,
+          })}`,
+        );
+      if (!Array.isArray(r?.clearances)) throw new ApiError(502, "bad_gateway");
+      return { ...r, clearances: r.clearances.map(withDay) };
+    },
+    getClearance: (x) => ok<Clearance>(letter(x)).then(withDay),
     getClearancePage: (x, n) =>
       blob(letter(x, `/pages/${Math.trunc(n)}`), PAGE_TYPES),
-    verifyClearance: (x, b, o) => ok(letter(x, "/verify"), "POST", b, o),
-    rejectClearance: (x, b, o) => ok(letter(x, "/reject"), "POST", b, o),
-    revokeClearance: (x, b, o) => ok(letter(x, "/revoke"), "POST", b, o),
+    verifyClearance: (x, b, o) =>
+      ok<Clearance>(letter(x, "/verify"), "POST", b, o).then(withDay),
+    rejectClearance: (x, b, o) =>
+      ok<Clearance>(letter(x, "/reject"), "POST", b, o).then(withDay),
+    revokeClearance: (x, b, o) =>
+      ok<Clearance>(letter(x, "/revoke"), "POST", b, o).then(withDay),
     getNamedAccess: () => ok("/named-access"),
     requestNamedAccess: (b, o) => ok("/named-access/requests", "POST", b, o),
     approveNamedAccess: (x, b, o) => ok(request(x, "/approve"), "POST", b, o),

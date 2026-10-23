@@ -77,6 +77,12 @@ export type Clearance = {
   } | null;
   pages: number;
   history: ClearanceEvent[];
+  /**
+   * The letter's hospital's day (YYYY-MM-DD), from the server: what its
+   * status words and the Revoke cut-off count to. Per letter, as the list
+   * spans time zones.
+   */
+  today: string;
   /** Decided by the server for the caller: false for auditors and linked admins. */
   verifiable_by_you: boolean;
   version: number;

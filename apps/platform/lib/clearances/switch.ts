@@ -16,7 +16,7 @@ export const SIGNOFF_MAX = 200;
  * An instant as the viewer's own calendar day, "3 Feb 2027" (display only:
  * no access decision depends on it), or "" if it isn't a time.
  */
-function instantDay(iso: string | null): string {
+export function instantDay(iso: string | null): string {
   const ms = iso ? Date.parse(iso) : NaN;
   if (!Number.isFinite(ms)) return "";
   const d = new Date(ms);

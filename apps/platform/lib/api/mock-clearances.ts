@@ -219,6 +219,7 @@ export function createClearanceMock(
     const covers_you = coversYou(c, m);
     return {
       ...structuredClone(c),
+      today: todayAt(c.hospital.id),
       covers_you,
       verifiable_by_you:
         m.role === "platform_admin" && !covers_you && !onTheirSide(c, m),

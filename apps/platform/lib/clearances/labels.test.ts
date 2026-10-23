@@ -85,6 +85,9 @@ describe("BLOCK_TEXT", () => {
     expect(BLOCK_TEXT.same_side).toBe(
       "You can't verify letters from a hospital you're linked to",
     );
+    expect(BLOCK_TEXT.not_ready).toBe(
+      "Can't verify while the file is being checked",
+    );
   });
 });
 

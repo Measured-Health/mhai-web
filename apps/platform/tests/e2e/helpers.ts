@@ -52,6 +52,7 @@ export async function openNav(
   name:
     | "Hospitals"
     | "Analytics"
+    | "Clearances"
     | "Legal holds"
     | "System"
     | "Settings"

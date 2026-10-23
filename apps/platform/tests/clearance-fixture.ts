@@ -25,6 +25,7 @@ export const letter = (over: Partial<Clearance> = {}): Clearance => ({
   revocation: null,
   pages: 1,
   history: [],
+  today: "2026-10-23",
   verifiable_by_you: true,
   version: 1,
   ...over,
