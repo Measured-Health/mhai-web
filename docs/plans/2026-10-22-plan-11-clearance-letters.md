@@ -144,6 +144,8 @@
     - a replay re-runs every check and returns the original `named_until`, never a later one;
     - once `named_until` has passed, the key is spent: **409** `expired`, and it is never renewed;
     - the proxy answers **422** `invalid` to a named view with no key or a malformed one;
+  - (11c) the hospital app treats **409** `expired` and **422** `idempotency_mismatch` on the named list as plain errors with **Try again**, not as an end of access; only the 403 codes above, a change in `clearance/me`, `named_until` and a filter or group change end names;
+  - (11c) `GET /analysis/clearance/me` when not covered: `named: false`, `clearance_id: null`, `until: null`, `version: 0` and a `reason` (the app reads anything else in those fields as a change);
   - for Plan 12b: `covered_platform` on the letter (both apps) and on upload; `covers_you` on the platform letter; `covers=me` on the platform list ("my clearances"); **409** `same_person` on verify and reject when the caller is covered;
   - the whole contract is **§14.10** in mhai-multiagent's frontend requirements.
 - **Narrowing to nobody is refused.** Removing everyone is a revocation. The server still ends a letter's access when its last covered person loses their role.
