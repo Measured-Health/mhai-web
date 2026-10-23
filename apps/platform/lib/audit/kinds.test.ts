@@ -286,6 +286,11 @@ describe("Plan 8's Activity actions", () => {
       clean_up_resumed: true,
       triage_switched_off: true,
       feedback_buffer_cleared: true,
+      emr_connection_added: true,
+      emr_connection_changed: true,
+      emr_connection_switched_on: true,
+      emr_connection_switched_off: true,
+      emr_connection_tested: true,
     };
     for (const action of Object.keys(ACTIONS))
       expect(KINDS[action], action).toBeDefined();
@@ -312,6 +317,57 @@ describe("Plan 8's Activity actions", () => {
       expect(KINDS[kind].type, kind).toBe("platform");
       expect(KINDS[kind].note, kind).toBe(false);
       expect(KINDS[kind].targets, kind).toEqual([]);
+    }
+  });
+});
+
+describe("Plan 13's record connection and alert settings kinds", () => {
+  const EMR = {
+    emr_connection_added: "Added the record connection",
+    emr_connection_changed: "Changed the record connection",
+    emr_connection_switched_on: "Switched on the record connection",
+    emr_connection_switched_off: "Switched off the record connection",
+    emr_connection_tested: "Tested the record connection",
+  };
+
+  it("the record connection kinds name the connection and the hospital", () => {
+    const e = auditEvent({
+      type: "hospital_settings",
+      reason: null,
+      hospital: { id: "h_havana", name: "Havana Hospital", removed: false },
+      target: { kind: "connection", id: "emr_hv1", name: "Main record" },
+    });
+    for (const [kind, start] of Object.entries(EMR)) {
+      const k = KINDS[kind];
+      expect(k.type, kind).toBe("hospital_settings");
+      expect(k.targets, kind).toEqual(["connection"]);
+      expect(k.named, kind).toBe(true);
+      expect(k.note, kind).toBe(false);
+      expect(k.words({ ...e, kind }), kind).toBe(
+        `${start} “Main record” for Havana Hospital`,
+      );
+      expect(k.words({ ...e, kind, target: null }), kind).toBe(
+        `${start} for Havana Hospital`,
+      );
+      expect(k.words({ ...e, kind, target: null, hospital: null }), kind).toBe(
+        `${start} for a hospital`,
+      );
+    }
+  });
+
+  it("the alert settings kinds are Alerts kinds with no target", () => {
+    const words = {
+      alert_units_changed: "Changed which units alerts cover",
+      alert_rules_changed: "Changed what alerts flag",
+      alert_recipients_changed: "Changed who gets alerts",
+    };
+    const e = auditEvent({ type: "alerts", target: null, reason: null });
+    for (const [kind, text] of Object.entries(words)) {
+      const k = KINDS[kind];
+      expect(k.type, kind).toBe("alerts");
+      expect(k.targets, kind).toEqual([]);
+      expect(k.note, kind).toBe(false);
+      expect(k.words({ ...e, kind }), kind).toBe(text);
     }
   });
 });

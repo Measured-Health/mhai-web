@@ -90,6 +90,13 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["GET", "platform/audit/verify/runs"],
   ["GET", "platform/audit/verify/runs/{id}"],
   ["POST", "platform/audit/verify/runs/{id}/outcome"],
+  ["GET", "platform/emr/connector-types"],
+  ["GET", "platform/emr/connections"],
+  ["POST", "platform/hospitals/{id}/emr/connections"],
+  ["GET", "platform/emr/connections/{id}"],
+  ["PATCH", "platform/emr/connections/{id}"],
+  ["PUT", "platform/emr/connections/{id}/enabled"],
+  ["POST", "platform/emr/connections/{id}/test"],
 ];
 
 /** The one shape that returns a file, not JSON. */

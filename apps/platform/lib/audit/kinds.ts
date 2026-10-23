@@ -1,7 +1,7 @@
 // The audit kinds and their words (spec §4). Every line on screen and in a
 // file is built here from structured fields, never from server text. A kind,
 // reason, role or letter status that isn't listed makes the entry "can't be
-// displayed" (see read.ts). Plans 8 and 11 add their kinds to KINDS.
+// displayed" (see read.ts). Plans 8, 11 and 13 add their kinds to KINDS.
 import type {
   ActorRole,
   AuditEvent,
@@ -153,6 +153,12 @@ const exportId =
       e.refs.export_id ?? (e.target?.kind === "export" ? e.target.id : null);
     return t ? make(t) : without;
   };
+/** "Added the record connection “Main record” for Havana Hospital". */
+const connectionWords = (done: string) => (e: AuditEvent) => {
+  const t = tName(e);
+  const what = t ? `the record connection “${t}”` : "the record connection";
+  return `${done} ${what} for ${hName(e)}`;
+};
 /** "Cardiology" from the code "cardiology". */
 export const specialty = (e: AuditEvent): string[] => {
   const s = e.facts.specialty;
@@ -293,6 +299,29 @@ export const KINDS: Record<string, Kind> = {
     (e) => `Tested single sign-on for ${hName(e)}`,
     { targets: ["hospital"], named: true },
   ),
+  // Record connections (Plan 13): named by the source label.
+  emr_connection_added: k("hospital_settings", connectionWords("Added"), {
+    targets: ["connection"],
+    named: true,
+  }),
+  emr_connection_changed: k("hospital_settings", connectionWords("Changed"), {
+    targets: ["connection"],
+    named: true,
+  }),
+  emr_connection_switched_on: k(
+    "hospital_settings",
+    connectionWords("Switched on"),
+    { targets: ["connection"], named: true },
+  ),
+  emr_connection_switched_off: k(
+    "hospital_settings",
+    connectionWords("Switched off"),
+    { targets: ["connection"], named: true },
+  ),
+  emr_connection_tested: k("hospital_settings", connectionWords("Tested"), {
+    targets: ["connection"],
+    named: true,
+  }),
   setting_changed: k(
     "hospital_settings",
     named((t) => `Changed ${t}`, "Changed a setting"),
@@ -330,6 +359,10 @@ export const KINDS: Record<string, Kind> = {
   // Alerts.
   alert_acknowledged: k("alerts", "Acknowledged an alert"),
   alert_escalated: k("alerts", "Escalated an alert"),
+  // Alert settings (Plan 13), one per section: no target, no note.
+  alert_units_changed: k("alerts", "Changed which units alerts cover"),
+  alert_rules_changed: k("alerts", "Changed what alerts flag"),
+  alert_recipients_changed: k("alerts", "Changed who gets alerts"),
   // Analysis.
   analysis_viewed: k("analysis", "Opened Analysis"),
   drilldown_deidentified: k(
