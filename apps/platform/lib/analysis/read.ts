@@ -36,6 +36,11 @@ import {
   type Obj,
 } from "@mhai/ui/guards";
 import { SMALL_GROUP_MIN, isSmallCount } from "@mhai/ui/small-groups";
+import {
+  PART_PAIRS,
+  type Figure,
+  type PartPair,
+} from "../api/analysis-contract";
 import type {
   AGuarded,
   AnalysisPeriod,
@@ -228,12 +233,8 @@ function rate(v: unknown, where: string, c: Ctx) {
   const p = guarded(r.per_1000, "rate", `${where}.per_1000`, c, {
     loose: true,
   });
-  // Shown together, count and base publish their complement (base − count)
-  // by subtraction, whatever the per 1,000 is.
-  if (shown(n) && shown(b)) {
-    need(val(n) <= val(b), where, "count over base");
-    need(!isSmallCount(val(b) - val(n)), where, "a rate leaving 1–4");
-  }
+  // Its complement (base − count) is a part-pair rest: see `pairsOk`.
+  if (shown(n) && shown(b)) need(val(n) <= val(b), where, "count over base");
   if (shown(p)) {
     need(shown(n) && shown(b), where, "a rate over a hidden count or base");
     need(val(b) > 0, where, "a rate over nothing");
@@ -387,6 +388,14 @@ function monthsOf(p: { from: string; to: string }): string[] {
 
 type ViewCtx = Ctx & {
   q: AnalysisQuery;
+  /**
+   * `patients` and `headline.base` for the sets and the part-pairs: across
+   * hospitals a total hidden for too few hospitals while every row it adds
+   * up from shows is known (Σ rows), so it reads as shown there.
+   */
+  setPatients: G;
+  setBase: G;
+  setCount: G;
   headline: { count: G; base: G; per_1000: G };
   patients: G;
   months: string[];
@@ -409,15 +418,9 @@ function prevalenceOk(d: unknown, c: ViewCtx) {
     same(cases, rt.count, `${w}.cases`, "its rate's count");
     same(rt.base, c.headline.base, `${w}.rate.base`, "the patients seen");
     const fresh = count(r.new, `${w}.new`, c);
-    // Existing cases (cases − new) are published by subtraction.
-    if (shown(cases) && shown(fresh)) {
+    // Existing cases (cases − new) are a part-pair rest: see `pairsOk`.
+    if (shown(cases) && shown(fresh))
       need(val(fresh) <= val(cases), `${w}.new`, "more new than cases");
-      need(
-        !isSmallCount(val(cases) - val(fresh)),
-        `${w}.new`,
-        "existing cases of 1–4",
-      );
-    }
   });
   unique(
     rows.map((r) => ((r as Obj).condition as Obj).id),
@@ -473,7 +476,7 @@ function breakdown(
     "a group",
   );
   setOk(
-    c.patients,
+    c.setPatients,
     rows.map((r) => r.patients),
     where,
   );
@@ -606,15 +609,9 @@ function qualityOk(d: unknown, c: ViewCtx) {
       `${w}.confidence`,
     );
     const rated = count(r.rated, `${w}.rated`, c);
-    // Unrated consultations (consultations − rated) are published by subtraction.
-    if (shown(cons) && shown(rated)) {
+    // Unrated consultations are a part-pair rest: see `pairsOk`.
+    if (shown(cons) && shown(rated))
       need(val(rated) <= val(cons), `${w}.rated`, "more rated than seen");
-      need(
-        !isSmallCount(val(cons) - val(rated)),
-        `${w}.rated`,
-        "unrated consultations of 1–4",
-      );
-    }
     const agree = guarded(r.agreement_rate, "share", `${w}.agreement_rate`, c, {
       loose: true,
     });
@@ -652,7 +649,7 @@ function qualityOk(d: unknown, c: ViewCtx) {
   );
   // The headline's ratings are the conditions' ratings added up.
   setOk(
-    c.headline.base,
+    c.setBase,
     rows.map((r) => r.rated),
     "data.by_condition.rated",
   );
@@ -836,6 +833,171 @@ function comparisonOk(v: unknown, view: ViewId, c: ViewCtx) {
   return k;
 }
 
+// ---- Figures inside figures ----------------------------------------------------------
+
+/**
+ * One figure of a reply, for `PART_PAIRS`: `key` pairs items of one family
+ * inside a reply; `across` names the same figure in the other scope (a
+ * condition by its 3-character code), or null when there is none there (a
+ * band of one scope only, a ward, a hospital row).
+ */
+export type FigureItem = {
+  key: string;
+  across: string | null;
+  value: AGuarded;
+  flagged: boolean;
+};
+
+const icd3 = (c: Obj) => (isStr(c.icd10) ? c.icd10.slice(0, 3) : String(c.id));
+const SHARED_BANDS = ["80+"];
+
+/**
+ * Every figure `PART_PAIRS` names, from a reply already read (or a sample
+ * reply). Not for logging.
+ */
+export function figuresOf(raw: unknown): Map<Figure, FigureItem[]> {
+  const r = raw as Obj;
+  const d = (r.data ?? {}) as Obj;
+  const out = new Map<Figure, FigureItem[]>();
+  const add = (
+    f: Figure,
+    key: string,
+    across: string | null,
+    value: unknown,
+    flagged = false,
+  ) => {
+    const list = out.get(f) ?? [];
+    list.push({ key, across, value: value as AGuarded, flagged });
+    out.set(f, list);
+  };
+  const head = r.headline as Obj;
+  add("patients", "", "", r.patients);
+  add("headline.count", "", "", head.count);
+  add("headline.base", "", "", head.base);
+  for (const h of (r.hospitals ?? []) as Obj[]) {
+    const id = String((h.hospital as Obj).id);
+    add("row.size", id, null, h.size);
+    add("row.count", id, null, (h.headline as Obj).count);
+    add("row.base", id, null, (h.headline as Obj).base);
+  }
+  if (r.view === "prevalence") {
+    for (const x of (d.series ?? []) as Obj[]) {
+      const m = String(x.month);
+      add("series.count", m, m, (x.rate as Obj).count);
+      add("series.base", m, m, (x.rate as Obj).base);
+    }
+    for (const x of (d.by_condition ?? []) as Obj[]) {
+      const c = x.condition as Obj;
+      add("condition.cases", String(c.id), icd3(c), x.cases);
+      add("condition.new", String(c.id), icd3(c), x.new);
+    }
+  }
+  if (r.view === "affected")
+    for (const [name, label] of [
+      ["by_age", "band"],
+      ["by_sex", "sex"],
+      ["by_setting", "setting"],
+      ["by_specialty", "specialty"],
+      ["by_location", "location"],
+    ] as const)
+      for (const x of (d[name] ?? []) as Obj[]) {
+        const v = x[label];
+        const id = isObj(v) ? String(v.id) : String(v);
+        const shared =
+          name === "by_location"
+            ? null
+            : name === "by_age" && !SHARED_BANDS.includes(id)
+              ? null
+              : `${name}:${id}`;
+        add("member.patients", `${name}:${id}`, shared, x.patients);
+      }
+  if (r.view === "co-occurring")
+    for (const x of (d.pairs ?? []) as Obj[]) {
+      const a = x.a as Obj;
+      const b = x.b as Obj;
+      add(
+        "pair.patients",
+        [a.id, b.id].map(String).sort().join("|"),
+        [icd3(a), icd3(b)].sort().join("|"),
+        x.patients,
+      );
+    }
+  if (r.view === "findings")
+    for (const x of (d.findings ?? []) as Obj[]) {
+      const k = `${x.name}|${x.flag}`;
+      add("finding.patients", k, k, x.patients, x.flag !== null);
+    }
+  if (r.view === "quality")
+    for (const x of (d.by_condition ?? []) as Obj[]) {
+      const c = x.condition as Obj;
+      add("quality.consultations", String(c.id), icd3(c), x.consultations);
+      add("quality.rated", String(c.id), icd3(c), x.rated);
+      add(
+        "quality.corrections",
+        String(c.id),
+        icd3(c),
+        (x.corrections as Obj).total,
+      );
+    }
+  return out;
+}
+
+/** The family a figure belongs to, or null for a single figure. */
+export const familyOfFigure = (f: Figure) =>
+  f === "patients" || f.startsWith("headline.") ? null : f.split(".")[0];
+
+/**
+ * Each instance of each pair of a view, as [whole, part] items: one family
+ * pairs item by item, a family part under a single whole pairs every item.
+ */
+export function pairInstances(
+  view: ViewId,
+  figs: Map<Figure, FigureItem[]>,
+): { pair: PartPair; whole: FigureItem; part: FigureItem }[] {
+  const out: { pair: PartPair; whole: FigureItem; part: FigureItem }[] = [];
+  for (const p of PART_PAIRS[view]) {
+    const wholes = figs.get(p.whole) ?? [];
+    const parts = (figs.get(p.part) ?? []).filter(
+      (x) => p.only !== "flagged" || x.flagged,
+    );
+    const same = familyOfFigure(p.whole) !== null;
+    for (const part of parts) {
+      const whole = same ? wholes.find((w) => w.key === part.key) : wholes[0];
+      if (whole) out.push({ pair: p, whole, part });
+    }
+  }
+  return out;
+}
+
+/** A hidden total whose every part shows is known: Σ parts. */
+function recovered(total: G, parts: G[]): G {
+  if (!total.suppressed || parts.length === 0 || !parts.every(shown))
+    return total;
+  return { value: parts.reduce((n, p) => n + val(p), 0), suppressed: false };
+}
+
+/**
+ * Every part-pair of the view (`PART_PAIRS`): a shown part of a shown whole
+ * must not exceed it, and must leave 0 or 5 or more.
+ */
+function pairsOk(view: ViewId, v: Obj, c: ViewCtx) {
+  const figs = figuresOf(v);
+  const single = (g: G): FigureItem[] => [
+    { key: "", across: "", value: g, flagged: false },
+  ];
+  figs.set("patients", single(c.setPatients));
+  figs.set("headline.base", single(c.setBase));
+  figs.set("headline.count", single(c.setCount));
+  for (const x of pairInstances(view, figs)) {
+    const w = x.whole.value;
+    const p = x.part.value;
+    if (!shown(w) || !shown(p)) continue;
+    const where = `${x.pair.whole} ⊇ ${x.pair.part}${x.part.key ? ` ${x.part.key}` : ""}`;
+    need(val(p) <= val(w), where, "a part over its whole");
+    need(!isSmallCount(val(w) - val(p)), where, `${x.pair.rest} leaving 1–4`);
+  }
+}
+
 // ---- The reply ----------------------------------------------------------------------
 
 const META_KEYS = [
@@ -898,6 +1060,9 @@ function check(view: ViewId, raw: unknown, q: AnalysisQuery, now: number) {
   const vc: ViewCtx = {
     ...c,
     q,
+    setPatients: patients,
+    setBase: headline.base,
+    setCount: headline.count,
     headline,
     patients,
     months: monthsOf(period),
@@ -907,8 +1072,23 @@ function check(view: ViewId, raw: unknown, q: AnalysisQuery, now: number) {
   if (q.scope === "hospital" && v.comparison !== null)
     comparison = comparisonOk(v.comparison, view, vc);
   vc.comparison = comparison;
-  if (q.scope === "all") hospitalRowsOk(v.hospitals, view, vc);
+  if (q.scope === "all") {
+    hospitalRowsOk(v.hospitals, view, vc);
+    const figs = figuresOf(v);
+    const rows = (f: Figure) => (figs.get(f) ?? []).map((x) => x.value);
+    vc.setCount = recovered(headline.count, rows("row.count"));
+    vc.setBase = recovered(headline.base, rows("row.base"));
+    // The group is everyone seen (no condition), or the headline count of
+    // the views about conditions in scope.
+    vc.setPatients =
+      q.condition === null
+        ? recovered(patients, rows("row.size"))
+        : view === "quality" || view === "findings"
+          ? patients
+          : recovered(patients, rows("row.count"));
+  }
   DATA_OK[view](v.data, vc);
+  pairsOk(view, v, vc);
 
   if (q.scope === "all") {
     for (const x of vc.conditions)

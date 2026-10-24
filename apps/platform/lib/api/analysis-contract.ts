@@ -287,3 +287,120 @@ export interface AnalysisClient {
     q: Omit<AccessQuery, "cursor">,
   ): Promise<{ filename: string; blob: Blob }>;
 }
+
+// ---- Figures inside figures --------------------------------------------------
+// Two shown counts where one is a part of the other publish the rest by
+// subtraction (whole − part), and that rest is a group too: it must be 0 or
+// 5 or more. The reader fails a view on a rest of 1–4 and the server (and
+// the sample) hides to prevent one. This is every such pair, per view.
+
+/**
+ * A figure in a reply. One figure: `patients`, `headline.*`. A family of
+ * figures, one per item: `series.*` (per month), `condition.*` (Prevalence's
+ * conditions), `quality.*` (Quality's conditions), `member.patients` (every
+ * Who is affected breakdown row), `pair.patients`, `finding.patients`, and
+ * `row.*` (the hospital rows across hospitals).
+ */
+export type Figure =
+  | "patients"
+  | "headline.count"
+  | "headline.base"
+  | "series.count"
+  | "series.base"
+  | "condition.cases"
+  | "condition.new"
+  | "member.patients"
+  | "pair.patients"
+  | "finding.patients"
+  | "quality.consultations"
+  | "quality.rated"
+  | "quality.corrections"
+  | "row.size"
+  | "row.count"
+  | "row.base";
+
+/**
+ * `part` is inside `whole`. Two figures of one family pair item by item
+ * (the same month, condition or row); a family part under a single whole
+ * pairs each item with it. `flagged`: only items with a flag (a finding is
+ * inside the flagged-finding headline only when it is flagged).
+ */
+export type PartPair = {
+  whole: Figure;
+  part: Figure;
+  /** What the rest counts, in words. */
+  rest: string;
+  only?: "flagged";
+};
+
+const pair = (whole: Figure, part: Figure, rest: string): PartPair => ({
+  whole,
+  part,
+  rest,
+});
+/** The headline over patients seen, and the group between them. */
+const SEEN: readonly PartPair[] = [
+  pair("headline.base", "headline.count", "the headline's complement"),
+  pair("headline.base", "patients", "patients seen outside the group"),
+  pair("patients", "headline.count", "the group less the headline"),
+];
+const ROWS: readonly PartPair[] = [
+  pair("row.base", "row.count", "a hospital's headline complement"),
+  pair("row.size", "row.count", "a hospital's patients seen less its headline"),
+];
+
+export const PART_PAIRS: Record<ViewId, readonly PartPair[]> = {
+  prevalence: [
+    ...SEEN,
+    pair("series.base", "series.count", "a month's rate complement"),
+    pair("headline.base", "series.base", "patients not seen that month"),
+    pair("headline.count", "series.count", "the headline less a month"),
+    pair("patients", "series.count", "the group less a month"),
+    pair("headline.base", "condition.cases", "a condition's rate complement"),
+    pair("headline.count", "condition.cases", "the headline less a condition"),
+    pair("patients", "condition.cases", "the group less a condition"),
+    pair("condition.cases", "condition.new", "existing cases (cases − new)"),
+    ...ROWS,
+  ],
+  affected: [
+    ...SEEN,
+    pair("patients", "member.patients", "the group less one of its rows"),
+    ...ROWS,
+  ],
+  "co-occurring": [
+    ...SEEN,
+    pair("headline.count", "pair.patients", "the headline less a pair"),
+    pair("patients", "pair.patients", "the group less a pair"),
+    ...ROWS,
+  ],
+  findings: [
+    ...SEEN,
+    pair("headline.base", "finding.patients", "a finding's rate complement"),
+    pair("patients", "finding.patients", "the group less a finding"),
+    {
+      ...pair("headline.count", "finding.patients", "flagged less a finding"),
+      only: "flagged",
+    },
+    ...ROWS,
+  ],
+  quality: [
+    pair("headline.base", "headline.count", "the headline's complement"),
+    pair("headline.base", "quality.rated", "ratings of other conditions"),
+    pair(
+      "quality.consultations",
+      "quality.rated",
+      "unrated consultations (consultations − rated)",
+    ),
+    pair(
+      "quality.consultations",
+      "quality.corrections",
+      "consultations without a correction",
+    ),
+    pair("row.base", "row.count", "a hospital's headline complement"),
+  ],
+};
+/** How many pairs the table declares, over every view. */
+export const PART_PAIR_COUNT = Object.values(PART_PAIRS).reduce(
+  (n, l) => n + l.length,
+  0,
+);

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  PART_PAIR_COUNT,
   VIEW_IDS,
   type AGuarded,
+  type PartPair,
   type AnalysisPeriod,
   type AnalysisQuery,
   type ScopeKind,
@@ -10,7 +12,16 @@ import {
 import { LOCATIONS, PROFILES } from "../api/analysis-fixtures";
 import { TEAM_EMAILS } from "../api/fixtures";
 import { createMockPlatform } from "../api/mock";
-import { readFilterOptions, readStatus, readView, viewProblem } from "./read";
+import {
+  figuresOf,
+  familyOfFigure,
+  pairInstances,
+  readFilterOptions,
+  readStatus,
+  readView,
+  viewProblem,
+  type FigureItem,
+} from "./read";
 
 const NOW = Date.parse("2026-10-23T09:30:00.000Z");
 type Raw = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -394,10 +405,11 @@ describe("readView: fails closed", () => {
       const r = prevalence(s);
       r.data.series[0].rate = { ...rate(498, 500), per_1000: HID };
       expect(problem("prevalence", r, queryFor(s))).toMatch(/leaving 1–4/);
-      const q = quality(s);
-      q.headline = { ...rate(97, 100), per_1000: HID };
-      expect(problem("quality", q, queryFor(s))).toMatch(/leaving 1–4/);
     }
+    const q = quality("hospital");
+    q.headline = { ...rate(97, 100), per_1000: HID };
+    q.comparison = null;
+    expect(problem("quality", q, one("h_havana"))).toMatch(/leaving 1–4/);
   });
 
   it("a rate that doesn't match its count and base fails", () => {
@@ -554,6 +566,62 @@ describe("readView: fails closed", () => {
     const pair = coOccurring("all");
     pair.data.pairs[0].b = { id: "x1", name: "Local term", icd10: null };
     expect(problem("co-occurring", pair, all())).toMatch(/3-character/);
+  });
+
+  it("any shown part of a shown whole leaves 0 or 5+ (the pair table)", () => {
+    // Findings, condition filter: the group less its flagged patients.
+    const f = findings("hospital");
+    f.patients = g(202);
+    expect(
+      problem("findings", f, one("h_havana", { condition: "e11" })),
+    ).toMatch(/group less the headline leaving 1–4/);
+    // Prevalence: patients seen, but not in one month.
+    const s = prevalence("hospital");
+    s.data.series[4].rate = rate(40, 1998);
+    expect(problem("prevalence", s, one("h_havana"))).toMatch(
+      /not seen that month leaving 1–4/,
+    );
+    // Findings: flagged patients without one flagged finding.
+    const k = findings("all");
+    k.data.findings[0].patients = dr(g(198));
+    k.data.findings[0].rate = rate(198, 2000);
+    expect(problem("findings", k, all())).toMatch(
+      /flagged less a finding leaving 1–4/,
+    );
+    // An unflagged finding isn't inside the flagged headline.
+    k.data.findings[0].flag = null;
+    expect(problem("findings", k, all())).toBeNull();
+    // Co-occurring: the headline less a pair.
+    const c = coOccurring("all");
+    c.data.pairs[0].patients = dr(g(197));
+    c.data.pairs[0].share_of_a = HID;
+    expect(problem("co-occurring", c, all())).toMatch(
+      /headline less a pair leaving 1–4/,
+    );
+    // A part over its whole fails too.
+    const o = prevalence("all");
+    o.data.by_condition[0].new = g(160);
+    expect(problem("prevalence", o, all())).toMatch(/new/);
+  });
+
+  it("a total hidden for too few hospitals that the rows give away is a shown total (N2)", () => {
+    const q = all({ condition: "e11" });
+    const r = affected("all");
+    r.patients = FEW;
+    r.headline = { count: FEW, base: g(215), per_1000: FEW };
+    const hide = (k: string, ...i: number[]) => {
+      for (const x of r.data[k]) x.share = HID;
+      for (const j of i) r.data[k][j].patients = dr(HID);
+    };
+    hide("by_age", 1, 2);
+    hide("by_setting", 0, 1);
+    hide("by_specialty", 0, 1);
+    hide("by_sex", 0, 1);
+    // The rows add up to 200: the group is 200, not secret.
+    expect(problem("affected", r, q)).toBeNull();
+    // Female 197 shown, male hidden: 200 − 197 = 3.
+    r.data.by_sex[0].patients = dr(g(197));
+    expect(problem("affected", r, q)).toMatch(/by_sex/);
   });
 
   it("a hidden total beside shown members reads, unless every member shows", () => {
@@ -1010,51 +1078,6 @@ describe("the mock's replies all read, over a grid", () => {
       expect(read).toBe(queries.length * VIEW_IDS.length);
     });
 
-  /**
-   * The remainders a reply publishes by subtraction: existing cases (cases −
-   * new), unrated consultations (consultations − rated), and every rate's
-   * complement (base − count), or null where a part is hidden. `map` keys
-   * them for the across-scopes sum (a condition by its 3-character code);
-   * `missing` is a hospital's value for a key its reply doesn't list;
-   * `within` also has the hospital rows' headlines.
-   */
-  function remainders(view: ViewId, raw: unknown) {
-    const map = new Map<string, number | null>();
-    const within: [string, number | null][] = [];
-    const r = raw as Raw;
-    const d = r.data;
-    const key = (c: Raw) => (c.icd10 ? c.icd10.slice(0, 3) : c.id);
-    const rest = (t: AGuarded, p: AGuarded) =>
-      !t.suppressed && !p.suppressed && t.value !== null && p.value !== null
-        ? t.value - p.value
-        : null;
-    const put = (k: string, v: number | null) => {
-      map.set(k, v);
-      within.push([k, v]);
-    };
-    const rateRest = (x: Raw) => rest(x.base, x.count);
-    put("rate:headline", rateRest(r.headline));
-    for (const h of r.hospitals ?? [])
-      within.push([`row ${h.hospital.id}`, rateRest(h.headline)]);
-    if (view === "prevalence") {
-      for (const x of d.by_condition) {
-        put(`e:${key(x.condition)}`, rest(x.cases, x.new));
-        put(`rate:c:${key(x.condition)}`, rateRest(x.rate));
-      }
-      for (const x of d.series) put(`rate:m:${x.month}`, rateRest(x.rate));
-    }
-    if (view === "findings")
-      for (const x of d.findings)
-        put(`rate:f:${x.name}|${x.flag}`, rateRest(x.rate));
-    if (view === "quality")
-      for (const x of d.by_condition)
-        put(`u:${key(x.condition)}`, rest(x.consultations, x.rated));
-    const seen = rest(r.headline.base, { value: 0, suppressed: false });
-    /** Not listed: no cases, so all its patients seen are the rest. */
-    const missing = (k: string): number | null =>
-      k.startsWith("rate:c:") ? seen : k.startsWith("rate:f:") ? null : 0;
-    return { map, within, missing };
-  }
   const small = (n: number) => n > 0 && n < 5;
   /** The one-hospital query that asks the same as an all-hospitals one. */
   const twinOf = (q: AnalysisQuery): Partial<AnalysisQuery> | null =>
@@ -1069,12 +1092,20 @@ describe("the mock's replies all read, over a grid", () => {
           specialty: q.specialty,
         };
 
+  const shownValue = (g: AGuarded) =>
+    !g.suppressed && g.value !== null ? g.value : null;
+  /** A hospital's rest for a pair its reply doesn't list: none, or unknown. */
+  const SPARSE = new Set(["condition", "member", "series", "quality"]);
+
   for (const period of PERIODS)
-    it(`no remainder of 1–4 (existing, unrated, base − count), in a reply or across scopes: ${period}`, async () => {
+    it(`every part-pair of the table leaves 0 or 5+, in a reply or across scopes: ${period}`, async () => {
+      expect(PART_PAIR_COUNT).toBe(39);
       const m = mock();
       const leaks: string[] = [];
-      const get = async (view: ViewId, q: AnalysisQuery) =>
-        remainders(view, await m.getAnalysisView(view, q));
+      const figs = async (view: ViewId, q: AnalysisQuery) =>
+        figuresOf(await m.getAnalysisView(view, q));
+      const name = (x: { pair: PartPair; part: FigureItem }) =>
+        `${x.pair.whole} ⊇ ${x.pair.part} ${x.part.key}`;
       for (const view of VIEW_IDS) {
         // Inside each reply.
         const queries = [
@@ -1084,32 +1115,57 @@ describe("the mock's replies all read, over a grid", () => {
           ),
         ];
         for (const q of queries)
-          for (const [k, v] of (await get(view, q)).within)
-            if (v !== null && small(v))
-              leaks.push(
-                `${view} ${q.hospital ?? "all"} ${JSON.stringify(q)} ${k}: ${v}`,
-              );
-        // Across scopes: the all-hospitals remainder less every hospital's own.
+          for (const x of pairInstances(view, await figs(view, q))) {
+            const w = shownValue(x.whole.value);
+            const pt = shownValue(x.part.value);
+            if (w !== null && pt !== null && (w < pt || small(w - pt)))
+              leaks.push(`${view} ${JSON.stringify(q)} ${name(x)}: ${w - pt}`);
+          }
+        // Across scopes: the all-hospitals rest less every hospital's own.
         for (const f of ALL_FILTERS) {
           const q = all({ period, ...f });
           const twin = twinOf(q);
           if (!twin) continue;
-          const whole = await get(view, q);
+          const whole = pairInstances(view, await figs(view, q));
           const each = await Promise.all(
-            PROFILES.map((p) => get(view, one(p.id, twin))),
+            PROFILES.map(async (p) => {
+              const fs = await figs(view, one(p.id, twin));
+              return { fs, list: pairInstances(view, fs) };
+            }),
           );
-          for (const [k, v] of whole.map) {
-            if (v === null) continue;
+          for (const x of whole) {
+            const w = shownValue(x.whole.value);
+            const pt = shownValue(x.part.value);
+            if (w === null || pt === null) continue;
+            if (x.part.across === null || x.whole.across === null) continue;
             let known = 0;
             let unknown = 0;
             for (const h of each) {
-              const x = h.map.has(k) ? h.map.get(k)! : h.missing(k);
-              if (x === null) unknown++;
-              else known += x;
+              const y = h.list.find(
+                (z) =>
+                  z.pair === x.pair &&
+                  z.part.across === x.part.across &&
+                  (familyOfFigure(x.pair.whole) === null ||
+                    z.whole.across === x.whole.across),
+              );
+              let rest: number | null;
+              if (y) {
+                const a = shownValue(y.whole.value);
+                const b = shownValue(y.part.value);
+                rest = a !== null && b !== null ? a - b : null;
+              } else if (!SPARSE.has(familyOfFigure(x.pair.part)!)) rest = null;
+              else if (familyOfFigure(x.pair.whole) !== null) rest = 0;
+              else {
+                // Not listed: none of the part, so the rest is the whole.
+                const wh = h.fs.get(x.pair.whole)?.[0];
+                rest = wh ? shownValue(wh.value) : null;
+              }
+              if (rest === null) unknown++;
+              else known += rest;
             }
-            if (unknown > 0 && small(v - known))
+            if (unknown > 0 && small(w - pt - known))
               leaks.push(
-                `${view} across ${JSON.stringify(f)} ${k}: ${v - known} over ${unknown} hospitals`,
+                `${view} across ${JSON.stringify(f)} ${name(x)}: ${w - pt - known} over ${unknown} hospitals`,
               );
           }
         }

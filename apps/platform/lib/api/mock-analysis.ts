@@ -12,7 +12,9 @@ import { toCsv } from "@mhai/ui/csv";
 import { SMALL_GROUP_MIN, isSmallCount } from "@mhai/ui/small-groups";
 import {
   MAX_FILTERS,
+  PART_PAIRS,
   VIEW_IDS,
+  type Figure,
   type AGuarded,
   type AccessEntry,
   type AccessKind,
@@ -212,6 +214,8 @@ type Sum = readonly [total: string, parts: readonly string[], across?: true];
  * next-smallest shown part (with none left, its total), and the loop runs
  * again over every sum until nothing changes. `off` only grows, so it ends.
  *
+ * Hidden parts may add up to 0 (a derived rest of 0): that gives no one away.
+ *
  * A figure hidden only because too few hospitals have cases (`few`) counts
  * as shown in a sum across hospitals: each of those hospitals shows its own
  * figure, so that total is never secret, and the hospitals are protected as
@@ -244,18 +248,31 @@ function closeSums(
     if (!from) return c;
     return raw(from[1]) > 0 ? from[1] : from[0];
   };
+  /** Hidden only for too few hospitals (inside a reply). */
+  const fewOnly = (c: string) => {
+    if (parents(c)) return false;
+    const n = raw(c);
+    return n !== 0 && !off.has(c) && !isSmallCount(n) && few(c);
+  };
   let changed = true;
   while (changed) {
     changed = false;
     for (const [total, parts, across] of sums) {
       const hidden = (c: string) => hiddenAt(c, across);
       const hid = parts.filter(hidden);
-      if (hidden(total)) {
+      if (!across && fewOnly(total)) {
+        // The rows may add up to it (the reader then knows it): close the
+        // set as under a shown total, and keep a member hidden besides.
+        const sum = hid.reduce((s, c) => s + raw(c), 0);
+        // Hidden parts that add up to 0 give no one away (a rest can be 0).
+        if (sum === 0 || (hid.length >= 2 && sum >= SMALL_GROUP_MIN)) continue;
+      } else if (hidden(total)) {
         if (hid.length > 0) continue;
       } else {
         if (hid.length === 0) continue;
         const sum = hid.reduce((s, c) => s + raw(c), 0);
-        if (hid.length >= 2 && sum >= SMALL_GROUP_MIN) continue;
+        // Hidden parts that add up to 0 give no one away (a rest can be 0).
+        if (sum === 0 || (hid.length >= 2 && sum >= SMALL_GROUP_MIN)) continue;
       }
       let next: string | null = null;
       for (const c of parts)
@@ -393,17 +410,6 @@ function tally(h: string, map: ScopeKind, f: Filters, win: Win): Rec {
     }
   }
   for (const [id, s] of reviewers) v[`q:${id}:rev`] = s.size;
-  // What subtraction publishes: existing cases and unrated consultations.
-  for (const k of Object.keys(v)) {
-    if (k.startsWith("c:")) {
-      const e = v[k]! - (v[`n:${k.slice(2)}`] ?? 0);
-      if (e > 0) v[`e:${k.slice(2)}`] = e;
-    } else if (k.startsWith("q:") && k.endsWith(":cons")) {
-      const p = k.slice(0, -4);
-      const u = v[k]! - (v[`${p}rated`] ?? 0);
-      if (u > 0) v[`${p}unrated`] = u;
-    }
-  }
   tallies.set(key, v);
   return v;
 }
@@ -519,32 +525,117 @@ const pairKey = (a: string, b: string, map: ScopeKind) => {
  * keys in that scope's names. `condition` is the filter, if any.
  */
 /**
- * A rate's complement: `r:{count}~{base}`, base − count. Count and base
- * both shown publish it by subtraction, so it is a derived cell like
- * existing cases (see closeSums), worked out from its parents, never stored.
+ * The rest of a part-pair (`PART_PAIRS`): `r:{part}~{whole}`, whole − part.
+ * The two shown together publish it by subtraction, so it is a derived cell
+ * (see closeSums), worked out from its parents, never stored.
  */
-const restKey = (count: string, base: string) => `r:${count}~${base}`;
+const restKey = (part: string, whole: string) => `r:${part}~${whole}`;
 function restOf(k: string): { count: string; base: string } | null {
   if (!k.startsWith("r:")) return null;
   const at = k.lastIndexOf("~");
   return { count: k.slice(2, at), base: k.slice(at + 1) };
 }
-/** Every rate a reply can send, as [count, base]. */
-function rateKeys(v: Rec): [string, string][] {
-  const out: [string, string][] = [
-    ["head", "seen"],
-    ["fhead", "seen"],
-    ["qagreed", "qrated"],
-  ];
-  for (const k of Object.keys(v)) {
-    if (k.startsWith("c:") || k.startsWith("f:")) out.push([k, "seen"]);
-    if (k.startsWith("ms:")) out.push([`mh:${k.slice(3)}`, k]);
+
+type Item = { item: string; key: string; flagged: boolean };
+/** A figure's cells in one owner's counts, item by item. */
+function figureCells(view: ViewId, f: Figure, v: Rec, map: ScopeKind): Item[] {
+  const one = (key: string): Item[] => [{ item: "", key, flagged: false }];
+  const keys = (prefix: string) =>
+    Object.keys(v).filter((k) => k.startsWith(prefix));
+  const each = (
+    prefix: string,
+    to: (id: string) => string = (id) => prefix + id,
+  ) =>
+    keys(prefix).map((k) => {
+      const id = k.slice(prefix.length);
+      return { item: id, key: to(id), flagged: false };
+    });
+  const qids = keys("q:")
+    .filter((k) => k.endsWith(":cons"))
+    .map((k) => k.slice(2, -5));
+  switch (f) {
+    case "patients":
+      return one("group");
+    case "headline.count":
+    case "row.count":
+      return one(HEADLINE[view][0]);
+    case "headline.base":
+    case "row.base":
+      return one(HEADLINE[view][1]);
+    case "row.size":
+      return one("seen");
+    case "series.base":
+      return each("ms:");
+    case "series.count":
+      return each("ms:", (m) => `mh:${m}`);
+    case "condition.cases":
+      return each("c:");
+    case "condition.new":
+      return each("c:", (id) => `n:${id}`);
+    case "member.patients":
+      return [
+        "age:",
+        "sex:",
+        "set:",
+        "spec:",
+        ...(map === "hospital" ? ["loc:"] : []),
+      ]
+        .flatMap((p) => keys(p))
+        .map((k) => ({ item: k, key: k, flagged: false }));
+    case "pair.patients":
+      return keys("p:").map((k) => ({ item: k, key: k, flagged: false }));
+    case "finding.patients":
+      return keys("f:").map((k) => ({
+        item: k,
+        key: k,
+        flagged: !k.endsWith("|-"),
+      }));
+    case "quality.consultations":
+      return qids.map((id) => ({
+        item: id,
+        key: `q:${id}:cons`,
+        flagged: false,
+      }));
+    case "quality.rated":
+      return qids.map((id) => ({
+        item: id,
+        key: `q:${id}:rated`,
+        flagged: false,
+      }));
+    case "quality.corrections":
+      return qids.map((id) => ({
+        item: id,
+        key: `q:${id}:corr`,
+        flagged: false,
+      }));
   }
-  return out;
 }
-/** Each rate's base is its count and its complement. */
-const rateSums = (pairs: [string, string][]): Sum[] =>
-  pairs.map(([count, base]) => [base, [count, restKey(count, base)]]);
+const isRowFigure = (f: Figure) => f.startsWith("row.");
+
+/**
+ * Every part-pair of every view over one owner's counts, as sums: the whole
+ * is its part and the rest. `rows` picks the hospital-row pairs only (a
+ * hospital with no reply of its own), or every other pair.
+ */
+function pairSums(v: Rec, map: ScopeKind, rows: boolean): Sum[] {
+  const out = new Map<string, Sum>();
+  for (const view of VIEW_IDS)
+    for (const p of PART_PAIRS[view]) {
+      if (isRowFigure(p.whole) !== rows) continue;
+      const wholes = figureCells(view, p.whole, v, map);
+      const same = !rows && wholes.length > 0 && wholes[0]!.item !== "";
+      for (const part of figureCells(view, p.part, v, map)) {
+        if (p.only === "flagged" && !part.flagged) continue;
+        const whole = same
+          ? wholes.find((w) => w.item === part.item)
+          : wholes[0];
+        if (!whole || whole.key === part.key) continue;
+        const rk = restKey(part.key, whole.key);
+        out.set(rk, [whole.key, [part.key, rk]]);
+      }
+    }
+  return [...out.values()];
+}
 
 function sumsOf(v: Rec, map: ScopeKind, condition: string | null): Sum[] {
   const bands = map === "all" ? ALL_BANDS : HOSPITAL_BANDS;
@@ -574,18 +665,8 @@ function sumsOf(v: Rec, map: ScopeKind, condition: string | null): Sum[] {
     ["qrated", ids.map((id) => `q:${id}:rated`)],
     ["qagreed", ids.map((id) => `q:${id}:agreed`)],
   );
-  // Sent beside their part, a total publishes the rest by subtraction:
-  // existing cases, and unrated consultations (derived cells, see closeSums).
-  for (const k of Object.keys(v))
-    if (k.startsWith("c:")) {
-      const id = k.slice(2);
-      out.push([k, [`n:${id}`, `e:${id}`]]);
-    }
-  for (const id of ids) {
-    const p = `q:${id}:`;
-    out.push([`${p}cons`, [`${p}rated`, `${p}unrated`]]);
-  }
-  out.push(...rateSums(rateKeys(v)));
+  // A whole shown beside its part publishes the rest (PART_PAIRS).
+  out.push(...pairSums(v, map, false));
   // The same figure under two names.
   const pa = Object.keys(v).filter((k) => k.startsWith("pa:"));
   if (condition === null) {
@@ -620,7 +701,6 @@ function hospitalKey(k: string): string | null {
   switch (head) {
     case "c":
     case "n":
-    case "e":
     case "pa":
       return `${head}:${id(a)}`;
     case "p": {
@@ -690,14 +770,6 @@ function hideTogether(owners: Owner[], sums: Sum[]): Map<string, Ctx> {
     const at = c.indexOf("#");
     const owner = c.slice(0, at + 1);
     const k = c.slice(at + 1);
-    if (k.startsWith("e:")) {
-      const id = k.slice(2);
-      return [`${owner}c:${id}`, `${owner}n:${id}`];
-    }
-    if (k.startsWith("q:") && k.endsWith(":unrated")) {
-      const p = k.slice(0, -"unrated".length);
-      return [`${owner}${p}cons`, `${owner}${p}rated`];
-    }
     const rest = restOf(k);
     if (rest) return [`${owner}${rest.base}`, `${owner}${rest.count}`];
     return null;
@@ -774,17 +846,16 @@ function familyOf(f: Filters, win: Win): Family {
           ),
         ),
       );
-  // Without a twin a hospital's only figures are its row's: its headline
-  // rate's complement is still published.
-  const rowRates = rateKeys({}).filter(
-    ([c, b]) => ROW_KEYS.has(c) && ROW_KEYS.has(b),
-  );
+  // Without a twin a hospital's only figures are its row's: the row pairs.
   if (!twin)
-    for (const p of PROFILES) sums.push(...inCells(p.id, rateSums(rowRates)));
-  // Each all-hospitals figure is the sum of the hospitals' own.
+    for (const p of PROFILES)
+      sums.push(
+        ...inCells(p.id, pairSums(tally(p.id, "all", f, win), "all", true)),
+      );
+  // Each all-hospitals figure, and each rest, is the sum of the hospitals' own.
   const across = [
     ...Object.keys(sum.v),
-    ...rateKeys(sum.v).map(([c, b]) => restKey(c, b)),
+    ...pairSums(sum.v, "all", false).map(([, parts]) => parts[1]!),
   ];
   for (const k of across) {
     const rest = restOf(k);
