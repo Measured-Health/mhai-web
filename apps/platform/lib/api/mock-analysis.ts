@@ -9,6 +9,7 @@
 // reply carries a patient: the cohorts are only ever counted.
 import { ApiError } from "@mhai/api-client/errors";
 import { toCsv } from "@mhai/ui/csv";
+import { countText } from "../analysis/access";
 import { SMALL_GROUP_MIN, isSmallCount } from "@mhai/ui/small-groups";
 import {
   MAX_FILTERS,
@@ -1624,7 +1625,7 @@ export function analysisMock(
             VIEW_WORDS[e.view],
             PERIOD_WORDS[e.period],
             e.filters.map((x) => x.label).join("; "),
-            e.count,
+            e.count === null ? null : countText(e.count),
             e.clearance_id,
             e.flagged ? "Yes" : "No",
           ]),

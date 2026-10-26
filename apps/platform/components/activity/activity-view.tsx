@@ -31,6 +31,7 @@ export function ActivityView() {
   const hospital = params.get("hospital") || undefined;
   const tab: Tab = params.get("tab") === ACCESS ? ACCESS : "team";
   const selectId = useId();
+  const base = useId();
   const options = useHospitalOptions();
   const names = options.data ?? [];
   const unknown =
@@ -62,6 +63,8 @@ export function ActivityView() {
                 key={key}
                 type="button"
                 role="tab"
+                id={`${base}-tab-${key}`}
+                aria-controls={`${base}-panel`}
                 aria-selected={tab === key}
                 onClick={() => go(key, hospital)}
                 className={cn(
@@ -98,11 +101,18 @@ export function ActivityView() {
             </select>
           </div>
 
-          {tab === "analysis-access" ? (
-            <AccessTrail hospital={hospital} />
-          ) : (
-            <TeamActions hospital={hospital} />
-          )}
+          <div
+            role="tabpanel"
+            id={`${base}-panel`}
+            aria-labelledby={`${base}-tab-${tab}`}
+            className="flex flex-col gap-4"
+          >
+            {tab === "analysis-access" ? (
+              <AccessTrail hospital={hospital} />
+            ) : (
+              <TeamActions hospital={hospital} />
+            )}
+          </div>
         </div>
       </div>
     </>

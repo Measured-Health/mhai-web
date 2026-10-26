@@ -463,8 +463,8 @@ describe("Plan 8's Activity actions", () => {
       ["analysis_switched", "Turned Analysis on", "Turned Analysis off"],
       [
         "patient_views_switched",
-        "Turned patient lists in Analysis on",
-        "Turned patient lists in Analysis off",
+        "Turned patient lists on",
+        "Turned patient lists off",
       ],
     ] as const) {
       expect(KINDS[kind].type, kind).toBe("platform");

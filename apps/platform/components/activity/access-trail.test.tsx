@@ -97,6 +97,9 @@ describe("Activity: Analysis access", () => {
       within(tabs).getByRole("tab", { name: "Team actions" }),
     ).toHaveAttribute("aria-selected", "false");
     await screen.findByRole("list", { name: "Analysis access" });
+    expect(screen.getByRole("tabpanel")).toHaveAccessibleName(
+      "Analysis access",
+    );
     const text = items().map((li) => li.textContent);
     expect(text.some((t) => /looked at/.test(t ?? ""))).toBe(true);
     expect(text.some((t) => /downloaded .* as CSV/.test(t ?? ""))).toBe(true);

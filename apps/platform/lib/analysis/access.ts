@@ -13,6 +13,7 @@ import type {
   ScopeKind,
   ViewId,
 } from "../api/analysis-contract";
+import { FEWER_THAN_5, isSmallCount } from "@mhai/ui/small-groups";
 import { VIEW_TITLE, periodLabel } from "./labels";
 import type { ViewState } from "./read";
 
@@ -145,6 +146,10 @@ export function readAccessPage(raw: unknown): ViewState<AccessPage> {
   }
 }
 
+/** A patient-list count, by the small-group rule: 1 to 4 is "Fewer than 5". */
+export const countText = (n: number) =>
+  isSmallCount(n) ? FEWER_THAN_5 : String(n);
+
 /** The line after the person's name is built here whole, for the screen. */
 export function accessLine(e: AccessEntry): string {
   const where =
@@ -152,7 +157,7 @@ export function accessLine(e: AccessEntry): string {
   const view = VIEW_TITLE[e.view];
   if (e.kind === "patient_list") {
     const n = e.count ?? 0;
-    return `${e.actor.name} opened ${n} de-identified ${n === 1 ? "patient" : "patients"} at ${where} · ${view} · letter ${e.clearance_id}`;
+    return `${e.actor.name} opened ${countText(n)} de-identified patients at ${where} · ${view} · letter ${e.clearance_id}`;
   }
   const parts = [where, periodLabel(e.period)];
   if (e.filters.length > 0)

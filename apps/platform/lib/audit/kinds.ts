@@ -534,8 +534,8 @@ export const KINDS: Record<string, Kind> = {
   ),
   patient_views_switched: k("platform", (e) =>
     e.facts.switched
-      ? `Turned patient lists in Analysis ${e.facts.switched}`
-      : "Switched patient lists in Analysis on or off",
+      ? `Turned patient lists ${e.facts.switched}`
+      : "Switched patient lists on or off",
   ),
   // Failed jobs and platform settings (Plan 8).
   // No target: the count, when sent, is `facts.job_count`.

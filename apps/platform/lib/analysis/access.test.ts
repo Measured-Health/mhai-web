@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AccessEntry } from "../api/analysis-contract";
-import { accessLine, readAccessPage } from "./access";
+import { accessLine, countText, readAccessPage } from "./access";
 
 const ADA = { id: "tm_ada", name: "Ada Bakare" };
 const TUNDE = { id: "tm_tunde", name: "Tunde Okafor" };
@@ -67,9 +67,21 @@ describe("accessLine", () => {
     expect(accessLine(list)).toBe(
       "Ada Bakare opened 37 de-identified patients at Havana Hospital · Findings and alerts · letter CL_hav_01",
     );
-    expect(accessLine({ ...list, count: 1 })).toContain(
-      "opened 1 de-identified patient at",
+  });
+  it("shows a patient-list count of 1 to 4 as Fewer than 5", () => {
+    for (const n of [1, 4])
+      expect(accessLine({ ...list, count: n })).toBe(
+        "Ada Bakare opened Fewer than 5 de-identified patients at Havana Hospital · Findings and alerts · letter CL_hav_01",
+      );
+    expect(accessLine({ ...list, count: 5 })).toContain(
+      "opened 5 de-identified",
     );
+    expect(accessLine({ ...list, count: 0 })).toContain(
+      "opened 0 de-identified",
+    );
+    expect(countText(3)).toBe("Fewer than 5");
+    expect(countText(0)).toBe("0");
+    expect(countText(5)).toBe("5");
   });
 });
 
@@ -112,6 +124,11 @@ describe("readAccessPage", () => {
     );
     expect(
       readAccessPage(page([{ ...download, clearance_id: "cl_1" }])).status,
+    ).toBe("failed");
+  });
+  it("fails closed on a patient list across hospitals", () => {
+    expect(
+      readAccessPage(page([{ ...list, scope: "all", hospital: null }])).status,
     ).toBe("failed");
   });
   it("fails closed when a patient list has no count or no letter", () => {
