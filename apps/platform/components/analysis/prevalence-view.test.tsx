@@ -11,6 +11,7 @@ import type { PlatformClient } from "@/lib/api/contract";
 import { createMockPlatform } from "@/lib/api/mock";
 import type { AnalysisMode } from "@/lib/api/mock-analysis";
 import { emptyQuery } from "@/lib/analysis/filters";
+import { monthLabel } from "@/lib/analysis/labels";
 import { readView, type ViewRead } from "@/lib/analysis/read";
 import { ADA, GrabAuth, renderWithAuth } from "@/tests/render";
 import { AnalysisGate } from "./analysis-gate";
@@ -404,5 +405,75 @@ describe("PrevalenceView on its own", () => {
     expect(summary).not.toContain(
       first!.getAttribute("aria-label")!.split(":")[0]!,
     );
+  });
+
+  const alone = (state: ViewRead<"prevalence">, mode: "chart" | "table") =>
+    rtl(
+      <PrevalenceView
+        state={state}
+        onRetry={() => {}}
+        mode={mode}
+        onMode={() => {}}
+      />,
+    );
+
+  it("One hospital: a hidden monthly median reads Not enough similar hospitals", async () => {
+    const read = await readAll(emptyQuery("hospital", "h_havana"));
+    expect(read.data.comparison?.available).toBe(true);
+    const series = read.data.data.series;
+    series[2] = { ...series[2]!, median: hidden };
+    const month = monthLabel(series[2]!.month);
+    const { unmount } = alone(read, "chart");
+    const items = within(
+      screen.getByRole("list", { name: "Cases per 1,000 by month" }),
+    ).getAllByRole("listitem");
+    expect(items[2]!.getAttribute("aria-label")).toMatch(
+      /, Median of similar hospitals: Not enough similar hospitals$/,
+    );
+    expect(items[2]!.querySelector("[data-second]")).toBeNull();
+    expect(items.some((i) => i.querySelector("[data-second]"))).toBe(true);
+    unmount();
+    alone(read, "table");
+    const table = screen.getByRole("table", {
+      name: "Cases per 1,000 by month",
+    });
+    const heads = within(table)
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+    const at = heads.indexOf("Median of similar hospitals");
+    expect(at).toBeGreaterThan(0);
+    const medians = within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => within(r).getAllByRole("cell")[at]!.textContent);
+    expect(medians[2]).toBe("Not enough similar hospitals");
+    expect(medians).not.toContain("Fewer than 5");
+    expect(
+      within(table).getByRole("row", { name: new RegExp(month) }),
+    ).toHaveTextContent("Not enough similar hospitals");
+  });
+
+  it("a month from too few hospitals reads the words and draws no column", async () => {
+    const read = await readAll();
+    const series = read.data.data.series;
+    const tooFew = {
+      value: null,
+      suppressed: true,
+      why: "too_few_hospitals" as const,
+    };
+    series[0] = {
+      ...series[0]!,
+      rate: { count: tooFew, base: tooFew, per_1000: tooFew },
+    };
+    alone(read, "chart");
+    const [first] = within(
+      screen.getByRole("list", { name: "Cases per 1,000 by month" }),
+    ).getAllByRole("listitem");
+    expect(first!.getAttribute("aria-label")).toMatch(
+      /: Too few hospitals to show$/,
+    );
+    expect(
+      first!.querySelector("span[aria-hidden].block")!.getAttribute("style"),
+    ).toMatch(/height:\s*0/);
   });
 });

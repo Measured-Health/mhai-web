@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import type { AGuarded, ConditionRef, Rate } from "@/lib/api/analysis-contract";
 import {
+  NOT_ENOUGH_PEERS,
   NOT_STANDARDISED,
   NO_DATA,
   TOO_FEW_HOSPITALS,
@@ -14,7 +15,7 @@ import type { ViewRead } from "@/lib/analysis/read";
 import { BarList } from "@mhai/ui/charts/bar-list";
 import { ColumnChart } from "@mhai/ui/charts/column-chart";
 import type { BarItem, Column } from "@mhai/ui/charts/types";
-import { FEWER_THAN_5 } from "@mhai/ui/small-groups";
+import { FEWER_THAN_5, isSmallCount } from "@mhai/ui/small-groups";
 import { ComparisonPanel } from "./comparison-panel";
 import { DataTable, type DataColumn, type DataRow } from "./data-table";
 import { HospitalRows, rateWithCount } from "./hospital-rows";
@@ -42,7 +43,15 @@ type ByCondition = {
 function columnOf(s: Series[number], withMedian: boolean): Column {
   const g = s.rate.per_1000;
   const second = withMedian && s.median ? shown(s.median) : null;
-  const base = { key: s.month, label: monthLabel(s.month), second };
+  // A hidden median: too few similar hospitals showed that month.
+  const secondText =
+    withMedian && s.median?.suppressed ? NOT_ENOUGH_PEERS : undefined;
+  const base = {
+    key: s.month,
+    label: monthLabel(s.month),
+    second,
+    secondText,
+  };
   if (g.suppressed && g.why === "too_few_hospitals")
     return { ...base, value: 0, text: TOO_FEW_HOSPITALS };
   if (g.suppressed) return { ...base, value: 0, hidden: true };
@@ -111,14 +120,22 @@ function barOf(c: ByCondition[number]): BarItem {
   const text = rateWithCount(c.rate);
   const note =
     c.new.why === "too_few_hospitals"
-      ? undefined
+      ? `New: ${TOO_FEW_HOSPITALS}`
       : `${valueText(c.new, "count")} new in this period`;
+  // From the guards, not the words: the rate and its count both hidden.
+  const r = c.rate.per_1000;
+  const n = c.rate.count;
+  const hidden =
+    r.suppressed &&
+    r.why === undefined &&
+    ((n.suppressed && n.why === undefined) ||
+      (n.value !== null && isSmallCount(n.value)));
   return {
     key: c.condition.id,
     label: conditionText(c.condition),
     value: shown(c.rate.per_1000),
     text,
-    hidden: text === FEWER_THAN_5,
+    hidden,
     note,
   };
 }
@@ -169,7 +186,11 @@ export function PrevalenceView({
         seen: { g: s.rate.base, kind: "count" },
         rate: { g: s.rate.per_1000, kind: "rate" },
         ...(withMedian && s.median
-          ? { median: { g: s.median, kind: "rate" } }
+          ? {
+              median: s.median.suppressed
+                ? NOT_ENOUGH_PEERS
+                : { g: s.median, kind: "rate" },
+            }
           : {}),
       },
     }));
@@ -177,7 +198,7 @@ export function PrevalenceView({
       id: c.condition.id,
       cells: {
         condition: c.condition.name ?? NOT_STANDARDISED,
-        icd10: c.condition.icd10 ?? "None",
+        icd10: c.condition.icd10 ?? "No code",
         cases: { g: c.cases, kind: "count" },
         rate: { g: c.rate.per_1000, kind: "rate" },
         new: { g: c.new, kind: "count" },

@@ -129,5 +129,8 @@ describe("HospitalRows", () => {
     expect(first()).toBe("DeltaPartly standardised");
     await user.click(screen.getByRole("button", { name: /Smallest first/ }));
     expect(first()).toBe("Alpha");
+    expect(
+      screen.getByRole("button", { name: /^Sorted Smallest first\./ }),
+    ).toBeInTheDocument();
   });
 });

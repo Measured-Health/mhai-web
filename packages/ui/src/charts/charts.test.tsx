@@ -459,4 +459,22 @@ describe("ColumnChart: written values and a second mark (Analysis)", () => {
       within(screen.getByRole("row", { name: /Aug 2026/ })).getByText("20"),
     ).toBeInTheDocument();
   });
+
+  it("a missing second mark can say why, with no mark drawn", () => {
+    rates([
+      { key: "1", label: "Aug 2026", value: 10, second: 20 },
+      {
+        key: "2",
+        label: "Sep 2026",
+        value: 12,
+        second: null,
+        secondText: "Not enough similar hospitals",
+      },
+    ]);
+    const items = screen.getAllByRole("listitem");
+    expect(items[1]).toHaveAccessibleName(
+      "Sep 2026: 12 per 1,000, Median of similar hospitals: Not enough similar hospitals",
+    );
+    expect(items[1]!.querySelector("[data-second]")).toBeNull();
+  });
 });

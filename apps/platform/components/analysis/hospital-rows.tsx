@@ -6,6 +6,7 @@ import {
   COVERAGE_LABEL,
   KIND_LABEL,
   PARTLY_STANDARDISED,
+  headlineText,
   valueText,
 } from "@/lib/analysis/labels";
 import { inputClass } from "@mhai/ui/auth/password-fields";
@@ -15,15 +16,6 @@ import { useIsDesktop } from "@mhai/ui/hooks/use-media";
 
 /** How a headline reads: per 1,000, or (Quality's agreement rate) a percentage. */
 export type HeadlineKind = "rate" | "share";
-
-/** A headline per 1,000 in words: "12.4 per 1,000", or "76%" as a share. */
-export function headlineText(g: AGuarded, kind: HeadlineKind): string {
-  if (kind === "rate") return valueText(g, "rate");
-  return valueText(
-    g.value === null ? g : { ...g, value: g.value / 1000 },
-    "share",
-  );
-}
 
 /**
  * A rate with its count beside it, never a count alone: "12.4 per 1,000 ·
@@ -149,6 +141,14 @@ export function HospitalRows({
 
   if (!desktop) {
     const text = TEXT_KEYS.has(sort.key);
+    const current =
+      sort.dir === "ascending"
+        ? text
+          ? "A to Z"
+          : "Smallest first"
+        : text
+          ? "Z to A"
+          : "Largest first";
     const other =
       sort.dir === "ascending"
         ? text
@@ -185,6 +185,7 @@ export function HospitalRows({
           <button
             type="button"
             onClick={() => sortBy(sort.key)}
+            aria-label={`Sorted ${current}. Show ${other}`}
             className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-line px-3.5 text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-mint-deep"
           >
             <ArrowUpDown aria-hidden className="size-3.5" />

@@ -65,7 +65,13 @@ export function ColumnChart({
     c.hidden ? FEWER_THAN_5 : (c.text ?? valueText(c.value));
   const describe = (c: Column) =>
     `${c.label}: ${written(c)}${c.mark ? `, ${c.mark}` : ""}${
-      seconds && hasSecond(c) ? `, ${secondLabel}: ${valueText(c.second!)}` : ""
+      !seconds
+        ? ""
+        : hasSecond(c)
+          ? `, ${secondLabel}: ${valueText(c.second!)}`
+          : c.secondText !== undefined
+            ? `, ${secondLabel}: ${c.secondText}`
+            : ""
     }`;
   const last = columns.length - 1;
   // The data can shrink under a live chart (period change, kept-alive route).

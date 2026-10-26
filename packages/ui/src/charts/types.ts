@@ -17,6 +17,8 @@ export interface Column {
   text?: string;
   /** A second mark on the column, e.g. the median of similar hospitals; null or absent draws none. */
   second?: number | null;
+  /** Said for the second mark when there is none, e.g. why it isn't shown; draws nothing. */
+  secondText?: string;
 }
 
 /** One row in a BarList. */
