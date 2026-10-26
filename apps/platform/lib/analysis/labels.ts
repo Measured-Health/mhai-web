@@ -31,6 +31,8 @@ export const SPECIALTY_NOT_RECORDED = "Specialty not recorded";
 export const SETTING_NOT_RECORDED = "Setting not recorded";
 export const NO_DATA = "No data yet";
 export const NO_EARLIER_DATA = "No earlier data";
+/** A hidden monthly median: too few similar hospitals showed that month. */
+export const NOT_ENOUGH_PEERS = "Not enough similar hospitals";
 export const NO_PATIENTS = "No patients match these filters";
 export const SAMPLE_DATA = "Sample data";
 export const FILTERS_CLEARED = "Filters cleared for the new scope";
@@ -190,12 +192,20 @@ export function valueText(g: AGuarded, kind: GuardKind): string {
 const perThousandAsShare = (g: AGuarded): AGuarded =>
   g.value === null ? g : { ...g, value: g.value / 1000 };
 /**
+ * A headline per 1,000 in words: "12.4 per 1,000", or with `kind` "share"
+ * (Quality's agreement rate) a percentage, "76%".
+ */
+export const headlineText = (g: AGuarded, kind: "rate" | "share") =>
+  kind === "share"
+    ? valueText(perThousandAsShare(g), "share")
+    : valueText(g, "rate");
+/**
  * A comparison value: the view's headline per 1,000. With `kind` "share"
  * (Quality's agreement rate) it reads as a percentage (per 1,000 ÷ 10).
  */
 const compareText = (g: AGuarded, kind: GuardKind) =>
-  kind === "share"
-    ? valueText(perThousandAsShare(g), "share")
+  kind === "share" || kind === "rate"
+    ? headlineText(g, kind)
     : valueText(g, kind);
 
 export const REASON_TEXT: Record<ComparisonReason, string> = {

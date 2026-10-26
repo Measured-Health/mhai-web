@@ -14,6 +14,7 @@ import {
   monthsText,
   valueText,
 } from "@/lib/analysis/labels";
+import type { ViewRead } from "@/lib/analysis/read";
 import {
   useAnalysisFilters,
   useAnalysisView,
@@ -26,6 +27,7 @@ import { downloadCsv } from "@mhai/ui/csv";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
 import { AnalysisFilters } from "./analysis-filters";
 import { AnalysisHeader } from "./analysis-header";
+import { PrevalenceView } from "./prevalence-view";
 import { ViewFrame, type ChartOrTable } from "./view-frame";
 
 /**
@@ -121,22 +123,31 @@ export function AnalysisView({ status }: { status: AnalysisStatus }) {
           ? { role: "tabpanel", "aria-labelledby": `${pickerId}-${view}` }
           : {})}
       >
-        <ViewFrame
-          view={view}
-          state={read.state}
-          onRetry={read.retry}
-          mode={chartOrTable}
-          onMode={setChartOrTable}
-          summary={
-            read.state?.status === "ok" && (
-              // Tasks 6 and 7 fill each view in; until then, its summary.
-              <p className="text-[14px] text-ink-2">
-                {valueText(read.state.data.patients, "count")} patients in the
-                group · {monthsText(read.state.data.period)}
-              </p>
-            )
-          }
-        />
+        {view === "prevalence" ? (
+          <PrevalenceView
+            state={read.state as ViewRead<"prevalence"> | undefined}
+            onRetry={read.retry}
+            mode={chartOrTable}
+            onMode={setChartOrTable}
+          />
+        ) : (
+          <ViewFrame<ViewId>
+            view={view}
+            state={read.state}
+            onRetry={read.retry}
+            mode={chartOrTable}
+            onMode={setChartOrTable}
+            summary={
+              read.state?.status === "ok" && (
+                // Task 7 fills the other views in; until then, a summary.
+                <p className="text-[14px] text-ink-2">
+                  {valueText(read.state.data.patients, "count")} patients in the
+                  group · {monthsText(read.state.data.period)}
+                </p>
+              )
+            }
+          />
+        )}
       </div>
     </>
   );

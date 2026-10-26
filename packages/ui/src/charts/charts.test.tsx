@@ -395,3 +395,86 @@ describe("ColumnChart", () => {
     expect(container.textContent).not.toContain("0 alerts");
   });
 });
+
+describe("ColumnChart: written values and a second mark (Analysis)", () => {
+  const rates = (columns: Column[]) =>
+    render(
+      <ColumnChart
+        title="Cases per 1,000 by month"
+        columns={columns}
+        summary="s"
+        valueText={(n) => `${n} per 1,000`}
+        headers={["Month", "Cases per 1,000"]}
+        markLegend=""
+        secondLabel="Median of similar hospitals"
+      />,
+    );
+
+  it("a column's text is written instead of its value and draws no column", async () => {
+    rates([
+      { key: "1", label: "Aug 2026", value: 0, text: "No data yet" },
+      { key: "2", label: "Sep 2026", value: 0 },
+    ]);
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).toHaveAccessibleName("Aug 2026: No data yet");
+    expect(items[1]).toHaveAccessibleName("Sep 2026: 0 per 1,000");
+    expect(
+      items[0]!.querySelector("span[aria-hidden].block")!.getAttribute("style"),
+    ).toMatch(/height:\s*0/);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show as table" }),
+    );
+    expect(
+      within(screen.getByRole("row", { name: /Aug 2026/ })).getByText(
+        "No data yet",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("draws a second mark with its name and a legend, and lists it in the table", async () => {
+    rates([
+      { key: "1", label: "Aug 2026", value: 10, second: 20 },
+      { key: "2", label: "Sep 2026", value: 4, hidden: true, second: null },
+    ]);
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).toHaveAccessibleName(
+      "Aug 2026: 10 per 1,000, Median of similar hospitals: 20 per 1,000",
+    );
+    expect(items[1]).toHaveAccessibleName("Sep 2026: Fewer than 5");
+    const ticks = document.querySelectorAll("[data-second]");
+    expect(ticks).toHaveLength(1);
+    expect((ticks[0] as HTMLElement).style.bottom).toBe("100%");
+    // Scaled with the second mark, so the column is half the height.
+    expect(
+      items[0]!.querySelector("span[aria-hidden].block")!.getAttribute("style"),
+    ).toMatch(/height:\s*50%/);
+    expect(screen.getByText("Median of similar hospitals")).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show as table" }),
+    );
+    expect(
+      screen.getByRole("columnheader", { name: "Median of similar hospitals" }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("row", { name: /Aug 2026/ })).getByText("20"),
+    ).toBeInTheDocument();
+  });
+
+  it("a missing second mark can say why, with no mark drawn", () => {
+    rates([
+      { key: "1", label: "Aug 2026", value: 10, second: 20 },
+      {
+        key: "2",
+        label: "Sep 2026",
+        value: 12,
+        second: null,
+        secondText: "Not enough similar hospitals",
+      },
+    ]);
+    const items = screen.getAllByRole("listitem");
+    expect(items[1]).toHaveAccessibleName(
+      "Sep 2026: 12 per 1,000, Median of similar hospitals: Not enough similar hospitals",
+    );
+    expect(items[1]!.querySelector("[data-second]")).toBeNull();
+  });
+});
