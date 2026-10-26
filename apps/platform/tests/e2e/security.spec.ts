@@ -90,6 +90,7 @@ test("every page has a CSP header with a nonce", async ({ page }) => {
     "/hospitals/new",
     "/hospitals/h_northgate",
     "/usage",
+    "/analysis",
     "/system/health",
     "/system/jobs",
     "/clearances",

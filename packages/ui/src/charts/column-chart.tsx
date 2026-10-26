@@ -48,6 +48,8 @@ export function ColumnChart({
   const [active, setActive] = useState(0);
   const [focused, setFocused] = useState<string | null>(null);
   const refs = useRef<(HTMLLIElement | null)[]>([]);
+  const scroller = useRef<HTMLDivElement>(null);
+  const [scrolls, setScrolls] = useState(false);
   const titleId = useId();
   const summaryId = useId();
   const H = HEADING[level];
@@ -78,6 +80,16 @@ export function ColumnChart({
   const current = Math.min(active, Math.max(0, last));
   // Keyed, so a data swap that drops the focused column drops its caption.
   const shown = columns.find((c) => c.key === focused) ?? null;
+  // On a phone a long series is wider than its card: say so, and make the
+  // scroller reachable by keyboard.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const measure = () => setScrolls(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [columns.length, asTable]);
   // A hidden route fires no blur; don't come back to a stale caption.
   useLayoutEffect(() => () => setFocused(null), []);
 
@@ -177,7 +189,17 @@ export function ColumnChart({
           {/* On phones each column is at least a 44 px target and the chart
               scrolls sideways, its axis labels with it; focusing a column
               scrolls it into view. */}
-          <div className="max-sm:overflow-x-auto">
+          <div
+            ref={scroller}
+            className="max-sm:overflow-x-auto"
+            {...(scrolls
+              ? {
+                  role: "group",
+                  tabIndex: 0,
+                  "aria-label": `${title}, scrolls sideways`,
+                }
+              : {})}
+          >
             <div className="max-sm:w-max max-sm:min-w-full">
               <ol
                 aria-labelledby={titleId}
@@ -254,6 +276,11 @@ export function ColumnChart({
               </div>
             </div>
           </div>
+          {scrolls && (
+            <p className="mt-1 text-[12px] text-ink-3 sm:hidden">
+              Scroll sideways to see every month.
+            </p>
+          )}
           <p aria-hidden className="mt-1 min-h-5 text-[12.5px] text-ink-2">
             {shown ? describe(shown) : ""}
           </p>

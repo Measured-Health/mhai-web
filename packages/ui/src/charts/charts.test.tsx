@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Activity } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BarList } from "./bar-list";
 import type { Column } from "./types";
 import { ColumnChart } from "./column-chart";
@@ -476,5 +476,55 @@ describe("ColumnChart: written values and a second mark (Analysis)", () => {
       "Sep 2026: 12 per 1,000, Median of similar hospitals: Not enough similar hospitals",
     );
     expect(items[1]!.querySelector("[data-second]")).toBeNull();
+  });
+});
+
+describe("ColumnChart scroller", () => {
+  const cols: Column[] = [
+    { key: "1", label: "Aug 2026", value: 10 },
+    { key: "2", label: "Sep 2026", value: 12 },
+  ];
+  const chart = () =>
+    render(
+      <ColumnChart
+        title="Cases by month"
+        columns={cols}
+        summary="Two months."
+        valueText={(n) => `${n}`}
+        headers={["Month", "Cases"]}
+        markLegend=""
+      />,
+    );
+
+  it("is a plain block when the columns fit", () => {
+    chart();
+    expect(
+      screen.queryByRole("group", { name: "Cases by month, scrolls sideways" }),
+    ).toBeNull();
+    expect(
+      screen.queryByText("Scroll sideways to see every month."),
+    ).toBeNull();
+  });
+
+  it("is a labelled, keyboard-reachable scroller when wider than its card", () => {
+    const wide = vi
+      .spyOn(HTMLElement.prototype, "scrollWidth", "get")
+      .mockReturnValue(600);
+    const client = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(300);
+    try {
+      chart();
+      const group = screen.getByRole("group", {
+        name: "Cases by month, scrolls sideways",
+      });
+      expect(group).toHaveAttribute("tabindex", "0");
+      expect(
+        screen.getByText("Scroll sideways to see every month."),
+      ).toBeInTheDocument();
+    } finally {
+      wide.mockRestore();
+      client.mockRestore();
+    }
   });
 });

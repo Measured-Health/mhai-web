@@ -98,6 +98,15 @@ Every PR must pass:
   filters, counts or patient rows in storage, the URL, the title or logs,
   and never export or print the patient list. Any change to what Analysis
   shows or who can open it needs `clinical-review` and that sign-off.
+- **Platform Analysis shows counts and rates across hospitals** (Plan 12a).
+  Clinical, privacy and legal sign-off is required before live use, and it
+  hasn't been given, so it runs on sample data only and stays off in live
+  mode until the backend switch is on and `ANALYSIS_SIGNED_OFF=true` is set.
+  Every count is read under the small-group rule ("Fewer than 5") and a
+  view that would give a hidden value away fails closed; never put its
+  filters, scope or figures in storage, the URL, the title or logs. Any
+  change to what it shows, to the guards in `@mhai/ui/guards`, or to who can
+  open it or its access trail needs `clinical-review` and that sign-off.
 - **Named access shows patient names, and only to someone covered by a
   verified clearance letter** (Plan 11). Clinical, privacy and legal
   sign-off is required before live use, and it hasn't been given, so it runs
