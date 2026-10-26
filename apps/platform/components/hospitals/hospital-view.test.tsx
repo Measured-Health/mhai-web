@@ -11,12 +11,14 @@ import { ApiError } from "@mhai/api-client/errors";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp, MOCK_CODE } from "@/lib/api/step-up";
 import { AMARA, ADA, renderWithAuth } from "@/tests/render";
+import { takeHandedOffHospital } from "@/lib/analysis/scope-handoff";
 import { dateLabel } from "./format";
 import { HospitalView } from "./hospital-view";
 
+const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/hospitals/h_eastbrook",
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: nav.push, replace: vi.fn() }),
 }));
 
 let api: PlatformClient;
@@ -540,5 +542,57 @@ describe("a hold status this app doesn't know", () => {
       within(holds).getByRole("button", { name: "Try again" }),
     );
     await waitFor(() => expect(calls).toBeGreaterThan(before));
+  });
+});
+
+describe("links to this hospital's usage and analysis", () => {
+  beforeEach(() => nav.push.mockClear());
+  const links = () =>
+    screen.getByRole("navigation", { name: "More for this hospital" });
+
+  it("the hospital page's Usage link opens the Hospitals tab on that hospital", async () => {
+    await open("h_northgate");
+    const usage = within(links()).getByRole("link", {
+      name: "Usage for this hospital",
+    });
+    expect(usage).toHaveAttribute("href", "/usage?hospital=h_northgate");
+  });
+
+  it("the hospital page's Analysis link opens One hospital on that hospital, with nothing in the URL", async () => {
+    await open("h_northgate");
+    const analysis = await within(links()).findByRole("link", {
+      name: "Analysis for this hospital",
+    });
+    expect(analysis).toHaveAttribute("href", "/analysis");
+    await userEvent.click(analysis);
+    expect(nav.push).toHaveBeenCalledWith("/analysis");
+    expect(takeHandedOffHospital()).toBe("h_northgate");
+  });
+
+  it("no Analysis link for a hospital Analysis leaves out, or for an auditor", async () => {
+    await open("h_eastbrook");
+    expect(
+      within(links()).getByRole("link", { name: "Usage for this hospital" }),
+    ).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(
+      within(links()).queryByRole("link", {
+        name: "Analysis for this hospital",
+      }),
+    ).toBeNull();
+  });
+
+  it("an auditor gets Usage only", async () => {
+    install(AMARA.email);
+    await open("h_northgate", AMARA);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(
+      within(links()).getByRole("link", { name: "Usage for this hospital" }),
+    ).toBeInTheDocument();
+    expect(
+      within(links()).queryByRole("link", {
+        name: "Analysis for this hospital",
+      }),
+    ).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AnalysisQuery } from "@/lib/api/analysis-contract";
@@ -14,6 +14,7 @@ import { ApiError } from "@mhai/api-client/errors";
 import { downloadCsv } from "@mhai/ui/csv";
 import { ADA, AMARA, GrabAuth, auth, renderWithAuth } from "@/tests/render";
 import { AppShell } from "../shell/app-shell";
+import { handOffHospital } from "@/lib/analysis/scope-handoff";
 import { AnalysisGate } from "./analysis-gate";
 
 const net = vi.hoisted(() => ({ online: true }));
@@ -619,5 +620,40 @@ describe("the Analysis page", () => {
         name: "Findings and alerts",
       }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("opening Analysis from a hospital page", () => {
+  it("a handed-off hospital opens One hospital on it, once, with nothing in the URL", async () => {
+    const view = vi.spyOn(api, "getAnalysisView");
+    handOffHospital("h_northgate");
+    render();
+    await loaded();
+    expect(
+      screen.getByRole("button", { name: "One hospital" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(select("Hospital").value).toBe("h_northgate");
+    expect(view.mock.calls[0]![1]).toMatchObject({
+      scope: "hospital",
+      hospital: "h_northgate",
+    });
+    expect(nav.replace).not.toHaveBeenCalled();
+    expect(nav.push).not.toHaveBeenCalled();
+    cleanup();
+    // Taken once: the next visit starts on All hospitals.
+    render();
+    await loaded();
+    expect(
+      screen.getByRole("button", { name: "All hospitals" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("a hospital Analysis leaves out opens All hospitals", async () => {
+    handOffHospital("h_eastbrook");
+    render();
+    await loaded();
+    expect(
+      screen.getByRole("button", { name: "All hospitals" }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 });

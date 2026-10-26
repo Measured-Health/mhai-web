@@ -90,7 +90,7 @@ describe("HospitalRows", () => {
       .slice(1)
       .map((r) => within(r).getAllByRole("cell")[2]!.textContent);
     expect(cells).toEqual([
-      "Fewer than 5",
+      "Not shown · Fewer than 5",
       "50 per 1,000 · 40",
       "100 per 1,000 · 60",
       "14.3 per 1,000 · 20",
@@ -132,5 +132,13 @@ describe("HospitalRows", () => {
     expect(
       screen.getByRole("button", { name: /^Sorted Smallest first\./ }),
     ).toBeInTheDocument();
+  });
+
+  it("a hidden rate beside a shown count reads Not shown · 25", () => {
+    const r = row("Echo", 900, 25);
+    r.headline = { ...r.headline, per_1000: HIDDEN };
+    render(<HospitalRows rows={[r]} headlineLabel="Cases per 1,000" />);
+    expect(screen.getByText("Not shown · 25")).toBeInTheDocument();
+    expect(screen.queryByText(/Fewer than 5/)).toBeNull();
   });
 });

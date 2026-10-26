@@ -34,7 +34,7 @@ describe("ComparisonPanel", () => {
     expect(verdict.closest("li")!.querySelector("svg")).not.toBeNull();
   });
 
-  it("no earlier data is not hidden; a hidden last period reads Fewer than 5", () => {
+  it("no earlier data is not hidden; a hidden last period reads Not shown", () => {
     const { unmount } = render(
       <ComparisonPanel
         comparison={{ ...BASE, previous: g(null) }}
@@ -49,7 +49,7 @@ describe("ComparisonPanel", () => {
         kind="rate"
       />,
     );
-    expect(lines()[1]).toBe("Last period: Fewer than 5");
+    expect(lines()[1]).toBe("Last period: Not shown");
   });
 
   it("not available: only the context and the reason", () => {

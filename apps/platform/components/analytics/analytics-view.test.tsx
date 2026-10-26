@@ -459,3 +459,33 @@ describe("opening Usage on a change", () => {
     expect(nav.replace).toHaveBeenCalledWith("/usage");
   });
 });
+
+describe("opening Usage on a hospital", () => {
+  it("?hospital= opens the Hospitals tab on that hospital", async () => {
+    nav.search = "hospital=h_havana";
+    await open();
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Hospitals" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      ),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        level: 2,
+        name: "Havana Hospital compared with the others",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("a hospital Usage doesn't list opens on What changed as usual", async () => {
+    nav.search = "hospital=h_nowhere";
+    await open();
+    expect(
+      await screen.findByRole("heading", { level: 2, name: NGH_ACK }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /compared with the others/ }),
+    ).toBeNull();
+  });
+});

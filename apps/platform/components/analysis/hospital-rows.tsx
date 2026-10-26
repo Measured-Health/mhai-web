@@ -7,24 +7,24 @@ import {
   KIND_LABEL,
   PARTLY_STANDARDISED,
   headlineText,
-  valueText,
+  withCount,
 } from "@/lib/analysis/labels";
 import { inputClass } from "@mhai/ui/auth/password-fields";
 import { Chip } from "@mhai/ui/chip";
 import { cn } from "@mhai/ui/cn";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
+import { hospitalCells } from "@/lib/analysis/tables";
 
 /** How a headline reads: per 1,000, or (Quality's agreement rate) a percentage. */
 export type HeadlineKind = "rate" | "share";
 
 /**
  * A rate with its count beside it, never a count alone: "12.4 per 1,000 ·
- * 25". When both read the same words (both hidden), they read once.
+ * 25", or "Not shown · 25" for a hidden rate beside a shown count. When
+ * both read the same words (both hidden), they read once.
  */
 export function rateWithCount(rate: Rate, kind: HeadlineKind = "rate"): string {
-  const r = headlineText(rate.per_1000, kind);
-  const c = valueText(rate.count, "count");
-  return r === c ? r : `${r} · ${c}`;
+  return withCount(rate.per_1000, rate.count, (g) => headlineText(g, kind));
 }
 
 type SortKey =
@@ -124,14 +124,9 @@ export function HospitalRows({
     { key: "not_standardised", label: "Not standardised", numeric: true },
   ];
   const sorted = sortRows(rows, sort.key, sort.dir);
-  const cells = (r: HospitalRow): Record<SortKey, string> => ({
-    hospital: r.hospital.name,
-    size: valueText(r.size, "count"),
-    headline: rateWithCount(r.headline, headlineKind),
-    kind: KIND_LABEL[r.kind],
-    coverage: COVERAGE_LABEL[r.coverage],
-    not_standardised: valueText(r.not_standardised_share, "share"),
-  });
+  // The same words the CSV writes (tables.ts).
+  const cells = (r: HospitalRow): Record<SortKey, string> =>
+    hospitalCells(r, headlineKind);
   const sortBy = (key: SortKey) =>
     setSort((s) =>
       s.key === key

@@ -1,9 +1,13 @@
 "use client";
 import type { ReactNode } from "react";
-import type { AGuarded, ConditionRef, Rate } from "@/lib/api/analysis-contract";
+import type {
+  AGuarded,
+  PrevalenceData,
+  Rate,
+} from "@/lib/api/analysis-contract";
 import {
   NOT_ENOUGH_PEERS,
-  NOT_STANDARDISED,
+  NOT_SHOWN,
   NO_DATA,
   TOO_FEW_HOSPITALS,
   conditionText,
@@ -11,19 +15,23 @@ import {
   monthsText,
   valueText,
 } from "@/lib/analysis/labels";
+import {
+  MEDIAN_LABEL,
+  MONTHS_TITLE,
+  PREVALENCE_RATE,
+  sortConditions,
+  viewTables,
+  withMedian,
+} from "@/lib/analysis/tables";
 import type { ViewRead } from "@/lib/analysis/read";
 import { BarList } from "@mhai/ui/charts/bar-list";
 import { ColumnChart } from "@mhai/ui/charts/column-chart";
 import type { BarItem, Column } from "@mhai/ui/charts/types";
-import { FEWER_THAN_5, isSmallCount } from "@mhai/ui/small-groups";
 import { ComparisonPanel } from "./comparison-panel";
-import { DataTable, type DataColumn, type DataRow } from "./data-table";
+import { SpecTables } from "./data-table";
 import { HospitalRows, rateWithCount } from "./hospital-rows";
 import { ViewFrame, type ChartOrTable } from "./view-frame";
-
-const RATE_LABEL = "Cases per 1,000";
-const MONTHS_TITLE = "Cases per 1,000 by month";
-const MEDIAN_LABEL = "Median of similar hospitals";
+import { isHiddenGroup } from "./view-parts";
 
 /** A number that shows; null when hidden or empty. Never worked out from others. */
 const shown = (g: AGuarded) =>
@@ -32,20 +40,15 @@ const rateText = (n: number) =>
   valueText({ value: n, suppressed: false }, "rate");
 
 type Series = { month: string; rate: Rate; median: AGuarded | null }[];
-type ByCondition = {
-  condition: ConditionRef;
-  cases: AGuarded;
-  rate: Rate;
-  new: AGuarded;
-}[];
+type ByCondition = PrevalenceData["by_condition"];
 
 /** One month's column: hidden ones draw nothing and read in words. */
-function columnOf(s: Series[number], withMedian: boolean): Column {
+function columnOf(s: Series[number], median: boolean): Column {
   const g = s.rate.per_1000;
-  const second = withMedian && s.median ? shown(s.median) : null;
+  const second = median && s.median ? shown(s.median) : null;
   // A hidden median: too few similar hospitals showed that month.
   const secondText =
-    withMedian && s.median?.suppressed ? NOT_ENOUGH_PEERS : undefined;
+    median && s.median?.suppressed ? NOT_ENOUGH_PEERS : undefined;
   const base = {
     key: s.month,
     label: monthLabel(s.month),
@@ -54,7 +57,8 @@ function columnOf(s: Series[number], withMedian: boolean): Column {
   };
   if (g.suppressed && g.why === "too_few_hospitals")
     return { ...base, value: 0, text: TOO_FEW_HOSPITALS };
-  if (g.suppressed) return { ...base, value: 0, hidden: true };
+  // A hidden rate reads "Not shown" ("Fewer than 5" is for counts).
+  if (g.suppressed) return { ...base, value: 0, text: NOT_SHOWN };
   if (g.value === null) return { ...base, value: 0, text: NO_DATA };
   return { ...base, value: g.value };
 }
@@ -73,15 +77,15 @@ function monthsSentence(series: Series): string {
       `Highest in ${monthLabel(hi.month)} at ${rateText(hi.v)}; lowest in ${monthLabel(lo.month)} at ${rateText(lo.v)}.`,
     );
   }
-  const few = series.filter(
+  const notShown = series.filter(
     (s) => s.rate.per_1000.suppressed && s.rate.per_1000.why === undefined,
   ).length;
   const tooFew = series.filter(
     (s) => s.rate.per_1000.why === "too_few_hospitals",
   ).length;
-  if (few)
+  if (notShown)
     parts.push(
-      `${few} ${few === 1 ? "month reads" : "months read"} ${FEWER_THAN_5}.`,
+      `${notShown} ${notShown === 1 ? "month reads" : "months read"} ${NOT_SHOWN}.`,
     );
   if (tooFew)
     parts.push(
@@ -99,21 +103,7 @@ function headlineSentence(rate: Rate, period: { from: string; to: string }) {
     shown(rate.per_1000) !== null && count !== null && base !== null
       ? ` (${valueText(rate.count, "count")} cases among ${valueText(rate.base, "count")} patients seen)`
       : "";
-  return `${RATE_LABEL} patients seen, ${monthsText(period)}: ${r}${detail}.`;
-}
-
-/**
- * Conditions by rate, largest first; anything not shown comes after, by
- * name, so a hidden row's place says nothing about its size.
- */
-function sortConditions(rows: ByCondition): ByCondition {
-  return [...rows].sort((a, b) => {
-    const x = shown(a.rate.per_1000);
-    const y = shown(b.rate.per_1000);
-    if (x !== null && y !== null && x !== y) return y - x;
-    if ((x === null) !== (y === null)) return x === null ? 1 : -1;
-    return conditionText(a.condition).localeCompare(conditionText(b.condition));
-  });
+  return `${PREVALENCE_RATE} patients seen, ${monthsText(period)}: ${r}${detail}.`;
 }
 
 function barOf(c: ByCondition[number]): BarItem {
@@ -122,21 +112,15 @@ function barOf(c: ByCondition[number]): BarItem {
     c.new.why === "too_few_hospitals"
       ? `New: ${TOO_FEW_HOSPITALS}`
       : `${valueText(c.new, "count")} new in this period`;
-  // From the guards, not the words: the rate and its count both hidden.
-  const r = c.rate.per_1000;
-  const n = c.rate.count;
-  const hidden =
-    r.suppressed &&
-    r.why === undefined &&
-    ((n.suppressed && n.why === undefined) ||
-      (n.value !== null && isSmallCount(n.value)));
+  // From the guards, not the words: the rate and its count both hidden
+  // reads "Not shown · Fewer than 5", with no bar and no note.
+  const hidden = isHiddenGroup(c.rate.per_1000, c.rate.count);
   return {
     key: c.condition.id,
     label: conditionText(c.condition),
     value: shown(c.rate.per_1000),
     text,
-    hidden,
-    note,
+    note: hidden ? undefined : note,
   };
 }
 
@@ -168,42 +152,7 @@ export function PrevalenceView({
     const one = ok.scope === "hospital";
     const series = ok.data.series;
     const conditions = sortConditions(ok.data.by_condition);
-    const withMedian = one && ok.comparison !== null && ok.comparison.available;
-    const monthColumns: DataColumn[] = [
-      { key: "month", label: "Month" },
-      { key: "cases", label: "Cases", numeric: true },
-      { key: "seen", label: "Patients seen", numeric: true },
-      { key: "rate", label: RATE_LABEL, numeric: true },
-      ...(withMedian
-        ? [{ key: "median", label: MEDIAN_LABEL, numeric: true }]
-        : []),
-    ];
-    const monthRows: DataRow[] = series.map((s) => ({
-      id: s.month,
-      cells: {
-        month: monthLabel(s.month),
-        cases: { g: s.rate.count, kind: "count" },
-        seen: { g: s.rate.base, kind: "count" },
-        rate: { g: s.rate.per_1000, kind: "rate" },
-        ...(withMedian && s.median
-          ? {
-              median: s.median.suppressed
-                ? NOT_ENOUGH_PEERS
-                : { g: s.median, kind: "rate" },
-            }
-          : {}),
-      },
-    }));
-    const conditionRows: DataRow[] = conditions.map((c) => ({
-      id: c.condition.id,
-      cells: {
-        condition: c.condition.name ?? NOT_STANDARDISED,
-        icd10: c.condition.icd10 ?? "No code",
-        cases: { g: c.cases, kind: "count" },
-        rate: { g: c.rate.per_1000, kind: "rate" },
-        new: { g: c.new, kind: "count" },
-      },
-    }));
+    const median = withMedian(ok);
     body = {
       summary: (
         <p className="text-[14px] text-ink-2">
@@ -214,13 +163,13 @@ export function PrevalenceView({
         <>
           <ColumnChart
             title={MONTHS_TITLE}
-            columns={series.map((s) => columnOf(s, withMedian))}
+            columns={series.map((s) => columnOf(s, median))}
             summary={monthsSentence(series)}
             valueText={rateText}
-            headers={["Month", RATE_LABEL]}
+            headers={["Month", PREVALENCE_RATE]}
             markLegend=""
             tableToggle={false}
-            secondLabel={withMedian ? MEDIAN_LABEL : undefined}
+            secondLabel={median ? MEDIAN_LABEL : undefined}
           />
           <div className="flex flex-col gap-2">
             <h3 className="text-[14px] font-semibold">By condition</h3>
@@ -232,33 +181,14 @@ export function PrevalenceView({
           </div>
         </>
       ),
-      table: (
-        <>
-          <DataTable
-            caption={MONTHS_TITLE}
-            columns={monthColumns}
-            rows={monthRows}
-          />
-          <DataTable
-            caption="By condition"
-            columns={[
-              { key: "condition", label: "Condition" },
-              { key: "icd10", label: "ICD-10" },
-              { key: "cases", label: "Cases", numeric: true },
-              { key: "rate", label: RATE_LABEL, numeric: true },
-              { key: "new", label: "New", numeric: true },
-            ]}
-            rows={conditionRows}
-          />
-        </>
-      ),
+      table: <SpecTables tables={viewTables("prevalence", ok)} />,
       comparison:
         one && ok.comparison ? (
           <ComparisonPanel comparison={ok.comparison} kind="rate" />
         ) : null,
       hospitals:
         !one && ok.hospitals ? (
-          <HospitalRows rows={ok.hospitals} headlineLabel={RATE_LABEL} />
+          <HospitalRows rows={ok.hospitals} headlineLabel={PREVALENCE_RATE} />
         ) : null,
     };
   }

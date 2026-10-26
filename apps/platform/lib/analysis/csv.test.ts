@@ -11,6 +11,7 @@ import { TEAM_EMAILS } from "../api/fixtures";
 import { createMockPlatform } from "../api/mock";
 import { analysisCsv, analysisCsvName } from "./csv";
 import { emptyQuery } from "./filters";
+import { SEX_LABEL } from "./labels";
 import { readFilterOptions, readStatus, readView } from "./read";
 
 const NOW = Date.parse("2026-10-23T09:30:00.000Z");
@@ -120,6 +121,117 @@ describe("analysisCsv", () => {
     expect(sc).toContain("Fewer than 5");
   });
 
+  it("hidden rates and shares write Not shown, hidden counts Fewer than 5, as on screen", async () => {
+    const m = mock();
+    const hidden = { value: null, suppressed: true };
+    const n25 = { value: 25, suppressed: false };
+    const prev = readView(
+      "prevalence",
+      await m.getAnalysisView("prevalence", ALL),
+      ALL,
+      NOW,
+    );
+    if (prev.status !== "ok") throw new Error("prevalence failed");
+    const c = prev.data.data.by_condition;
+    c[0] = {
+      ...c[0]!,
+      cases: { ...n25, drill: null },
+      rate: { count: n25, base: hidden, per_1000: hidden },
+    };
+    c[1] = {
+      ...c[1]!,
+      cases: { ...hidden, drill: null },
+      rate: { count: hidden, base: c[1]!.rate.base, per_1000: hidden },
+    };
+    prev.data.headline = { ...prev.data.headline, per_1000: hidden };
+    const h = prev.data.hospitals!;
+    h[0] = {
+      ...h[0]!,
+      headline: { ...h[0]!.headline, count: n25, per_1000: hidden },
+      not_standardised_share: hidden,
+    };
+    const rows = cells(analysisCsv("prevalence", prev, await context(m, ALL)));
+    const byName = (name: string) => rows.find((r) => r[0] === name)!;
+    const first = byName(c[0]!.condition.name!);
+    expect(first[2]).toBe("25");
+    expect(first[3]).toBe("Not shown");
+    const second = byName(c[1]!.condition.name!);
+    expect(second[2]).toBe("Fewer than 5");
+    expect(second[3]).toBe("Not shown");
+    const hosp = byName(h[0]!.hospital.name);
+    expect(hosp[2]).toBe("Not shown · 25");
+    expect(hosp[5]).toBe("Not shown");
+    const head = rows[rows.findIndex((r) => r[0] === "Headline") + 2]!;
+    expect(head[3]).toBe("Not shown");
+    expect(rows.flat()).not.toContain("Fewer than 5 · 25");
+
+    const aff = readView(
+      "affected",
+      await m.getAnalysisView("affected", ALL),
+      ALL,
+      NOW,
+    );
+    if (aff.status !== "ok") throw new Error("affected failed");
+    const sex = aff.data.data.by_sex;
+    sex[0] = { ...sex[0]!, patients: { ...n25, drill: null }, share: hidden };
+    const arows = cells(analysisCsv("affected", aff, await context(m, ALL)));
+    expect(arows.find((r) => r[0] === SEX_LABEL[sex[0]!.sex])).toEqual([
+      SEX_LABEL[sex[0]!.sex],
+      "Not shown",
+      "25",
+    ]);
+  });
+
+  it("findings: Not standardised for no name and No flag for none, as on screen", async () => {
+    const m = mock();
+    const f = readView(
+      "findings",
+      await m.getAnalysisView("findings", ALL),
+      ALL,
+      NOW,
+    );
+    if (f.status !== "ok") throw new Error("findings failed");
+    const list = f.data.data.findings;
+    list[0] = { ...list[0]!, name: null, flag: null };
+    const rows = cells(analysisCsv("findings", f, await context(m, ALL)));
+    expect(
+      rows.some((r) => r[0] === "Not standardised" && r[1] === "No flag"),
+    ).toBe(true);
+    expect(rows.flat()).not.toContain("Not named");
+  });
+
+  it("the monthly median: Not enough similar hospitals when hidden, and no column without a comparison", async () => {
+    const m = mock();
+    const v = readView(
+      "prevalence",
+      await m.getAnalysisView("prevalence", HAVANA),
+      HAVANA,
+      NOW,
+    );
+    if (v.status !== "ok" || !v.data.comparison?.available)
+      throw new Error("Havana should compare");
+    v.data.data.series[0] = {
+      ...v.data.data.series[0]!,
+      median: { value: null, suppressed: true },
+    };
+    const ctx = await context(m, HAVANA);
+    const rows = cells(analysisCsv("prevalence", v, ctx));
+    const at = rows.findIndex((r) => r[0] === "Cases per 1,000 by month");
+    expect(rows[at + 1]).toContain("Median of similar hospitals");
+    expect(rows[at + 2]!.at(-1)).toBe("Not enough similar hospitals");
+    // Without an available comparison the screen has no median column.
+    v.data.comparison = {
+      ...v.data.comparison,
+      available: false,
+      reason: "too_few_peers",
+      verdict: null,
+      median: { value: null, suppressed: false },
+    };
+    const none = cells(analysisCsv("prevalence", v, ctx));
+    const at2 = none.findIndex((r) => r[0] === "Cases per 1,000 by month");
+    expect(none[at2 + 1]).not.toContain("Median of similar hospitals");
+  });
+
   it("hospital rows across hospitals; comparison lines for one", async () => {
     const m = mock();
     const across = cells(await csvOf(m, "prevalence", ALL));
@@ -128,11 +240,10 @@ describe("analysisCsv", () => {
     expect(across[header]).toEqual([
       "Hospital",
       "Patients seen",
-      "Patients with a condition in scope",
-      "Per 1,000 seen",
+      "Cases per 1,000",
       "Kind",
       "Coverage",
-      "Not standardised (%)",
+      "Not standardised",
       "Partly standardised",
     ]);
     const names = across.slice(header + 1, header + 11).map((r) => r[0]);
