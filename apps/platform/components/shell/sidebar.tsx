@@ -2,15 +2,22 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@mhai/ui/brand";
+import { Chip } from "@mhai/ui/chip";
 import { cn } from "@mhai/ui/cn";
+import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
+import { useAnalysisStatus } from "@/lib/queries/analysis";
+import { SAMPLE_DATA } from "@/lib/analysis/labels";
 import { AccountMenu } from "./account-menu";
-import { NAV } from "./nav";
+import { visibleNav } from "./nav";
 
 const on = (path: string | null, href: string) =>
   path === href || Boolean(path?.startsWith(`${href}/`));
 
 export function Sidebar() {
   const path = usePathname();
+  const { user } = useAuth();
+  // Only a platform admin asks: the proxy refuses an auditor's read.
+  const status = useAnalysisStatus(isPlatformAdmin(user));
   return (
     <nav
       aria-label="Platform"
@@ -23,7 +30,7 @@ export function Sidebar() {
         </p>
       </div>
       <ul className="flex flex-col gap-1">
-        {NAV.map(({ href, label, Icon }) => {
+        {visibleNav(user, status).map(({ href, label, Icon, sample }) => {
           const current = on(path, href);
           return (
             <li key={href}>
@@ -47,6 +54,11 @@ export function Sidebar() {
                   <Icon className="size-3.5" />
                 </span>
                 {label}
+                {sample && (
+                  <Chip tone="warn" className="ml-auto">
+                    {SAMPLE_DATA}
+                  </Chip>
+                )}
               </Link>
             </li>
           );

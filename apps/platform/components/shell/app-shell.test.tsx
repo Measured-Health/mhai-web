@@ -32,7 +32,7 @@ const shell = (user?: User) =>
   );
 
 describe("the platform shell", () => {
-  it("the sidebar shows Platform and the ten links in order", () => {
+  it("the sidebar shows Platform and the links in order (Analysis waits for the status)", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     expect(within(nav).getByText("Platform")).toBeInTheDocument();
@@ -108,6 +108,58 @@ describe("the platform shell", () => {
       "href",
       "/usage",
     );
+  });
+
+  it("a platform admin sees Analysis between Usage and Clearances, with Sample data, once the status is on", async () => {
+    __setPlatformClientForTests(
+      createMockPlatform({ delayMs: 0, me: () => ADA.email }),
+    );
+    pathname.value = "/analysis";
+    shell();
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    const link = await within(nav).findByRole("link", { name: /^Analysis/ });
+    expect(link).toHaveAttribute("href", "/analysis");
+    expect(link).toHaveAttribute("aria-current", "page");
+    expect(within(link).getByText("Sample data")).toBeInTheDocument();
+    const names = within(nav)
+      .getAllByRole("link")
+      .map((l) => l.getAttribute("href"));
+    expect(names.slice(0, 5)).toEqual([
+      "/hospitals",
+      "/connections",
+      "/usage",
+      "/analysis",
+      "/clearances",
+    ]);
+    __resetPlatformClientForTests();
+  });
+
+  it("an auditor never sees Analysis, and the status is never asked", async () => {
+    const m = createMockPlatform({ delayMs: 0, me: () => AMARA.email });
+    const status = vi.spyOn(m, "getAnalysisStatus");
+    __setPlatformClientForTests(m);
+    shell(AMARA);
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    await within(nav).findByRole("link", { name: "Usage" });
+    expect(within(nav).queryByRole("link", { name: /^Analysis/ })).toBeNull();
+    expect(status).not.toHaveBeenCalled();
+    __resetPlatformClientForTests();
+  });
+
+  it("with the switch off, nobody sees Analysis", async () => {
+    const m = createMockPlatform({
+      delayMs: 0,
+      me: () => ADA.email,
+      analysis: "off",
+    });
+    const status = vi.spyOn(m, "getAnalysisStatus");
+    __setPlatformClientForTests(m);
+    shell();
+    await waitFor(() => expect(status).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    expect(within(nav).queryByRole("link", { name: /^Analysis/ })).toBeNull();
+    __resetPlatformClientForTests();
   });
 
   it("no sidebar entry says Analytics", () => {
