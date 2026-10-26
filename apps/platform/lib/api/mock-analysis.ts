@@ -12,7 +12,9 @@ import { toCsv } from "@mhai/ui/csv";
 import { SMALL_GROUP_MIN, isSmallCount } from "@mhai/ui/small-groups";
 import {
   MAX_FILTERS,
+  PART_PAIRS,
   VIEW_IDS,
+  type Figure,
   type AGuarded,
   type AccessEntry,
   type AccessKind,
@@ -47,6 +49,8 @@ import {
   CONDITIONS,
   EXCLUDED,
   LOCATIONS,
+  allBand,
+  hospitalBand,
   MONTHS,
   PROFILES,
   SPECIALTIES,
@@ -115,26 +119,6 @@ const round = (x: number, places: number) => {
   const f = 10 ** places;
   return Math.round(x * f) / f;
 };
-const allBand = (age: number): AllAgeBand =>
-  age < 20
-    ? "0-19"
-    : age < 40
-      ? "20-39"
-      : age < 60
-        ? "40-59"
-        : age < 80
-          ? "60-79"
-          : "80+";
-const hospitalBand = (age: number): HospitalAgeBand =>
-  age < 18
-    ? "0-17"
-    : age < 40
-      ? "18-39"
-      : age < 65
-        ? "40-64"
-        : age < 80
-          ? "65-79"
-          : "80+";
 
 // --- hiding, the way the server must ---
 
@@ -212,42 +196,72 @@ type Sum = readonly [total: string, parts: readonly string[], across?: true];
  * next-smallest shown part (with none left, its total), and the loop runs
  * again over every sum until nothing changes. `off` only grows, so it ends.
  *
+ * Hidden parts may add up to 0 (a derived rest of 0): that gives no one away.
+ *
  * A figure hidden only because too few hospitals have cases (`few`) counts
  * as shown in a sum across hospitals: each of those hospitals shows its own
  * figure, so that total is never secret, and the hospitals are protected as
  * if it were known. Inside one reply it counts as hidden, so the rest of a
  * set can't give it away.
+ *
+ * A derived cell (`parents` gives its total and part) is never sent, but is
+ * published by subtraction while both of them show: existing cases (cases −
+ * new) and unrated consultations (consultations − rated). It is hidden
+ * whenever either parent is, and hiding it hides its part (or, when the part
+ * is 0, its total), so the loop closes it like any other cell.
  */
 function closeSums(
   raw: (cell: string) => number,
   few: (cell: string) => boolean,
   sums: readonly Sum[],
   off: Set<string>,
+  parents: (cell: string) => readonly [string, string] | null = () => null,
 ) {
+  const hiddenAt = (c: string, across: boolean | undefined): boolean => {
+    const from = parents(c);
+    if (from && (hiddenAt(from[0], across) || hiddenAt(from[1], across)))
+      return true;
+    const n = raw(c);
+    return n !== 0 && (off.has(c) || isSmallCount(n) || (!across && few(c)));
+  };
+  /** The sent cell to hide for a cell: itself, or a derived cell's parent. */
+  const target = (c: string) => {
+    const from = parents(c);
+    if (!from) return c;
+    return raw(from[1]) > 0 ? from[1] : from[0];
+  };
+  /** Hidden only for too few hospitals (inside a reply). */
+  const fewOnly = (c: string) => {
+    if (parents(c)) return false;
+    const n = raw(c);
+    return n !== 0 && !off.has(c) && !isSmallCount(n) && few(c);
+  };
   let changed = true;
   while (changed) {
     changed = false;
     for (const [total, parts, across] of sums) {
-      const hidden = (c: string) => {
-        const n = raw(c);
-        return (
-          n !== 0 && (off.has(c) || isSmallCount(n) || (!across && few(c)))
-        );
-      };
+      const hidden = (c: string) => hiddenAt(c, across);
       const hid = parts.filter(hidden);
-      if (hidden(total)) {
+      if (!across && fewOnly(total)) {
+        // The rows may add up to it (the reader then knows it): close the
+        // set as under a shown total, and keep a member hidden besides.
+        const sum = hid.reduce((s, c) => s + raw(c), 0);
+        // Hidden parts that add up to 0 give no one away (a rest can be 0).
+        if (sum === 0 || (hid.length >= 2 && sum >= SMALL_GROUP_MIN)) continue;
+      } else if (hidden(total)) {
         if (hid.length > 0) continue;
       } else {
         if (hid.length === 0) continue;
         const sum = hid.reduce((s, c) => s + raw(c), 0);
-        if (hid.length >= 2 && sum >= SMALL_GROUP_MIN) continue;
+        // Hidden parts that add up to 0 give no one away (a rest can be 0).
+        if (sum === 0 || (hid.length >= 2 && sum >= SMALL_GROUP_MIN)) continue;
       }
       let next: string | null = null;
       for (const c of parts)
         if (!hidden(c) && raw(c) > 0 && (next === null || raw(c) < raw(next)))
           next = c;
       if (next === null && hidden(total)) continue;
-      off.add(next ?? total);
+      off.add(target(next ?? total));
       changed = true;
     }
   }
@@ -329,6 +343,20 @@ function tally(h: string, map: ScopeKind, f: Filters, win: Win): Rec {
     add(`set:${p.setting ?? "-"}`);
     add(`spec:${p.specialty ?? "-"}`);
     add(`loc:${p.location ?? "-"}`);
+    // Rows of two breakdowns at once, to find one row wholly inside another.
+    const rows = [
+      `age:${band(p.age)}`,
+      `sex:${p.sex}`,
+      `set:${p.setting ?? "-"}`,
+      `spec:${p.specialty ?? "-"}`,
+      ...(map === "hospital" ? [`loc:${p.location ?? "-"}`] : []),
+    ];
+    rows.forEach((a, i) => {
+      for (const b of rows.slice(i + 1)) add(crossKey(a, b));
+    });
+    // A setting's patients with no recorded ward: never sent, but its wards
+    // leave them by subtraction.
+    if (map === "hospital" && p.setting && !p.location) add(`lx:${p.setting}`);
     // Co-occurring: pairs within this one hospital, never with an unnamed one.
     const ids = [
       ...new Set(known.map((c) => cid(c.id)).filter((id) => id !== UNMAPPED)),
@@ -492,6 +520,160 @@ const pairKey = (a: string, b: string, map: ScopeKind) => {
  * The sums inside one reply's figures (one hospital's, or all hospitals'),
  * keys in that scope's names. `condition` is the filter, if any.
  */
+/**
+ * The rest of a part-pair (`PART_PAIRS`): `r:{part}~{whole}`, whole − part.
+ * The two shown together publish it by subtraction, so it is a derived cell
+ * (see closeSums), worked out from its parents, never stored.
+ */
+const restKey = (part: string, whole: string) => `r:${part}~${whole}`;
+function restOf(k: string): { count: string; base: string } | null {
+  if (!k.startsWith("r:")) return null;
+  const at = k.lastIndexOf("~");
+  return { count: k.slice(2, at), base: k.slice(at + 1) };
+}
+
+type Item = { item: string; key: string; flagged: boolean; within?: string };
+/** A figure's cells in one owner's counts, item by item. */
+function figureCells(view: ViewId, f: Figure, v: Rec, map: ScopeKind): Item[] {
+  const one = (key: string): Item[] => [{ item: "", key, flagged: false }];
+  const keys = (prefix: string) =>
+    Object.keys(v).filter((k) => k.startsWith(prefix));
+  const each = (
+    prefix: string,
+    to: (id: string) => string = (id) => prefix + id,
+  ) =>
+    keys(prefix).map((k) => {
+      const id = k.slice(prefix.length);
+      return { item: id, key: to(id), flagged: false };
+    });
+  const qids = keys("q:")
+    .filter((k) => k.endsWith(":cons"))
+    .map((k) => k.slice(2, -5));
+  switch (f) {
+    case "patients":
+      return one("group");
+    case "headline.count":
+    case "row.count":
+      return one(HEADLINE[view][0]);
+    case "headline.base":
+    case "row.base":
+      return one(HEADLINE[view][1]);
+    case "row.size":
+      return one("seen");
+    case "series.base":
+      return each("ms:");
+    case "series.count":
+      return each("ms:", (m) => `mh:${m}`);
+    case "condition.cases":
+      return each("c:");
+    case "condition.new":
+      return each("c:", (id) => `n:${id}`);
+    case "member.patients":
+      return ["age:", "sex:", "spec:"]
+        .flatMap((p) => keys(p))
+        .map((k) => ({ item: k, key: k, flagged: false }));
+    case "setting.patients":
+      return keys("set:").map((k) => ({ item: k, key: k, flagged: false }));
+    case "ward.patients": {
+      if (map !== "hospital") return [];
+      return keys("loc:").map((k) => {
+        const s = LOCATIONS.find((l) => `loc:${l.id}` === k)?.setting;
+        const it: Item = { item: k, key: k, flagged: false };
+        if (s) it.within = `set:${s}`;
+        return it;
+      });
+    }
+    case "pair.patients":
+      return keys("p:").map((k) => ({ item: k, key: k, flagged: false }));
+    case "finding.patients":
+      return keys("f:").map((k) => ({
+        item: k,
+        key: k,
+        flagged: !k.endsWith("|-"),
+      }));
+    case "quality.consultations":
+      return qids.map((id) => ({
+        item: id,
+        key: `q:${id}:cons`,
+        flagged: false,
+      }));
+    case "quality.rated":
+      return qids.map((id) => ({
+        item: id,
+        key: `q:${id}:rated`,
+        flagged: false,
+      }));
+    case "quality.corrections":
+      return qids.map((id) => ({
+        item: id,
+        key: `q:${id}:corr`,
+        flagged: false,
+      }));
+  }
+}
+const isRowFigure = (f: Figure) => f.startsWith("row.");
+
+/**
+ * Every part-pair of every view over one owner's counts, as sums: the whole
+ * is its part and the rest. `rows` picks the hospital-row pairs only (a
+ * hospital with no reply of its own), or every other pair.
+ */
+function pairSums(v: Rec, map: ScopeKind, rows: boolean): Sum[] {
+  const out = new Map<string, Sum>();
+  for (const view of VIEW_IDS)
+    for (const p of PART_PAIRS[view]) {
+      if (isRowFigure(p.whole) !== rows) continue;
+      const wholes = figureCells(view, p.whole, v, map);
+      const same = !rows && wholes.length > 0 && wholes[0]!.item !== "";
+      for (const part of figureCells(view, p.part, v, map)) {
+        if (p.only === "flagged" && !part.flagged) continue;
+        const whole = p.within
+          ? wholes.find((w) => w.item === part.within)
+          : same
+            ? wholes.find((w) => w.item === part.item)
+            : wholes[0];
+        if (!whole || whole.key === part.key) continue;
+        const rk = restKey(part.key, whole.key);
+        out.set(rk, [whole.key, [part.key, rk]]);
+      }
+    }
+  return [...out.values()];
+}
+
+/** Patients in two breakdown rows (of different breakdowns) at once. */
+const crossKey = (a: string, b: string) => `x:${a}&${b}`;
+const CROSS_DIMS = ["age:", "sex:", "set:", "spec:", "loc:"] as const;
+
+/**
+ * A row wholly inside a row of another breakdown in these counts (a
+ * children's ward inside 0–17, a specialty seen by one sex): the two shown
+ * together leave the rest by subtraction, so it is a part-pair rest too.
+ * This is in the data, not the contract, so the reader can't know it; the
+ * sample (like the server) finds and closes it. A ward inside its own
+ * setting is a declared pair as well; "no setting" inside "no ward" is not.
+ */
+function containedSums(v: Rec, map: ScopeKind): Sum[] {
+  const dims = CROSS_DIMS.filter((d) => map === "hospital" || d !== "loc:");
+  const rows = dims.map((d) =>
+    Object.keys(v).filter((k) => k.startsWith(d) && (v[k] ?? 0) > 0),
+  );
+  const out: Sum[] = [];
+  rows.forEach((as, i) => {
+    for (const bs of rows.slice(i + 1))
+      for (const a of as)
+        for (const b of bs) {
+          const both = v[crossKey(a, b)] ?? 0;
+          for (const [part, whole] of [
+            [a, b],
+            [b, a],
+          ] as const)
+            if (both === v[part] && v[whole]! > v[part]!)
+              out.push([whole, [part, restKey(part, whole)]]);
+        }
+  });
+  return out;
+}
+
 function sumsOf(v: Rec, map: ScopeKind, condition: string | null): Sum[] {
   const bands = map === "all" ? ALL_BANDS : HOSPITAL_BANDS;
   const out: Sum[] = [
@@ -501,11 +683,18 @@ function sumsOf(v: Rec, map: ScopeKind, condition: string | null): Sum[] {
     ["group", [...SPECIALTIES, "-"].map((s) => `spec:${s}`)],
     ["al:total", ["al:critical", "al:urgent", "al:info"]],
   ];
-  if (map === "hospital")
+  if (map === "hospital") {
     out.push([
       "group",
       [...LOCATIONS.map((l) => l.id), "-"].map((l) => `loc:${l}`),
     ]);
+    // A setting's row is its wards and its patients with no ward.
+    for (const s of SETTINGS) {
+      const wards = LOCATIONS.filter((l) => l.setting === s);
+      if (wards.length > 0)
+        out.push([`set:${s}`, [...wards.map((l) => `loc:${l.id}`), `lx:${s}`]]);
+    }
+  }
   const ids = Object.keys(v)
     .filter((k) => k.startsWith("q:") && k.endsWith(":cons"))
     .map((k) => k.slice(2, -5));
@@ -520,6 +709,9 @@ function sumsOf(v: Rec, map: ScopeKind, condition: string | null): Sum[] {
     ["qrated", ids.map((id) => `q:${id}:rated`)],
     ["qagreed", ids.map((id) => `q:${id}:agreed`)],
   );
+  // A whole shown beside its part publishes the rest (PART_PAIRS).
+  out.push(...pairSums(v, map, false));
+  out.push(...containedSums(v, map));
   // The same figure under two names.
   const pa = Object.keys(v).filter((k) => k.startsWith("pa:"));
   if (condition === null) {
@@ -543,6 +735,12 @@ const HOSPITAL_ID = new Map(CONDITIONS.map((c) => [allId(c.id), c.id]));
  * has no such figure (the 20-year age bands but the last).
  */
 function hospitalKey(k: string): string | null {
+  const rest = restOf(k);
+  if (rest) {
+    const count = hospitalKey(rest.count);
+    const base = hospitalKey(rest.base);
+    return count === null || base === null ? null : restKey(count, base);
+  }
   const [head, a = "", b = ""] = k.split(":");
   const id = (x: string) => HOSPITAL_ID.get(x) ?? x;
   switch (head) {
@@ -559,6 +757,8 @@ function hospitalKey(k: string): string | null {
     case "age":
       return k === "age:80+" ? k : null;
     case "loc":
+    case "lx":
+    case "x":
       return null;
     default:
       return k;
@@ -589,10 +789,14 @@ function hideTogether(owners: Owner[], sums: Sum[]): Map<string, Ctx> {
   };
   const raw = (c: string) => {
     const [o, k] = split(c);
+    const rest = restOf(k);
+    if (rest) return (o.v[rest.base] ?? 0) - (o.v[rest.count] ?? 0);
     return o.v[k] ?? 0;
   };
+  // A complement is hidden through its parents, never for itself.
   const few = (c: string) => {
     const [o, k] = split(c);
+    if (restOf(k)) return false;
     return o.hosp !== null && (o.hosp[k] ?? 0) < MIN_HOSPITALS;
   };
   for (const [total, parts] of sums)
@@ -608,8 +812,17 @@ function hideTogether(owners: Owner[], sums: Sum[]): Map<string, Ctx> {
         return [o.id, new Ctx(o.v, mine, o.hosp)] as const;
       }),
     );
+  /** A derived cell's total and part, in the same owner. */
+  const parents = (c: string): readonly [string, string] | null => {
+    const at = c.indexOf("#");
+    const owner = c.slice(0, at + 1);
+    const k = c.slice(at + 1);
+    const rest = restOf(k);
+    if (rest) return [`${owner}${rest.base}`, `${owner}${rest.count}`];
+    return null;
+  };
   for (;;) {
-    closeSums(raw, few, sums, off);
+    closeSums(raw, few, sums, off, parents);
     const now = ctxs();
     let cut = false;
     for (const o of owners) {
@@ -680,9 +893,23 @@ function familyOf(f: Filters, win: Win): Family {
           ),
         ),
       );
-  // Each all-hospitals figure is the sum of the hospitals' own.
-  for (const k of Object.keys(sum.v)) {
-    const hk = twin ? hospitalKey(k) : ROW_KEYS.has(k) ? k : null;
+  // Without a twin a hospital's only figures are its row's: the row pairs.
+  if (!twin)
+    for (const p of PROFILES)
+      sums.push(
+        ...inCells(p.id, pairSums(tally(p.id, "all", f, win), "all", true)),
+      );
+  // Each all-hospitals figure, and each rest, is the sum of the hospitals' own.
+  const across = [
+    ...Object.keys(sum.v),
+    ...pairSums(sum.v, "all", false).map(([, parts]) => parts[1]!),
+  ];
+  for (const k of across) {
+    const rest = restOf(k);
+    const row = rest
+      ? ROW_KEYS.has(rest.count) && ROW_KEYS.has(rest.base)
+      : ROW_KEYS.has(k);
+    const hk = twin ? hospitalKey(k) : row ? k : null;
     if (hk === null) continue;
     sums.push([cellOf("*", k), PROFILES.map((p) => cellOf(p.id, hk)), true]);
   }

@@ -21,9 +21,12 @@ import {
   LOCATIONS,
   PROFILES,
   SPECIALTIES,
+  allBand,
   allId,
   buildCohort,
   cohortOf,
+  hospitalBand,
+  type CohortPatient,
 } from "./analysis-fixtures";
 import { TEAM_EMAILS } from "./fixtures";
 import { createMockPlatform } from "./mock";
@@ -157,6 +160,41 @@ describe("the sample cohorts", () => {
       }),
     );
     expect(pair).toHaveLength(2);
+  });
+
+  it("put no ward and no specialty wholly inside one age band or one sex (R3)", () => {
+    const pure: string[] = [];
+    const by = [
+      ["a hospital age band", (x: CohortPatient) => hospitalBand(x.age)],
+      ["an age band across hospitals", (x: CohortPatient) => allBand(x.age)],
+      ["a sex", (x: CohortPatient) => x.sex],
+    ] as const;
+    for (const p of PROFILES) {
+      const rows: [string, (x: CohortPatient) => boolean][] = [
+        ...LOCATIONS.map(
+          (l) =>
+            [`ward ${l.id}`, (x: CohortPatient) => x.location === l.id] as [
+              string,
+              (x: CohortPatient) => boolean,
+            ],
+        ),
+        ...SPECIALTIES.map(
+          (s) =>
+            [s, (x: CohortPatient) => x.specialty === s] as [
+              string,
+              (x: CohortPatient) => boolean,
+            ],
+        ),
+      ];
+      for (const [name, isIn] of rows) {
+        const xs = cohortOf(p.id).filter(isIn);
+        if (xs.length === 0) continue;
+        for (const [what, of] of by)
+          if (new Set(xs.map(of)).size === 1)
+            pure.push(`${p.id} ${name}: all ${what}`);
+      }
+    }
+    expect(pure).toEqual([]);
   });
 
   it("name no vendor, and carry no lab wording or patient field", () => {

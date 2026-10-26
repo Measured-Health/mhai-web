@@ -10,8 +10,10 @@
 // a product.
 import type {
   AccessEntry,
+  AllAgeBand,
   ConditionRef,
   Coverage,
+  HospitalAgeBand,
   HospitalKind,
   LocationRef,
   Setting,
@@ -331,6 +333,29 @@ const FINDINGS_OF: Record<string, FindingKind[]> = {
 };
 const ANY_FINDING: FindingKind[] = Object.values(F);
 
+/** The age band across hospitals. */
+export const allBand = (age: number): AllAgeBand =>
+  age < 20
+    ? "0-19"
+    : age < 40
+      ? "20-39"
+      : age < 60
+        ? "40-59"
+        : age < 80
+          ? "60-79"
+          : "80+";
+/** The age band in one hospital (Plan 6). */
+export const hospitalBand = (age: number): HospitalAgeBand =>
+  age < 18
+    ? "0-17"
+    : age < 40
+      ? "18-39"
+      : age < 65
+        ? "40-64"
+        : age < 80
+          ? "65-79"
+          : "80+";
+
 /** Plan 6's hospital bands: the age is a whole number of years. */
 const AGE_RANGE = {
   "0-17": [0, 17],
@@ -532,7 +557,78 @@ export function buildCohort(p: Profile): CohortPatient[] {
       out[i]!.conditions = out[i]!.conditions.filter((c) => c.id !== "n18");
   }
   if (p.plantTbCkd) plant(10, p.plantTbCkd, "n18");
+  mixRows(out);
   return out;
+}
+
+/** What makes a ward's or a specialty's row wholly one group, if it is. */
+const PURE_BY = [
+  (x: CohortPatient) => hospitalBand(x.age),
+  (x: CohortPatient) => allBand(x.age),
+  (x: CohortPatient) => x.sex,
+] as const;
+
+/**
+ * No ward and no specialty is wholly inside one age band (in either scope)
+ * or one sex: such a row is a part of that band's row, and the two shown
+ * together leave the rest by subtraction. A pure row takes in one patient
+ * who differs on every count it is pure on, from the largest other row (a
+ * ward from another ward of its setting, or from its setting's patients
+ * with no ward). Moved, not drawn, so the rest of the sample is as drawn.
+ */
+function mixRows(out: CohortPatient[]) {
+  const rows: {
+    of: (x: CohortPatient) => string | null;
+    set: (x: CohortPatient, v: string) => void;
+    ok: (x: CohortPatient, v: string) => boolean;
+    values: string[];
+  }[] = [
+    {
+      of: (x) => x.location,
+      set: (x, v) => void (x.location = v),
+      ok: (x, v) => x.setting === LOCATIONS.find((l) => l.id === v)!.setting,
+      values: LOCATIONS.map((l) => l.id),
+    },
+    {
+      of: (x) => x.specialty,
+      set: (x, v) => void (x.specialty = v),
+      ok: () => true,
+      values: SPECIALTIES,
+    },
+  ];
+  for (let pass = 0; pass < 4; pass++)
+    for (const row of rows)
+      for (const v of row.values) {
+        const members = out.filter((x) => row.of(x) === v);
+        if (members.length === 0) continue;
+        const pure = PURE_BY.filter(
+          (by) => new Set(members.map(by)).size === 1,
+        );
+        if (pure.length === 0) continue;
+        const size = new Map<string | null, number>();
+        for (const x of out)
+          size.set(row.of(x), (size.get(row.of(x)) ?? 0) + 1);
+        const donors = out
+          .filter(
+            (x) =>
+              row.of(x) !== v &&
+              row.ok(x, v) &&
+              pure.every((by) => by(x) !== by(members[0]!)),
+          )
+          .sort((a, b) => size.get(row.of(b))! - size.get(row.of(a))!);
+        // Not one whose own row it would leave wholly one group.
+        const keepsMixed = (d: CohortPatient) => {
+          const from = row.of(d);
+          if (from === null) return true;
+          const rest = out.filter((x) => x !== d && row.of(x) === from);
+          return (
+            rest.length === 0 ||
+            PURE_BY.every((by) => new Set(rest.map(by)).size > 1)
+          );
+        };
+        const donor = donors.find(keepsMixed);
+        if (donor) row.set(donor, v);
+      }
 }
 
 const cohorts = new Map<string, CohortPatient[]>();
