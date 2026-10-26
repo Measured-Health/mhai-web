@@ -132,7 +132,7 @@ Plan 7c's **Analytics** page is renamed **Usage** first. In 12b, a platform admi
   - the list carries `until` and disappears at that time;
   - while it is open, the app checks the status every **30 seconds**;
   - a 403 `no_clearance`, `clearance_ended` or `patient_views_off` removes it at once.
-- **Backend contract:** the controller adds spec §11, with the changes above, to mhai-multiagent `docs/specs/2026-10-17-frontend-requirements.md` as §14.11, through its own PR. It also changes the 7d email link to `/usage?change=` in §14.7.
+- **Backend contract:** the controller adds spec §11, with the changes above, to mhai-multiagent `docs/specs/2026-10-17-frontend-requirements.md` as §14.12, through its own PR. It also changes the 7d email link to `/usage?change=` in §14.7.
 
 ## Needs from Plan 11
 
@@ -962,7 +962,7 @@ This task mounts a placeholder body for each view (title and summary only). Task
 - [ ] **Step 3: Verify.** Run the full suite: `npm test`, `npm run e2e` (both apps), lint, `format:check`, typecheck, build, `check:bundle` and `check:platform-marker`. Compare the counts with Task 1's record.
 - [ ] **Step 4: Commit:** "Test Analysis across hospitals end to end; document the demo".
 
-The controller then opens the 12a PR and the backend contract PR (§14.11, and the §14.7 link change).
+The controller then opens the 12a PR and the backend contract PR (§14.12, and the §14.7 link change).
 
 ---
 
