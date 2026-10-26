@@ -16,3 +16,8 @@ export function takeHandedOffHospital(): string | null {
   handed = null;
   return id;
 }
+
+/** Drops any hand-off: on sign-out, so the next person never opens on it. */
+export function clearHandedOffHospital(): void {
+  handed = null;
+}

@@ -11,6 +11,7 @@ import { TEAM_EMAILS } from "../api/fixtures";
 import { createMockPlatform } from "../api/mock";
 import { analysisCsv, analysisCsvName } from "./csv";
 import { emptyQuery } from "./filters";
+import { SEX_LABEL, conditionText } from "./labels";
 import { readFilterOptions, readStatus, readView } from "./read";
 
 const NOW = Date.parse("2026-10-23T09:30:00.000Z");
@@ -118,6 +119,61 @@ describe("analysisCsv", () => {
     expect(tb).toContain("Too few hospitals to show");
     const sc = await csvOf(m, "prevalence", { ...ALL, condition: "d57" });
     expect(sc).toContain("Fewer than 5");
+  });
+
+  it("a hidden rate or share beside a shown count writes Not shown; Fewer than 5 stays for hidden counts", async () => {
+    const m = mock();
+    const hidden = { value: null, suppressed: true };
+    const n25 = { value: 25, suppressed: false };
+    const prev = readView(
+      "prevalence",
+      await m.getAnalysisView("prevalence", ALL),
+      ALL,
+      NOW,
+    );
+    if (prev.status !== "ok") throw new Error("prevalence failed");
+    const c = prev.data.data.by_condition;
+    c[0] = {
+      ...c[0]!,
+      cases: { ...n25, drill: null },
+      rate: { count: n25, base: hidden, per_1000: hidden },
+    };
+    c[1] = {
+      ...c[1]!,
+      cases: { ...hidden, drill: null },
+      rate: { count: hidden, base: c[1]!.rate.base, per_1000: hidden },
+    };
+    const h = prev.data.hospitals!;
+    h[0] = {
+      ...h[0]!,
+      headline: { ...h[0]!.headline, count: n25, per_1000: hidden },
+    };
+    const rows = cells(analysisCsv("prevalence", prev, await context(m, ALL)));
+    const byName = (name: string) => rows.find((r) => r[0] === name)!;
+    const first = byName(conditionText(c[0]!.condition));
+    expect(first[1]).toBe("25");
+    expect(first[3]).toBe("Not shown");
+    const second = byName(conditionText(c[1]!.condition));
+    expect(second[1]).toBe("Fewer than 5");
+    expect(second[3]).toBe("Fewer than 5");
+    const hosp = byName(h[0]!.hospital.name);
+    expect(hosp.slice(2, 4)).toEqual(["25", "Not shown"]);
+
+    const aff = readView(
+      "affected",
+      await m.getAnalysisView("affected", ALL),
+      ALL,
+      NOW,
+    );
+    if (aff.status !== "ok") throw new Error("affected failed");
+    const sex = aff.data.data.by_sex;
+    sex[0] = { ...sex[0]!, patients: { ...n25, drill: null }, share: hidden };
+    const arows = cells(analysisCsv("affected", aff, await context(m, ALL)));
+    expect(arows.find((r) => r[0] === SEX_LABEL[sex[0]!.sex])).toEqual([
+      SEX_LABEL[sex[0]!.sex],
+      "25",
+      "Not shown",
+    ]);
   });
 
   it("hospital rows across hospitals; comparison lines for one", async () => {

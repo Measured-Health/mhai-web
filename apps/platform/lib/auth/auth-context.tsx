@@ -12,6 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { clearHandedOffHospital } from "../analysis/scope-handoff";
 import { queryKeys } from "../queries/keys";
 import { endSessionRequests } from "../queries/session-end";
 import { getAuthClient } from "./client";
@@ -148,6 +149,8 @@ export function AuthProvider({
         // Named on purpose (clear() below removes them too): Analysis
         // figures, filters and its off mark never outlive the person.
         queryClient.removeQueries({ queryKey: queryKeys.analysis });
+        // Nor does a hospital handed from a hospital page to Analysis.
+        clearHandedOffHospital();
         queryClient.clear();
         setState(SIGNED_OUT);
         setMfaPending(false);

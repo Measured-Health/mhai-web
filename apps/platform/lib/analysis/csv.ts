@@ -3,7 +3,8 @@
 // the months, each active filter by its label, the included hospitals and
 // "Sample data" when it is; then the view's tables, then the hospital rows
 // (All hospitals) or the comparison lines (One hospital). Hidden values read
-// "Fewer than 5" or "Too few hospitals to show". It carries no id, no drill
+// "Fewer than 5" or "Too few hospitals to show"; a hidden rate or share
+// beside a count that shows reads "Not shown". It carries no id, no drill
 // key and no patient field.
 import { CSV_MAX_ROWS, toCsv, type Cell } from "@mhai/ui/csv";
 import type { GuardKind } from "@mhai/ui/guards";
@@ -28,6 +29,7 @@ import {
   ageText,
   comparisonLines,
   conditionText,
+  hiddenBeside,
   hiddenText,
   includedText,
   locationText,
@@ -61,7 +63,11 @@ const NOT_LISTED = "Not listed";
  * A cell: hidden reads in words; a count as a number, a rate per 1,000 to
  * one place, a share as a whole percentage; nothing to measure is empty.
  */
-function cell(g: AGuarded, kind: GuardKind): Cell {
+function cell(g: AGuarded, kind: GuardKind, beside?: AGuarded): Cell {
+  // A hidden rate or share beside a count that shows: "Not shown", as on
+  // screen. "Fewer than 5" is for hidden counts only.
+  const notShown = beside ? hiddenBeside(g, beside) : null;
+  if (notShown) return notShown;
   const hidden = hiddenText(g, kind);
   if (hidden) return hidden;
   if (g.value === null || !Number.isFinite(g.value)) return null;
@@ -70,8 +76,8 @@ function cell(g: AGuarded, kind: GuardKind): Cell {
   return Math.round(g.value);
 }
 const num = (g: AGuarded) => cell(g, "count");
-const per = (g: AGuarded) => cell(g, "rate");
-const pct = (g: AGuarded) => cell(g, "share");
+const per = (g: AGuarded, beside?: AGuarded) => cell(g, "rate", beside);
+const pct = (g: AGuarded, beside?: AGuarded) => cell(g, "share", beside);
 
 /** What a view's headline counts, over what, and as what. */
 const HEADLINE: Record<ViewId, [count: string, base: string, rate: string]> = {
@@ -98,10 +104,14 @@ const HEADLINE: Record<ViewId, [count: string, base: string, rate: string]> = {
   quality: ["Ratings agreed with", "Ratings", "Agreement rate (%)"],
 };
 /** Quality's headline is a percentage (per 1,000 ÷ 10). */
-const headlineRate = (view: ViewId, g: AGuarded): Cell =>
+const headlineRate = (view: ViewId, g: AGuarded, count: AGuarded): Cell =>
   view === "quality"
-    ? cell(g.value === null ? g : { ...g, value: g.value / 1000 }, "share")
-    : per(g);
+    ? cell(
+        g.value === null ? g : { ...g, value: g.value / 1000 },
+        "share",
+        count,
+      )
+    : per(g, count);
 
 /** Each active filter, by its label; never an id. */
 function filterRows(q: AnalysisQuery, o: FilterOptionsOut | null): Row[] {
@@ -141,7 +151,7 @@ const shareTable = (title: string, group: string, rows: Row[]) =>
 const rateCells = (r: Rate): Row => [
   num(r.count),
   num(r.base),
-  per(r.per_1000),
+  per(r.per_1000, r.count),
 ];
 
 const TABLES: { [V in ViewId]: (d: Read<V>) => Row[] } = {
@@ -159,7 +169,7 @@ const TABLES: { [V in ViewId]: (d: Read<V>) => Row[] } = {
         conditionText(r.condition),
         num(r.cases),
         num(r.rate.base),
-        per(r.rate.per_1000),
+        per(r.rate.per_1000, r.rate.count),
         num(r.new),
       ]),
     ),
@@ -187,7 +197,7 @@ const TABLES: { [V in ViewId]: (d: Read<V>) => Row[] } = {
       d.data.by_age.map((r) => [
         ageText(r.band),
         num(r.patients),
-        pct(r.share),
+        pct(r.share, r.patients),
       ]),
     ),
     ...shareTable(
@@ -196,7 +206,7 @@ const TABLES: { [V in ViewId]: (d: Read<V>) => Row[] } = {
       d.data.by_sex.map((r) => [
         SEX_LABEL[r.sex],
         num(r.patients),
-        pct(r.share),
+        pct(r.share, r.patients),
       ]),
     ),
     ...shareTable(
@@ -205,7 +215,7 @@ const TABLES: { [V in ViewId]: (d: Read<V>) => Row[] } = {
       d.data.by_setting.map((r) => [
         settingText(r.setting),
         num(r.patients),
-        pct(r.share),
+        pct(r.share, r.patients),
       ]),
     ),
     ...shareTable(
@@ -214,7 +224,7 @@ const TABLES: { [V in ViewId]: (d: Read<V>) => Row[] } = {
       d.data.by_specialty.map((r) => [
         specialtyText(r.specialty),
         num(r.patients),
-        pct(r.share),
+        pct(r.share, r.patients),
       ]),
     ),
     ...(d.data.by_location
@@ -224,7 +234,7 @@ const TABLES: { [V in ViewId]: (d: Read<V>) => Row[] } = {
           d.data.by_location.map((r) => [
             locationText(r.location),
             num(r.patients),
-            pct(r.share),
+            pct(r.share, r.patients),
           ]),
         )
       : []),
@@ -238,7 +248,7 @@ const TABLES: { [V in ViewId]: (d: Read<V>) => Row[] } = {
         conditionText(p.a),
         conditionText(p.b),
         num(p.patients),
-        pct(p.share_of_a),
+        pct(p.share_of_a, p.patients),
       ]),
     ),
 
@@ -252,7 +262,7 @@ const TABLES: { [V in ViewId]: (d: Read<V>) => Row[] } = {
           ? null
           : { high: "High", low: "Low", abnormal: "Abnormal" }[f.flag],
         num(f.patients),
-        per(f.rate.per_1000),
+        per(f.rate.per_1000, f.patients),
       ]),
     ),
     ...table(
@@ -293,7 +303,7 @@ const TABLES: { [V in ViewId]: (d: Read<V>) => Row[] } = {
         num(r.confidence.medium),
         num(r.confidence.low),
         num(r.rated),
-        pct(r.agreement_rate),
+        pct(r.agreement_rate, r.rated),
         num(r.reviewers),
         num(r.corrections.total),
         num(r.corrections.approved),
@@ -322,7 +332,7 @@ function hospitalRows<V extends ViewId>(view: V, d: Read<V>): Row[] {
       r.hospital.name,
       num(r.size),
       num(r.headline.count),
-      headlineRate(view, r.headline.per_1000),
+      headlineRate(view, r.headline.per_1000, r.headline.count),
       KIND_LABEL[r.kind],
       COVERAGE_LABEL[r.coverage],
       pct(r.not_standardised_share),
@@ -373,7 +383,7 @@ export function analysisCsv<V extends ViewId>(
           num(data.patients),
           num(data.headline.count),
           num(data.headline.base),
-          headlineRate(view, data.headline.per_1000),
+          headlineRate(view, data.headline.per_1000, data.headline.count),
         ],
       ],
     ),
