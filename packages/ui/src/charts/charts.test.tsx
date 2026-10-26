@@ -506,7 +506,7 @@ describe("ColumnChart scroller", () => {
     ).toBeNull();
   });
 
-  it("is a labelled, keyboard-reachable scroller when wider than its card", () => {
+  it("is a labelled scroller, reached through its columns, when wider than its card", () => {
     const wide = vi
       .spyOn(HTMLElement.prototype, "scrollWidth", "get")
       .mockReturnValue(600);
@@ -518,7 +518,9 @@ describe("ColumnChart scroller", () => {
       const group = screen.getByRole("group", {
         name: "Cases by month, scrolls sideways",
       });
-      expect(group).toHaveAttribute("tabindex", "0");
+      // No tab stop of its own: the columns are the one stop, and focusing
+      // one scrolls it into view.
+      expect(group).not.toHaveAttribute("tabindex");
       expect(
         screen.getByText("Scroll sideways to see every column."),
       ).toBeInTheDocument();

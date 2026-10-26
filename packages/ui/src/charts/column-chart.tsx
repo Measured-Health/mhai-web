@@ -80,8 +80,9 @@ export function ColumnChart({
   const current = Math.min(active, Math.max(0, last));
   // Keyed, so a data swap that drops the focused column drops its caption.
   const shown = columns.find((c) => c.key === focused) ?? null;
-  // On a phone a long series is wider than its card: say so, and make the
-  // scroller reachable by keyboard.
+  // On a phone a long series is wider than its card: say so. The scroller is
+  // not a tab stop of its own: the columns are focusable and focusing one
+  // scrolls it into view, so the keyboard reaches every column.
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
@@ -195,7 +196,6 @@ export function ColumnChart({
             {...(scrolls
               ? {
                   role: "group",
-                  tabIndex: 0,
                   "aria-label": `${title}, scrolls sideways`,
                 }
               : {})}
