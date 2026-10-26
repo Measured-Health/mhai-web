@@ -1,11 +1,10 @@
 "use client";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
 import { useRedirect } from "@/lib/auth/use-redirect";
 import { dropAnalysis, useAnalysisStatus } from "@/lib/queries/analysis";
 import { TopBar } from "../shell/top-bar";
-import { Empty } from "../states/empty";
 import { Loading } from "../states/loading";
 import { AnalysisView } from "./analysis-view";
 
@@ -29,14 +28,33 @@ export function AnalysisGate() {
     status?.status === "failed" ||
     (status?.status === "ok" && !status.data.aggregates_enabled);
   // Once the page is down (its queries unmounted), nothing it read stays.
+  // If it went down under the person's hands, focus moves to the reason.
+  const shown = useRef(false);
+  const reason = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    if (off) dropAnalysis(qc);
+    if (!off) return;
+    dropAnalysis(qc);
+    if (shown.current) reason.current?.focus();
+    shown.current = false;
   }, [off, qc]);
+  useEffect(() => {
+    if (status?.status === "ok" && !off) shown.current = true;
+  }, [status, off]);
 
   let body;
   if (!admin || status === undefined) body = <Loading />;
   else if (off || status.status !== "ok")
-    body = <Empty title={NOT_AVAILABLE} />;
+    body = (
+      <div className="rounded-2xl border border-dashed border-lilac-2 bg-white px-6 py-10 text-center">
+        <h2
+          ref={reason}
+          tabIndex={-1}
+          className="text-base font-semibold focus-visible:outline-none"
+        >
+          {NOT_AVAILABLE}
+        </h2>
+      </div>
+    );
   else body = <AnalysisView status={status.data} />;
 
   return (

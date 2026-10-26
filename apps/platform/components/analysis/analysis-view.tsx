@@ -43,6 +43,8 @@ export function AnalysisView({ status }: { status: AnalysisStatus }) {
   const [cleared, setCleared] = useState(false);
   const [downloadFailed, setDownloadFailed] = useState(false);
   const offline = !useNetwork().online;
+  const desktop = useIsDesktop();
+  const pickerId = useId();
 
   const options = useAnalysisFilters(query.scope, query.hospital);
   const read = useAnalysisView(view, query);
@@ -105,8 +107,20 @@ export function AnalysisView({ status }: { status: AnalysisStatus }) {
         onRetryOptions={options.retry}
         offline={offline}
       />
-      <ViewPicker view={view} onView={setView} />
-      <div id="analysis-view">
+      <ViewPicker
+        id={pickerId}
+        view={view}
+        onView={(v) => {
+          setDownloadFailed(false);
+          setView(v);
+        }}
+      />
+      <div
+        id={`${pickerId}-panel`}
+        {...(desktop
+          ? { role: "tabpanel", "aria-labelledby": `${pickerId}-${view}` }
+          : {})}
+      >
         <ViewFrame
           view={view}
           state={read.state}
@@ -130,14 +144,16 @@ export function AnalysisView({ status }: { status: AnalysisStatus }) {
 
 /** Tabs on `md` and up; a "View" select below it. */
 function ViewPicker({
+  id,
   view,
   onView,
 }: {
+  /** The tabs are `${id}-${view}`, the panel `${id}-panel`. */
+  id: string;
   view: ViewId;
   onView(v: ViewId): void;
 }) {
   const desktop = useIsDesktop();
-  const id = useId();
   const tabs = useRef(new Map<ViewId, HTMLButtonElement>());
   if (!desktop)
     return (
@@ -191,7 +207,7 @@ function ViewPicker({
           type="button"
           role="tab"
           aria-selected={v === view}
-          aria-controls="analysis-view"
+          aria-controls={`${id}-panel`}
           tabIndex={v === view ? 0 : -1}
           onClick={() => onView(v)}
           className={cn(

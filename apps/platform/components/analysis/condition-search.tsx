@@ -3,11 +3,13 @@ import { X } from "lucide-react";
 import { useId, useState } from "react";
 import type { ConditionRef } from "@/lib/api/analysis-contract";
 import { matchCondition } from "@/lib/analysis/filters";
-import { NOT_STANDARDISED, conditionText } from "@/lib/analysis/labels";
+import { conditionText } from "@/lib/analysis/labels";
 import { inputClass } from "@mhai/ui/auth/password-fields";
 import { cn } from "@mhai/ui/cn";
 
 const SHOWN = 8;
+/** A set condition whose name isn't (or isn't yet) in the choices. */
+const CONDITION_SET = "Condition set";
 
 /**
  * The condition filter: a combobox over the scope's conditions, searched on
@@ -34,7 +36,7 @@ export function ConditionSearch({
   const chosen = value ? conditions.find((c) => c.id === value) : undefined;
 
   if (value !== null) {
-    const label = chosen ? conditionText(chosen) : NOT_STANDARDISED;
+    const label = chosen ? conditionText(chosen) : CONDITION_SET;
     return (
       <div className="flex flex-col gap-1">
         <span className="text-[12.5px] font-semibold text-ink-2">

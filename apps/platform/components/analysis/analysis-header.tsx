@@ -84,7 +84,7 @@ export function AnalysisHeader({
               key={s}
               type="button"
               aria-pressed={query.scope === s}
-              disabled={offline || list.length === 0}
+              disabled={offline || (s === "hospital" && list.length === 0)}
               {...offProps}
               onClick={() =>
                 s === "all"
@@ -180,11 +180,10 @@ export function AnalysisHeader({
           ))}
         </ul>
       )}
-      {cleared && (
-        <p role="status" className="text-[13px] text-ink-2">
-          {FILTERS_CLEARED}
-        </p>
-      )}
+      {/* Always mounted, so the note is announced when it appears. */}
+      <p role="status" className="text-[13px] text-ink-2 empty:hidden">
+        {cleared ? FILTERS_CLEARED : ""}
+      </p>
       {downloadFailed && (
         <p role="alert" className="text-[13px] font-semibold text-bad-deep">
           {RECORD_FAILED}

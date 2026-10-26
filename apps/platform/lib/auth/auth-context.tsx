@@ -145,8 +145,8 @@ export function AuthProvider({
         // Nothing fetched for this person outlives the session, and nothing
         // still in flight lands in the next person's.
         endSessionRequests(queryClient);
-        // Analysis figures and filters first, by name: they never outlive
-        // the person who asked.
+        // Named on purpose (clear() below removes them too): Analysis
+        // figures, filters and its off mark never outlive the person.
         queryClient.removeQueries({ queryKey: queryKeys.analysis });
         queryClient.clear();
         setState(SIGNED_OUT);

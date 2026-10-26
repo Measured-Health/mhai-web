@@ -2,10 +2,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  AnalysisQuery,
-  AnalysisStatus,
-} from "@/lib/api/analysis-contract";
+import type { AnalysisQuery } from "@/lib/api/analysis-contract";
 import {
   __resetPlatformClientForTests,
   __setPlatformClientForTests,
@@ -85,6 +82,21 @@ const viewQueries = (qc: QueryClient) =>
   qc.getQueryCache().findAll({ queryKey: ["analysis", "view"] });
 const lastQuery = (spy: { mock: { calls: unknown[][] } }) =>
   spy.mock.calls.at(-1)![1] as AnalysisQuery;
+function renderShell(qc: QueryClient) {
+  renderWithAuth(
+    <AppShell>
+      <AnalysisGate />
+    </AppShell>,
+    { queryClient: qc },
+  );
+}
+/** Every Analysis link in either copy of the sidebar. */
+const sidebarLinks = () =>
+  screen
+    .getAllByRole("navigation", { name: "Platform" })
+    .flatMap((n) => within(n).queryAllByRole("link", { name: /^Analysis/ }));
+/** Lets timers, microtasks and refetches run. */
+const settle = () => act(() => new Promise((r) => setTimeout(r, 50)));
 const phone = () =>
   vi.stubGlobal("matchMedia", (q: string) => ({
     matches: false,
@@ -132,49 +144,107 @@ describe("the Analysis gate", () => {
   it("a 403 analysis_off mid-session swaps the page for Analysis isn't available yet, drops the analysis queries and hides the sidebar entry", async () => {
     const user = userEvent.setup();
     const qc = newClient();
-    renderWithAuth(
-      <AppShell>
-        <AnalysisGate />
-      </AppShell>,
-      { queryClient: qc },
-    );
+    renderShell(qc);
     await loaded();
-    const sidebar = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
-    expect(
-      within(sidebar).getByRole("link", { name: /^Analysis/ }),
-    ).toBeInTheDocument();
+    expect(sidebarLinks()).toHaveLength(1);
     expect(viewQueries(qc).length).toBeGreaterThan(0);
 
-    // The switch goes off on the server while the page is open.
-    const real = await api.getAnalysisStatus();
-    vi.spyOn(api, "getAnalysisStatus").mockResolvedValue({
-      ...real,
-      aggregates_enabled: false,
-      patient_views_enabled: false,
-    } satisfies AnalysisStatus);
-    vi.spyOn(api, "getAnalysisView").mockRejectedValue(
-      new ApiError(403, "analysis_off"),
-    );
+    // The status keeps saying on: only the 403 itself can turn things off.
+    const status = vi.spyOn(api, "getAnalysisStatus");
+    const filters = vi.spyOn(api, "getAnalysisFilters");
+    const view = vi
+      .spyOn(api, "getAnalysisView")
+      .mockRejectedValue(new ApiError(403, "analysis_off"));
     await user.selectOptions(select("Period"), "6m");
 
-    expect(
-      await screen.findByText("Analysis isn't available yet"),
-    ).toBeInTheDocument();
+    // The page and the sidebar entry go in the same render.
+    // waitFor checks after each DOM change: at the first change that shows
+    // the reason, the entry must already be gone.
+    await waitFor(() =>
+      expect(screen.getByText("Analysis isn't available yet")).toBeVisible(),
+    );
+    expect(sidebarLinks()).toHaveLength(0);
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByText(/hospitals included/)).toBeNull();
     expect(screen.queryByRole("button", { name: /Download CSV/ })).toBeNull();
+    // Focus goes to the reason, not to the page body.
+    expect(document.activeElement).toHaveTextContent(
+      "Analysis isn't available yet",
+    );
     await waitFor(() => {
       expect(viewQueries(qc)).toHaveLength(0);
       expect(
         qc.getQueryCache().findAll({ queryKey: ["analysis", "filters"] }),
       ).toHaveLength(0);
     });
-    for (const nav of screen.getAllByRole("navigation", { name: "Platform" }))
-      expect(within(nav).queryByRole("link", { name: /^Analysis/ })).toBeNull();
+
+    // Nothing is asked again.
+    const calls = view.mock.calls.length;
+    await settle();
+    expect(view).toHaveBeenCalledTimes(calls);
+    expect(view.mock.calls.length).toBe(1);
+    expect(filters).not.toHaveBeenCalled();
+    expect(status).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Analysis isn't available yet"),
+    ).toBeInTheDocument();
+    expect(sidebarLinks()).toHaveLength(0);
     // Usage is still there.
+    const sidebar = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     expect(
       within(sidebar).getByRole("link", { name: "Usage" }),
     ).toBeInTheDocument();
+  });
+
+  it("once off, it stays off for the session even when the status keeps saying on (no request loop)", async () => {
+    const status = vi.spyOn(api, "getAnalysisStatus");
+    const filters = vi.spyOn(api, "getAnalysisFilters");
+    const view = vi
+      .spyOn(api, "getAnalysisView")
+      .mockRejectedValue(new ApiError(403, "analysis_off"));
+    const qc = newClient();
+    renderShell(qc);
+    expect(
+      await screen.findByText("Analysis isn't available yet"),
+    ).toBeInTheDocument();
+    expect(sidebarLinks()).toHaveLength(0);
+    await settle();
+    await settle();
+    // One status (shared by the gate and the sidebar), one filters and one
+    // view request: nothing after the 403.
+    expect(status).toHaveBeenCalledTimes(1);
+    expect(filters).toHaveBeenCalledTimes(1);
+    expect(view).toHaveBeenCalledTimes(1);
+    // Nothing comes back, and nothing it read stays.
+    expect(
+      screen.getByText("Analysis isn't available yet"),
+    ).toBeInTheDocument();
+    expect(sidebarLinks()).toHaveLength(0);
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(viewQueries(qc)).toHaveLength(0);
+    // Even a status read that says on doesn't bring it back.
+    await act(() => qc.invalidateQueries({ queryKey: ["analysis", "status"] }));
+    await settle();
+    expect(status).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByText("Analysis isn't available yet"),
+    ).toBeInTheDocument();
+    expect(sidebarLinks()).toHaveLength(0);
+  });
+
+  it("a 403 analysis_off on the download record makes no file and turns Analysis off", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "recordDownload").mockRejectedValue(
+      new ApiError(403, "analysis_off"),
+    );
+    renderShell(newClient());
+    await loaded();
+    await user.click(screen.getByRole("button", { name: /Download CSV/ }));
+    expect(
+      await screen.findByText("Analysis isn't available yet"),
+    ).toBeInTheDocument();
+    expect(sidebarLinks()).toHaveLength(0);
+    expect(downloadCsv).not.toHaveBeenCalled();
   });
 
   it("sign-out removes the analysis queries", async () => {

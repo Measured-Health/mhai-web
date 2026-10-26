@@ -29,6 +29,8 @@ import { queryKeys } from "./keys";
 // keys of the in-memory cache: never the URL, storage, the title or logs.
 export const analysisKeys = {
   status: [...queryKeys.analysis, "status"] as const,
+  /** Set by a 403 `analysis_off`; cleared only with the cache. */
+  off: [...queryKeys.analysis, "off"] as const,
   filters: (scope: ScopeKind, hospital: string | null) =>
     [...queryKeys.analysis, "filters", scope, hospital] as const,
   view: (view: ViewId, q: AnalysisQuery) =>
@@ -39,29 +41,38 @@ export const isAnalysisOff = (e: unknown) =>
   e instanceof ApiError && e.status === 403 && e.code === "analysis_off";
 
 /**
- * The switch went off while the page was open: the status says so at once
- * (the page and the sidebar entry go), every other analysis query is
- * removed, and the status is asked again.
+ * The switch went off while the page was open. Analysis stays off for the
+ * rest of the session (until a reload or a fresh sign-in clears the
+ * cache), whatever a later status says: a server that disagrees with
+ * itself can't bring the page back, or start a request loop. The page and
+ * the sidebar entry go at once, and every other analysis query is removed.
+ * Nothing is asked again.
  */
 export function analysisOff(qc: QueryClient) {
-  qc.setQueryData<unknown>(analysisKeys.status, (s: unknown) =>
-    s && typeof s === "object"
-      ? { ...(s as AnalysisStatus), aggregates_enabled: false }
-      : s,
-  );
+  qc.setQueryData(analysisKeys.off, true);
   // After the failing call has settled, so it isn't removed mid-flight.
-  queueMicrotask(() => {
-    dropAnalysis(qc);
-    void qc.invalidateQueries({ queryKey: analysisKeys.status });
-  });
+  queueMicrotask(() => dropAnalysis(qc));
 }
 
-/** Removes every analysis query but the status. */
+/** Removes every analysis query but the status and the off mark. */
 export function dropAnalysis(qc: QueryClient) {
   qc.removeQueries({
     queryKey: queryKeys.analysis,
-    predicate: (q) => q.queryKey[1] !== "status",
+    predicate: (q) => q.queryKey[1] !== "status" && q.queryKey[1] !== "off",
   });
+}
+
+/** True once a 403 `analysis_off` has arrived in this session. */
+function useAnalysisOff(): boolean {
+  const q = useQuery({
+    queryKey: analysisKeys.off,
+    // Never fetched: only `analysisOff` writes it.
+    queryFn: () => false,
+    enabled: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+  return q.data === true;
 }
 
 /** Wraps a read so a 403 `analysis_off` turns the whole area off. */
@@ -83,20 +94,26 @@ const toState = <T>(q: {
 
 /**
  * The status, read through `readStatus`: undefined while it loads (or for
- * someone who can't ask: an auditor), failed when it fails or doesn't read.
+ * someone who can't ask: an auditor), failed when it fails or doesn't read,
+ * and failed for good once a 403 `analysis_off` has arrived.
  */
 export function useAnalysisStatus(
   enabled: boolean,
 ): ViewState<AnalysisStatus> | undefined {
   const qc = useQueryClient();
+  const off = useAnalysisOff();
   const q = useQuery({
     queryKey: analysisKeys.status,
     queryFn: guarded(qc, () => getPlatformClient().getAnalysisStatus()),
-    enabled,
+    // Once off, never asked again in this session.
+    enabled: enabled && !off,
     select: readStatus,
   });
-  return enabled ? toState(q) : undefined;
+  if (!enabled) return undefined;
+  if (off) return OFF;
+  return toState(q);
 }
+const OFF: ViewState<AnalysisStatus> = { status: "failed" };
 
 /** The filter choices for a scope (no ward or source across hospitals). */
 export function useAnalysisFilters(scope: ScopeKind, hospital: string | null) {
@@ -105,8 +122,10 @@ export function useAnalysisFilters(scope: ScopeKind, hospital: string | null) {
     (raw: unknown) => readFilterOptions(raw, scope),
     [scope],
   );
+  const off = useAnalysisOff();
   const q = useQuery({
     queryKey: analysisKeys.filters(scope, hospital),
+    enabled: !off,
     queryFn: guarded(qc, () =>
       getPlatformClient().getAnalysisFilters(scope, hospital),
     ),
@@ -125,8 +144,10 @@ export function useAnalysisView<V extends ViewId>(
   query: AnalysisQuery,
 ) {
   const qc = useQueryClient();
+  const off = useAnalysisOff();
   const q = useQuery({
     queryKey: analysisKeys.view(view, query),
+    enabled: !off,
     queryFn: guarded(qc, async (): Promise<Fetched<V>> => {
       const asked = { ...query };
       const raw = await getPlatformClient().getAnalysisView(view, asked);

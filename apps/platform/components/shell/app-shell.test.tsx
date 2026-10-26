@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +7,7 @@ import {
   __setPlatformClientForTests,
 } from "@/lib/api/client";
 import { createMockPlatform } from "@/lib/api/mock";
+import type { AnalysisStatus } from "@/lib/api/analysis-contract";
 import type { User } from "@/lib/auth/types";
 import { ADA, AMARA, renderWithAuth } from "@/tests/render";
 import { AppShell } from "./app-shell";
@@ -154,9 +156,24 @@ describe("the platform shell", () => {
     });
     const status = vi.spyOn(m, "getAnalysisStatus");
     __setPlatformClientForTests(m);
-    shell();
-    await waitFor(() => expect(status).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 0));
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderWithAuth(
+      <AppShell>
+        <TopBar title="Hospitals" />
+      </AppShell>,
+      { queryClient: qc },
+    );
+    // The status has been read, and said off: not merely still loading.
+    await waitFor(() =>
+      expect(qc.getQueryState(["analysis", "status"])?.status).toBe("success"),
+    );
+    expect(
+      (qc.getQueryData(["analysis", "status"]) as AnalysisStatus)
+        .aggregates_enabled,
+    ).toBe(false);
+    expect(status).toHaveBeenCalledTimes(1);
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     expect(within(nav).queryByRole("link", { name: /^Analysis/ })).toBeNull();
     __resetPlatformClientForTests();
