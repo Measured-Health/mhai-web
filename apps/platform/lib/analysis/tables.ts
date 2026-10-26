@@ -30,7 +30,9 @@ import {
   SEVERITIES,
   SEVERITY_LABEL,
   SEX_LABEL,
+  TOO_FEW_HOSPITALS,
   ageText,
+  countShows,
   conditionText,
   flagText,
   headlineText,
@@ -404,6 +406,76 @@ const qualityTables = (d: Read<"quality">): TableSpec[] => [
   },
 ];
 
+// ---- Headline ---------------------------------------------------------------
+
+export const HEADLINE_TITLE = "Headline";
+export const NO_RATINGS = "No ratings yet";
+const AGREED = "Reviewers agreed";
+
+/** Per 1,000 (Quality's headline) as a share of 0 to 1. */
+const asShare = (g: AGuarded): AGuarded =>
+  g.value === null ? g : { ...g, value: g.value / 1000 };
+
+/** Prevalence's sentence: the rate, and its count and base only beside it. */
+function prevalenceHeadline(d: Read<"prevalence">): Record<string, Fig> {
+  const h = d.headline;
+  const detail =
+    shownValue(h.per_1000) !== null &&
+    shownValue(h.count) !== null &&
+    shownValue(h.base) !== null;
+  return {
+    rate: rate(h.per_1000),
+    ...(detail ? { cases: count(h.count), seen: count(h.base) } : {}),
+  };
+}
+
+/**
+ * Quality's line, as `agreementText` reads it: the agreement rate and the
+ * ratings only where the line shows them.
+ */
+function qualityHeadline(d: Read<"quality">): Record<string, Fig> {
+  const agreed = asShare(d.headline.per_1000);
+  const rated = d.headline.base;
+  if (rated.why === "too_few_hospitals" || agreed.why === "too_few_hospitals")
+    return { agreed: TOO_FEW_HOSPITALS };
+  if (!countShows(rated))
+    return rated.suppressed || rated.value !== null
+      ? { rated: count(rated) }
+      : { agreed: NO_RATINGS };
+  if (agreed.suppressed) return { agreed: share(agreed), rated: count(rated) };
+  if (agreed.value === null) return { agreed: NO_RATINGS };
+  return { agreed: share(agreed), rated: count(rated) };
+}
+
+const HEADLINE_COLUMNS: TableColumn[] = [
+  { key: "patients", label: "Patients in the group", numeric: true },
+  { key: "rate", label: PREVALENCE_RATE, numeric: true },
+  { key: "cases", label: "Cases", numeric: true },
+  { key: "seen", label: "Patients seen", numeric: true },
+  { key: "agreed", label: AGREED, numeric: true },
+  { key: "rated", label: "Rated", numeric: true },
+];
+
+/**
+ * The headline as the view's summary shows it, never more (spec §5.2):
+ * Prevalence's sentence, Quality's agreement line, and for the other views
+ * the patients in the group. A figure the summary doesn't show has no
+ * column.
+ */
+function headlineTable<V extends ViewId>(view: V, d: Read<V>): TableSpec {
+  const cells: Record<string, Fig> =
+    view === "prevalence"
+      ? prevalenceHeadline(d as Read<"prevalence">)
+      : view === "quality"
+        ? qualityHeadline(d as Read<"quality">)
+        : { patients: count(d.patients) };
+  return {
+    caption: HEADLINE_TITLE,
+    columns: HEADLINE_COLUMNS.filter((c) => c.key in cells),
+    rows: [{ id: "headline", cells }],
+  };
+}
+
 const TABLES: { [V in ViewId]: (d: Read<V>) => TableSpec[] } = {
   prevalence: prevalenceTables,
   affected: affectedTables,
@@ -412,9 +484,12 @@ const TABLES: { [V in ViewId]: (d: Read<V>) => TableSpec[] } = {
   quality: qualityTables,
 };
 
-/** A view's tables, in screen order, as the Table view shows them. */
+/**
+ * A view's tables, in screen order, as the Table view shows them: the
+ * headline first, then the view's own. The CSV writes these and no others.
+ */
 export function viewTables<V extends ViewId>(view: V, d: Read<V>): TableSpec[] {
-  return TABLES[view](d);
+  return [headlineTable(view, d), ...TABLES[view](d)];
 }
 
 // ---- Hospital rows ----------------------------------------------------------

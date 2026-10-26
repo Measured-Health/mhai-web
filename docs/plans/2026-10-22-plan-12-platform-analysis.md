@@ -1143,7 +1143,7 @@ type PlatformPatientsOut = {
 ## Across plans (controller, 22 Oct 2026)
 
 - **Platform sidebar order** once every plan has merged: Hospitals · Usage · Analysis · Clearances · Legal holds · System · Settings · Team · Activity · Audit log · Account. Whichever plan merges second fixes `nav.ts` to match.
-- **Backend requirements numbering:** Plan 6 updates §10 (Analysis), Plan 8 is §14.8, Plan 9 is §14.9, Plan 11 is §14.10 (plus its hospital side in §10), and Plan 12 is §14.10.
+- **Backend requirements numbering:** Plan 6 updates §10 (Analysis), Plan 8 is §14.8, Plan 9 is §14.9, Plan 11 is §14.10 (plus its hospital side in §10), and Plan 12 is §14.12.
 - **Audit kinds:** Plans 8 and 11 add their event kinds to Plan 9's `lib/audit/kinds.ts` if Plan 9 has merged first; otherwise Plan 9 adds theirs.
 - **Binary pass-through:** Plans 9 and 11 share one helper in `route.ts`. Whichever lands second reuses it.
 
@@ -1171,4 +1171,5 @@ From the Task 3 review (findings C1 to C3). The sample mock (`apps/platform/lib/
 - **A total hidden for too few hospitals isn't secret when its rows add up to it.** Inside a reply, close its sets as under a shown total, with at least two hidden members that add up to 5 or more.
 - **Too few hospitals** counts as shown in a sum across hospitals (each hospital's own figure is shown anyway), and as hidden inside one reply.
 - **Known limit: containment across breakdowns in the data.** In real data a row can sit wholly inside a row of another breakdown with nothing in the contract to say so: a children's ward inside 0–17, a specialty seen by one sex, "no setting" inside "no ward". The two rows shown together leave the rest by subtraction. The app can't see this from a reply, so the server must detect it from its own counts for each query and close it as a whole-and-part pair. The sample does this (`containedSums` in `mock-analysis.ts`), and its fixtures put no ward or specialty wholly inside one age band or one sex.
+- **The access-trail export** writes patient-list counts of 1 to 4 as "Fewer than 5", and holds no figures and no patients.
 - **Not covered here:** the same patients reached by a filter in one query and a breakdown row in another (for example "Sex: Other" as a filter against the Other row), and inference that combines several sums at once. Raise both with the backend before sign-off.

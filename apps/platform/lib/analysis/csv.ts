@@ -1,15 +1,14 @@
 // The platform Analysis CSV (spec §5.2, §6): exactly the read view on
 // screen, never more. It starts with the view, the scope (and hospital),
 // the months, each active filter by its label, the included hospitals and
-// "Sample data" when it is; then the headline and the view's tables, built
-// by `tables.ts` exactly as the Table view shows them, then the hospital
+// "Sample data" when it is; then the view's tables (the headline first),
+// built by `viewTables` exactly as the Table view shows them, then the hospital
 // rows (All hospitals) or the comparison as the panel shows it (One
 // hospital). Every word is the screen's: hidden counts "Fewer than 5",
 // hidden rates and shares "Not shown", "Too few hospitals to show". It
 // carries no id, no drill key and no patient field.
 import { CSV_MAX_ROWS, toCsv, type Cell } from "@mhai/ui/csv";
 import type {
-  AGuarded,
   AnalysisQuery,
   AnalysisStatus,
   DataOf,
@@ -79,40 +78,6 @@ export function figCell(f: Fig): Cell {
   if (kind === "rate") return Math.round(g.value * 10) / 10;
   return Math.round(g.value);
 }
-const num = (g: AGuarded) => figCell({ g, kind: "count" });
-
-/** What a view's headline counts, over what, and as what. */
-const HEADLINE: Record<ViewId, [count: string, base: string, rate: string]> = {
-  prevalence: [
-    "Patients with a condition in scope",
-    "Patients seen",
-    "Per 1,000 seen",
-  ],
-  affected: [
-    "Patients with a condition in scope",
-    "Patients seen",
-    "Per 1,000 seen",
-  ],
-  "co-occurring": [
-    "Patients with a condition in scope",
-    "Patients seen",
-    "Per 1,000 seen",
-  ],
-  findings: [
-    "Patients with a flagged finding",
-    "Patients seen",
-    "Per 1,000 seen",
-  ],
-  quality: ["Ratings agreed with", "Ratings", "Reviewers agreed"],
-};
-/** Quality's headline is a percentage (per 1,000 ÷ 1,000 as a share). */
-const headlineRate = (view: ViewId, g: AGuarded): Cell =>
-  view === "quality"
-    ? figCell({
-        g: g.value === null ? g : { ...g, value: g.value / 1000 },
-        kind: "share",
-      })
-    : figCell({ g, kind: "rate" });
 
 /** Each active filter, by its label; never an id. */
 function filterRows(q: AnalysisQuery, o: FilterOptionsOut | null): Row[] {
@@ -216,7 +181,6 @@ export function analysisCsv<V extends ViewId>(
   ctx: CsvContext,
 ): string {
   const { data, query } = read;
-  const [countLabel, baseLabel, rateLabel] = HEADLINE[view];
   const head: Row[] = [
     ["Scope", SCOPE_LABEL[data.scope]],
     ...(data.scope === "hospital" && data.hospital
@@ -230,18 +194,6 @@ export function analysisCsv<V extends ViewId>(
     [],
   ];
   const body: Row[] = [
-    ...table(
-      "Headline",
-      ["Patients in the group", countLabel, baseLabel, rateLabel],
-      [
-        [
-          num(data.patients),
-          num(data.headline.count),
-          num(data.headline.base),
-          headlineRate(view, data.headline.per_1000),
-        ],
-      ],
-    ),
     ...viewTables(view, data).flatMap(specRows),
     ...extraRows(view, data),
     ...(data.scope === "all"

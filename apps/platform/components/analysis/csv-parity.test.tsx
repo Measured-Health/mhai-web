@@ -5,7 +5,7 @@ import {
   type AnalysisQuery,
   type ViewId,
 } from "@/lib/api/analysis-contract";
-import { analysisCsv } from "@/lib/analysis/csv";
+import { analysisCsv, figCell } from "@/lib/analysis/csv";
 import { emptyQuery } from "@/lib/analysis/filters";
 import type { ViewRead } from "@/lib/analysis/read";
 import { alertsTotalText, viewTables } from "@/lib/analysis/tables";
@@ -67,6 +67,39 @@ function section(rows: string[][], title: string): string[][] {
 }
 const textOf = (el: Element) => el.textContent ?? "";
 
+/**
+ * The file's blocks after its header: each run of rows up to a blank line.
+ * The header is the first block (scope, months, filters, hospitals).
+ */
+function blocks(rows: string[][]): string[][][] {
+  const out: string[][][] = [];
+  let at: string[][] = [];
+  for (const r of rows.slice(1)) {
+    if (r.length === 0 || (r.length === 1 && r[0] === "")) {
+      if (at.length) out.push(at);
+      at = [];
+    } else at.push(r);
+  }
+  if (at.length) out.push(at);
+  return out;
+}
+/** The header's row labels: never a figure. */
+const HEADER_LABELS = new Set([
+  "Scope",
+  "Hospital",
+  "Months",
+  "Period",
+  "Condition",
+  "Age band",
+  "Sex",
+  "Setting",
+  "Specialty",
+  "Ward or clinic",
+  "Source",
+  "Hospitals",
+  "Sample data",
+]);
+
 const QUERIES: AnalysisQuery[] = [
   emptyQuery("all", null),
   { ...emptyQuery("all", null), sex: "female" },
@@ -89,8 +122,50 @@ describe("the CSV matches the screen", () => {
         show(view, read);
         const where = `${view} ${q.scope} ${q.hospital ?? ""}`;
 
-        // The view's tables.
-        for (const t of viewTables(view, read.data)) {
+        // Every block in the file is the header, one of `viewTables`' tables
+        // (cell for cell), or a screen section checked below; nothing else.
+        const tables = viewTables(view, read.data);
+        const [header, ...rest] = blocks(csv);
+        for (const r of header!)
+          expect(HEADER_LABELS.has(r[0]!), `${where} header ${r[0]}`).toBe(
+            true,
+          );
+        const findings = view === "findings";
+        const alerts = findings
+          ? alertsTotalText((read as OkRead<"findings">).data.data)
+          : null;
+        const expected = [
+          ...tables.map((t) => t.caption),
+          ...(alerts ? [alerts] : []),
+          ...(q.scope === "all" &&
+          read.data.hospitals &&
+          view !== "co-occurring"
+            ? ["By hospital"]
+            : []),
+          ...(q.scope === "hospital" &&
+          read.data.comparison &&
+          (view === "prevalence" || findings || view === "quality")
+            ? ["Compared with similar hospitals"]
+            : []),
+        ];
+        expect(
+          rest.map((b) => b[0]![0]),
+          `${where}: the file's blocks`,
+        ).toEqual(expected);
+        tables.forEach((t, i) => {
+          const [, head, ...body] = rest[i]!;
+          expect(head, `${where} ${t.caption}`).toEqual(
+            t.columns.map((c) => c.label),
+          );
+          expect(body, `${where} ${t.caption}`).toEqual(
+            t.rows.map((r) =>
+              t.columns.map((c) => String(figCell(r.cells[c.key] ?? ""))),
+            ),
+          );
+        });
+
+        // The view's tables, against the screen.
+        for (const t of tables) {
           const table = screen.getByRole("table", { name: t.caption });
           const [head, ...body] = section(csv, t.caption);
           expect(head, where).toEqual(

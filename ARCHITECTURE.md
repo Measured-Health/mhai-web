@@ -582,7 +582,7 @@ browser ──> platforms.<domain> (IP allow list)
   is sample. While the status loads or fails it stays hidden.
 - **Analysis gate.** In live mode the proxy answers 404 `not_found` to every
   `platform/analysis/*` shape unless `ANALYSIS_SIGNED_OFF` is exactly
-  `"true"` (and the patients path also needs
+  `"true"` (12b adds the patients path, which also needs
   `ANALYSIS_PATIENT_VIEWS_SIGNED_OFF`), before it reads the session. The
   gate can only keep things off. An auditor's `platform/analysis/*` read is
   403 `forbidden` before upstream, and `/analysis` sends them to

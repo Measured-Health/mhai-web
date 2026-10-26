@@ -40,7 +40,7 @@ All notable changes to this project are documented here. The format follows
   affected, Co-occurring conditions, Findings and alerts, MHAI quality) for
   all hospitals or one, filters, a fair comparison with similar hospitals,
   Chart and Table, and Download CSV that matches the screen. Counts of 1 to
-  4 read "Fewer than 5", and a view that would give one away fails closed.
+  4 read "Fewer than 5", a hidden rate or share reads "Not shown", and a view that would give one away fails closed.
   Each visit and download is recorded first and shown in a new Analysis
   access tab on Activity, which platform admins and auditors both read and
   export. Auditors have no Analysis entry. It stays off in live mode until

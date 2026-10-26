@@ -285,7 +285,7 @@ Proposal (design call):
 ## 11. Backend this design needs (assumed contract)
 
 Add to the backend requirements (mhai-multiagent `docs/specs/2026-10-17-frontend-requirements.md`
-§14, as §14.8). It follows the §14 conventions: the `X-MHAI-Audience: platform` header, two-step
+§14, as §14.12; see the ruling in the plan). It follows the §14 conventions: the `X-MHAI-Audience: platform` header, two-step
 required, auditors refused, opaque ids, errors as `{code}`. A guarded value is `{value,
 suppressed}` as in Plan 5b and 7c.
 

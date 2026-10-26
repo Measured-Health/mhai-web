@@ -161,8 +161,12 @@ describe("analysisCsv", () => {
     const hosp = byName(h[0]!.hospital.name);
     expect(hosp[2]).toBe("Not shown · 25");
     expect(hosp[5]).toBe("Not shown");
-    const head = rows[rows.findIndex((r) => r[0] === "Headline") + 2]!;
-    expect(head[3]).toBe("Not shown");
+    // The headline holds only what the sentence shows: a hidden rate, and
+    // no count or base beside it (final review I1).
+    const at = rows.findIndex((r) => r[0] === "Headline");
+    expect(rows[at + 1]).toEqual(["Cases per 1,000"]);
+    expect(rows[at + 2]).toEqual(["Not shown"]);
+    expect(rows[at + 3]).toEqual([]);
     expect(rows.flat()).not.toContain("Fewer than 5 · 25");
 
     const aff = readView(
@@ -180,6 +184,24 @@ describe("analysisCsv", () => {
       "Not shown",
       "25",
     ]);
+  });
+
+  it("the headline holds only what each view's summary shows (final review I1)", async () => {
+    const m = mock();
+    for (const view of ["affected", "co-occurring", "findings"] as const) {
+      const rows = cells(await csvOf(m, view, ALL));
+      const at = rows.findIndex((r) => r[0] === "Headline");
+      expect(rows[at + 1], view).toEqual(["Patients in the group"]);
+      expect(rows[at + 2], view).toHaveLength(1);
+      expect(rows[at + 3], view).toEqual([]);
+    }
+    const prev = cells(await csvOf(m, "prevalence", ALL));
+    const p = prev.findIndex((r) => r[0] === "Headline");
+    expect(prev[p + 1]).toEqual(["Cases per 1,000", "Cases", "Patients seen"]);
+    const q = cells(await csvOf(m, "quality", ALL));
+    const at = q.findIndex((r) => r[0] === "Headline");
+    expect(q[at + 1]).toEqual(["Reviewers agreed", "Rated"]);
+    expect(q.flat()).not.toContain("Ratings agreed with");
   });
 
   it("findings: Not standardised for no name and No flag for none, as on screen", async () => {

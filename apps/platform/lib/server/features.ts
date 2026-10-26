@@ -6,6 +6,6 @@
 export const analysisSignedOff = (env: NodeJS.ProcessEnv = process.env) =>
   env.ANALYSIS_SIGNED_OFF === "true";
 
-/** The de-identified patient lists (12b), on top of the aggregates. */
+/** The de-identified patient lists, on top of the aggregates. Unused until 12b adds the patients path. */
 export const patientViewsSignedOff = (env: NodeJS.ProcessEnv = process.env) =>
   env.ANALYSIS_PATIENT_VIEWS_SIGNED_OFF === "true";

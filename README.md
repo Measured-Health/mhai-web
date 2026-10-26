@@ -266,7 +266,7 @@ Riverside Children's Hospital has "Not enough similar hospitals to compare";
 and Lakeside Community Clinic and Harbour View Hospital have counts of 1 to
 4, which read "Fewer than 5" on screen and in **Download CSV** (for example
 with the Sickle cell disease filter). A rate is hidden when what it is built
-from is. Ridgeway, Marlow and Fairhaven are small general hospitals that
+from is, and a hidden rate or share reads "Not shown". Ridgeway, Marlow and Fairhaven are small general hospitals that
 make up the remaining sample, and they show "Not connected" on
 **Connections**. Filters, scope and period live in the page only: never the
 URL, the title or browser storage. Each visit and each download is recorded

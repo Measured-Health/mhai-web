@@ -278,7 +278,7 @@ export function ColumnChart({
           </div>
           {scrolls && (
             <p className="mt-1 text-[12px] text-ink-3 sm:hidden">
-              Scroll sideways to see every month.
+              Scroll sideways to see every column.
             </p>
           )}
           <p aria-hidden className="mt-1 min-h-5 text-[12.5px] text-ink-2">

@@ -502,7 +502,7 @@ describe("ColumnChart scroller", () => {
       screen.queryByRole("group", { name: "Cases by month, scrolls sideways" }),
     ).toBeNull();
     expect(
-      screen.queryByText("Scroll sideways to see every month."),
+      screen.queryByText("Scroll sideways to see every column."),
     ).toBeNull();
   });
 
@@ -520,7 +520,7 @@ describe("ColumnChart scroller", () => {
       });
       expect(group).toHaveAttribute("tabindex", "0");
       expect(
-        screen.getByText("Scroll sideways to see every month."),
+        screen.getByText("Scroll sideways to see every column."),
       ).toBeInTheDocument();
     } finally {
       wide.mockRestore();
