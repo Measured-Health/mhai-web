@@ -13,6 +13,12 @@ export interface Column {
   mark?: string | null;
   /** Under the small-group rule: reads "Fewer than 5", draws no column, `value` is ignored. */
   hidden?: boolean;
+  /** Written instead of the value, e.g. "No data yet"; draws no column. */
+  text?: string;
+  /** A second mark on the column, e.g. the median of similar hospitals; null or absent draws none. */
+  second?: number | null;
+  /** Said for the second mark when there is none, e.g. why it isn't shown; draws nothing. */
+  secondText?: string;
 }
 
 /** One row in a BarList. */

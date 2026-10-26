@@ -11,6 +11,7 @@ import {
 } from "./contract";
 import type { EmrClient } from "./emr-contract";
 import { dayLabel } from "@mhai/ui/clearances";
+import { analysisQueryParams, type AnalysisClient } from "./analysis-contract";
 import type {
   Clearance,
   ClearancesClient,
@@ -116,6 +117,51 @@ function emrLive(ok: LiveOk): EmrClient {
     setConnectionEnabled: (x, b, o) =>
       ok(connection(x, "/enabled"), "PUT", b, o),
     testConnection: (x, o) => ok(connection(x, "/test"), "POST", undefined, o),
+  };
+}
+
+/** The trail's export is a CSV, or a zip with the cited letters. */
+const TRAIL_TYPES = ["text/csv", "application/zip"] as const;
+
+/**
+ * Platform Analysis (Plan 12, §14.12): rows `platform/analysis…` and
+ * `platform/audit/analysis-access…` of the shape table. The view's query
+ * leaves out what is not set.
+ */
+function analysisLive(ok: LiveOk, blob: LiveBlob): AnalysisClient {
+  return {
+    getAnalysisStatus: () => ok("/analysis/status"),
+    getAnalysisFilters: (scope, hospital) =>
+      ok(
+        `/analysis/filters${query({ scope, hospital: hospital ?? undefined })}`,
+      ),
+    getAnalysisView: (view, q) =>
+      ok(`/analysis/${view}?${analysisQueryParams(q)}`),
+    async recordDownload(b, o) {
+      await ok("/analysis/downloads", "POST", b, o);
+    },
+    listAnalysisAccess: (q) =>
+      ok(
+        `/audit/analysis-access${query({
+          hospital: q.hospital,
+          kind: q.kind,
+          cursor: q.cursor,
+        })}`,
+      ),
+    async exportAnalysisAccess(q) {
+      const file = await blob(
+        `/audit/analysis-access/export${query({
+          hospital: q.hospital,
+          kind: q.kind,
+        })}`,
+        TRAIL_TYPES,
+      );
+      const day = new Date().toISOString().slice(0, 10);
+      const ext = file.type.toLowerCase().startsWith("application/zip")
+        ? "zip"
+        : "csv";
+      return { filename: `mhai-analysis-access-${day}.${ext}`, blob: file };
+    },
   };
 }
 
@@ -307,5 +353,6 @@ export function createLivePlatformClient({
     ...settingsLive(ok),
     ...emrLive(ok),
     ...clearancesLive(ok, blob),
+    ...analysisLive(ok, blob),
   };
 }

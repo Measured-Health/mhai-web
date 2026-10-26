@@ -12,6 +12,10 @@ import {
   testAuthClient,
 } from "@/tests/render";
 import { TEAM_EMAILS } from "@/lib/api/fixtures";
+import {
+  handOffHospital,
+  takeHandedOffHospital,
+} from "@/lib/analysis/scope-handoff";
 
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -70,6 +74,13 @@ describe("AuthProvider", () => {
     });
     expect(signOut).toHaveBeenCalledTimes(1);
     expect(auth.current.signedOutReason).toBe("manual");
+  });
+
+  it("sign-out drops a hospital handed to Analysis, so the next person never opens on it", async () => {
+    renderWithAuth(<GrabAuth />);
+    handOffHospital("h_havana");
+    await act(() => auth.current.signOut("manual"));
+    expect(takeHandedOffHospital()).toBeNull();
   });
 
   it("a new sign-in clears the notice", async () => {

@@ -12,6 +12,7 @@ vi.mock("next/headers", () => ({ cookies: async () => jar }));
 
 import { ApiError } from "@mhai/api-client/errors";
 import { DELETE, GET, PATCH, POST, PUT } from "@/app/api/v1/[...path]/route";
+import type { AnalysisQuery } from "./analysis-contract";
 import { TooManyRowsError } from "./audit-contract";
 import { BlockedError, type PlatformClient } from "./contract";
 import { createLivePlatformClient } from "./live";
@@ -28,6 +29,19 @@ beforeEach(() => {
 });
 
 const K = { idempotencyKey: "key-1" };
+/** An Analysis query with most things unset: a null is never sent. */
+const ANALYSIS_Q: AnalysisQuery = {
+  scope: "hospital",
+  hospital: "h_havana",
+  period: "6m",
+  condition: "e11",
+  age_band: null,
+  sex: "female",
+  setting: null,
+  specialty: null,
+  location: null,
+  source: null,
+};
 const CODE = { mfa_code: "123456" };
 type Row = [
   name: string,
@@ -839,6 +853,54 @@ const ROWS: Row[] = [
     },
     SWITCH,
   ],
+  [
+    "getAnalysisStatus",
+    (c) => c.getAnalysisStatus(),
+    "GET",
+    "/api/v1/platform/analysis/status",
+    undefined,
+  ],
+  [
+    "getAnalysisFilters",
+    (c) => c.getAnalysisFilters("hospital", "h_havana"),
+    "GET",
+    "/api/v1/platform/analysis/filters?scope=hospital&hospital=h_havana",
+    undefined,
+  ],
+  [
+    "getAnalysisView",
+    (c) => c.getAnalysisView("co-occurring", ANALYSIS_Q),
+    "GET",
+    "/api/v1/platform/analysis/co-occurring?scope=hospital&hospital=h_havana&period=6m&condition=e11&sex=female",
+    undefined,
+  ],
+  [
+    "recordDownload",
+    (c) => c.recordDownload({ view: "quality", query: ANALYSIS_Q }, K),
+    "POST",
+    "/api/v1/platform/analysis/downloads",
+    { view: "quality", query: ANALYSIS_Q },
+  ],
+  [
+    "listAnalysisAccess",
+    (c) =>
+      c.listAnalysisAccess({
+        hospital: "h_havana",
+        kind: "download",
+        cursor: "50",
+      }),
+    "GET",
+    "/api/v1/platform/audit/analysis-access?hospital=h_havana&kind=download&cursor=50",
+    undefined,
+  ],
+  [
+    "exportAnalysisAccess",
+    (c) => c.exportAnalysisAccess({ hospital: "h_havana", kind: "visit" }),
+    "GET",
+    "/api/v1/platform/audit/analysis-access/export?hospital=h_havana&kind=visit",
+    undefined,
+    csv,
+  ],
 ];
 
 describe("live platform client", () => {
@@ -1268,10 +1330,117 @@ describe("live platform client", () => {
     });
   });
 
+  describe("platform Analysis", () => {
+    it("builds the view's query without nulls, for each view", async () => {
+      for (const view of [
+        "prevalence",
+        "affected",
+        "co-occurring",
+        "findings",
+        "quality",
+      ] as const)
+        await client().getAnalysisView(view, ANALYSIS_Q);
+      await client().getAnalysisView("prevalence", {
+        scope: "all",
+        hospital: null,
+        period: "12m",
+        condition: null,
+        age_band: null,
+        sex: null,
+        setting: null,
+        specialty: null,
+        location: null,
+        source: null,
+      });
+      const urls = fetchImpl.mock.calls.map((c) => c[0] as string);
+      expect(urls.slice(0, 5)).toEqual(
+        ["prevalence", "affected", "co-occurring", "findings", "quality"].map(
+          (v) =>
+            `/api/v1/platform/analysis/${v}?scope=hospital&hospital=h_havana&period=6m&condition=e11&sex=female`,
+        ),
+      );
+      expect(urls[5]).toBe(
+        "/api/v1/platform/analysis/prevalence?scope=all&period=12m",
+      );
+      for (const u of urls) expect(u).not.toMatch(/null|undefined|=&|=$/);
+    });
+
+    it("asks for the filters across hospitals with no hospital", async () => {
+      await client().getAnalysisFilters("all", null);
+      expect(call()[0]).toBe("/api/v1/platform/analysis/filters?scope=all");
+    });
+
+    it("sends the Idempotency-Key on recordDownload, and nothing comes back", async () => {
+      reply(() => new Response(null, { status: 204 }));
+      await expect(
+        client().recordDownload({ view: "findings", query: ANALYSIS_Q }, K),
+      ).resolves.toBeUndefined();
+      const [url, init] = call();
+      expect(url).toBe("/api/v1/platform/analysis/downloads");
+      expect(init.method).toBe("POST");
+      expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBe(
+        "key-1",
+      );
+      expect(JSON.parse(String(init.body))).toEqual({
+        view: "findings",
+        query: ANALYSIS_Q,
+      });
+    });
+
+    it("a refused download is the server's refusal, so no file is made", async () => {
+      reply(() => Response.json({ code: "analysis_off" }, { status: 403 }));
+      await expect(
+        client().recordDownload({ view: "findings", query: ANALYSIS_Q }, K),
+      ).rejects.toMatchObject({ status: 403, code: "analysis_off" });
+    });
+
+    it("a view refusal keeps its code", async () => {
+      reply(() => Response.json({ code: "too_many_filters" }, { status: 422 }));
+      await expect(
+        client().getAnalysisView("quality", ANALYSIS_Q),
+      ).rejects.toMatchObject({ status: 422, code: "too_many_filters" });
+    });
+
+    it("reads the trail's export as a Blob, named by day and type", async () => {
+      reply(
+        () =>
+          new Response("When,Who\r\n", {
+            headers: { "Content-Type": "text/csv" },
+          }),
+      );
+      const { filename, blob } = await client().exportAnalysisAccess({});
+      expect(call()[0]).toBe("/api/v1/platform/audit/analysis-access/export");
+      expect(blob).toBeInstanceOf(Blob);
+      expect(await blob.text()).toBe("When,Who\r\n");
+      expect(filename).toMatch(/^mhai-analysis-access-\d{4}-\d{2}-\d{2}\.csv$/);
+      reply(
+        () =>
+          new Response(new Uint8Array([80, 75]), {
+            headers: { "Content-Type": "application/zip" },
+          }),
+      );
+      const zip = await client().exportAnalysisAccess({});
+      expect(zip.filename).toMatch(/\.zip$/);
+    });
+
+    it("an export of any other type is a bad gateway", async () => {
+      reply(
+        () =>
+          new Response("<html>", { headers: { "Content-Type": "text/html" } }),
+      );
+      await expect(client().exportAnalysisAccess({})).rejects.toMatchObject({
+        status: 502,
+        code: "bad_gateway",
+      });
+    });
+  });
+
   describe("against the proxy's shape table", () => {
     beforeEach(() => {
       vi.stubEnv("PLATFORM_SESSION_SECRET", "p".repeat(40));
       vi.stubEnv("MHAI_API_URL", "http://api.test/");
+      // Analysis is dark until it is signed off.
+      vi.stubEnv("ANALYSIS_SIGNED_OFF", "true");
     });
     afterEach(() => vi.unstubAllEnvs());
     const HANDLERS = { GET, POST, PATCH, PUT, DELETE } as Record<

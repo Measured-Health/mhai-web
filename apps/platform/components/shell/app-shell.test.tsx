@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +7,7 @@ import {
   __setPlatformClientForTests,
 } from "@/lib/api/client";
 import { createMockPlatform } from "@/lib/api/mock";
+import type { AnalysisStatus } from "@/lib/api/analysis-contract";
 import type { User } from "@/lib/auth/types";
 import { ADA, AMARA, renderWithAuth } from "@/tests/render";
 import { AppShell } from "./app-shell";
@@ -32,7 +34,7 @@ const shell = (user?: User) =>
   );
 
 describe("the platform shell", () => {
-  it("the sidebar shows Platform and the ten links in order", () => {
+  it("the sidebar shows Platform and the links in order (Analysis waits for the status)", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     expect(within(nav).getByText("Platform")).toBeInTheDocument();
@@ -42,7 +44,7 @@ describe("the platform shell", () => {
     expect(links).toEqual([
       ["Hospitals", "/hospitals"],
       ["Connections", "/connections"],
-      ["Analytics", "/analytics"],
+      ["Usage", "/usage"],
       ["Clearances", "/clearances"],
       ["Legal holds", "/legal-holds"],
       ["System", "/system"],
@@ -95,21 +97,95 @@ describe("the platform shell", () => {
     ).toHaveAttribute("href", "/connections");
   });
 
-  it("the sidebar shows Analytics after Connections", () => {
+  it("the sidebar shows Usage between Connections and Clearances, linking to /usage", () => {
     shell();
     const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
     const names = within(nav)
       .getAllByRole("link")
       .map((l) => l.textContent);
-    const at = names.indexOf("Analytics");
+    const at = names.indexOf("Usage");
     expect(names[at - 1]).toBe("Connections");
     expect(names[at + 1]).toBe("Clearances");
-    expect(
-      within(nav).getByRole("link", { name: "Analytics" }),
-    ).toHaveAttribute("href", "/analytics");
+    expect(within(nav).getByRole("link", { name: "Usage" })).toHaveAttribute(
+      "href",
+      "/usage",
+    );
   });
 
-  it("the sidebar shows Clearances straight after Analytics; active on /clearances", () => {
+  it("a platform admin sees Analysis between Usage and Clearances, with Sample data, once the status is on", async () => {
+    __setPlatformClientForTests(
+      createMockPlatform({ delayMs: 0, me: () => ADA.email }),
+    );
+    pathname.value = "/analysis";
+    shell();
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    const link = await within(nav).findByRole("link", { name: /^Analysis/ });
+    expect(link).toHaveAttribute("href", "/analysis");
+    expect(link).toHaveAttribute("aria-current", "page");
+    expect(within(link).getByText("Sample data")).toBeInTheDocument();
+    const names = within(nav)
+      .getAllByRole("link")
+      .map((l) => l.getAttribute("href"));
+    expect(names.slice(0, 5)).toEqual([
+      "/hospitals",
+      "/connections",
+      "/usage",
+      "/analysis",
+      "/clearances",
+    ]);
+    __resetPlatformClientForTests();
+  });
+
+  it("an auditor never sees Analysis, and the status is never asked", async () => {
+    const m = createMockPlatform({ delayMs: 0, me: () => AMARA.email });
+    const status = vi.spyOn(m, "getAnalysisStatus");
+    __setPlatformClientForTests(m);
+    shell(AMARA);
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    await within(nav).findByRole("link", { name: "Usage" });
+    expect(within(nav).queryByRole("link", { name: /^Analysis/ })).toBeNull();
+    expect(status).not.toHaveBeenCalled();
+    __resetPlatformClientForTests();
+  });
+
+  it("with the switch off, nobody sees Analysis", async () => {
+    const m = createMockPlatform({
+      delayMs: 0,
+      me: () => ADA.email,
+      analysis: "off",
+    });
+    const status = vi.spyOn(m, "getAnalysisStatus");
+    __setPlatformClientForTests(m);
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderWithAuth(
+      <AppShell>
+        <TopBar title="Hospitals" />
+      </AppShell>,
+      { queryClient: qc },
+    );
+    // The status has been read, and said off: not merely still loading.
+    await waitFor(() =>
+      expect(qc.getQueryState(["analysis", "status"])?.status).toBe("success"),
+    );
+    expect(
+      (qc.getQueryData(["analysis", "status"]) as AnalysisStatus)
+        .aggregates_enabled,
+    ).toBe(false);
+    expect(status).toHaveBeenCalledTimes(1);
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    expect(within(nav).queryByRole("link", { name: /^Analysis/ })).toBeNull();
+    __resetPlatformClientForTests();
+  });
+
+  it("no sidebar entry says Analytics", () => {
+    shell();
+    const nav = screen.getAllByRole("navigation", { name: "Platform" })[0]!;
+    expect(within(nav).queryByText(/Analytics/)).toBeNull();
+  });
+
+  it("the sidebar shows Clearances straight after Usage; active on /clearances", () => {
     pathname.value = "/clearances";
     for (const user of [undefined, AMARA]) {
       const { unmount } = shell(user);
@@ -118,7 +194,7 @@ describe("the platform shell", () => {
         .getAllByRole("link")
         .map((l) => l.textContent);
       const at = names.indexOf("Clearances");
-      expect(names[at - 1]).toBe("Analytics");
+      expect(names[at - 1]).toBe("Usage");
       expect(names[at + 1]).toBe("Legal holds");
       const link = within(nav).getByRole("link", { name: "Clearances" });
       expect(link).toHaveAttribute("href", "/clearances");

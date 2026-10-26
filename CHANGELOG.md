@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The platform admin app's **Analytics** page is now **Usage** (at `/usage`;
+  `/analytics` redirects there). Nothing else about it changes.
+- On a phone, a chart with more columns than fit its card is now a labelled,
+  keyboard-reachable scroller that says it scrolls sideways.
 - The fonts are now served from the repository (`packages/tokens/fonts`)
   instead of being fetched from Google during `next build`, so builds work
   offline and no longer break on Google's font URLs. They look the same.
@@ -31,6 +35,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Analysis across hospitals in the platform admin app, on sample data: an
+  Analysis page after Usage with five views (Prevalence and trends, Who is
+  affected, Co-occurring conditions, Findings and alerts, MHAI quality) for
+  all hospitals or one, filters, a fair comparison with similar hospitals,
+  Chart and Table, and Download CSV that matches the screen. Counts of 1 to
+  4 read "Fewer than 5", a hidden rate or share reads "Not shown", and a view that would give one away fails closed.
+  Each visit and download is recorded first and shown in a new Analysis
+  access tab on Activity, which platform admins and auditors both read and
+  export. Auditors have no Analysis entry. It stays off in live mode until
+  clinical, privacy and legal sign-off, `ANALYSIS_SIGNED_OFF=true` and the
+  backend switch. The shared small-group guards moved to `@mhai/ui/guards`.
+  End-to-end tests cover it on desktop and phone.
 - EMR screens, on sample data: a Connections page in the platform admin app
   (list by hospital, a connection's page, Add a connection, test, switch on
   and off, write-only credentials, Activity and audit words), a Patient

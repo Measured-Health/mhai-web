@@ -28,6 +28,7 @@ export function ColumnChart({
   markLegend,
   level = 3,
   tableToggle = true,
+  secondLabel,
 }: {
   title: string;
   columns: readonly Column[];
@@ -39,24 +40,57 @@ export function ColumnChart({
   level?: 2 | 3 | 4;
   /** False when the page gives its own table view (Analysis): no "Show as table" here. */
   tableToggle?: boolean;
+  /** What a column's `second` mark is, e.g. "Median of similar hospitals". */
+  secondLabel?: string;
 }) {
   const [table, setAsTable] = useState(false);
   const asTable = tableToggle && table;
   const [active, setActive] = useState(0);
   const [focused, setFocused] = useState<string | null>(null);
   const refs = useRef<(HTMLLIElement | null)[]>([]);
+  const scroller = useRef<HTMLDivElement>(null);
+  const [scrolls, setScrolls] = useState(false);
   const titleId = useId();
   const summaryId = useId();
   const H = HEADING[level];
-  const top = Math.max(1, ...columns.map((c) => (c.hidden ? 0 : c.value)));
+  const drawn = (c: Column) => !c.hidden && c.text === undefined;
+  const hasSecond = (c: Column) =>
+    typeof c.second === "number" && Number.isFinite(c.second);
+  const top = Math.max(
+    1,
+    ...columns.map((c) => (drawn(c) ? c.value : 0)),
+    ...columns.map((c) => (hasSecond(c) ? c.second! : 0)),
+  );
   const marked = columns.some((c) => c.mark);
+  const seconds = secondLabel !== undefined && columns.some(hasSecond);
+  const written = (c: Column) =>
+    c.hidden ? FEWER_THAN_5 : (c.text ?? valueText(c.value));
   const describe = (c: Column) =>
-    `${c.label}: ${c.hidden ? FEWER_THAN_5 : valueText(c.value)}${c.mark ? `, ${c.mark}` : ""}`;
+    `${c.label}: ${written(c)}${c.mark ? `, ${c.mark}` : ""}${
+      !seconds
+        ? ""
+        : hasSecond(c)
+          ? `, ${secondLabel}: ${valueText(c.second!)}`
+          : c.secondText !== undefined
+            ? `, ${secondLabel}: ${c.secondText}`
+            : ""
+    }`;
   const last = columns.length - 1;
   // The data can shrink under a live chart (period change, kept-alive route).
   const current = Math.min(active, Math.max(0, last));
   // Keyed, so a data swap that drops the focused column drops its caption.
   const shown = columns.find((c) => c.key === focused) ?? null;
+  // On a phone a long series is wider than its card: say so. The scroller is
+  // not a tab stop of its own: the columns are focusable and focusing one
+  // scrolls it into view, so the keyboard reaches every column.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const measure = () => setScrolls(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [columns.length, asTable]);
   // A hidden route fires no blur; don't come back to a stale caption.
   useLayoutEffect(() => () => setFocused(null), []);
 
@@ -114,6 +148,11 @@ export function ColumnChart({
               <th scope="col" className="py-1 text-right font-semibold">
                 {headers[1]}
               </th>
+              {seconds && (
+                <th scope="col" className="py-1 text-right font-semibold">
+                  {secondLabel}
+                </th>
+              )}
               {marked && (
                 <th scope="col" className="py-1 pl-3 text-left font-semibold">
                   Note
@@ -128,8 +167,15 @@ export function ColumnChart({
                   {c.label}
                 </th>
                 <td className="py-1 text-right font-mono">
-                  {c.hidden ? FEWER_THAN_5 : c.value.toLocaleString("en-GB")}
+                  {c.hidden
+                    ? FEWER_THAN_5
+                    : (c.text ?? c.value.toLocaleString("en-GB"))}
                 </td>
+                {seconds && (
+                  <td className="py-1 text-right font-mono">
+                    {hasSecond(c) ? c.second!.toLocaleString("en-GB") : ""}
+                  </td>
+                )}
                 {marked && (
                   <td className="py-1 pl-3 [overflow-wrap:anywhere]">
                     {c.mark ?? ""}
@@ -144,7 +190,16 @@ export function ColumnChart({
           {/* On phones each column is at least a 44 px target and the chart
               scrolls sideways, its axis labels with it; focusing a column
               scrolls it into view. */}
-          <div className="max-sm:overflow-x-auto">
+          <div
+            ref={scroller}
+            className="max-sm:overflow-x-auto"
+            {...(scrolls
+              ? {
+                  role: "group",
+                  "aria-label": `${title}, scrolls sideways`,
+                }
+              : {})}
+          >
             <div className="max-sm:w-max max-sm:min-w-full">
               <ol
                 aria-labelledby={titleId}
@@ -165,9 +220,19 @@ export function ColumnChart({
                       setFocused(c.key);
                     }}
                     onBlur={() => setFocused(null)}
-                    className="flex h-full min-w-0 flex-1 flex-col items-center justify-end rounded-t-sm focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-mint-deep max-sm:min-w-11"
+                    className="relative flex h-full min-w-0 flex-1 flex-col items-center justify-end rounded-t-sm focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-mint-deep max-sm:min-w-11"
                   >
-                    {c.mark && !c.hidden && (
+                    {seconds && hasSecond(c) && (
+                      <span
+                        aria-hidden
+                        data-second
+                        className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-ink-2"
+                        style={{
+                          bottom: `${Math.round((c.second! * 100) / top)}%`,
+                        }}
+                      />
+                    )}
+                    {c.mark && drawn(c) && (
                       <span
                         aria-hidden
                         className="mb-0.5 text-[10px] leading-none text-warn-deep"
@@ -183,7 +248,7 @@ export function ColumnChart({
                       )}
                       style={{
                         height:
-                          c.value && !c.hidden
+                          c.value && drawn(c)
                             ? `${Math.max(2, Math.round((c.value * 100) / top))}%`
                             : 0,
                       }}
@@ -211,9 +276,23 @@ export function ColumnChart({
               </div>
             </div>
           </div>
+          {scrolls && (
+            <p className="mt-1 text-[12px] text-ink-3 sm:hidden">
+              Scroll sideways to see every column.
+            </p>
+          )}
           <p aria-hidden className="mt-1 min-h-5 text-[12.5px] text-ink-2">
             {shown ? describe(shown) : ""}
           </p>
+          {seconds && (
+            <p className="mt-1 flex items-center gap-1.5 text-[12px] text-ink-2">
+              <span
+                aria-hidden
+                className="inline-block w-4 border-t-2 border-dashed border-ink-2"
+              />
+              {secondLabel}
+            </p>
+          )}
           {marked && (
             <p className="mt-1 flex items-center gap-1.5 text-[12px] text-ink-2">
               <span aria-hidden className="text-warn-deep">

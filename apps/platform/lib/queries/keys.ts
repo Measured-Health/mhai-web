@@ -17,6 +17,7 @@ export const queryKeys = {
   settings: ["settings"] as const,
   clearances: ["clearances"] as const,
   namedAccess: ["named-access"] as const,
+  analysis: ["analysis"] as const,
 };
 
 /** The query client's defaults: memory-only cache, no retry on a 4xx. */

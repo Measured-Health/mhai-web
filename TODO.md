@@ -4,7 +4,7 @@ The frontend was called finished for the team demo on 23 Oct 2026. Everything be
 
 ## Next plans
 
-- **Plan 12: Analysis across hospitals (platform admin app).** It's designed and planned, but not built. The spec and plan are on branch `agent/platform-designs`. 12b (the drill-down for one hospital) uses Plan 11's letters that name Measured Health people.
+- **Plan 12b: the drill-down for one hospital (platform admin app).** Plan 12a (Analysis across hospitals) is built on sample data. 12b adds the de-identified patient list for one hospital; it uses Plan 11's letters that name Measured Health people. The spec and plan are on branch `agent/platform-designs`.
 - **EMR integration beyond the screens.** Plan 13 built the screens on sample data only. Still to do:
   - real connections through the backend (ADR 0003: one connector per EMR type, a FHIR R4 canonical model);
   - "Open patient record" links;
@@ -32,10 +32,17 @@ The frontend uses these on sample data. Each must be built or confirmed in mhai-
 - `POST /analysis/patients/named`, and `clearance/me` with `reason`;
 - §14.11 record connections;
 - §12 alert settings, routing and evidence;
-- §14.8 analysis across hospitals.
+- §14.12 platform Analysis across hospitals (the contract for Plan 12a, with the server requirements under "Known limits" below).
 
 ## Known limits
 
+- **Platform Analysis can still be differenced (Plan 12a).** The page hides cells and fails closed on remainders, but the server must close what a browser cannot. All three need a privacy decision (rounding, noise or query limits) before live use, and go in the sign-off pack:
+  - **Filter against breakdown.** A filtered count can be subtracted from a breakdown of the same group (the sample has 18 such cases, e.g. Harbour View, 3 months, sex Other = 3).
+  - **Multi-sum inference.** Several shown sums that each hide nothing can together give a hidden cell away.
+  - **Containment across dimensions.** A row wholly inside a row of another breakdown, with nothing in the reply to say so (a children's ward inside 0–17, a specialty seen by one sex, "no setting" inside "no ward"), gives away the rest by subtraction. These are containments the reply doesn't declare, so the server must detect and close them (the reader closes the declared whole and part pairs and their transitive closure only).
+- **Usage keeps its own local guards (`usage-guards.ts`).** Plan 12 moved the strict small-group guards to `@mhai/ui/guards`; Usage stayed on looser local helpers so its behaviour didn't change. Move it over once a decision is made on its wording.
+- **Flaky clinical test.** "typing in a filter isn't interrupted" (the named-view test) failed intermittently (seen twice) and passes when run again.
+- **CSV file prefix.** Usage downloads are still named `analytics-…`; rename to `usage-…` with the next Usage change.
 - **Analysis status line (M4).** It uses the viewer's day, not the hospital's. The server's check is the source of truth.
 - **Named view end time (M8).** The browser clock is compared with `named_until`. The server's 30-second check is the source of truth.
 - **Removed hospitals.** Edit, switch and test still work on a removed hospital's record connections; only Add is refused.

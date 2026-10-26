@@ -56,7 +56,7 @@ function hospitalOf(state: AnalyticsState, id: string): Person {
 }
 
 /**
- * The Analytics page (spec §4, layout B): What changed on the left, the
+ * The Usage page (spec §4, layout B): What changed on the left, the
  * selected change on the right, the tabs below. Each area has its own
  * "Updated {time}" and fails on its own. On phones the list shows alone;
  * a row opens the detail, with Back.
@@ -85,9 +85,29 @@ export function AnalyticsView() {
   const returnToHospital = useRef<string | null>(null);
 
   const items = state?.changes.status === "ok" ? state.changes.items : [];
+  const params = useSearchParams();
+  // A hospital page's "Usage for this hospital" (?hospital=): read once, it
+  // opens the Hospitals tab on that hospital when Usage lists it.
+  const [wantedHospital] = useState(() => params.get("hospital"));
+  const [hospitalDone, setHospitalDone] = useState(false);
+  if (wantedHospital && !hospitalDone && state) {
+    setHospitalDone(true);
+    const listed =
+      state.hospitals.status === "ok" &&
+      state.hospitals.rows.some((r) => r.hospital.id === wantedHospital);
+    if (listed) {
+      setDetail({
+        kind: "hospital",
+        id: wantedHospital,
+        measure: defaultMeasure(items, wantedHospital),
+      });
+      if (!desktop) setPhoneDetail(true);
+    }
+  }
+  const hospitalPending = !!wantedHospital && !hospitalDone;
   // The first row is selected on open, and stays selected by its id when
   // the list re-ranks (after a follow-up, say).
-  if (detail === null && items[0])
+  if (detail === null && items[0] && !hospitalPending)
     setDetail({ kind: "change", id: items[0].id });
   const onHospital = detail?.kind === "hospital";
   const selected = onHospital
@@ -114,7 +134,7 @@ export function AnalyticsView() {
 
   // A bell notification opens the page on its change (?change=). Applied
   // once per link, when the list is in; a change that has cleared says so.
-  const wanted = useSearchParams().get("change");
+  const wanted = params.get("change");
   const router = useRouter();
   const pathname = usePathname();
   // Picking something else ends the link: the note goes, and the same
@@ -166,7 +186,7 @@ export function AnalyticsView() {
 
   return (
     <>
-      <TopBar title="Analytics" sub="Every active hospital" />
+      <TopBar title="Usage" sub="Every active hospital" />
       <div className="flex-1 overflow-auto px-4 pb-10 pt-6 md:px-[26px]">
         <div className="mx-auto flex max-w-[1100px] flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -249,6 +269,7 @@ export function AnalyticsView() {
           {/* Kept mounted behind a phone's detail, so the open tab stays. */}
           <div hidden={!showList}>
             <AnalyticsTabs
+              initialTab={wantedHospital ? "hospitals" : "use"}
               state={state}
               failed={q.isError && !q.data}
               onRetry={() => void q.refetch()}

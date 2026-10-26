@@ -29,7 +29,7 @@ export function onSessionEnd(forget: () => void): void {
 }
 
 /**
- * Sign-out: cancel the notification and audit queries still in flight (the
+ * Sign-out: cancel the notification, audit and analysis queries still in flight (the
  * background polls among them), forget the module state that belongs to the
  * person, and mark every write begun so far as belonging to a finished
  * session.
@@ -38,5 +38,6 @@ export function endSessionRequests(qc: QueryClient) {
   epoch += 1;
   void qc.cancelQueries({ queryKey: queryKeys.notifications });
   void qc.cancelQueries({ queryKey: queryKeys.audit });
+  void qc.cancelQueries({ queryKey: queryKeys.analysis });
   for (const forget of forgets) forget();
 }

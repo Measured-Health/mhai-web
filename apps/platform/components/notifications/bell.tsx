@@ -74,7 +74,7 @@ function BellAndList() {
       router.push("/audit");
       return;
     }
-    router.push(`/analytics?change=${encodeURIComponent(n.change_id)}`);
+    router.push(`/usage?change=${encodeURIComponent(n.change_id)}`);
   };
 
   const body = (

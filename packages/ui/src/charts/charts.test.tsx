@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Activity } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BarList } from "./bar-list";
 import type { Column } from "./types";
 import { ColumnChart } from "./column-chart";
@@ -393,5 +393,140 @@ describe("ColumnChart", () => {
     expect(within(row).getByText("Fewer than 5")).toBeInTheDocument();
     expect(row.textContent).not.toMatch(/\b0\b/);
     expect(container.textContent).not.toContain("0 alerts");
+  });
+});
+
+describe("ColumnChart: written values and a second mark (Analysis)", () => {
+  const rates = (columns: Column[]) =>
+    render(
+      <ColumnChart
+        title="Cases per 1,000 by month"
+        columns={columns}
+        summary="s"
+        valueText={(n) => `${n} per 1,000`}
+        headers={["Month", "Cases per 1,000"]}
+        markLegend=""
+        secondLabel="Median of similar hospitals"
+      />,
+    );
+
+  it("a column's text is written instead of its value and draws no column", async () => {
+    rates([
+      { key: "1", label: "Aug 2026", value: 0, text: "No data yet" },
+      { key: "2", label: "Sep 2026", value: 0 },
+    ]);
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).toHaveAccessibleName("Aug 2026: No data yet");
+    expect(items[1]).toHaveAccessibleName("Sep 2026: 0 per 1,000");
+    expect(
+      items[0]!.querySelector("span[aria-hidden].block")!.getAttribute("style"),
+    ).toMatch(/height:\s*0/);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show as table" }),
+    );
+    expect(
+      within(screen.getByRole("row", { name: /Aug 2026/ })).getByText(
+        "No data yet",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("draws a second mark with its name and a legend, and lists it in the table", async () => {
+    rates([
+      { key: "1", label: "Aug 2026", value: 10, second: 20 },
+      { key: "2", label: "Sep 2026", value: 4, hidden: true, second: null },
+    ]);
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).toHaveAccessibleName(
+      "Aug 2026: 10 per 1,000, Median of similar hospitals: 20 per 1,000",
+    );
+    expect(items[1]).toHaveAccessibleName("Sep 2026: Fewer than 5");
+    const ticks = document.querySelectorAll("[data-second]");
+    expect(ticks).toHaveLength(1);
+    expect((ticks[0] as HTMLElement).style.bottom).toBe("100%");
+    // Scaled with the second mark, so the column is half the height.
+    expect(
+      items[0]!.querySelector("span[aria-hidden].block")!.getAttribute("style"),
+    ).toMatch(/height:\s*50%/);
+    expect(screen.getByText("Median of similar hospitals")).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show as table" }),
+    );
+    expect(
+      screen.getByRole("columnheader", { name: "Median of similar hospitals" }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("row", { name: /Aug 2026/ })).getByText("20"),
+    ).toBeInTheDocument();
+  });
+
+  it("a missing second mark can say why, with no mark drawn", () => {
+    rates([
+      { key: "1", label: "Aug 2026", value: 10, second: 20 },
+      {
+        key: "2",
+        label: "Sep 2026",
+        value: 12,
+        second: null,
+        secondText: "Not enough similar hospitals",
+      },
+    ]);
+    const items = screen.getAllByRole("listitem");
+    expect(items[1]).toHaveAccessibleName(
+      "Sep 2026: 12 per 1,000, Median of similar hospitals: Not enough similar hospitals",
+    );
+    expect(items[1]!.querySelector("[data-second]")).toBeNull();
+  });
+});
+
+describe("ColumnChart scroller", () => {
+  const cols: Column[] = [
+    { key: "1", label: "Aug 2026", value: 10 },
+    { key: "2", label: "Sep 2026", value: 12 },
+  ];
+  const chart = () =>
+    render(
+      <ColumnChart
+        title="Cases by month"
+        columns={cols}
+        summary="Two months."
+        valueText={(n) => `${n}`}
+        headers={["Month", "Cases"]}
+        markLegend=""
+      />,
+    );
+
+  it("is a plain block when the columns fit", () => {
+    chart();
+    expect(
+      screen.queryByRole("group", { name: "Cases by month, scrolls sideways" }),
+    ).toBeNull();
+    expect(
+      screen.queryByText("Scroll sideways to see every column."),
+    ).toBeNull();
+  });
+
+  it("is a labelled scroller, reached through its columns, when wider than its card", () => {
+    const wide = vi
+      .spyOn(HTMLElement.prototype, "scrollWidth", "get")
+      .mockReturnValue(600);
+    const client = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(300);
+    try {
+      chart();
+      const group = screen.getByRole("group", {
+        name: "Cases by month, scrolls sideways",
+      });
+      // No tab stop of its own: the columns are the one stop, and focusing
+      // one scrolls it into view.
+      expect(group).not.toHaveAttribute("tabindex");
+      expect(
+        screen.getByText("Scroll sideways to see every column."),
+      ).toBeInTheDocument();
+    } finally {
+      wide.mockRestore();
+      client.mockRestore();
+    }
   });
 });

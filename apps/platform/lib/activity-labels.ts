@@ -4,6 +4,10 @@ import type { ActivityAction } from "@/lib/api/contract";
 const connection = (t: string | null) =>
   t ? `the record connection “${t}”` : "the record connection";
 
+/** "on" or "off", else "on or off" (the switch's position is not known). */
+const position = (d: string | null | undefined) =>
+  d === "on" || d === "off" ? d : "on or off";
+
 /** Why a verify was refused, by its code. */
 const REFUSED: Record<string, string> = {
   same_side: "they're linked to the hospital",
@@ -12,12 +16,14 @@ const REFUSED: Record<string, string> = {
 
 /**
  * What was done, as the end of a sentence after the person's name. `reason`
- * is a refusal's code, put in words after it.
+ * is a refusal's code, put in words after it; `detail` is the position of an
+ * Analysis switch ("on" or "off").
  */
 export function actionLabel(
   a: ActivityAction,
   target?: string | null,
   reason?: string | null,
+  detail?: string | null,
 ): string {
   const t = target?.trim() || null;
   switch (a) {
@@ -163,6 +169,11 @@ export function actionLabel(
       return t
         ? `turned named access down to ${t}`
         : "turned named access down";
+    // The Analysis switches: `detail` is "on" or "off".
+    case "analysis_switched":
+      return `turned Analysis ${position(detail)}`;
+    case "patient_views_switched":
+      return `turned patient lists ${position(detail)}`;
   }
 }
 

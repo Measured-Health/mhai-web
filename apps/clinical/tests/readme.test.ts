@@ -103,8 +103,8 @@ describe("README demo instructions", () => {
     );
   });
 
-  it("documents the platform analytics demo", () => {
-    expect(readme).toMatch(/\*\*Analytics\.\*\*/);
+  it("documents the platform usage demo", () => {
+    expect(readme).toMatch(/\*\*Usage across hospitals\.\*\*/);
   });
 
   it("documents the platform clearances demo", () => {
@@ -228,5 +228,24 @@ describe("README demo instructions", () => {
     expect(readme.slice(from)).toMatch(
       /Names\s+in\s+Analysis\s+\(Show\s+names\)\s+are\s+part\s+of\s+the\s+same\s+sign-off/,
     );
+  });
+
+  it("documents the platform analysis demo", () => {
+    expect(readme).toMatch(/\*\*Analysis across hospitals\.\*\*/);
+    const section = readme.slice(
+      readme.indexOf("### Platform admin app"),
+      readme.indexOf("### Share the demo"),
+    );
+    expect(section).toMatch(/Fewer\s+than\s+5/);
+    expect(section).not.toMatch(/\blab\b/i);
+  });
+
+  it("says platform Analysis needs sign-off", () => {
+    const section = readme.slice(
+      readme.indexOf("### Platform admin app"),
+      readme.indexOf("### Share the demo"),
+    );
+    expect(section).toMatch(/ANALYSIS_SIGNED_OFF=true/);
+    expect(section).toMatch(/clinical,\s+privacy\s+and\s+legal\s+sign-off/);
   });
 });
