@@ -55,6 +55,7 @@ export async function openNav(
     | "Hospitals"
     | "Connections"
     | "Usage"
+    | "Analysis"
     | "Clearances"
     | "Legal holds"
     | "System"
@@ -68,7 +69,11 @@ export async function openNav(
     await page.getByRole("button", { name: "Open menu" }).click();
   await page
     .getByRole("navigation", { name: "Platform" })
-    .getByRole("link", { name, exact: true })
+    // Analysis carries a "Sample data" sign in its name while sample.
+    .getByRole("link", {
+      name: name === "Analysis" ? /^Analysis/ : name,
+      exact: true,
+    })
     .filter({ visible: true })
     .click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();

@@ -12,6 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { queryKeys } from "../queries/keys";
 import { endSessionRequests } from "../queries/session-end";
 import { getAuthClient } from "./client";
 import { onUnauthorized } from "./events";
@@ -144,6 +145,9 @@ export function AuthProvider({
         // Nothing fetched for this person outlives the session, and nothing
         // still in flight lands in the next person's.
         endSessionRequests(queryClient);
+        // Named on purpose (clear() below removes them too): Analysis
+        // figures, filters and its off mark never outlive the person.
+        queryClient.removeQueries({ queryKey: queryKeys.analysis });
         queryClient.clear();
         setState(SIGNED_OUT);
         setMfaPending(false);
