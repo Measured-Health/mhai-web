@@ -173,7 +173,7 @@ export function actionLabel(
     case "analysis_switched":
       return `turned Analysis ${position(detail)}`;
     case "patient_views_switched":
-      return `turned patient lists in Analysis ${position(detail)}`;
+      return `turned patient lists ${position(detail)}`;
   }
 }
 
