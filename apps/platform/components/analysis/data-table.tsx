@@ -1,34 +1,44 @@
 "use client";
 import type { ReactNode } from "react";
-import type { AGuarded } from "@/lib/api/analysis-contract";
-import { hiddenBeside, valueText } from "@/lib/analysis/labels";
-import type { GuardKind } from "@mhai/ui/guards";
+import {
+  figText,
+  type Fig,
+  type TableColumn,
+  type TableSpec,
+} from "@/lib/analysis/tables";
 import { cn } from "@mhai/ui/cn";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
 
-export type DataColumn = { key: string; label: string; numeric?: boolean };
-/**
- * A guarded figure (read in words when hidden), or plain text. `beside` is
- * the count shown next to a rate or share: hidden beside a shown count, it
- * reads "Not shown".
- */
-type GuardedCell = { g: AGuarded; kind: GuardKind; beside?: AGuarded };
-export type DataCell = string | ReactNode | GuardedCell;
+export type DataColumn = TableColumn;
+/** Words, a guarded figure (read in the screen's words), or any node. */
+export type DataCell = Fig | ReactNode;
 export type DataRow = { id: string; cells: Record<string, DataCell> };
 
-const isGuarded = (c: DataCell): c is GuardedCell =>
+const isFig = (c: DataCell): c is Exclude<Fig, string> =>
   typeof c === "object" && c !== null && "g" in c && "kind" in c;
 const show = (c: DataCell | undefined): ReactNode =>
-  c === undefined
-    ? null
-    : isGuarded(c)
-      ? ((c.beside && hiddenBeside(c.g, c.beside)) ?? valueText(c.g, c.kind))
-      : c;
+  c === undefined ? null : isFig(c) ? figText(c) : c;
+
+/** A view's tables from `tables.ts`, the same ones the CSV writes. */
+export function SpecTables({ tables }: { tables: readonly TableSpec[] }) {
+  return (
+    <>
+      {tables.map((t) => (
+        <DataTable
+          key={t.caption}
+          caption={t.caption}
+          columns={t.columns}
+          rows={t.rows}
+        />
+      ))}
+    </>
+  );
+}
 
 /**
  * A view's figures as a table on `md` and up, and as cards below it, so
- * nothing scrolls sideways on a phone. Hidden cells read "Fewer than 5" or
- * "Too few hospitals to show".
+ * nothing scrolls sideways on a phone. Hidden cells read in the screen's
+ * words: "Fewer than 5", "Not shown" or "Too few hospitals to show".
  */
 export function DataTable({
   caption,

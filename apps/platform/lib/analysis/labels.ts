@@ -30,6 +30,8 @@ export const LOCATION_NOT_RECORDED = "Location not recorded";
 export const SPECIALTY_NOT_RECORDED = "Specialty not recorded";
 export const SETTING_NOT_RECORDED = "Setting not recorded";
 export const NO_DATA = "No data yet";
+/** A hidden rate or share (spec §5.1 ruling): "Fewer than 5" is for counts. */
+export const NOT_SHOWN = "Not shown";
 export const NO_EARLIER_DATA = "No earlier data";
 /** A hidden monthly median: too few similar hospitals showed that month. */
 export const NOT_ENOUGH_PEERS = "Not enough similar hospitals";
@@ -124,6 +126,24 @@ export const conditionText = (c: ConditionRef) =>
 export const locationText = (l: LocationRef | null) =>
   l ? l.label : LOCATION_NOT_RECORDED;
 
+/** A finding's flag, in words ("No flag" for none). */
+export const FLAG_LABEL: Record<"high" | "low" | "abnormal" | "none", string> =
+  {
+    high: "High",
+    low: "Low",
+    abnormal: "Abnormal",
+    none: "No flag",
+  };
+export const flagText = (f: "high" | "low" | "abnormal" | null) =>
+  FLAG_LABEL[f ?? "none"];
+/** Alert severities, in their fixed order. */
+export const SEVERITIES = ["critical", "urgent", "info"] as const;
+export const SEVERITY_LABEL: Record<(typeof SEVERITIES)[number], string> = {
+  critical: "Critical",
+  urgent: "Urgent",
+  info: "Info",
+};
+
 export const KIND_LABEL: Record<HospitalKind, string> = {
   general: "General hospital",
   specialist: "Specialist hospital",
@@ -156,10 +176,17 @@ const grouped = (n: number) => {
 /** To one place, ".0" dropped: 12.4, 12, 1,234.6. */
 const oneDecimal = (n: number) => grouped(Math.round(n * 10) / 10);
 
-/** Hidden: too few hospitals, or fewer than 5 (a shown 1–4 count too). */
+/**
+ * Hidden: too few hospitals; a hidden rate or share reads "Not shown"; a
+ * hidden count (or a shown 1–4 count) reads "Fewer than 5".
+ */
 export function hiddenText(g: AGuarded, kind: GuardKind): string | null {
   if (g.suppressed)
-    return g.why === "too_few_hospitals" ? TOO_FEW_HOSPITALS : FEWER_THAN_5;
+    return g.why === "too_few_hospitals"
+      ? TOO_FEW_HOSPITALS
+      : kind === "rate" || kind === "share"
+        ? NOT_SHOWN
+        : FEWER_THAN_5;
   if (kind === "count" && g.value !== null && isSmallCount(g.value))
     return FEWER_THAN_5;
   return null;
@@ -188,32 +215,21 @@ export function valueText(g: AGuarded, kind: GuardKind): string {
   }
 }
 
-/** A hidden rate or share beside a count that shows: "Not shown · 25". */
-export const NOT_SHOWN = "Not shown";
-
 /** A count that reads as a number: shown, not 1–4, not empty. */
 export const countShows = (c: AGuarded) =>
   !c.suppressed && c.value !== null && !isSmallCount(c.value);
 
 /**
- * "Not shown" for a rate or share hidden by the small-group rule beside a
- * count that shows; null otherwise. "Fewer than 5" is for hidden counts
- * only. Nothing is worked out from the count.
- */
-export const hiddenBeside = (g: AGuarded, count: AGuarded): string | null =>
-  g.suppressed && g.why === undefined && countShows(count) ? NOT_SHOWN : null;
-
-/**
- * A rate or share in words with its count beside it, "12.4 per 1,000 · 25",
- * "62% · 140" or "Not shown · 25". When both read the same words (both
- * hidden), they read once.
+ * A rate or share in words with its count beside it: "12.4 per 1,000 · 25",
+ * "62% · 140", "Not shown · 25" or "Not shown · Fewer than 5". Both reading
+ * "Too few hospitals to show" read it once.
  */
 export function withCount(
   g: AGuarded,
   count: AGuarded,
   text: (g: AGuarded) => string,
 ): string {
-  const r = hiddenBeside(g, count) ?? text(g);
+  const r = text(g);
   const c = valueText(count, "count");
   return r === c ? r : `${r} · ${c}`;
 }

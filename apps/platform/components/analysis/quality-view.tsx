@@ -5,18 +5,18 @@ import {
   TOO_FEW_HOSPITALS,
   conditionText,
   countShows,
-  hiddenBeside,
   monthsText,
   valueText,
 } from "@/lib/analysis/labels";
 import type { ViewRead } from "@/lib/analysis/read";
+import { sortQuality, viewTables } from "@/lib/analysis/tables";
 import { BarList } from "@mhai/ui/charts/bar-list";
 import { FEWER_THAN_5, isSmallCount } from "@mhai/ui/small-groups";
 import { ComparisonPanel } from "./comparison-panel";
-import { DataTable } from "./data-table";
+import { SpecTables } from "./data-table";
 import { HospitalRows } from "./hospital-rows";
 import { ViewFrame, type ChartOrTable } from "./view-frame";
-import { byShownThenName, shownValue } from "./view-parts";
+import { countValue } from "./view-parts";
 
 const HEADLINE_LABEL = "Reviewers agreed";
 
@@ -41,8 +41,8 @@ export function agreementText(agreed: AGuarded, rated: AGuarded): string {
       (rated.value !== null && isSmallCount(rated.value))
       ? `${HEADLINE_LABEL}: ${FEWER_THAN_5} rated`
       : "No ratings yet";
-  const notShown = hiddenBeside(agreed, rated);
-  if (notShown) return `${HEADLINE_LABEL}: ${notShown} · ${r} rated`;
+  if (agreed.suppressed)
+    return `${HEADLINE_LABEL}: ${valueText(agreed, "share")} · ${r} rated`;
   if (agreed.value === null) return "No ratings yet";
   return `${HEADLINE_LABEL} ${valueText(agreed, "share")} of ${r} rated`;
 }
@@ -54,11 +54,7 @@ const count = (g: AGuarded) => valueText(g, "count");
 const correctionsText = (r: Row) =>
   `Corrections: ${count(r.corrections.approved)} approved, ${count(r.corrections.rejected)} rejected, ${count(r.corrections.waiting)} waiting`;
 
-/** A number that reads; null when it reads in words. */
-const countOf = (g: AGuarded) => {
-  const n = shownValue(g);
-  return n === null || isSmallCount(n) ? null : n;
-};
+const countOf = countValue;
 
 function ConditionCard({ r }: { r: Row }) {
   const id = useId();
@@ -122,11 +118,7 @@ export function QualityView({
     hospitals: ReactNode;
   } | null = null;
   if (ok) {
-    const rows = byShownThenName(
-      ok.data.by_condition,
-      (r) => countOf(r.consultations),
-      (r) => conditionText(r.condition),
-    );
+    const rows = sortQuality(ok.data.by_condition);
     const h = ok.headline;
     body = {
       summary: (
@@ -141,40 +133,7 @@ export function QualityView({
           ))}
         </ul>
       ),
-      table: (
-        <DataTable
-          caption="By condition"
-          columns={[
-            { key: "condition", label: "Condition" },
-            { key: "consultations", label: "Consultations", numeric: true },
-            { key: "high", label: "High confidence", numeric: true },
-            { key: "medium", label: "Medium confidence", numeric: true },
-            { key: "low", label: "Low confidence", numeric: true },
-            { key: "rated", label: "Rated", numeric: true },
-            { key: "agreed", label: "Reviewers agreed", numeric: true },
-            { key: "reviewers", label: "Reviewers", numeric: true },
-            { key: "approved", label: "Approved", numeric: true },
-            { key: "rejected", label: "Rejected", numeric: true },
-            { key: "waiting", label: "Waiting", numeric: true },
-          ]}
-          rows={rows.map((r) => ({
-            id: r.condition.id,
-            cells: {
-              condition: conditionText(r.condition),
-              consultations: { g: r.consultations, kind: "count" },
-              high: { g: r.confidence.high, kind: "count" },
-              medium: { g: r.confidence.medium, kind: "count" },
-              low: { g: r.confidence.low, kind: "count" },
-              rated: { g: r.rated, kind: "count" },
-              agreed: { g: r.agreement_rate, kind: "share", beside: r.rated },
-              reviewers: { g: r.reviewers, kind: "count" },
-              approved: { g: r.corrections.approved, kind: "count" },
-              rejected: { g: r.corrections.rejected, kind: "count" },
-              waiting: { g: r.corrections.waiting, kind: "count" },
-            },
-          }))}
-        />
-      ),
+      table: <SpecTables tables={viewTables("quality", ok)} />,
       comparison:
         ok.scope === "hospital" && ok.comparison ? (
           <ComparisonPanel comparison={ok.comparison} kind="share" />

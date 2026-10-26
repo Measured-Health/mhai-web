@@ -140,6 +140,13 @@ describe("MHAI quality", () => {
         .getAllByRole("cell")
         .map((x) => x.textContent!);
       expect(cards[i]).toContain(c[0]);
+      expect(cards[i]).toContain(`${c[1]} consultations`);
+      if (/^\d+%$/.test(c[6]!))
+        expect(cards[i]).toContain(`Reviewers agreed ${c[6]} of ${c[5]} rated`);
+      else if (c[6] === "Not shown" && c[5] !== "Fewer than 5")
+        expect(cards[i]).toContain(
+          `Reviewers agreed: Not shown · ${c[5]} rated`,
+        );
       expect(cards[i]).toContain(`High${c[2]}`);
       expect(cards[i]).toContain(`Medium${c[3]}`);
       expect(cards[i]).toContain(`Low${c[4]}`);

@@ -108,10 +108,10 @@ describe("valueText", () => {
     expect(valueText(FEW, "rate")).toBe("Too few hospitals to show");
   });
 
-  it("Fewer than 5", () => {
+  it("Fewer than 5 for a hidden count; Not shown for a hidden rate or share", () => {
     expect(valueText(HID, "count")).toBe("Fewer than 5");
-    expect(valueText(HID, "rate")).toBe("Fewer than 5");
-    expect(valueText(HID, "share")).toBe("Fewer than 5");
+    expect(valueText(HID, "rate")).toBe("Not shown");
+    expect(valueText(HID, "share")).toBe("Not shown");
     // A shown 1–4 still never shows.
     expect(valueText(g(3), "count")).toBe("Fewer than 5");
     expect(valueText(g(0), "count")).toBe("0");
@@ -199,7 +199,7 @@ describe("comparisonLines", () => {
     ).toBe("Last period: No earlier data");
     expect(
       comparisonLines(comparison({ previous: HID }), "rate").previous,
-    ).toBe("Last period: Fewer than 5");
+    ).toBe("Last period: Not shown");
   });
 
   it("the context line", () => {

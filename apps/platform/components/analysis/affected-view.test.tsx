@@ -10,7 +10,7 @@ import {
 import { AffectedView } from "./affected-view";
 
 const SHARE_AND_COUNT =
-  /^(?:\d+% · [\d,]+|Fewer than 5|Not shown · [\d,]+|Too few hospitals to show)$/;
+  /^(?:\d+% · [\d,]+|Not shown · Fewer than 5|Not shown · [\d,]+|Too few hospitals to show)$/;
 
 function show(read: OkRead<"affected">, mode: "chart" | "table" = "chart") {
   return render(
@@ -68,13 +68,21 @@ describe("Who is affected", () => {
       expect(screen.getByRole("list", { name: g })).toBeInTheDocument();
     for (const t of barTexts("By ward or clinic"))
       expect(t).toMatch(SHARE_AND_COUNT);
+    // One hospital: the Plan 6 age bands.
+    expect(barLabels("By age band")).toEqual([
+      "0–17",
+      "18–39",
+      "40–64",
+      "65–79",
+      "80 and over",
+    ]);
     expect(screen.queryByRole("table", { name: "By hospital" })).toBeNull();
     expect(
       screen.queryByRole("region", { name: "Compared with similar hospitals" }),
     ).toBeNull();
   });
 
-  it("a hidden share beside a shown count reads Not shown, and a hidden group reads Fewer than 5 once", async () => {
+  it("a hidden share reads Not shown, beside its count or its hidden count", async () => {
     const read = await sampleRead("affected");
     const sex = read.data.data.by_sex;
     sex[0] = {
@@ -90,7 +98,7 @@ describe("Who is affected", () => {
     show(read);
     const texts = barTexts("By sex");
     expect(texts[0]).toBe("Not shown · 25");
-    expect(texts[1]).toBe("Fewer than 5");
+    expect(texts[1]).toBe("Not shown · Fewer than 5");
   });
 
   it("hidden specialties come last whichever their size, by name", async () => {
@@ -102,7 +110,7 @@ describe("Who is affected", () => {
     show(read);
     const labels = barLabels("By specialty");
     expect(labels.at(-1)).toBe(first.specialty ?? "Specialty not recorded");
-    expect(barTexts("By specialty").at(-1)).toBe("Fewer than 5");
+    expect(barTexts("By specialty").at(-1)).toBe("Not shown · Fewer than 5");
   });
 
   it("each view has a Table with the same numbers (Who is affected)", async () => {

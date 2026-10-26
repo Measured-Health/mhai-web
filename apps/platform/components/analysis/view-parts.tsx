@@ -7,38 +7,17 @@ import { isSmallCount } from "@mhai/ui/small-groups";
 // Small pieces the Analysis views share. No hidden value is ever worked out
 // from other figures, and no order ever shows a hidden value's size.
 
-/** A number that shows; null when hidden or empty. */
-export const shownValue = (g: AGuarded): number | null =>
-  g.suppressed || g.value === null ? null : g.value;
+export { byShownThenName, countValue, shownValue } from "@/lib/analysis/tables";
 
 /**
- * Hidden under the small-group rule, so a bar writes "Fewer than 5" and
- * draws nothing: the value is hidden (not for too few hospitals) and its
- * count is hidden or 1–4. From the guards, never from the words.
+ * Hidden under the small-group rule with its count hidden too (or 1–4): the
+ * bar draws nothing and carries no note. From the guards, never the words.
  */
 export const isHiddenGroup = (g: AGuarded, count: AGuarded): boolean =>
   g.suppressed &&
   g.why === undefined &&
   ((count.suppressed && count.why === undefined) ||
     (count.value !== null && isSmallCount(count.value)));
-
-/**
- * Largest shown first; anything not shown after, by name, in either case
- * the same, so a hidden row's place says nothing about its size.
- */
-export function byShownThenName<T>(
-  rows: readonly T[],
-  value: (r: T) => number | null,
-  name: (r: T) => string,
-): T[] {
-  return [...rows].sort((a, b) => {
-    const x = value(a);
-    const y = value(b);
-    if (x !== null && y !== null && x !== y) return y - x;
-    if ((x === null) !== (y === null)) return x === null ? 1 : -1;
-    return name(a).localeCompare(name(b));
-  });
-}
 
 /** "1,240 patients in the group · Oct 2025 to Sep 2026". */
 export function GroupLine({ meta }: { meta: Meta }) {

@@ -38,6 +38,8 @@ export function HospitalLinks({ hospitalId }: { hospitalId: string }) {
           href="/analysis"
           className={linkClass}
           onClick={(e) => {
+            // A new tab or window opens Analysis as usual (All hospitals).
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
             e.preventDefault();
             handOffHospital(hospitalId);
             router.push("/analysis");

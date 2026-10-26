@@ -90,7 +90,7 @@ describe("HospitalRows", () => {
       .slice(1)
       .map((r) => within(r).getAllByRole("cell")[2]!.textContent);
     expect(cells).toEqual([
-      "Fewer than 5",
+      "Not shown · Fewer than 5",
       "50 per 1,000 · 40",
       "100 per 1,000 · 60",
       "14.3 per 1,000 · 20",

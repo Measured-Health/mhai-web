@@ -11,66 +11,56 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import type { AGuarded, FindingsData } from "@/lib/api/analysis-contract";
+import type { FindingsData } from "@/lib/api/analysis-contract";
+import { SEVERITIES, SEVERITY_LABEL, valueText } from "@/lib/analysis/labels";
 import {
-  NOT_STANDARDISED,
-  hiddenBeside,
-  valueText,
-} from "@/lib/analysis/labels";
+  ALERTS_TITLE,
+  HOSPITAL_HEADLINE,
+  alertsTotalText,
+  countValue,
+  findingKey,
+  findingText,
+  sortFindings,
+  viewTables,
+} from "@/lib/analysis/tables";
 import type { ViewRead } from "@/lib/analysis/read";
 import { BarList } from "@mhai/ui/charts/bar-list";
 import type { BarItem } from "@mhai/ui/charts/types";
-import { isSmallCount } from "@mhai/ui/small-groups";
 import { ComparisonPanel } from "./comparison-panel";
-import { DataTable } from "./data-table";
+import { SpecTables } from "./data-table";
 import { HospitalRows } from "./hospital-rows";
 import { ViewFrame, type ChartOrTable } from "./view-frame";
-import { Block, GroupLine, byShownThenName, shownValue } from "./view-parts";
+import { Block, GroupLine } from "./view-parts";
 
 export const USAGE_LINK = "See alert handling on Usage";
-const HEADLINE_LABEL = "Abnormal findings per 1,000";
 
 type Finding = FindingsData["findings"][number];
-type Flag = Finding["flag"];
-type Severity = keyof FindingsData["alerts"]["by_severity"];
+type Severity = (typeof SEVERITIES)[number];
 
-const FLAG: Record<NonNullable<Flag> | "none", [string, LucideIcon]> = {
-  high: ["High", ArrowUp],
-  low: ["Low", ArrowDown],
-  abnormal: ["Abnormal", TriangleAlert],
-  none: ["No flag", Minus],
+/** Each flag's icon; its words are `flagText`, shared with the CSV. */
+const FLAG_ICON: Record<"high" | "low" | "abnormal" | "none", LucideIcon> = {
+  high: ArrowUp,
+  low: ArrowDown,
+  abnormal: TriangleAlert,
+  none: Minus,
 };
-const flagOf = (f: Flag) => FLAG[f ?? "none"];
-const SEVERITY: [Severity, string, LucideIcon][] = [
-  ["critical", "Critical", OctagonAlert],
-  ["urgent", "Urgent", TriangleAlert],
-  ["info", "Info", Info],
-];
-
-const nameOf = (f: Finding) => f.name ?? NOT_STANDARDISED;
-/** "Potassium · High": the flag in words, never by colour alone. */
-const findingText = (f: Finding) => `${nameOf(f)} · ${flagOf(f.flag)[0]}`;
-const keyOf = (f: Finding) => `${f.name ?? "-"}|${f.flag ?? "-"}`;
-/** A count that reads as a number; null when it reads in words. */
-const countOf = (g: AGuarded) => {
-  const n = shownValue(g);
-  return n === null || isSmallCount(n) ? null : n;
+const SEVERITY_ICON: Record<Severity, LucideIcon> = {
+  critical: OctagonAlert,
+  urgent: TriangleAlert,
+  info: Info,
 };
-const rateText = (f: Finding) =>
-  hiddenBeside(f.rate.per_1000, f.patients) ??
-  valueText(f.rate.per_1000, "rate");
 
 function findingBar(f: Finding): BarItem {
-  const n = countOf(f.patients);
-  const Icon = flagOf(f.flag)[1];
+  const n = countValue(f.patients);
+  const Icon = FLAG_ICON[f.flag ?? "none"];
   return {
-    key: keyOf(f),
+    key: findingKey(f),
     label: findingText(f),
     icon: <Icon aria-hidden className="size-4 shrink-0 text-ink-2" />,
     value: n,
     text: valueText(f.patients, "count"),
     hidden: n === null && f.patients.why === undefined,
-    note: n === null ? undefined : rateText(f),
+    note: n === null ? undefined : valueText(f.rate.per_1000, "rate"),
   };
 }
 
@@ -101,12 +91,8 @@ export function FindingsView({
   } | null = null;
   if (ok) {
     const d = ok.data;
-    const findings = byShownThenName(
-      d.findings,
-      (f) => countOf(f.patients),
-      findingText,
-    );
-    const total = valueText(d.alerts.total, "count");
+    const findings = sortFindings(d.findings);
+    const total = alertsTotalText(d);
     const usage = (
       <Link
         href="/usage"
@@ -127,16 +113,17 @@ export function FindingsView({
               empty="No flagged findings."
             />
           </Block>
-          <Block title="Alerts by severity">
-            <p className="text-[13px] text-ink-2">Alerts in all: {total}</p>
+          <Block title={ALERTS_TITLE}>
+            <p className="text-[13px] text-ink-2">{total}</p>
             <BarList
-              label="Alerts by severity"
-              items={SEVERITY.map(([k, label, Icon]) => {
+              label={ALERTS_TITLE}
+              items={SEVERITIES.map((k) => {
                 const g = d.alerts.by_severity[k];
-                const n = countOf(g);
+                const n = countValue(g);
+                const Icon = SEVERITY_ICON[k];
                 return {
                   key: k,
-                  label,
+                  label: SEVERITY_LABEL[k],
                   icon: (
                     <Icon aria-hidden className="size-4 shrink-0 text-ink-2" />
                   ),
@@ -152,44 +139,8 @@ export function FindingsView({
       ),
       table: (
         <>
-          <DataTable
-            caption="Findings"
-            columns={[
-              { key: "finding", label: "Finding" },
-              { key: "flag", label: "Flag" },
-              { key: "patients", label: "Patients", numeric: true },
-              { key: "rate", label: "Per 1,000 seen", numeric: true },
-            ]}
-            rows={findings.map((f) => ({
-              id: keyOf(f),
-              cells: {
-                finding: nameOf(f),
-                flag: flagOf(f.flag)[0],
-                patients: { g: f.patients, kind: "count" },
-                rate: { g: f.rate.per_1000, kind: "rate", beside: f.patients },
-              },
-            }))}
-          />
-          <DataTable
-            caption="Alerts by severity"
-            columns={[
-              { key: "severity", label: "Severity" },
-              { key: "alerts", label: "Alerts", numeric: true },
-            ]}
-            rows={[
-              ...SEVERITY.map(([k, label]) => ({
-                id: k,
-                cells: {
-                  severity: label,
-                  alerts: {
-                    g: d.alerts.by_severity[k],
-                    kind: "count" as const,
-                  },
-                },
-              })),
-            ]}
-          />
-          <p className="text-[13px] text-ink-2">Alerts in all: {total}</p>
+          <SpecTables tables={viewTables("findings", ok)} />
+          <p className="text-[13px] text-ink-2">{total}</p>
           {usage}
         </>
       ),
@@ -199,7 +150,10 @@ export function FindingsView({
         ) : null,
       hospitals:
         ok.scope === "all" && ok.hospitals ? (
-          <HospitalRows rows={ok.hospitals} headlineLabel={HEADLINE_LABEL} />
+          <HospitalRows
+            rows={ok.hospitals}
+            headlineLabel={HOSPITAL_HEADLINE.findings!.label}
+          />
         ) : null,
     };
   }

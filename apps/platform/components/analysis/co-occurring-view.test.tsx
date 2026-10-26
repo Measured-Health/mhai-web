@@ -35,7 +35,7 @@ describe("Co-occurring conditions", () => {
     const b = p.b.name ?? "Not standardised";
     expect(pairs[0]!.textContent).toContain(`${a} + ${b}`);
     expect(pairs[0]!.textContent).toMatch(
-      new RegExp(`(\\d+%|Not shown) of people with ${a}`),
+      new RegExp(`(\\d+% of people with ${a}|Share of people with ${a}: )`),
     );
     expect(
       screen.getByText("Pairs are counted within each hospital, then added up"),
@@ -89,7 +89,9 @@ describe("Co-occurring conditions", () => {
     show(read);
     const item = items().find((li) => li.textContent!.startsWith(label))!;
     expect(item.querySelector("b")!.textContent).toBe("25");
-    expect(item.textContent).toMatch(/Not shown of people with /);
+    expect(item.textContent).toContain(
+      `Share of people with ${pairs[0]!.a.name ?? "Not standardised"}: Not shown`,
+    );
   });
 
   it("each view has a Table with the same numbers (Co-occurring)", async () => {
@@ -98,6 +100,7 @@ describe("Co-occurring conditions", () => {
     const bars = items().map((li) => ({
       label: li.querySelector("span > span")!.textContent!,
       text: li.querySelector("b")!.textContent!,
+      note: li.querySelector("span.block")?.textContent ?? null,
     }));
     unmount();
     show(read, "table");
@@ -110,11 +113,13 @@ describe("Co-occurring conditions", () => {
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(bars.length);
     rows.forEach((r, i) => {
-      const [pair, patients] = within(r)
+      const [pair, patients, share] = within(r)
         .getAllByRole("cell")
         .map((c) => c.textContent!);
       expect(pair).toBe(bars[i]!.label);
       expect(patients).toBe(bars[i]!.text);
+      // The note carries the same share, in the same words.
+      if (bars[i]!.note !== null) expect(bars[i]!.note).toContain(share);
     });
     expect(
       screen.getByText("Pairs are counted within each hospital, then added up"),
