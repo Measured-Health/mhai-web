@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  PART_PAIR_BASE,
+  PART_PAIR_BASE_COUNT,
+  PART_PAIRS,
   PART_PAIR_COUNT,
   VIEW_IDS,
+  closePairs,
   type AGuarded,
   type PartPair,
   type AnalysisPeriod,
@@ -9,7 +13,14 @@ import {
   type ScopeKind,
   type ViewId,
 } from "../api/analysis-contract";
-import { LOCATIONS, PROFILES } from "../api/analysis-fixtures";
+import {
+  LOCATIONS,
+  PROFILES,
+  allBand,
+  allId,
+  cohortOf,
+  hospitalBand,
+} from "../api/analysis-fixtures";
 import { TEAM_EMAILS } from "../api/fixtures";
 import { createMockPlatform } from "../api/mock";
 import {
@@ -222,9 +233,11 @@ const affected = fresh(function affected(scope: ScopeKind): Raw {
       by_location:
         scope === "all"
           ? null
-          : set("location", [
-              [LOCATIONS[0], 200],
-              [null, 15],
+          : // Each ward inside its setting: admitted 115, outpatient 100.
+            set("location", [
+              [LOCATIONS[0], 110],
+              [LOCATIONS[2], 100],
+              [null, 5],
             ]),
     },
   };
@@ -602,6 +615,77 @@ describe("readView: fails closed", () => {
     const o = prevalence("all");
     o.data.by_condition[0].new = g(160);
     expect(problem("prevalence", o, all())).toMatch(/new/);
+  });
+
+  it("a part of a part is checked when the middle figure is hidden (the closure, R2)", () => {
+    // Prevalence: one condition's cases hidden; the headline less its new
+    // cases is 2.
+    const p = prevalence("hospital");
+    p.data.by_condition[0].cases = dr(HID);
+    p.data.by_condition[0].rate = { count: HID, base: g(2000), per_1000: HID };
+    p.data.by_condition[0].new = g(198);
+    expect(problem("prevalence", p, one("h_havana"))).toMatch(
+      /headline\.count less condition\.new \(through condition\.cases\) leaving 1–4/,
+    );
+    // Prevalence, a condition filter: patients seen less one month's count,
+    // with the group and the headline hidden.
+    const s = prevalence("hospital");
+    s.patients = HID;
+    s.headline = { count: HID, base: g(2000), per_1000: HID };
+    for (const c of s.data.by_condition) {
+      c.cases = dr(HID);
+      c.rate = { count: HID, base: g(2000), per_1000: HID };
+      c.new = HID;
+    }
+    s.comparison = {
+      ...s.comparison,
+      available: false,
+      reason: "too_few_peers",
+      peers: 3,
+      current: HID,
+      median: HID,
+      verdict: null,
+    };
+    for (const m of s.data.series) m.median = null;
+    s.data.series[4].rate = { count: g(1997), base: HID, per_1000: HID };
+    expect(
+      problem("prevalence", s, one("h_havana", { condition: "e11" })),
+    ).toMatch(/headline\.base less series\.count/);
+  });
+
+  it("a ward is inside its setting: one ward, and all its wards together (R1)", () => {
+    const q = one("h_havana");
+    expect(problem("affected", affected("hospital"), q)).toBeNull();
+    // Outpatient 100 less the outpatient clinic 97: 3 outpatients elsewhere.
+    const a = affected("hospital");
+    a.data.by_location = [
+      { location: LOCATIONS[0], patients: dr(g(110)), share: share(110, 215) },
+      { location: LOCATIONS[2], patients: dr(g(97)), share: share(97, 215) },
+      { location: null, patients: dr(g(8)), share: share(8, 215) },
+    ];
+    expect(problem("affected", a, q)).toMatch(
+      /setting's patients outside one of its wards leaving 1–4/,
+    );
+    // Admitted 115 less both its wards (60 and 52): 3 admitted with no ward.
+    const b = affected("hospital");
+    b.data.by_location = [
+      [LOCATIONS[0], 60],
+      [LOCATIONS[1], 52],
+      [LOCATIONS[2], 95],
+      [null, 8],
+    ].map(([location, n]) => ({
+      location,
+      patients: dr(g(n as number)),
+      share: share(n as number, 215),
+    }));
+    expect(problem("affected", b, q)).toMatch(/in no shown ward leaving 1–4/);
+    // A ward over its setting fails too.
+    b.data.by_location.forEach((x: Raw, i: number) => {
+      const n = [120, 0, 95, 0][i]!;
+      x.patients = dr(g(n));
+      x.share = share(n, 215);
+    });
+    expect(problem("affected", b, q)).toMatch(/over its whole/);
   });
 
   it("a total hidden for too few hospitals that the rows give away is a shown total (N2)", () => {
@@ -1006,6 +1090,104 @@ describe("readView: lists, periods and patient fields", () => {
 
 // ---- The mock's own replies --------------------------------------------------
 
+describe("the part-pair closure", () => {
+  const names = (list: readonly PartPair[]) =>
+    list.map(
+      (p) =>
+        `${p.whole} ⊇ ${p.part}${p.within ? " (within)" : ""}${p.only ? ` (${p.only})` : ""}`,
+    );
+
+  it("declares 42 pairs and closes them to 50", () => {
+    expect(PART_PAIR_BASE_COUNT).toBe(42);
+    expect(PART_PAIR_COUNT).toBe(50);
+    for (const view of VIEW_IDS)
+      expect(names(PART_PAIRS[view])).toEqual(
+        expect.arrayContaining(names(PART_PAIR_BASE[view])),
+      );
+  });
+
+  it("holds every part of a part, by name (R1, R2)", () => {
+    const closed = (view: ViewId) => names(PART_PAIRS[view]);
+    expect(closed("prevalence")).toEqual(
+      expect.arrayContaining([
+        "headline.base ⊇ condition.new",
+        "headline.count ⊇ condition.new",
+        "patients ⊇ condition.new",
+        "headline.base ⊇ series.count",
+      ]),
+    );
+    expect(closed("affected")).toEqual(
+      expect.arrayContaining([
+        "setting.patients ⊇ ward.patients (within)",
+        "patients ⊇ ward.patients",
+        "headline.base ⊇ member.patients",
+        "headline.base ⊇ setting.patients",
+        "headline.base ⊇ ward.patients",
+      ]),
+    );
+    expect(closed("co-occurring")).toContain("headline.base ⊇ pair.patients");
+    // Findings and Quality were closed already.
+    expect(closed("findings")).toEqual(names(PART_PAIR_BASE.findings));
+    expect(closed("quality")).toEqual(names(PART_PAIR_BASE.quality));
+    const via = PART_PAIRS.prevalence.find(
+      (p) => p.whole === "headline.count" && p.part === "condition.new",
+    );
+    expect(via?.via).toEqual(["condition.cases"]);
+  });
+
+  it("is closed: A ⊇ B and B ⊇ C always give A ⊇ C", () => {
+    for (const view of VIEW_IDS) {
+      const list = PART_PAIRS[view];
+      const has = (a: string, c: string) =>
+        list.some((p) => p.whole === a && p.part === c);
+      for (const ab of list)
+        for (const bc of list)
+          if (ab.part === bc.whole)
+            expect(
+              has(ab.whole, bc.part),
+              `${view} ${ab.whole} ⊇ ${bc.part}`,
+            ).toBe(true);
+    }
+  });
+
+  it("chains through families, keeps a flag, drops a flagged twin, and refuses a cycle", () => {
+    const p = (whole: string, part: string, extra: Partial<PartPair> = {}) =>
+      ({ whole, part, rest: "", ...extra }) as PartPair;
+    const out = closePairs([
+      p("headline.base", "patients"),
+      p("patients", "headline.count"),
+      p("headline.count", "finding.patients", { only: "flagged" }),
+      p("patients", "finding.patients"),
+    ]);
+    expect(names(out)).toEqual([
+      "headline.base ⊇ patients",
+      "patients ⊇ headline.count",
+      "headline.count ⊇ finding.patients (flagged)",
+      "patients ⊇ finding.patients",
+      "headline.base ⊇ headline.count",
+      "headline.base ⊇ finding.patients",
+    ]);
+    // Item by item, then within: within.
+    const w = closePairs([
+      p("series.base", "series.count"),
+      p("series.count", "ward.patients", { within: true }),
+    ]);
+    expect(names(w)).toContain("series.base ⊇ ward.patients (within)");
+    expect(() =>
+      closePairs([
+        p("patients", "headline.count"),
+        p("headline.count", "patients"),
+      ]),
+    ).toThrow(/cycle/);
+    expect(() =>
+      closePairs([
+        p("series.base", "patients"),
+        p("patients", "headline.count"),
+      ]),
+    ).toThrow(/no item pairing/);
+  });
+});
+
 describe("the mock's replies all read, over a grid", () => {
   const PERIODS: AnalysisPeriod[] = ["3m", "6m", "12m"];
   const ALL_FILTERS: Partial<AnalysisQuery>[] = [
@@ -1095,11 +1277,17 @@ describe("the mock's replies all read, over a grid", () => {
   const shownValue = (g: AGuarded) =>
     !g.suppressed && g.value !== null ? g.value : null;
   /** A hospital's rest for a pair its reply doesn't list: none, or unknown. */
-  const SPARSE = new Set(["condition", "member", "series", "quality"]);
+  const SPARSE = new Set([
+    "condition",
+    "member",
+    "setting",
+    "series",
+    "quality",
+  ]);
 
   for (const period of PERIODS)
     it(`every part-pair of the table leaves 0 or 5+, in a reply or across scopes: ${period}`, async () => {
-      expect(PART_PAIR_COUNT).toBe(39);
+      expect(PART_PAIR_COUNT).toBe(50);
       const m = mock();
       const leaks: string[] = [];
       const figs = async (view: ViewId, q: AnalysisQuery) =>
@@ -1170,6 +1358,87 @@ describe("the mock's replies all read, over a grid", () => {
           }
         }
       }
+      expect(`${leaks.length} leaks\n${leaks.slice(0, 15).join("\n")}`).toBe(
+        "0 leaks\n",
+      );
+    });
+
+  const LENGTH: Record<AnalysisPeriod, number> = {
+    "3m": 3,
+    "6m": 6,
+    "12m": 12,
+  };
+  /** Each patient's Who is affected rows, from the sample, for a query. */
+  const rowsOfSlice = (q: AnalysisQuery): string[][] => {
+    const win = { from: 12 - LENGTH[q.period], to: 11 };
+    const across = q.scope === "all";
+    const band = across ? allBand : hospitalBand;
+    const cid = (id: string) => (across ? allId(id) : id);
+    const ids = across ? PROFILES.map((p) => p.id) : [q.hospital!];
+    return ids.flatMap((h) =>
+      cohortOf(h)
+        .filter(
+          (p) =>
+            (q.sex === null || p.sex === q.sex) &&
+            (q.setting === null || p.setting === q.setting) &&
+            (q.specialty === null || p.specialty === q.specialty) &&
+            (q.location === null || p.location === q.location) &&
+            (q.source === null || p.source === q.source) &&
+            (q.age_band === null || band(p.age) === q.age_band) &&
+            p.visits.some((m) => m >= win.from && m <= win.to) &&
+            (q.condition === null ||
+              p.conditions.some(
+                (c) => c.onset <= win.to && cid(c.id) === q.condition,
+              )),
+        )
+        .map((p) => [
+          `by_age:${band(p.age)}`,
+          `by_sex:${p.sex}`,
+          `by_setting:${p.setting}`,
+          `by_specialty:${p.specialty}`,
+          ...(across ? [] : [`by_location:${p.location}`]),
+        ]),
+    );
+  };
+
+  for (const period of PERIODS)
+    it(`a row wholly inside a row of another breakdown leaves 0 or 5+ (R3): ${period}`, async () => {
+      const m = mock();
+      const leaks: string[] = [];
+      let checked = 0;
+      const queries = [
+        ...ALL_FILTERS.map((f) => all({ period, ...f })),
+        ...PROFILES.flatMap((p) =>
+          ONE_FILTERS(p.id).map((f) => one(p.id, { period, ...f })),
+        ),
+      ];
+      for (const q of queries) {
+        const raw = (await m.getAnalysisView("affected", q)) as Raw;
+        const shownRows = new Map<string, number>();
+        for (const [name, label] of [
+          ["by_age", "band"],
+          ["by_sex", "sex"],
+          ["by_setting", "setting"],
+          ["by_specialty", "specialty"],
+          ["by_location", "location"],
+        ] as const)
+          for (const x of raw.data[name] ?? []) {
+            const v = x[label];
+            const n = shownValue(x.patients);
+            if (n !== null) shownRows.set(`${name}:${v?.id ?? v}`, n);
+          }
+        const patients = rowsOfSlice(q);
+        for (const [a, na] of shownRows)
+          for (const [b, nb] of shownRows) {
+            if (a.split(":")[0] === b.split(":")[0]) continue;
+            const inA = patients.filter((p) => p.includes(a));
+            if (inA.length === 0 || !inA.every((p) => p.includes(b))) continue;
+            checked++;
+            if (small(nb - na))
+              leaks.push(`${JSON.stringify(q)} ${b} − ${a}: ${nb - na}`);
+          }
+      }
+      expect(checked).toBeGreaterThan(0);
       expect(`${leaks.length} leaks\n${leaks.slice(0, 15).join("\n")}`).toBe(
         "0 leaks\n",
       );

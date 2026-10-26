@@ -38,6 +38,7 @@ import {
 import { SMALL_GROUP_MIN, isSmallCount } from "@mhai/ui/small-groups";
 import {
   PART_PAIRS,
+  familyOfFigure,
   type Figure,
   type PartPair,
 } from "../api/analysis-contract";
@@ -846,6 +847,8 @@ export type FigureItem = {
   across: string | null;
   value: AGuarded;
   flagged: boolean;
+  /** The key of the item this one sits inside (a ward's setting row). */
+  within?: string;
 };
 
 const icd3 = (c: Obj) => (isStr(c.icd10) ? c.icd10.slice(0, 3) : String(c.id));
@@ -865,9 +868,12 @@ export function figuresOf(raw: unknown): Map<Figure, FigureItem[]> {
     across: string | null,
     value: unknown,
     flagged = false,
+    within?: string,
   ) => {
     const list = out.get(f) ?? [];
-    list.push({ key, across, value: value as AGuarded, flagged });
+    const item: FigureItem = { key, across, value: value as AGuarded, flagged };
+    if (within !== undefined) item.within = within;
+    list.push(item);
     out.set(f, list);
   };
   const head = r.headline as Obj;
@@ -893,12 +899,12 @@ export function figuresOf(raw: unknown): Map<Figure, FigureItem[]> {
     }
   }
   if (r.view === "affected")
-    for (const [name, label] of [
-      ["by_age", "band"],
-      ["by_sex", "sex"],
-      ["by_setting", "setting"],
-      ["by_specialty", "specialty"],
-      ["by_location", "location"],
+    for (const [name, label, fig] of [
+      ["by_age", "band", "member.patients"],
+      ["by_sex", "sex", "member.patients"],
+      ["by_setting", "setting", "setting.patients"],
+      ["by_specialty", "specialty", "member.patients"],
+      ["by_location", "location", "ward.patients"],
     ] as const)
       for (const x of (d[name] ?? []) as Obj[]) {
         const v = x[label];
@@ -909,7 +915,10 @@ export function figuresOf(raw: unknown): Map<Figure, FigureItem[]> {
             : name === "by_age" && !SHARED_BANDS.includes(id)
               ? null
               : `${name}:${id}`;
-        add("member.patients", `${name}:${id}`, shared, x.patients);
+        // A ward sits inside its setting's row (LocationRef.setting).
+        const within =
+          isObj(v) && isStr(v.setting) ? `by_setting:${v.setting}` : undefined;
+        add(fig, `${name}:${id}`, shared, x.patients, false, within);
       }
   if (r.view === "co-occurring")
     for (const x of (d.pairs ?? []) as Obj[]) {
@@ -942,13 +951,12 @@ export function figuresOf(raw: unknown): Map<Figure, FigureItem[]> {
   return out;
 }
 
-/** The family a figure belongs to, or null for a single figure. */
-export const familyOfFigure = (f: Figure) =>
-  f === "patients" || f.startsWith("headline.") ? null : f.split(".")[0];
+export { familyOfFigure };
 
 /**
  * Each instance of each pair of a view, as [whole, part] items: one family
- * pairs item by item, a family part under a single whole pairs every item.
+ * pairs item by item, a family part under a single whole pairs every item,
+ * and a `within` part pairs with the whole item it sits inside.
  */
 export function pairInstances(
   view: ViewId,
@@ -960,9 +968,13 @@ export function pairInstances(
     const parts = (figs.get(p.part) ?? []).filter(
       (x) => p.only !== "flagged" || x.flagged,
     );
-    const same = familyOfFigure(p.whole) !== null;
+    const family = familyOfFigure(p.whole) !== null;
     for (const part of parts) {
-      const whole = same ? wholes.find((w) => w.key === part.key) : wholes[0];
+      const whole = p.within
+        ? wholes.find((w) => w.key === part.within)
+        : family
+          ? wholes.find((w) => w.key === part.key)
+          : wholes[0];
       if (whole) out.push({ pair: p, whole, part });
     }
   }
@@ -995,6 +1007,22 @@ function pairsOk(view: ViewId, v: Obj, c: ViewCtx) {
     const where = `${x.pair.whole} ⊇ ${x.pair.part}${x.part.key ? ` ${x.part.key}` : ""}`;
     need(val(p) <= val(w), where, "a part over its whole");
     need(!isSmallCount(val(w) - val(p)), where, `${x.pair.rest} leaving 1–4`);
+  }
+  // A setting less all its shown wards: its patients in no shown ward.
+  for (const s of figs.get("setting.patients") ?? []) {
+    if (!shown(s.value)) continue;
+    const wards = (figs.get("ward.patients") ?? []).filter(
+      (x) => x.within === s.key && shown(x.value),
+    );
+    if (wards.length < 2) continue;
+    const rest = val(s.value) - wards.reduce((n, x) => n + val(x.value), 0);
+    const where = `setting.patients ⊇ its wards ${s.key}`;
+    need(rest >= 0, where, "wards over their setting");
+    need(
+      !isSmallCount(rest),
+      where,
+      "a setting's patients in no shown ward leaving 1–4",
+    );
   }
 }
 

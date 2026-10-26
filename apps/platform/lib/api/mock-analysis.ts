@@ -49,6 +49,8 @@ import {
   CONDITIONS,
   EXCLUDED,
   LOCATIONS,
+  allBand,
+  hospitalBand,
   MONTHS,
   PROFILES,
   SPECIALTIES,
@@ -117,26 +119,6 @@ const round = (x: number, places: number) => {
   const f = 10 ** places;
   return Math.round(x * f) / f;
 };
-const allBand = (age: number): AllAgeBand =>
-  age < 20
-    ? "0-19"
-    : age < 40
-      ? "20-39"
-      : age < 60
-        ? "40-59"
-        : age < 80
-          ? "60-79"
-          : "80+";
-const hospitalBand = (age: number): HospitalAgeBand =>
-  age < 18
-    ? "0-17"
-    : age < 40
-      ? "18-39"
-      : age < 65
-        ? "40-64"
-        : age < 80
-          ? "65-79"
-          : "80+";
 
 // --- hiding, the way the server must ---
 
@@ -361,6 +343,20 @@ function tally(h: string, map: ScopeKind, f: Filters, win: Win): Rec {
     add(`set:${p.setting ?? "-"}`);
     add(`spec:${p.specialty ?? "-"}`);
     add(`loc:${p.location ?? "-"}`);
+    // Rows of two breakdowns at once, to find one row wholly inside another.
+    const rows = [
+      `age:${band(p.age)}`,
+      `sex:${p.sex}`,
+      `set:${p.setting ?? "-"}`,
+      `spec:${p.specialty ?? "-"}`,
+      ...(map === "hospital" ? [`loc:${p.location ?? "-"}`] : []),
+    ];
+    rows.forEach((a, i) => {
+      for (const b of rows.slice(i + 1)) add(crossKey(a, b));
+    });
+    // A setting's patients with no recorded ward: never sent, but its wards
+    // leave them by subtraction.
+    if (map === "hospital" && p.setting && !p.location) add(`lx:${p.setting}`);
     // Co-occurring: pairs within this one hospital, never with an unnamed one.
     const ids = [
       ...new Set(known.map((c) => cid(c.id)).filter((id) => id !== UNMAPPED)),
@@ -536,7 +532,7 @@ function restOf(k: string): { count: string; base: string } | null {
   return { count: k.slice(2, at), base: k.slice(at + 1) };
 }
 
-type Item = { item: string; key: string; flagged: boolean };
+type Item = { item: string; key: string; flagged: boolean; within?: string };
 /** A figure's cells in one owner's counts, item by item. */
 function figureCells(view: ViewId, f: Figure, v: Rec, map: ScopeKind): Item[] {
   const one = (key: string): Item[] => [{ item: "", key, flagged: false }];
@@ -573,15 +569,20 @@ function figureCells(view: ViewId, f: Figure, v: Rec, map: ScopeKind): Item[] {
     case "condition.new":
       return each("c:", (id) => `n:${id}`);
     case "member.patients":
-      return [
-        "age:",
-        "sex:",
-        "set:",
-        "spec:",
-        ...(map === "hospital" ? ["loc:"] : []),
-      ]
+      return ["age:", "sex:", "spec:"]
         .flatMap((p) => keys(p))
         .map((k) => ({ item: k, key: k, flagged: false }));
+    case "setting.patients":
+      return keys("set:").map((k) => ({ item: k, key: k, flagged: false }));
+    case "ward.patients": {
+      if (map !== "hospital") return [];
+      return keys("loc:").map((k) => {
+        const s = LOCATIONS.find((l) => `loc:${l.id}` === k)?.setting;
+        const it: Item = { item: k, key: k, flagged: false };
+        if (s) it.within = `set:${s}`;
+        return it;
+      });
+    }
     case "pair.patients":
       return keys("p:").map((k) => ({ item: k, key: k, flagged: false }));
     case "finding.patients":
@@ -626,15 +627,51 @@ function pairSums(v: Rec, map: ScopeKind, rows: boolean): Sum[] {
       const same = !rows && wholes.length > 0 && wholes[0]!.item !== "";
       for (const part of figureCells(view, p.part, v, map)) {
         if (p.only === "flagged" && !part.flagged) continue;
-        const whole = same
-          ? wholes.find((w) => w.item === part.item)
-          : wholes[0];
+        const whole = p.within
+          ? wholes.find((w) => w.item === part.within)
+          : same
+            ? wholes.find((w) => w.item === part.item)
+            : wholes[0];
         if (!whole || whole.key === part.key) continue;
         const rk = restKey(part.key, whole.key);
         out.set(rk, [whole.key, [part.key, rk]]);
       }
     }
   return [...out.values()];
+}
+
+/** Patients in two breakdown rows (of different breakdowns) at once. */
+const crossKey = (a: string, b: string) => `x:${a}&${b}`;
+const CROSS_DIMS = ["age:", "sex:", "set:", "spec:", "loc:"] as const;
+
+/**
+ * A row wholly inside a row of another breakdown in these counts (a
+ * children's ward inside 0–17, a specialty seen by one sex): the two shown
+ * together leave the rest by subtraction, so it is a part-pair rest too.
+ * This is in the data, not the contract, so the reader can't know it; the
+ * sample (like the server) finds and closes it. A ward inside its own
+ * setting is a declared pair as well; "no setting" inside "no ward" is not.
+ */
+function containedSums(v: Rec, map: ScopeKind): Sum[] {
+  const dims = CROSS_DIMS.filter((d) => map === "hospital" || d !== "loc:");
+  const rows = dims.map((d) =>
+    Object.keys(v).filter((k) => k.startsWith(d) && (v[k] ?? 0) > 0),
+  );
+  const out: Sum[] = [];
+  rows.forEach((as, i) => {
+    for (const bs of rows.slice(i + 1))
+      for (const a of as)
+        for (const b of bs) {
+          const both = v[crossKey(a, b)] ?? 0;
+          for (const [part, whole] of [
+            [a, b],
+            [b, a],
+          ] as const)
+            if (both === v[part] && v[whole]! > v[part]!)
+              out.push([whole, [part, restKey(part, whole)]]);
+        }
+  });
+  return out;
 }
 
 function sumsOf(v: Rec, map: ScopeKind, condition: string | null): Sum[] {
@@ -646,11 +683,18 @@ function sumsOf(v: Rec, map: ScopeKind, condition: string | null): Sum[] {
     ["group", [...SPECIALTIES, "-"].map((s) => `spec:${s}`)],
     ["al:total", ["al:critical", "al:urgent", "al:info"]],
   ];
-  if (map === "hospital")
+  if (map === "hospital") {
     out.push([
       "group",
       [...LOCATIONS.map((l) => l.id), "-"].map((l) => `loc:${l}`),
     ]);
+    // A setting's row is its wards and its patients with no ward.
+    for (const s of SETTINGS) {
+      const wards = LOCATIONS.filter((l) => l.setting === s);
+      if (wards.length > 0)
+        out.push([`set:${s}`, [...wards.map((l) => `loc:${l.id}`), `lx:${s}`]]);
+    }
+  }
   const ids = Object.keys(v)
     .filter((k) => k.startsWith("q:") && k.endsWith(":cons"))
     .map((k) => k.slice(2, -5));
@@ -667,6 +711,7 @@ function sumsOf(v: Rec, map: ScopeKind, condition: string | null): Sum[] {
   );
   // A whole shown beside its part publishes the rest (PART_PAIRS).
   out.push(...pairSums(v, map, false));
+  out.push(...containedSums(v, map));
   // The same figure under two names.
   const pa = Object.keys(v).filter((k) => k.startsWith("pa:"));
   if (condition === null) {
@@ -712,6 +757,8 @@ function hospitalKey(k: string): string | null {
     case "age":
       return k === "age:80+" ? k : null;
     case "loc":
+    case "lx":
+    case "x":
       return null;
     default:
       return k;

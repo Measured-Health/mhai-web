@@ -297,9 +297,11 @@ export interface AnalysisClient {
 /**
  * A figure in a reply. One figure: `patients`, `headline.*`. A family of
  * figures, one per item: `series.*` (per month), `condition.*` (Prevalence's
- * conditions), `quality.*` (Quality's conditions), `member.patients` (every
- * Who is affected breakdown row), `pair.patients`, `finding.patients`, and
- * `row.*` (the hospital rows across hospitals).
+ * conditions), `quality.*` (Quality's conditions), `member.patients` (Who is
+ * affected's age, sex and specialty rows), `setting.patients` (its setting
+ * rows), `ward.patients` (its ward rows, one hospital only),
+ * `pair.patients`, `finding.patients`, and `row.*` (the hospital rows
+ * across hospitals).
  */
 export type Figure =
   | "patients"
@@ -310,6 +312,8 @@ export type Figure =
   | "condition.cases"
   | "condition.new"
   | "member.patients"
+  | "setting.patients"
+  | "ward.patients"
   | "pair.patients"
   | "finding.patients"
   | "quality.consultations"
@@ -320,10 +324,16 @@ export type Figure =
   | "row.base";
 
 /**
- * `part` is inside `whole`. Two figures of one family pair item by item
- * (the same month, condition or row); a family part under a single whole
- * pairs each item with it. `flagged`: only items with a flag (a finding is
- * inside the flagged-finding headline only when it is flagged).
+ * `part` is inside `whole`. How their items pair:
+ * - a single whole: each part item sits inside it;
+ * - two figures of one family, or `item`: the same item (month, condition,
+ *   row) of each;
+ * - `within`: a part item sits inside the whole item its `within` key names
+ *   (a ward inside its `LocationRef.setting`).
+ *
+ * `flagged`: only part items with a flag (a finding is inside the flagged-
+ * finding headline only when it is flagged). `via`: the figures a closed
+ * pair goes through (none for a declared one).
  */
 export type PartPair = {
   whole: Figure;
@@ -331,6 +341,8 @@ export type PartPair = {
   /** What the rest counts, in words. */
   rest: string;
   only?: "flagged";
+  within?: true;
+  via?: readonly Figure[];
 };
 
 const pair = (whole: Figure, part: Figure, rest: string): PartPair => ({
@@ -349,7 +361,11 @@ const ROWS: readonly PartPair[] = [
   pair("row.size", "row.count", "a hospital's patients seen less its headline"),
 ];
 
-export const PART_PAIRS: Record<ViewId, readonly PartPair[]> = {
+/**
+ * The declared pairs: every figure directly inside another, per view.
+ * `PART_PAIRS` is their transitive closure.
+ */
+export const PART_PAIR_BASE: Record<ViewId, readonly PartPair[]> = {
   prevalence: [
     ...SEEN,
     pair("series.base", "series.count", "a month's rate complement"),
@@ -365,6 +381,17 @@ export const PART_PAIRS: Record<ViewId, readonly PartPair[]> = {
   affected: [
     ...SEEN,
     pair("patients", "member.patients", "the group less one of its rows"),
+    pair("patients", "setting.patients", "the group less one setting"),
+    // A ward may have no setting, and "no recorded ward" has none.
+    pair("patients", "ward.patients", "the group less one ward"),
+    {
+      ...pair(
+        "setting.patients",
+        "ward.patients",
+        "a setting's patients outside one of its wards",
+      ),
+      within: true,
+    },
     ...ROWS,
   ],
   "co-occurring": [
@@ -399,8 +426,79 @@ export const PART_PAIRS: Record<ViewId, readonly PartPair[]> = {
     pair("row.base", "row.count", "a hospital's headline complement"),
   ],
 };
-/** How many pairs the table declares, over every view. */
-export const PART_PAIR_COUNT = Object.values(PART_PAIRS).reduce(
-  (n, l) => n + l.length,
-  0,
-);
+
+/** The family a figure belongs to, or null for a single figure. */
+export const familyOfFigure = (f: Figure): string | null =>
+  f === "patients" || f.startsWith("headline.") ? null : f.split(".")[0]!;
+
+const pairId = (p: PartPair) =>
+  `${p.whole}>${p.part}${p.within ? "~in" : ""}${p.only ? `~${p.only}` : ""}`;
+
+/**
+ * A ⊇ B and B ⊇ C give A ⊇ C. Throws on a chain whose item pairing it
+ * can't state (a family over a single figure, `within` then anything, a
+ * `flagged` middle family), and on a cycle.
+ */
+function compose(ab: PartPair, bc: PartPair): PartPair {
+  const a = ab.whole;
+  const b = ab.part;
+  const c = bc.part;
+  const say = `${a} ⊇ ${b} ⊇ ${c}`;
+  if (a === c) throw new Error(`part-pair cycle: ${say}`);
+  if (ab.only && familyOfFigure(b) !== null)
+    throw new Error(`part-pair chain through a flagged family: ${say}`);
+  const out: PartPair = {
+    whole: a,
+    part: c,
+    rest: `${a} less ${c} (through ${b})`,
+    via: [...(ab.via ?? []), b, ...(bc.via ?? [])],
+  };
+  if (bc.only) out.only = bc.only;
+  if (familyOfFigure(a) === null) return out;
+  // A family whole: its items pair with B's item by item (or B's within A's).
+  if (familyOfFigure(b) === null || ab.within)
+    throw new Error(`part-pair chain with no item pairing: ${say}`);
+  // Item by item twice is item by item; item by item, then within, is within.
+  if (bc.within) out.within = true;
+  return out;
+}
+
+/**
+ * The transitive closure of a list of pairs: every declared pair, then
+ * every chain of them, once. A pair already there without `flagged`
+ * covers its `flagged` twin.
+ */
+export function closePairs(base: readonly PartPair[]): PartPair[] {
+  const out = new Map<string, PartPair>();
+  const put = (p: PartPair) => {
+    const plain = pairId({ ...p, only: undefined });
+    if (out.has(pairId(p)) || (p.only && out.has(plain))) return false;
+    if (!p.only) out.delete(pairId({ ...p, only: "flagged" }));
+    out.set(pairId(p), p);
+    return true;
+  };
+  for (const p of base) put(p);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    const list = [...out.values()];
+    for (const ab of list)
+      for (const bc of list)
+        if (ab.part === bc.whole && put(compose(ab, bc))) grew = true;
+  }
+  return [...out.values()];
+}
+
+/** Every figure inside another, per view: the closure of `PART_PAIR_BASE`. */
+export const PART_PAIRS: Record<ViewId, readonly PartPair[]> = {
+  prevalence: closePairs(PART_PAIR_BASE.prevalence),
+  affected: closePairs(PART_PAIR_BASE.affected),
+  "co-occurring": closePairs(PART_PAIR_BASE["co-occurring"]),
+  findings: closePairs(PART_PAIR_BASE.findings),
+  quality: closePairs(PART_PAIR_BASE.quality),
+};
+const countOf = (t: Record<ViewId, readonly PartPair[]>) =>
+  Object.values(t).reduce((n, l) => n + l.length, 0);
+/** How many pairs are declared, and how many the closure holds. */
+export const PART_PAIR_BASE_COUNT = countOf(PART_PAIR_BASE);
+export const PART_PAIR_COUNT = countOf(PART_PAIRS);
