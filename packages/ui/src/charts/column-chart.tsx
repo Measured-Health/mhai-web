@@ -28,6 +28,7 @@ export function ColumnChart({
   markLegend,
   level = 3,
   tableToggle = true,
+  secondLabel,
 }: {
   title: string;
   columns: readonly Column[];
@@ -39,6 +40,8 @@ export function ColumnChart({
   level?: 2 | 3 | 4;
   /** False when the page gives its own table view (Analysis): no "Show as table" here. */
   tableToggle?: boolean;
+  /** What a column's `second` mark is, e.g. "Median of similar hospitals". */
+  secondLabel?: string;
 }) {
   const [table, setAsTable] = useState(false);
   const asTable = tableToggle && table;
@@ -48,10 +51,22 @@ export function ColumnChart({
   const titleId = useId();
   const summaryId = useId();
   const H = HEADING[level];
-  const top = Math.max(1, ...columns.map((c) => (c.hidden ? 0 : c.value)));
+  const drawn = (c: Column) => !c.hidden && c.text === undefined;
+  const hasSecond = (c: Column) =>
+    typeof c.second === "number" && Number.isFinite(c.second);
+  const top = Math.max(
+    1,
+    ...columns.map((c) => (drawn(c) ? c.value : 0)),
+    ...columns.map((c) => (hasSecond(c) ? c.second! : 0)),
+  );
   const marked = columns.some((c) => c.mark);
+  const seconds = secondLabel !== undefined && columns.some(hasSecond);
+  const written = (c: Column) =>
+    c.hidden ? FEWER_THAN_5 : (c.text ?? valueText(c.value));
   const describe = (c: Column) =>
-    `${c.label}: ${c.hidden ? FEWER_THAN_5 : valueText(c.value)}${c.mark ? `, ${c.mark}` : ""}`;
+    `${c.label}: ${written(c)}${c.mark ? `, ${c.mark}` : ""}${
+      seconds && hasSecond(c) ? `, ${secondLabel}: ${valueText(c.second!)}` : ""
+    }`;
   const last = columns.length - 1;
   // The data can shrink under a live chart (period change, kept-alive route).
   const current = Math.min(active, Math.max(0, last));
@@ -114,6 +129,11 @@ export function ColumnChart({
               <th scope="col" className="py-1 text-right font-semibold">
                 {headers[1]}
               </th>
+              {seconds && (
+                <th scope="col" className="py-1 text-right font-semibold">
+                  {secondLabel}
+                </th>
+              )}
               {marked && (
                 <th scope="col" className="py-1 pl-3 text-left font-semibold">
                   Note
@@ -128,8 +148,15 @@ export function ColumnChart({
                   {c.label}
                 </th>
                 <td className="py-1 text-right font-mono">
-                  {c.hidden ? FEWER_THAN_5 : c.value.toLocaleString("en-GB")}
+                  {c.hidden
+                    ? FEWER_THAN_5
+                    : (c.text ?? c.value.toLocaleString("en-GB"))}
                 </td>
+                {seconds && (
+                  <td className="py-1 text-right font-mono">
+                    {hasSecond(c) ? c.second!.toLocaleString("en-GB") : ""}
+                  </td>
+                )}
                 {marked && (
                   <td className="py-1 pl-3 [overflow-wrap:anywhere]">
                     {c.mark ?? ""}
@@ -165,9 +192,19 @@ export function ColumnChart({
                       setFocused(c.key);
                     }}
                     onBlur={() => setFocused(null)}
-                    className="flex h-full min-w-0 flex-1 flex-col items-center justify-end rounded-t-sm focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-mint-deep max-sm:min-w-11"
+                    className="relative flex h-full min-w-0 flex-1 flex-col items-center justify-end rounded-t-sm focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-mint-deep max-sm:min-w-11"
                   >
-                    {c.mark && !c.hidden && (
+                    {seconds && hasSecond(c) && (
+                      <span
+                        aria-hidden
+                        data-second
+                        className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-ink-2"
+                        style={{
+                          bottom: `${Math.round((c.second! * 100) / top)}%`,
+                        }}
+                      />
+                    )}
+                    {c.mark && drawn(c) && (
                       <span
                         aria-hidden
                         className="mb-0.5 text-[10px] leading-none text-warn-deep"
@@ -183,7 +220,7 @@ export function ColumnChart({
                       )}
                       style={{
                         height:
-                          c.value && !c.hidden
+                          c.value && drawn(c)
                             ? `${Math.max(2, Math.round((c.value * 100) / top))}%`
                             : 0,
                       }}
@@ -214,6 +251,15 @@ export function ColumnChart({
           <p aria-hidden className="mt-1 min-h-5 text-[12.5px] text-ink-2">
             {shown ? describe(shown) : ""}
           </p>
+          {seconds && (
+            <p className="mt-1 flex items-center gap-1.5 text-[12px] text-ink-2">
+              <span
+                aria-hidden
+                className="inline-block w-4 border-t-2 border-dashed border-ink-2"
+              />
+              {secondLabel}
+            </p>
+          )}
           {marked && (
             <p className="mt-1 flex items-center gap-1.5 text-[12px] text-ink-2">
               <span aria-hidden className="text-warn-deep">
