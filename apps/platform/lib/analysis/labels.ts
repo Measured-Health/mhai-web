@@ -188,6 +188,36 @@ export function valueText(g: AGuarded, kind: GuardKind): string {
   }
 }
 
+/** A hidden rate or share beside a count that shows: "Not shown · 25". */
+export const NOT_SHOWN = "Not shown";
+
+/** A count that reads as a number: shown, not 1–4, not empty. */
+export const countShows = (c: AGuarded) =>
+  !c.suppressed && c.value !== null && !isSmallCount(c.value);
+
+/**
+ * "Not shown" for a rate or share hidden by the small-group rule beside a
+ * count that shows; null otherwise. "Fewer than 5" is for hidden counts
+ * only. Nothing is worked out from the count.
+ */
+export const hiddenBeside = (g: AGuarded, count: AGuarded): string | null =>
+  g.suppressed && g.why === undefined && countShows(count) ? NOT_SHOWN : null;
+
+/**
+ * A rate or share in words with its count beside it, "12.4 per 1,000 · 25",
+ * "62% · 140" or "Not shown · 25". When both read the same words (both
+ * hidden), they read once.
+ */
+export function withCount(
+  g: AGuarded,
+  count: AGuarded,
+  text: (g: AGuarded) => string,
+): string {
+  const r = hiddenBeside(g, count) ?? text(g);
+  const c = valueText(count, "count");
+  return r === c ? r : `${r} · ${c}`;
+}
+
 /** A headline per 1,000 as a share (Quality's agreement rate). */
 const perThousandAsShare = (g: AGuarded): AGuarded =>
   g.value === null ? g : { ...g, value: g.value / 1000 };

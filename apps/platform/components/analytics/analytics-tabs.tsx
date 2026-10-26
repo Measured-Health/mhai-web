@@ -15,7 +15,7 @@ import { QualityTab } from "./quality-tab";
 import { UseTab } from "./use-tab";
 
 const TABS = ["use", "alerts", "quality", "hospitals"] as const;
-type TabKey = (typeof TABS)[number];
+export type TabKey = (typeof TABS)[number];
 
 /**
  * Use, Alert safety, Answer quality and Hospitals, below the two columns.
@@ -23,6 +23,7 @@ type TabKey = (typeof TABS)[number];
  * Each tab has its own Updated line and its own Couldn't load.
  */
 export function AnalyticsTabs({
+  initialTab = "use",
   state,
   failed,
   onRetry,
@@ -30,6 +31,8 @@ export function AnalyticsTabs({
   onPickHospital,
   rowRefs,
 }: {
+  /** The tab it opens on (read once); Use unless a link says otherwise. */
+  initialTab?: TabKey;
   state: AnalyticsState | null;
   /** The whole request failed with nothing to show. */
   failed: boolean;
@@ -39,7 +42,7 @@ export function AnalyticsTabs({
   /** The Hospitals rows' buttons by hospital id, so Back can refocus one. */
   rowRefs: RefObject<Map<string, HTMLButtonElement>>;
 }) {
-  const [tab, setTab] = useState<TabKey>("use");
+  const [tab, setTab] = useState<TabKey>(initialTab);
   const base = useId();
   const refs = useRef(new Map<TabKey, HTMLButtonElement>());
 

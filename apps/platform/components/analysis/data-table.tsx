@@ -1,20 +1,29 @@
 "use client";
 import type { ReactNode } from "react";
 import type { AGuarded } from "@/lib/api/analysis-contract";
-import { valueText } from "@/lib/analysis/labels";
+import { hiddenBeside, valueText } from "@/lib/analysis/labels";
 import type { GuardKind } from "@mhai/ui/guards";
 import { cn } from "@mhai/ui/cn";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
 
 export type DataColumn = { key: string; label: string; numeric?: boolean };
-/** A guarded figure (read in words when hidden), or plain text. */
-export type DataCell = string | ReactNode | { g: AGuarded; kind: GuardKind };
+/**
+ * A guarded figure (read in words when hidden), or plain text. `beside` is
+ * the count shown next to a rate or share: hidden beside a shown count, it
+ * reads "Not shown".
+ */
+type GuardedCell = { g: AGuarded; kind: GuardKind; beside?: AGuarded };
+export type DataCell = string | ReactNode | GuardedCell;
 export type DataRow = { id: string; cells: Record<string, DataCell> };
 
-const isGuarded = (c: DataCell): c is { g: AGuarded; kind: GuardKind } =>
+const isGuarded = (c: DataCell): c is GuardedCell =>
   typeof c === "object" && c !== null && "g" in c && "kind" in c;
 const show = (c: DataCell | undefined): ReactNode =>
-  c === undefined ? null : isGuarded(c) ? valueText(c.g, c.kind) : c;
+  c === undefined
+    ? null
+    : isGuarded(c)
+      ? ((c.beside && hiddenBeside(c.g, c.beside)) ?? valueText(c.g, c.kind))
+      : c;
 
 /**
  * A view's figures as a table on `md` and up, and as cards below it, so

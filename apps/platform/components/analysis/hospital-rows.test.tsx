@@ -133,4 +133,12 @@ describe("HospitalRows", () => {
       screen.getByRole("button", { name: /^Sorted Smallest first\./ }),
     ).toBeInTheDocument();
   });
+
+  it("a hidden rate beside a shown count reads Not shown · 25", () => {
+    const r = row("Echo", 900, 25);
+    r.headline = { ...r.headline, per_1000: HIDDEN };
+    render(<HospitalRows rows={[r]} headlineLabel="Cases per 1,000" />);
+    expect(screen.getByText("Not shown · 25")).toBeInTheDocument();
+    expect(screen.queryByText(/Fewer than 5/)).toBeNull();
+  });
 });

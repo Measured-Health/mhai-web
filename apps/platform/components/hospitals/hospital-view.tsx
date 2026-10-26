@@ -11,6 +11,7 @@ import { CouldntLoad } from "../states/couldnt-load";
 import { Loading } from "../states/loading";
 import { DetailsSection } from "./details-section";
 import { FirstAdminSection } from "./first-admin-section";
+import { HospitalLinks } from "./hospital-links";
 import { DangerZone } from "./danger-zone";
 import { RecentActions } from "./recent-actions";
 import { RemovalPanel } from "./removal-panel";
@@ -57,6 +58,7 @@ export function HospitalView({ id }: { id: string }) {
                 canAct={canAct}
                 onGone={() => void refetch()}
               />
+              <HospitalLinks hospitalId={h.id} />
               <RemovalPanel hospital={h} />
               <HospitalHoldsSection
                 hospital={h}

@@ -8,6 +8,7 @@ import {
   PARTLY_STANDARDISED,
   headlineText,
   valueText,
+  withCount,
 } from "@/lib/analysis/labels";
 import { inputClass } from "@mhai/ui/auth/password-fields";
 import { Chip } from "@mhai/ui/chip";
@@ -19,12 +20,11 @@ export type HeadlineKind = "rate" | "share";
 
 /**
  * A rate with its count beside it, never a count alone: "12.4 per 1,000 ·
- * 25". When both read the same words (both hidden), they read once.
+ * 25", or "Not shown · 25" for a hidden rate beside a shown count. When
+ * both read the same words (both hidden), they read once.
  */
 export function rateWithCount(rate: Rate, kind: HeadlineKind = "rate"): string {
-  const r = headlineText(rate.per_1000, kind);
-  const c = valueText(rate.count, "count");
-  return r === c ? r : `${r} · ${c}`;
+  return withCount(rate.per_1000, rate.count, (g) => headlineText(g, kind));
 }
 
 type SortKey =

@@ -3,10 +3,13 @@ import type { ReactNode } from "react";
 import type { AGuarded, ConditionRef, Rate } from "@/lib/api/analysis-contract";
 import {
   NOT_ENOUGH_PEERS,
+  NOT_SHOWN,
   NOT_STANDARDISED,
   NO_DATA,
   TOO_FEW_HOSPITALS,
   conditionText,
+  countShows,
+  hiddenBeside,
   monthLabel,
   monthsText,
   valueText,
@@ -54,6 +57,8 @@ function columnOf(s: Series[number], withMedian: boolean): Column {
   };
   if (g.suppressed && g.why === "too_few_hospitals")
     return { ...base, value: 0, text: TOO_FEW_HOSPITALS };
+  const notShown = hiddenBeside(g, s.rate.count);
+  if (notShown) return { ...base, value: 0, text: notShown };
   if (g.suppressed) return { ...base, value: 0, hidden: true };
   if (g.value === null) return { ...base, value: 0, text: NO_DATA };
   return { ...base, value: g.value };
@@ -74,7 +79,13 @@ function monthsSentence(series: Series): string {
     );
   }
   const few = series.filter(
-    (s) => s.rate.per_1000.suppressed && s.rate.per_1000.why === undefined,
+    (s) =>
+      s.rate.per_1000.suppressed &&
+      s.rate.per_1000.why === undefined &&
+      !countShows(s.rate.count),
+  ).length;
+  const notShown = series.filter(
+    (s) => hiddenBeside(s.rate.per_1000, s.rate.count) !== null,
   ).length;
   const tooFew = series.filter(
     (s) => s.rate.per_1000.why === "too_few_hospitals",
@@ -82,6 +93,10 @@ function monthsSentence(series: Series): string {
   if (few)
     parts.push(
       `${few} ${few === 1 ? "month reads" : "months read"} ${FEWER_THAN_5}.`,
+    );
+  if (notShown)
+    parts.push(
+      `${notShown} ${notShown === 1 ? "month reads" : "months read"} ${NOT_SHOWN}.`,
     );
   if (tooFew)
     parts.push(
@@ -184,7 +199,7 @@ export function PrevalenceView({
         month: monthLabel(s.month),
         cases: { g: s.rate.count, kind: "count" },
         seen: { g: s.rate.base, kind: "count" },
-        rate: { g: s.rate.per_1000, kind: "rate" },
+        rate: { g: s.rate.per_1000, kind: "rate", beside: s.rate.count },
         ...(withMedian && s.median
           ? {
               median: s.median.suppressed
@@ -200,7 +215,7 @@ export function PrevalenceView({
         condition: c.condition.name ?? NOT_STANDARDISED,
         icd10: c.condition.icd10 ?? "No code",
         cases: { g: c.cases, kind: "count" },
-        rate: { g: c.rate.per_1000, kind: "rate" },
+        rate: { g: c.rate.per_1000, kind: "rate", beside: c.rate.count },
         new: { g: c.new, kind: "count" },
       },
     }));

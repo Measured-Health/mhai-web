@@ -8,13 +8,9 @@ import type {
 } from "@/lib/api/analysis-contract";
 import { analysisCsv, analysisCsvName } from "@/lib/analysis/csv";
 import { emptyQuery, setFilter, switchScope } from "@/lib/analysis/filters";
-import {
-  VIEWS,
-  VIEW_TITLE,
-  monthsText,
-  valueText,
-} from "@/lib/analysis/labels";
+import { VIEWS, VIEW_TITLE } from "@/lib/analysis/labels";
 import type { ViewRead } from "@/lib/analysis/read";
+import { takeHandedOffHospital } from "@/lib/analysis/scope-handoff";
 import {
   useAnalysisFilters,
   useAnalysisView,
@@ -27,8 +23,12 @@ import { downloadCsv } from "@mhai/ui/csv";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
 import { AnalysisFilters } from "./analysis-filters";
 import { AnalysisHeader } from "./analysis-header";
+import { AffectedView } from "./affected-view";
+import { CoOccurringView } from "./co-occurring-view";
+import { FindingsView } from "./findings-view";
 import { PrevalenceView } from "./prevalence-view";
-import { ViewFrame, type ChartOrTable } from "./view-frame";
+import { QualityView } from "./quality-view";
+import type { ChartOrTable } from "./view-frame";
 
 /**
  * The Analysis page (spec §4): the header, the filters, the view picker and
@@ -37,9 +37,14 @@ import { ViewFrame, type ChartOrTable } from "./view-frame";
  * Offline keeps what is loaded and disables what would ask again.
  */
 export function AnalysisView({ status }: { status: AnalysisStatus }) {
-  const [query, setQuery] = useState<AnalysisQuery>(() =>
-    emptyQuery("all", null),
-  );
+  // A hospital page's "Analysis for this hospital" hands its hospital over
+  // once, outside the URL; one Analysis leaves out opens All hospitals.
+  const [query, setQuery] = useState<AnalysisQuery>(() => {
+    const handed = takeHandedOffHospital();
+    return handed && status.hospitals.list.some((h) => h.id === handed)
+      ? emptyQuery("hospital", handed)
+      : emptyQuery("all", null);
+  });
   const [view, setView] = useState<ViewId>("prevalence");
   const [chartOrTable, setChartOrTable] = useState<ChartOrTable>("chart");
   const [cleared, setCleared] = useState(false);
@@ -123,34 +128,67 @@ export function AnalysisView({ status }: { status: AnalysisStatus }) {
           ? { role: "tabpanel", "aria-labelledby": `${pickerId}-${view}` }
           : {})}
       >
-        {view === "prevalence" ? (
-          <PrevalenceView
-            state={read.state as ViewRead<"prevalence"> | undefined}
-            onRetry={read.retry}
-            mode={chartOrTable}
-            onMode={setChartOrTable}
-          />
-        ) : (
-          <ViewFrame<ViewId>
-            view={view}
-            state={read.state}
-            onRetry={read.retry}
-            mode={chartOrTable}
-            onMode={setChartOrTable}
-            summary={
-              read.state?.status === "ok" && (
-                // Task 7 fills the other views in; until then, a summary.
-                <p className="text-[14px] text-ink-2">
-                  {valueText(read.state.data.patients, "count")} patients in the
-                  group · {monthsText(read.state.data.period)}
-                </p>
-              )
-            }
-          />
-        )}
+        <OneView
+          view={view}
+          state={read.state}
+          onRetry={read.retry}
+          mode={chartOrTable}
+          onMode={setChartOrTable}
+        />
       </div>
     </>
   );
+}
+
+/** The picked view, with the read it asked for. */
+function OneView({
+  view,
+  state,
+  ...rest
+}: {
+  view: ViewId;
+  state: ViewRead<ViewId> | undefined;
+  onRetry(): void;
+  mode: ChartOrTable;
+  onMode(m: ChartOrTable): void;
+}) {
+  switch (view) {
+    case "prevalence":
+      return (
+        <PrevalenceView
+          state={state as ViewRead<"prevalence"> | undefined}
+          {...rest}
+        />
+      );
+    case "affected":
+      return (
+        <AffectedView
+          state={state as ViewRead<"affected"> | undefined}
+          {...rest}
+        />
+      );
+    case "co-occurring":
+      return (
+        <CoOccurringView
+          state={state as ViewRead<"co-occurring"> | undefined}
+          {...rest}
+        />
+      );
+    case "findings":
+      return (
+        <FindingsView
+          state={state as ViewRead<"findings"> | undefined}
+          {...rest}
+        />
+      );
+    case "quality":
+      return (
+        <QualityView
+          state={state as ViewRead<"quality"> | undefined}
+          {...rest}
+        />
+      );
+  }
 }
 
 /** Tabs on `md` and up; a "View" select below it. */

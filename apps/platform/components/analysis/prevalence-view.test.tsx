@@ -101,7 +101,8 @@ const lines = (panel: HTMLElement) =>
     .getAllByRole("listitem")
     .map((li) => li.textContent);
 
-const RATE_AND_COUNT = /^(?:[\d,.]+ per 1,000 · [\d,]+|Fewer than 5)$/;
+const RATE_AND_COUNT =
+  /^(?:[\d,.]+ per 1,000 · [\d,]+|Not shown · [\d,]+|Fewer than 5)$/;
 
 describe("Prevalence and trends", () => {
   it("All hospitals: the rate line, conditions, and one row per hospital with size, kind and coverage", async () => {
@@ -161,7 +162,7 @@ describe("Prevalence and trends", () => {
     ).getAllByRole("listitem");
     for (const b of bars)
       expect(b.querySelector("b")!.textContent).toMatch(
-        /^(?:[\d,.]+ per 1,000 · [\d,]+|Fewer than 5|Too few hospitals to show)$/,
+        /^(?:[\d,.]+ per 1,000 · [\d,]+|Not shown · [\d,]+|Fewer than 5|Too few hospitals to show)$/,
       );
   });
 
@@ -451,6 +452,57 @@ describe("PrevalenceView on its own", () => {
     expect(
       within(table).getByRole("row", { name: new RegExp(month) }),
     ).toHaveTextContent("Not enough similar hospitals");
+  });
+
+  it("a hidden rate beside a shown count reads Not shown · 25, never Fewer than 5 · 25", async () => {
+    const read = await readAll();
+    const conds = read.data.data.by_condition;
+    conds[0] = {
+      ...conds[0]!,
+      cases: { value: 25, suppressed: false, drill: null },
+      rate: {
+        count: { value: 25, suppressed: false },
+        base: hidden,
+        per_1000: hidden,
+      },
+    };
+    const series = read.data.data.series;
+    series[0] = {
+      ...series[0]!,
+      rate: {
+        count: { value: 25, suppressed: false },
+        base: hidden,
+        per_1000: hidden,
+      },
+    };
+    const name = conds[0]!.condition.name!;
+    const { unmount } = alone(read, "chart");
+    const bar = within(screen.getByRole("list", { name: "By condition" }))
+      .getByText(new RegExp(name))
+      .closest("li")!;
+    expect(bar.querySelector("b")!.textContent).toBe("Not shown · 25");
+    expect(bar.querySelector("[aria-hidden].rounded-full")).toBeNull();
+    const [first] = within(
+      screen.getByRole("list", { name: "Cases per 1,000 by month" }),
+    ).getAllByRole("listitem");
+    expect(first!.getAttribute("aria-label")).toMatch(/: Not shown$/);
+    expect(document.body.textContent).not.toContain("Fewer than 5 · 25");
+    unmount();
+    alone(read, "table");
+    const row = within(
+      screen.getByRole("table", { name: "By condition" }),
+    ).getByRole("row", { name: new RegExp(name) });
+    const cells = within(row)
+      .getAllByRole("cell")
+      .map((c) => c.textContent);
+    expect(cells[2]).toBe("25");
+    expect(cells[3]).toBe("Not shown");
+    const month = within(
+      screen.getByRole("table", { name: "Cases per 1,000 by month" }),
+    ).getAllByRole("row")[1]!;
+    expect(within(month).getAllByRole("cell")[3]!.textContent).toBe(
+      "Not shown",
+    );
   });
 
   it("a month from too few hospitals reads the words and draws no column", async () => {
