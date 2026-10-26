@@ -56,7 +56,7 @@ const WITH: Record<ActivityAction, string> = {
   named_access_cancelled: "cancelled turning named access to Kemi",
   named_access_lowered: "turned named access down to Kemi",
   analysis_switched: "turned Analysis on or off",
-  patient_views_switched: "turned patient lists in Analysis on or off",
+  patient_views_switched: "turned patient lists on or off",
 };
 const WITHOUT: Partial<Record<ActivityAction, string>> = {
   admin_invited: "invited the first hospital admin",
@@ -101,7 +101,7 @@ const WITHOUT: Partial<Record<ActivityAction, string>> = {
   named_access_cancelled: "cancelled a change to named access",
   named_access_lowered: "turned named access down",
   analysis_switched: "turned Analysis on or off",
-  patient_views_switched: "turned patient lists in Analysis on or off",
+  patient_views_switched: "turned patient lists on or off",
 };
 
 describe("actionLabel", () => {
@@ -176,10 +176,10 @@ describe("actionLabel", () => {
       "turned Analysis off",
     );
     expect(actionLabel("patient_views_switched", null, null, "on")).toBe(
-      "turned patient lists in Analysis on",
+      "turned patient lists on",
     );
     expect(actionLabel("patient_views_switched", null, null, "off")).toBe(
-      "turned patient lists in Analysis off",
+      "turned patient lists off",
     );
     // Anything else says nothing about the position.
     expect(actionLabel("analysis_switched", null, null, "maybe")).toBe(

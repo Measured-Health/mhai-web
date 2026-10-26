@@ -60,6 +60,8 @@ describe("Activity", () => {
     );
     expect(items[4].textContent).toContain("invited ");
     expect(items[5].textContent).toContain("Ada Bakare turned Analysis on");
+    // The line says "on", so the detail is not said a second time.
+    expect(items[5].querySelectorAll("p")).toHaveLength(1);
     expect(items[11].textContent).toContain("changed Amara Eze's role");
     expect(items[11].textContent).not.toContain("·  ·");
   });
