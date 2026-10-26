@@ -106,7 +106,13 @@ async function asGrace(page: Page) {
   await openAnalysis(page);
 }
 
-/** Opens the Emergency group (37 patients) as a list, de-identified. */
+/**
+ * The size of the Emergency group, read from the page. The sample cohort's
+ * default period moves with today's date, so the count is not pinned.
+ */
+const emergencyCount = new WeakMap<Page, number>();
+
+/** Opens the Emergency group (5 or more patients) as a list, de-identified. */
 async function openEmergency(page: Page) {
   await openView(page, "Who is affected");
   const ward = page.getByRole("list", { name: "Patients by ward or clinic" });
@@ -114,12 +120,17 @@ async function openEmergency(page: Page) {
     .getByRole("listitem")
     .filter({ hasText: /^Emergency/ })
     .first();
-  await expect(emergency).toContainText("37");
+  await expect(emergency).toContainText(/^Emergency\s*\d+/);
+  const n = Number(/^Emergency\s*(\d+)/.exec(await emergency.innerText())![1]);
+  expect(n, "the Emergency group is big enough to open").toBeGreaterThanOrEqual(
+    5,
+  );
+  emergencyCount.set(page, n);
   await emergency.getByRole("button", { name: /^See patients/ }).click();
   const panel = page.getByRole("dialog", { name: /patients ·/ });
   await expect(
     panel.getByRole("heading", {
-      name: "37 patients · Ward or clinic: Emergency",
+      name: `${n} patients · Ward or clinic: Emergency`,
     }),
   ).toBeVisible();
   await expect(
@@ -194,7 +205,7 @@ test("Grace opens a group, shows names for Quality improvement, and sees the ban
   ).toHaveCount(0);
 });
 
-test("Activity shows 'viewed 37 patients by name in Analysis', flagged", async ({
+test("Activity shows 'viewed N patients by name in Analysis', flagged", async ({
   page,
 }) => {
   await asGrace(page);
@@ -207,7 +218,11 @@ test("Activity shows 'viewed 37 patients by name in Analysis', flagged", async (
   await openAdmin(page, "Activity");
   await expect(page).toHaveURL(/\/admin\/activity$/);
   const line = page
-    .getByText(/viewed 37 patients by name in Analysis/)
+    .getByText(
+      new RegExp(
+        `viewed ${emergencyCount.get(page)} patients by name in Analysis`,
+      ),
+    )
     .filter({ visible: true })
     .first();
   await expect(line).toBeVisible();
