@@ -81,33 +81,31 @@ describe("proxy: security headers", () => {
   });
 });
 
-describe("proxy: ended consultations", () => {
-  it("sends a full load of a consultation or printout to /ended, with the headers", () => {
-    for (const path of ["/c/abc", "/print/abc"]) {
+describe("proxy: never rewrites", () => {
+  // Next strips the RSC headers before a proxy sees the request, so a
+  // rewrite here would also catch in-app navigation (next.config.ts does it).
+  it("passes consultations and printouts through, with the headers", () => {
+    for (const path of ["/c/abc", "/print/abc", "/", "/ended"]) {
       const res = proxy(request(path));
-      expect(rewrittenTo(res), path).toBe("http://localhost:3000/ended");
-      expect(nonceOf(cspOf(res))).toBeTruthy();
-      expect(res.headers.get("x-middleware-request-x-nonce")).toBe(
-        nonceOf(cspOf(res)),
-      );
-      expect(res.headers.get("x-frame-options")).toBe("DENY");
+      expect(rewrittenTo(res), path).toBeNull();
+      expect(nonceOf(cspOf(res)), path).toBeTruthy();
     }
   });
+});
 
-  it("lets in-app navigation and prefetches through", () => {
-    const navigations: Record<string, string>[] = [
-      { rsc: "1" },
-      { "next-router-prefetch": "1" },
+describe("next.config: ended consultations", () => {
+  it("sends only a full load of /c/:id or /print/:id to /ended", async () => {
+    const config = (await import("./next.config")).default;
+    const rewrites = await config.rewrites!();
+    expect(Array.isArray(rewrites)).toBe(false);
+    const { beforeFiles } = rewrites as { beforeFiles: unknown[] };
+    const missing = [
+      { type: "header", key: "rsc" },
+      { type: "header", key: "next-router-prefetch" },
     ];
-    for (const h of navigations) {
-      const res = proxy(request("/c/abc", h));
-      expect(rewrittenTo(res)).toBeNull();
-      expect(nonceOf(cspOf(res))).toBeTruthy();
-    }
-  });
-
-  it("leaves every other page alone", () => {
-    for (const path of ["/", "/c", "/c/abc/x", "/analysis", "/ended"])
-      expect(rewrittenTo(proxy(request(path))), path).toBeNull();
+    expect(beforeFiles).toEqual([
+      { source: "/c/:id", missing, destination: "/ended" },
+      { source: "/print/:id", missing, destination: "/ended" },
+    ]);
   });
 });
