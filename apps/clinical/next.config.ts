@@ -4,14 +4,15 @@ import type { NextConfig } from "next";
 // The repository root: npm workspaces install node_modules there.
 const repositoryRoot = path.join(import.meta.dirname, "../..");
 
+// No cacheComponents and no partialPrefetching: the nonce-based CSP in
+// proxy.ts needs every page rendered per request (a static shell can't carry
+// the request's nonce).
 const nextConfig: NextConfig = {
   // A self-contained server for the Docker image (deploy/).
   output: "standalone",
   outputFileTracingRoot: repositoryRoot,
   // Shared workspace packages ship TypeScript source.
   transpilePackages: ["@mhai/api-client", "@mhai/tokens", "@mhai/ui"],
-  cacheComponents: true,
-  partialPrefetching: true,
   turbopack: {
     root: repositoryRoot,
     rules: {

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./csp";
 import {
   DEMO_EMAILS,
   expectNoStorage,
@@ -8,9 +8,9 @@ import {
   signIn,
 } from "./helpers";
 
-// A console and page-error check, not a header test: the clinical app sends no
-// Content-Security-Policy. Console messages that mention one, and uncaught page
-// errors, are collected for every test and checked after it.
+// A console and page-error check (the CSP header itself is checked in
+// security.spec.ts): Content Security Policy messages and uncaught page
+// errors are collected for every test and checked after it.
 const violations = new WeakMap<Page, string[]>();
 
 test.beforeEach(({ page }) => {
