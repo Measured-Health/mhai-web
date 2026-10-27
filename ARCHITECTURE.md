@@ -623,9 +623,4 @@ These are in CONTRIBUTING.md and apply to both apps:
 - the client never sends user ids;
 - confidence is never shown by colour alone;
 - keyboard and screen-reader support;
-- `prefers-reduced-motion` is respected;
-- every page carries the same security headers, from each app's `proxy.ts`
-  through `@mhai/api-client/server/security-headers`: a strict CSP with a
-  fresh nonce (so every page renders per request: no `cacheComponents`), no
-  framing, `nosniff`, a referrer policy, a Permissions-Policy and, in
-  production, HSTS.
+- `prefers-reduced-motion` is respected.

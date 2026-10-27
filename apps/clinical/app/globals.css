@@ -14,10 +14,6 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
 }
-/* The demo ribbon's height, for layouts that fill the screen (layout.tsx). */
-body[data-demo] {
-  --demo-h: 44px;
-}
 .tabular {
   font-variant-numeric: tabular-nums;
 }

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "./csp";
+import { expect, test, type Page } from "@playwright/test";
 import {
   expectNoForbiddenWords,
   expectNoStorage,

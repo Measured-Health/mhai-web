@@ -78,7 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const body = (
     <>
       <div className="grid h-[calc(100dvh-var(--demo-h,0px))] grid-cols-1 md:grid-cols-[76px_minmax(0,1fr)] xl:grid-cols-[256px_minmax(0,1fr)]">
-        {/* Sidebar reads usePathname(); it sits in Suspense. */}
+        {/* Sidebar reads usePathname(); with cacheComponents it must sit in Suspense. */}
         <div className="hidden md:block xl:hidden">
           <Suspense fallback={null}>
             <Sidebar items={items} rail onOpenSearch={openSearch} />

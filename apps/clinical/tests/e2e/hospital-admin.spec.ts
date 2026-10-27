@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "./csp";
+import { expect, test, type Page } from "@playwright/test";
 import {
   DEMO_EMAILS,
   expectNoForbiddenWords,

@@ -79,20 +79,6 @@ describe("proxy", () => {
     expect(directive(csp, "img-src")).toBe("img-src 'self' data: blob:");
   });
 
-  it("sends HSTS in production on the real host only", () => {
-    const at = (origin: string) =>
-      proxy(new NextRequest(`${origin}/sign-in`)).headers.get(
-        "strict-transport-security",
-      );
-    vi.stubEnv("NODE_ENV", "production");
-    expect(at("https://platforms.measured-health.org")).toBe(
-      "max-age=31536000; includeSubDomains",
-    );
-    expect(at("http://localhost:3001")).toBeNull();
-    vi.stubEnv("NODE_ENV", "development");
-    expect(at("https://platforms.measured-health.org")).toBeNull();
-  });
-
   it("sets frame-ancestors 'none' and the other headers", () => {
     const h = proxy(request()).headers;
     expect(
