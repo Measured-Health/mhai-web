@@ -18,7 +18,7 @@ export function SignOut() {
   // Also set by "Sign out and delete", so emptying the outbox can't sign out twice.
   const started = useRef(false);
   const unsent = items.length;
-  // Visited routes stay mounted, hidden (cacheComponents): leaving this page
+  // If the page is kept mounted while hidden (React <Activity>), leaving it
   // runs the cleanup, so the next sign-out in this tab starts again.
   useEffect(
     () => () => {

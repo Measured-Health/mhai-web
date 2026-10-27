@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./csp";
 import { fillForm, signIn } from "./helpers";
 
 test.setTimeout(240_000);

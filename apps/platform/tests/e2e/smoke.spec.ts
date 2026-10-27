@@ -10,6 +10,15 @@ test("the sign-in page loads with the CSP header and no console CSP errors", asy
   const response = await page.goto("/sign-in");
   expect(response?.status()).toBe(200);
   expect(response?.headers()["content-security-policy"]).toContain("'nonce-");
+  const h = response?.headers() ?? {};
+  expect(h["x-frame-options"]).toBe("DENY");
+  expect(h["x-content-type-options"]).toBe("nosniff");
+  expect(h["referrer-policy"]).toBe("no-referrer");
+  expect(h["permissions-policy"]).toBe(
+    "camera=(), microphone=(), geolocation=()",
+  );
+  // Never pinned to https on localhost.
+  expect(h["strict-transport-security"]).toBeUndefined();
   await expect(
     page.getByRole("heading", { name: "Sign in to MHAI Platform" }),
   ).toBeVisible();

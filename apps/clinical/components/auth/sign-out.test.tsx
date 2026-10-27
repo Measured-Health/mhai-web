@@ -58,8 +58,8 @@ const mountWithUnsent = () =>
   });
 
 /**
- * The app keeps visited routes alive (cacheComponents): /sign-out stays
- * mounted, hidden, after a sign-out and is shown again on the next one.
+ * If /sign-out is kept alive (React <Activity>), it stays mounted, hidden,
+ * after a sign-out and is shown again on the next one.
  */
 function KeptAlive() {
   const [mode, setMode] = useState<"visible" | "hidden">("visible");
