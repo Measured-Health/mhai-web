@@ -39,7 +39,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => "/analysis",
 }));
-import { watermarkTile } from "./named-view";
+import { NamedView, watermarkTile } from "./named-view";
 import { PatientsPanel } from "./patients-panel";
 
 let qc: QueryClient;
@@ -106,12 +106,16 @@ async function ended(reason: string, { focused = true } = {}) {
   expect(notice).not.toHaveAttribute("aria-live");
   expect(notice).toHaveTextContent(reason);
   const spoken = `Named access has ended. ${reason}`;
+  // The notice's effect takes the focus or writes the region. That effect
+  // can run in a later task than the commit `findByText` saw (the update
+  // comes from the query cache, outside act), so wait for its outcome
+  // before checking that the other one didn't happen.
   if (focused) {
     await waitFor(() => expect(notice).toHaveFocus());
     expect(screen.queryByText(spoken)).toBeNull();
   } else {
+    expect(await screen.findByText(spoken)).toHaveAttribute("role", "status");
     expect(notice).not.toHaveFocus();
-    expect(screen.getByText(spoken)).toHaveAttribute("role", "status");
   }
   expect(screen.queryByRole("table", { name: /^Named patients/ })).toBeNull();
   // Back to the de-identified rows.
@@ -430,6 +434,31 @@ describe("NamedView", () => {
     );
     await ended("The clearance letter has ended.");
     expect(namedQueries()).toHaveLength(0);
+  });
+
+  it("a 403 that ends access hides the rows on its own render, before onEnd", async () => {
+    // The view must not wait for its parent: the refusal's render shows no
+    // names, even if nothing has reacted to onEnd yet.
+    const onEnd = vi.fn();
+    open(
+      GRACE,
+      <NamedView
+        drill="sex-female"
+        filters={NAMED_FILTERS}
+        purpose="audit"
+        onEnd={onEnd}
+      />,
+    );
+    await screen.findByRole("table", { name: /^Named patients/ });
+    vi.spyOn(holder.client, "listNamedPatients").mockRejectedValue(
+      new ApiError(403, "clearance_ended"),
+    );
+    await act(() =>
+      qc.refetchQueries({ queryKey: ["analysis", "patients", "named"] }),
+    );
+    await waitFor(() => expect(onEnd).toHaveBeenCalledWith("ended"));
+    expect(screen.queryByRole("table", { name: /^Named patients/ })).toBeNull();
+    expect(document.body).not.toHaveTextContent(/HH-\d{6}/);
   });
 
   it("a 409 expired is a plain error, not an end of names", async () => {

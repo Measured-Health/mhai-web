@@ -249,8 +249,18 @@ export function NamedView({
   // Never a frame of old names: other filters, or past named_until (read
   // afresh, not only the last tick).
   if (!user || !sameAsAsked) return null;
+  // A refusal that ends access, or a check that says names are over, hides
+  // the rows on the render that sees it. The effects above call `onEnd`
+  // only after the commit, and the browser may paint before they run.
+  const stopped =
+    endReasonFrom(q.error) !== null ||
+    (me.error !== null && !networkDown(me.error)) ||
+    me.data === null ||
+    (me.data !== undefined && (!me.data.named || me.data.until === null));
   const live =
-    d !== null && Math.max(now, wallClock()) < Date.parse(d.named_until);
+    !stopped &&
+    d !== null &&
+    Math.max(now, wallClock()) < Date.parse(d.named_until);
   const mark = `${user.fullName ?? user.displayName} · ${clockText(now)}`;
   const failed = q.data?.status === "failed" || (q.isError && !d);
 

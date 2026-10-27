@@ -310,6 +310,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Security
 
+- Named patients now disappear on the same screen update that brings a
+  refusal ending access, or a clearance check saying names are over. Before,
+  the rows could stay on screen for a moment until the panel caught up.
 - Removing a staff member (or cancelling an invite) needs the hospital
   admin's own two-step code or a backup code; a wrong code removes no one.
 - Every hospital admin must use two-step verification. An admin without it
