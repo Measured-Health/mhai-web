@@ -32,7 +32,9 @@ export async function openAccountMenu(page: Page) {
 /** On the signed-in home page: opens the form and fills it. */
 export async function fillForm(page: Page, question: string) {
   await page.getByRole("button", { name: /Start a consultation/ }).click();
-  await page.getByLabel("Age", { exact: true }).fill("54");
+  // By role: getByLabel("Age") also matches an admin's "Usage" links, and
+  // the label's text holds a hidden "*", so an exact label match finds none.
+  await page.getByRole("textbox", { name: "Age", exact: true }).fill("54");
   await page.getByRole("radio", { name: "Male", exact: true }).click();
   await page.getByRole("radio", { name: /Urgent/ }).click();
   if (isMobile(page)) await page.getByRole("button", { name: "Next" }).click();
