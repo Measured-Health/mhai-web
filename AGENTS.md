@@ -24,6 +24,19 @@ model).
   workflow.
 - `docs/adr/`: decisions so far.
 
+## Security is part of every step
+
+We build securely, and security is part of the design. The project skills are in `.claude/skills/`, and every agent uses them:
+
+| When                                | Skill             | What it requires                                                                                                                                                                                                                             |
+| ----------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Writing a design, spec, ADR or plan | `secure-design`   | A **Security and threat model** section in every spec in `docs/specs/` (assets, boundaries, STRIDE threats, controls, abuse-case tests, residual risk and sign-off). A spec without it isn't approved.                                       |
+| Writing code                        | `secure-build`    | No patient data in URLs, storage, titles, logs, caches after sign-out or test artefacts; the token stays in the BFF; exact proxy shapes; fail-closed readers and CSV/screen parity; same auth messages; read-only auditors; no vendor names. |
+| Reviewing a change                  | `security-review` | An attacker's walk through the frontend vulnerability classes this repo has actually had, with proof and severity.                                                                                                                           |
+| Finding and fixing bugs             | `bug-hunt`        | A failing test first, then the edge cases that have bitten this repo (dates in e2e, flaky tests, shared components, merged lists) and fixing the whole class.                                                                                |
+
+Run `security-review` on your own diff before you open a PR. When a review finds a new kind of issue, add it to that skill's list.
+
 ## Workflow
 
 - Work on your own branch (`agent/<topic>`) and open a PR using the template.

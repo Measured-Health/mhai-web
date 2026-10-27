@@ -28,6 +28,21 @@ Every PR must pass:
 - the script tests (`node --test`);
 - a gitleaks scan of history.
 
+## Security by design
+
+We build securely, and security is part of the design, not a review step at
+the end:
+
+- **Every design spec in `docs/specs/` has a Security and threat model
+  section** (assets, trust boundaries, threats, decided controls,
+  abuse-case tests, residual risk and sign-off). A spec without it isn't
+  approved, and the plan carries its abuse-case tests into its tasks.
+- **Code follows the rules below and the `secure-build` skill** in
+  `.claude/skills/`: patient data in the browser, the BFF and its exact
+  proxy shapes, fail-closed readers, auth UI and auditor separation.
+- **Every PR gets a security review** (the `security-review` skill) before
+  it's opened, and a bug fix starts with a failing test (`bug-hunt`).
+
 ## Conventions
 
 - **Commits:** imperative subject of at most 72 characters ("Add the
