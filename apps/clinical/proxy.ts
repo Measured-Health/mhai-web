@@ -5,21 +5,6 @@ import {
   wantsHsts,
 } from "@mhai/api-client/server/security-headers";
 
-// A full page load of a consultation or its printout starts a new, empty
-// in-memory session, so the consultation can't be there. Send those loads to
-// a 404 page. In-app navigation (RSC requests and prefetches) skips this and
-// keeps working, because the session is still in memory.
-// Revisit when consultations can be fetched again after a reload (Plan 2).
-const ENDED = /^\/(c|print)\/[^/]+$/;
-
-function endedLoad(request: NextRequest): boolean {
-  return (
-    ENDED.test(request.nextUrl.pathname) &&
-    !request.headers.has("rsc") &&
-    !request.headers.has("next-router-prefetch")
-  );
-}
-
 /**
  * A strict Content Security Policy and the other security headers for every
  * page (`@mhai/api-client/server/security-headers`, shared with the platform
@@ -47,10 +32,10 @@ export function proxy(request: NextRequest) {
     headers["Content-Security-Policy"],
   );
 
-  const init = { request: { headers: requestHeaders } };
-  const response = endedLoad(request)
-    ? NextResponse.rewrite(new URL("/ended", request.url), init)
-    : NextResponse.next(init);
+  // The /c/:id and /print/:id full-load rewrite to /ended is in
+  // next.config.ts: Next strips the RSC headers from the request a proxy
+  // sees, so only a config rewrite can tell a reload from in-app navigation.
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   for (const [name, value] of Object.entries(headers))
     response.headers.set(name, value);
   return response;
