@@ -13,11 +13,6 @@ repository root as the build context), push it to
 `ghcr.io/measured-health/mhai-web`, then SSH to the instance, pull, restart
 and health-check. It never touches the EMR containers or nginx.
 
-Security headers (CSP, `X-Frame-Options`, `nosniff`, `Referrer-Policy`,
-`Permissions-Policy` and `Strict-Transport-Security: max-age=31536000;
-includeSubDomains`) come from each app's `proxy.ts`, on every page, so nginx
-needs no header lines for them; the app leaves HSTS off for localhost.
-
 ## One-time setup on the instance
 
 Run as `ubuntu`. The demo is at `demo.measured-health.org`; its DNS A

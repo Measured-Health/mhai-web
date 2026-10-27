@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import { darker, jetbrains, outfit } from "@mhai/tokens/fonts";
 import "./globals.css";
 import { DemoRibbon } from "@/components/states/demo-ribbon";
@@ -10,10 +9,7 @@ export const metadata: Metadata = {
   description: "Evidence-checked clinical decision support",
 };
 
-export default async function RootLayout({ children }: LayoutProps<"/">) {
-  // Reading the request makes every page dynamic, so each response carries
-  // the nonce proxy.ts made for it (Next applies it to its own tags).
-  await headers();
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
@@ -21,9 +17,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body
         className="min-h-full"
-        // An attribute, not an inline style: the CSP blocks style attributes
-        // in the server's HTML. globals.css sets --demo-h from it.
-        data-demo={process.env.NEXT_PUBLIC_USE_MOCK === "true" ? "" : undefined}
+        style={
+          process.env.NEXT_PUBLIC_USE_MOCK === "true"
+            ? ({ "--demo-h": "44px" } as React.CSSProperties)
+            : undefined
+        }
       >
         <Providers>
           <DemoRibbon />

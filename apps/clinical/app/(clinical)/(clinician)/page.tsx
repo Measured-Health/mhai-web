@@ -292,7 +292,7 @@ function HomeRoute() {
 }
 
 export default function Page() {
-  // useSearchParams sits inside a Suspense boundary.
+  // useSearchParams needs a Suspense boundary with cacheComponents.
   return (
     <Suspense>
       <HomeRoute />

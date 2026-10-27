@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "./csp";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   DEMO_EMAILS,
   expectNoStorage,
