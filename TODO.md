@@ -10,6 +10,7 @@ The frontend was called finished for the team demo on 23 Oct 2026. Everything be
   - "Open patient record" links;
   - patient-facing explanations, which a clinician reviews before anything is sent;
   - the rest of the EMR design follow-ups.
+- **BFF over NATS (backend decision, 28 Oct).** The BFF stops calling the core service with `fetch` and becomes a NATS client: nats.js over TCP, from the Node server side only, never from the browser. Each app has its own NATS user (`bff_clinical`, `bff_platform`) with its NKey seed in the server environment, and inbox prefix `_INBOX_bff.<app>`. A call is one message on `api.v1.clinical` or `api.v1.platform` with headers `Mhai-Method`, `Mhai-Path` and the same `Authorization`, `Idempotency-Key` and `X-MHAI-Client-IP` as today; the reply carries `Mhai-Status-Code`, the headers and the body. The NATS identity replaces the `X-MHAI-Service` key. The backend keeps HTTP on until this lands. Design: mhai-multiagent `docs/specs/2026-10-28-intelligence-boundary-design.md` §17 and ADR 0011.
 - **Reference documents for MHAI** (guidelines, protocols). Upload isn't in any plan yet; it needs scoping.
 
 ## Sign-offs and live switches
