@@ -53,8 +53,26 @@ record must point at the instance's public IP.
 
 5. In the GitHub repository:
    - environment `preview` with secrets `DEPLOY_HOST`, `DEPLOY_USER`
-     (`ubuntu`) and `DEPLOY_SSH_KEY` (the private key);
+     (`ubuntu`), `DEPLOY_SSH_KEY` (the private key) and
+     `DEPLOY_HOST_FINGERPRINT` (below);
    - repository variable `DEPLOY_ENABLED=true`.
+
+   `DEPLOY_HOST_FINGERPRINT` is the instance's SSH host key fingerprint.
+   The deploy checks it, so nobody in between can pose as the instance and
+   receive the GHCR token, and it refuses to run while the secret is
+   missing. `appleboy/ssh-action` v1.2.5 compares the full `SHA256:...`
+   string, and the key it is offered is the host's **ECDSA** key (its SSH
+   library asks for ECDSA before Ed25519). On the instance:
+
+   ```bash
+   ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub | awk '{print $2}'   # SHA256:...
+   ```
+
+   Check it matches what your machine sees
+   (`ssh-keyscan -t ecdsa 3.239.87.6 2>/dev/null | ssh-keygen -lf -`), then
+   `gh secret set DEPLOY_HOST_FINGERPRINT --env preview --repo Measured-Health/mhai-web --body 'SHA256:...'`.
+   If the instance is rebuilt, its host keys change: update the secret, or
+   the deploy fails with `ssh: host key fingerprint mismatch`.
 
 Then run the workflow once by hand (Actions → Deploy demo → Run workflow).
 
