@@ -8,7 +8,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
 import type { AnalysisClient } from "@/lib/api/analysis";
-import type { AnalysisFilters } from "@/lib/api/analysis-contract";
+import type {
+  AnalysisFilters,
+  ClearanceMeOut,
+} from "@/lib/api/analysis-contract";
 import { ApiError } from "@/lib/api/errors";
 import { resetAudit } from "@/lib/api/mock-audit";
 import {
@@ -39,7 +42,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => "/analysis",
 }));
-import { watermarkTile } from "./named-view";
+import { NamedView, watermarkTile } from "./named-view";
 import { PatientsPanel } from "./patients-panel";
 
 let qc: QueryClient;
@@ -106,12 +109,16 @@ async function ended(reason: string, { focused = true } = {}) {
   expect(notice).not.toHaveAttribute("aria-live");
   expect(notice).toHaveTextContent(reason);
   const spoken = `Named access has ended. ${reason}`;
+  // The notice's effect takes the focus or writes the region. That effect
+  // can run in a later task than the commit `findByText` saw (the update
+  // comes from the query cache, outside act), so wait for its outcome
+  // before checking that the other one didn't happen.
   if (focused) {
     await waitFor(() => expect(notice).toHaveFocus());
     expect(screen.queryByText(spoken)).toBeNull();
   } else {
+    expect(await screen.findByText(spoken)).toHaveAttribute("role", "status");
     expect(notice).not.toHaveFocus();
-    expect(screen.getByText(spoken)).toHaveAttribute("role", "status");
   }
   expect(screen.queryByRole("table", { name: /^Named patients/ })).toBeNull();
   // Back to the de-identified rows.
@@ -430,6 +437,99 @@ describe("NamedView", () => {
     );
     await ended("The clearance letter has ended.");
     expect(namedQueries()).toHaveLength(0);
+  });
+
+  describe("the view hides names on the render that sees an ending, before onEnd", () => {
+    // NamedView alone, with an onEnd that does nothing: no parent takes the
+    // view away, so any names left on screen are the view's own.
+    async function alone() {
+      const onEnd = vi.fn();
+      open(
+        GRACE,
+        <NamedView
+          drill="sex-female"
+          filters={NAMED_FILTERS}
+          purpose="audit"
+          onEnd={onEnd}
+        />,
+      );
+      await screen.findByRole("table", { name: /^Named patients/ });
+      const me = await holder.client.getClearanceMe();
+      return { onEnd, me: me as ClearanceMeOut };
+    }
+    const noNames = () => {
+      expect(
+        screen.queryByRole("table", { name: /^Named patients/ }),
+      ).toBeNull();
+      expect(document.body).not.toHaveTextContent(/HH-\d{6}/);
+    };
+    const refetch = (key: readonly string[]) =>
+      act(() => qc.refetchQueries({ queryKey: [...key] }));
+    const NAMED_KEY = ["analysis", "patients", "named"];
+    const ME_KEY = ["analysis", "clearance", "me"];
+
+    it.each([
+      ["clearance_ended", "ended"],
+      ["not_cleared", "changed"],
+      ["named_access_off", "switched_off"],
+    ])("a 403 %s from the named list", async (code, reason) => {
+      const { onEnd } = await alone();
+      vi.spyOn(holder.client, "listNamedPatients").mockRejectedValue(
+        new ApiError(403, code),
+      );
+      await refetch(NAMED_KEY);
+      await waitFor(() => expect(onEnd).toHaveBeenCalledWith(reason));
+      noNames();
+    });
+
+    it.each([
+      ["another letter", { clearance_id: "cl_other" }],
+      ["a new version of the letter", { version: 99 }],
+    ] as const)("a check that names %s", async (_, change) => {
+      const { onEnd, me } = await alone();
+      vi.spyOn(holder.client, "getClearanceMe").mockResolvedValue({
+        ...me,
+        ...change,
+      });
+      await refetch(ME_KEY);
+      await waitFor(() => expect(onEnd).toHaveBeenCalledWith("changed"));
+      noNames();
+    });
+
+    it("a check whose until has passed, though named_until hasn't", async () => {
+      // A shortened letter: the check's until is behind the view's
+      // named_until, which the view's own clock would still allow.
+      const { onEnd, me } = await alone();
+      vi.spyOn(holder.client, "getClearanceMe").mockResolvedValue({
+        ...me,
+        until: new Date(Date.now() - SECOND).toISOString(),
+      });
+      await refetch(ME_KEY);
+      await waitFor(() => expect(onEnd).toHaveBeenCalledWith("until"));
+      noNames();
+    });
+
+    it("a check that fails (fail closed)", async () => {
+      const { onEnd } = await alone();
+      vi.spyOn(holder.client, "getClearanceMe").mockRejectedValue(
+        new ApiError(404, "not_found"),
+      );
+      await refetch(ME_KEY);
+      await waitFor(() => expect(onEnd).toHaveBeenCalledWith("changed"));
+      noNames();
+    });
+
+    it("names don't come back when a later check says named again", async () => {
+      const { onEnd, me } = await alone();
+      const check = vi
+        .spyOn(holder.client, "getClearanceMe")
+        .mockResolvedValue({ ...me, version: 99 });
+      await refetch(ME_KEY);
+      await waitFor(() => expect(onEnd).toHaveBeenCalled());
+      check.mockResolvedValue(me);
+      await refetch(ME_KEY);
+      noNames();
+    });
   });
 
   it("a 409 expired is a plain error, not an end of names", async () => {

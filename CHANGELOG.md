@@ -310,6 +310,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Security
 
+- A named view now hides its names on the same screen update that brings
+  any ending: a refusal that ends access (the letter ended, not cleared,
+  named access switched off), a clearance check that fails, says names are
+  over, names another letter or a new version of it, or gives an end time
+  already past. Once hidden, a later check never shows them again in that
+  view. Before, the names could stay on screen for a moment until the panel
+  caught up.
 - Removing a staff member (or cancelling an invite) needs the hospital
   admin's own two-step code or a backup code; a wrong code removes no one.
 - Every hospital admin must use two-step verification. An admin without it

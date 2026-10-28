@@ -41,7 +41,6 @@ The frontend uses these on sample data. Each must be built or confirmed in mhai-
   - **Multi-sum inference.** Several shown sums that each hide nothing can together give a hidden cell away.
   - **Containment across dimensions.** A row wholly inside a row of another breakdown, with nothing in the reply to say so (a children's ward inside 0–17, a specialty seen by one sex, "no setting" inside "no ward"), gives away the rest by subtraction. These are containments the reply doesn't declare, so the server must detect and close them (the reader closes the declared whole and part pairs and their transitive closure only).
 - **Usage keeps its own local guards (`usage-guards.ts`).** Plan 12 moved the strict small-group guards to `@mhai/ui/guards`; Usage stayed on looser local helpers so its behaviour didn't change. Move it over once a decision is made on its wording.
-- **Flaky clinical test.** "typing in a filter isn't interrupted" (the named-view test) failed intermittently (seen twice) and passes when run again.
 - **CSV file prefix.** Usage downloads are still named `analytics-…`; rename to `usage-…` with the next Usage change.
 - **Analysis status line (M4).** It uses the viewer's day, not the hospital's. The server's check is the source of truth.
 - **Named view end time (M8).** The browser clock is compared with `named_until`. The server's 30-second check is the source of truth.
