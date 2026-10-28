@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The clinical app now sends the same security headers as the platform
+  admin app on every page: a strict Content Security Policy with a fresh
+  nonce, no framing, `nosniff`, a referrer policy, a Permissions-Policy and,
+  in production, HSTS. Every page now renders per request, and visited
+  pages are no longer kept alive: on a phone, coming back to Review
+  corrections opens the queue rather than the last detail.
+
 - The platform admin app's **Analytics** page is now **Usage** (at `/usage`;
   `/analytics` redirects there). Nothing else about it changes.
 - On a phone, a chart with more columns than fit its card is now a labelled,

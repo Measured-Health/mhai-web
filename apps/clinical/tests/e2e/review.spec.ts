@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./csp";
 import {
   expectNoForbiddenWords,
   expectNoStorage,
@@ -136,8 +136,12 @@ test("leaving during the undo window sends the approval at once", async ({
   await expect(page).toHaveURL(/\/help$/);
   await page.clock.resume();
   await openReview(page);
-  // The page keeps its place, so phones come back to the next one's detail.
-  await backToQueue(page);
+  // Visited routes aren't kept alive (no cacheComponents: the CSP needs
+  // every page rendered per request), so the page mounts afresh and phones
+  // come back to the queue, not to a detail.
+  await expect(
+    page.getByRole("button", { name: "Back to the queue" }),
+  ).toHaveCount(0);
   await expect(row(page, "Dengue fever, likely")).toHaveCount(0);
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(
