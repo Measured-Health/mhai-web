@@ -22,6 +22,7 @@ import {
   endReasonFrom,
   meChanged,
   msUntil,
+  namedNow,
   networkDown,
   type EndReason,
 } from "@/lib/analysis/named";
@@ -235,32 +236,47 @@ export function NamedView({
   }, [me.error]);
 
   // The check: anything but the same, still-current letter ends names.
-  const first = useRef<ClearanceMeOut | null>(null);
+  // `first` is the first named reply this view saw, kept in state so that
+  // rendering can compare with it too (below).
+  const [first, setFirst] = useState<ClearanceMeOut | null>(null);
   useEffect(() => {
     const m = me.data;
     if (m === undefined) return;
     if (m === null || !m.named || m.until === null)
       end(endReasonFrom(m) ?? "changed");
     else if (msUntil(m.until, Date.now()) === 0) end("until");
-    else if (first.current === null) first.current = m;
-    else if (meChanged(first.current, m)) end(endReasonFrom(m) ?? "changed");
-  }, [me.data]);
+    else if (first !== null && meChanged(first, m))
+      end(endReasonFrom(m) ?? "changed");
+  }, [me.data, first]);
+
+  // Whether any ending has been seen, read on this render: a refusal that
+  // ends access, a failed check (not the network), or a check that isn't
+  // the first letter, still named and still current. The effects above call
+  // `onEnd` only after the commit, and the browser may paint before they
+  // run, so rendering decides by itself. Once seen, it stays: a later reply
+  // never shows names again in this view. Before the first check answers,
+  // nothing shows either, but that isn't an ending.
+  const t = wallClock();
+  const unchecked = me.data === undefined;
+  const endingNow =
+    endReasonFrom(q.error) !== null ||
+    (me.error !== null && !networkDown(me.error)) ||
+    (!unchecked &&
+      (!namedNow(me.data, t) ||
+        (first !== null && meChanged(first, me.data ?? null))));
+  const [ended, setEnded] = useState(false);
+  if (endingNow && !ended) setEnded(true);
+  if (!endingNow && !ended && first === null && me.data) setFirst(me.data);
 
   // Never a frame of old names: other filters, or past named_until (read
   // afresh, not only the last tick).
   if (!user || !sameAsAsked) return null;
-  // A refusal that ends access, or a check that says names are over, hides
-  // the rows on the render that sees it. The effects above call `onEnd`
-  // only after the commit, and the browser may paint before they run.
-  const stopped =
-    endReasonFrom(q.error) !== null ||
-    (me.error !== null && !networkDown(me.error)) ||
-    me.data === null ||
-    (me.data !== undefined && (!me.data.named || me.data.until === null));
   const live =
-    !stopped &&
+    !unchecked &&
+    !endingNow &&
+    !ended &&
     d !== null &&
-    Math.max(now, wallClock()) < Date.parse(d.named_until);
+    Math.max(now, t) < Date.parse(d.named_until);
   const mark = `${user.fullName ?? user.displayName} · ${clockText(now)}`;
   const failed = q.data?.status === "failed" || (q.isError && !d);
 

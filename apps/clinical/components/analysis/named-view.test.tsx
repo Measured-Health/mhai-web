@@ -8,7 +8,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
 import type { AnalysisClient } from "@/lib/api/analysis";
-import type { AnalysisFilters } from "@/lib/api/analysis-contract";
+import type {
+  AnalysisFilters,
+  ClearanceMeOut,
+} from "@/lib/api/analysis-contract";
 import { ApiError } from "@/lib/api/errors";
 import { resetAudit } from "@/lib/api/mock-audit";
 import {
@@ -436,29 +439,97 @@ describe("NamedView", () => {
     expect(namedQueries()).toHaveLength(0);
   });
 
-  it("a 403 that ends access hides the rows on its own render, before onEnd", async () => {
-    // The view must not wait for its parent: the refusal's render shows no
-    // names, even if nothing has reacted to onEnd yet.
-    const onEnd = vi.fn();
-    open(
-      GRACE,
-      <NamedView
-        drill="sex-female"
-        filters={NAMED_FILTERS}
-        purpose="audit"
-        onEnd={onEnd}
-      />,
-    );
-    await screen.findByRole("table", { name: /^Named patients/ });
-    vi.spyOn(holder.client, "listNamedPatients").mockRejectedValue(
-      new ApiError(403, "clearance_ended"),
-    );
-    await act(() =>
-      qc.refetchQueries({ queryKey: ["analysis", "patients", "named"] }),
-    );
-    await waitFor(() => expect(onEnd).toHaveBeenCalledWith("ended"));
-    expect(screen.queryByRole("table", { name: /^Named patients/ })).toBeNull();
-    expect(document.body).not.toHaveTextContent(/HH-\d{6}/);
+  describe("the view hides names on the render that sees an ending, before onEnd", () => {
+    // NamedView alone, with an onEnd that does nothing: no parent takes the
+    // view away, so any names left on screen are the view's own.
+    async function alone() {
+      const onEnd = vi.fn();
+      open(
+        GRACE,
+        <NamedView
+          drill="sex-female"
+          filters={NAMED_FILTERS}
+          purpose="audit"
+          onEnd={onEnd}
+        />,
+      );
+      await screen.findByRole("table", { name: /^Named patients/ });
+      const me = await holder.client.getClearanceMe();
+      return { onEnd, me: me as ClearanceMeOut };
+    }
+    const noNames = () => {
+      expect(
+        screen.queryByRole("table", { name: /^Named patients/ }),
+      ).toBeNull();
+      expect(document.body).not.toHaveTextContent(/HH-\d{6}/);
+    };
+    const refetch = (key: readonly string[]) =>
+      act(() => qc.refetchQueries({ queryKey: [...key] }));
+    const NAMED_KEY = ["analysis", "patients", "named"];
+    const ME_KEY = ["analysis", "clearance", "me"];
+
+    it.each([
+      ["clearance_ended", "ended"],
+      ["not_cleared", "changed"],
+      ["named_access_off", "switched_off"],
+    ])("a 403 %s from the named list", async (code, reason) => {
+      const { onEnd } = await alone();
+      vi.spyOn(holder.client, "listNamedPatients").mockRejectedValue(
+        new ApiError(403, code),
+      );
+      await refetch(NAMED_KEY);
+      await waitFor(() => expect(onEnd).toHaveBeenCalledWith(reason));
+      noNames();
+    });
+
+    it.each([
+      ["another letter", { clearance_id: "cl_other" }],
+      ["a new version of the letter", { version: 99 }],
+    ] as const)("a check that names %s", async (_, change) => {
+      const { onEnd, me } = await alone();
+      vi.spyOn(holder.client, "getClearanceMe").mockResolvedValue({
+        ...me,
+        ...change,
+      });
+      await refetch(ME_KEY);
+      await waitFor(() => expect(onEnd).toHaveBeenCalledWith("changed"));
+      noNames();
+    });
+
+    it("a check whose until has passed, though named_until hasn't", async () => {
+      // A shortened letter: the check's until is behind the view's
+      // named_until, which the view's own clock would still allow.
+      const { onEnd, me } = await alone();
+      vi.spyOn(holder.client, "getClearanceMe").mockResolvedValue({
+        ...me,
+        until: new Date(Date.now() - SECOND).toISOString(),
+      });
+      await refetch(ME_KEY);
+      await waitFor(() => expect(onEnd).toHaveBeenCalledWith("until"));
+      noNames();
+    });
+
+    it("a check that fails (fail closed)", async () => {
+      const { onEnd } = await alone();
+      vi.spyOn(holder.client, "getClearanceMe").mockRejectedValue(
+        new ApiError(404, "not_found"),
+      );
+      await refetch(ME_KEY);
+      await waitFor(() => expect(onEnd).toHaveBeenCalledWith("changed"));
+      noNames();
+    });
+
+    it("names don't come back when a later check says named again", async () => {
+      const { onEnd, me } = await alone();
+      const check = vi
+        .spyOn(holder.client, "getClearanceMe")
+        .mockResolvedValue({ ...me, version: 99 });
+      await refetch(ME_KEY);
+      await waitFor(() => expect(onEnd).toHaveBeenCalled());
+      check.mockResolvedValue(me);
+      await refetch(ME_KEY);
+      noNames();
+    });
   });
 
   it("a 409 expired is a plain error, not an end of names", async () => {
