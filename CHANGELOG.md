@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- The demo deploy now checks the preview instance's SSH host key
+  (`DEPLOY_HOST_FINGERPRINT` in the `preview` environment) and refuses to
+  run without it, so the GHCR token can only go to the real instance.
+
 ### Changed
 
 - The clinical app now sends the same security headers as the platform
