@@ -4,6 +4,8 @@
 
 **Goal:** the server side of both apps (the BFF: route handlers and `lib/server/` in `apps/clinical` and `apps/platform`) reaches the core service over **NATS** instead of HTTP, behind a per-app switch `BACKEND_TRANSPORT=http|nats` that defaults to `http` until NATS is proven. The same change brings the clinical `contract.ts` and its screens in line with core's contract v1.2.0. The product owner said "do it" on 31 Oct.
 
+**Status:** Approved, 2026-11-03 (product owner, as recommended; see Decisions).
+
 **Architecture:**
 
 - **One transport function per app,** shaped like `fetch`. Every place the BFF calls core today (`callUpstream` in `@mhai/api-client`, the two `/api/v1/[...path]` proxies) calls it instead of `fetch`. With `http` it is `fetch` plus the trusted headers; with `nats` it turns the request into one NATS request on `api.v1.<app>` and the reply back into a `Response`. Nothing above it changes: shapes, session, refresh, refusals and file checks stay as they are.
@@ -65,13 +67,13 @@ Read before planning; each point shapes a ruling below.
 - **R3. Client IP on both transports.** Core needs `X-MHAI-Client-IP` for sign-in (fact 4). The app reads it from the one header the host's nginx overwrites, named by `TRUSTED_CLIENT_IP_HEADER` (the demo's sites set `X-Real-IP $remote_addr`), through `next/headers` inside the request, checks it is an IP literal (`node:net` `isIP`), and passes it to the transport. Unset or invalid: the header is omitted and core fails sign-in closed. No call site changes for this: each app's `lib/server/backend.ts` reads it.
 - **R4. The HTTP transport gains `X-MHAI-Service`** from `BFF_SERVICE_KEY_FILE`, so the HTTP side of the parity runs works against a real core on steven-reid. It lives only as long as the HTTP transport, which a later PR removes once core turns `CORE_HTTP_API` off. On `nats` the key is never read.
 - **R5. Timeouts.** The caller passes `timeoutMs` (15 000 for `callUpstream`, 30 000 for the proxies, as today). The transport sends `Mhai-Timeout-Ms` = `timeoutMs − 500` (at least 1000), so core gives up before the BFF does and its reply, if any, isn't wasted; the NATS request itself times out at `timeoutMs`. `init.signal` still aborts the wait.
-- **R6. Size.** The transport refuses a body over 64 KB itself, with the same reply core would give (413, `{ "code": "payload_too_large" }` as `application/problem+json` on clinical, `{code}` on platform), and never publishes it. The JSON paths already cap at 64 KB before this; the one bigger body, the Plan 11 letter upload (up to `LETTER_MAX_BYTES` + 64 KB, multipart), has no core route yet and cannot ride `api.v1` as designed (see Open questions).
+- **R6. Size.** The transport refuses a body over 64 KB itself, with the same reply core would give (413, `{ "code": "payload_too_large" }` as `application/problem+json` on clinical, `{code}` on platform), and never publishes it. The JSON paths already cap at 64 KB before this; the one bigger body, the Plan 11 letter upload (up to `LETTER_MAX_BYTES` + 64 KB, multipart), has no core route yet and cannot ride `api.v1` as designed (Decision 7).
 - **R7. The reply is buffered,** not streamed: one NATS message is at most 1 MB. The transport builds `new Response(body, { status, headers })` from the reply. The proxies' file checks (`Content-Type` against the shape's types) work unchanged.
 - **R8. Readiness.** The clinical proxy forwards `GET readyz` today; core doesn't serve probes over NATS. In `nats` mode the clinical proxy answers `readyz` itself from the transport's readiness (200 `{}` when connected, 503 `{}` when not), which the live client's `getReadiness()` already reads as up or down. Each app also gets `GET /api/health` for Docker's health check (200 `{"status":"ok"}` or 503 `{"status":"unavailable"}`, no detail).
 - **R9. Auth on NATS:** NKey only, except when `MHAI_DEPLOY_ENV=development`, where a user and a password file are also accepted (the backend's dev and smoke stacks use password users). TLS: required unless `MHAI_DEPLOY_ENV=development`; with TLS, a CA file and a client certificate and key (the production server has `verify: true`). The demo runs as development, like core there (product owner, 28 Oct).
 - **R10. Connect early, never block a build.** `instrumentation.ts` `register()` opens the connection at server start when the transport is `nats` (Node runtime only); a call before it is up waits at most its own timeout. `next build` never connects (register doesn't run there, and the module connects lazily otherwise).
 - **R11. No retries in the transport.** A lost reply on a write is the caller's to retry: the clients already reuse one `Idempotency-Key` per write (`useKeyedMutation`), so core replays instead of acting twice. Auth calls without a key behave as on HTTP.
-- **R12. `trust_band` is typed, not shown.** Core calls it provisional. The confidence bars keep coming from `trust_score` and the safety rule (needs review never shows a confidence level). Showing the band waits for clinical sign-off (Open questions).
+- **R12. `trust_band` is typed, not shown.** Core calls it provisional. The confidence bars keep coming from `trust_score` and the safety rule (needs review never shows a confidence level). Showing the band waits for clinical sign-off (Decision 4).
 
 ## Design
 
@@ -211,13 +213,13 @@ browser ──https──> nginx (host) ──> app container (Next.js server = 
 
 - **Accepted:** a stolen seed plus a stolen access token can act as that user until the token expires (15 minutes) and the seed is rotated, the same as a stolen service key plus token on HTTP. NATS accounts aren't split yet on the backend (its TODO.md, "Split NATS accounts before production"); core's reply-prefix check is the defence until then.
 - **Accepted:** the demo runs NATS without TLS, on one host, as development (spec §17.6 requires TLS in production; this plan's config refuses to run without it there).
-- **Sign-off:** none clinical for the transport (what clinicians see doesn't change). The empty-citations wording and any display of `trust_band` need `clinical-review` (Task 7, Open questions).
+- **Sign-off:** none clinical for the transport (what clinicians see doesn't change). The empty-citations wording and any display of `trust_band` need `clinical-review` (Task 7, Decisions 4 and 5).
 
 ## Demo deploy, rollout and rollback
 
 ### What changes on the instance
 
-- **Live containers, separate from the public demo.** The public demo (`web`, port 8090) and the platform app (`platform`, port 8091) stay sample data, built with `NEXT_PUBLIC_USE_MOCK=true`, unchanged, and don't join `mhai-bff`: they have no use for it, and a public container without a seed is the safer default. A new image tag (`-live`, built with `USE_MOCK=false`) runs as `web-live` in `/srv/mhai-web/compose.yml` under the profile `live`, on `127.0.0.1:8093` only, reached by SSH tunnel (no nginx site), like core's Redoc. It is the only container that joins `mhai-bff` and holds the seed. The platform gets `platform-live` the same way (`127.0.0.1:8094`, `/srv/mhai-web-platform`) once `bff_platform` exists. (Open question 1 offers the alternative of switching the public demo itself.)
+- **Live containers, separate from the public demo.** The public demo (`web`, port 8090) and the platform app (`platform`, port 8091) stay sample data, built with `NEXT_PUBLIC_USE_MOCK=true`, unchanged, and don't join `mhai-bff`: they have no use for it, and a public container without a seed is the safer default. A new image tag (`-live`, built with `USE_MOCK=false`) runs as `web-live` in `/srv/mhai-web/compose.yml` under the profile `live`, on `127.0.0.1:8093` only, reached by SSH tunnel (no nginx site), like core's Redoc. It is the only container that joins `mhai-bff` and holds the seed. The platform gets `platform-live` the same way (`127.0.0.1:8094`, `/srv/mhai-web-platform`) once `bff_platform` exists. (Decision 1.)
 - **`deploy/compose.yml`:**
 
   ```yaml
@@ -293,7 +295,7 @@ Needed before step 1 of the rollout; nothing in core's Go code changes.
 4. **`services/core/internal/bus/conf_test.go`:** the demo's `bff_platform` permissions equal `services/nats/nats.conf`'s, as for the clinical user.
 5. **`deploy/README.md`** ("The frontend and NATS"): both users, the seed files and their owner, rotation; **`TODO.md`**: drop "no `bff_platform` user", keep "turn core's HTTP API off" pointing at mhai-web's rollout step 6.
 
-(Renaming `NATS_BFF_NKEY` to `NATS_BFF_CLINICAL_NKEY` is optional; see Open questions.)
+(Renaming `NATS_BFF_NKEY` to `NATS_BFF_CLINICAL_NKEY` is not done now; Decision 8.)
 
 ## Review Focus
 
@@ -653,19 +655,21 @@ Lands after the backend follow-up is merged and `setup-host.sh` has run on the i
 
 Nothing heavy runs on the laptop.
 
-## Open questions (each with a recommendation)
+## Decisions
 
-1. **Switch the public demo to live, or add live preview containers?** Today both public sites are sample data, and most live screens would be 404 from core (fact 3). _Recommendation:_ keep the public sites on sample data and add `web-live` / `platform-live` on loopback, reached by tunnel (as planned). Switch the public demo only when core serves the screens it shows.
-2. **Fix today's HTTP path (service key and client IP)?** It has never worked against core (fact 4). _Recommendation:_ yes, as R3 and R4: the client IP on both transports (core needs it on NATS too); the service key on HTTP only, so the parity runs have a working HTTP baseline. Both go when the HTTP transport goes.
-3. **Where does the frontend's seed live on the instance?** Today it is a line in the backend's `.env`. _Recommendation:_ the backend's `setup-host.sh` writes one file per app under `/srv/mhai-backend/secrets/bff/`, owned by uid 1001, mode 0400, and mhai-web's compose mounts it as a secret by that path (backend follow-up). No copying by hand, and one place to rotate.
-4. **Show `trust_band`?** Core marks it provisional. _Recommendation:_ type it and don't show it (R12) until clinical sign-off says what each band means and how it sits next to the confidence bars.
-5. **The empty-citations wording.** _Recommendation:_ "Sources for this answer can't be shown yet." and "Claim details can't be shown yet.", through `clinical-review`, until the pipeline stores citation details (backend TODO.md).
-6. **Readiness on NATS.** Core serves no probes over NATS. _Recommendation:_ the BFF answers `readyz` from its own connection (R8). If the degraded strip should also reflect core's database and KV, ask the backend for a `GET /readyz` on `api.v1` later; not needed now.
-7. **Letter uploads and file replies.** The Plan 11 upload (up to 10 MB) can't ride `api.v1` (64 KB body, 1 MB message), and page images near 1 MB would fail. Neither route exists in core yet. _Recommendation:_ out of scope; the documents service design picks the path (for example a short-lived upload grant over NATS and an object-store upload). Until then, on `nats` the BFF answers 413 for bodies over 64 KB (R6). Listed in TODO.md (Task 11).
-8. **Rename `NATS_BFF_NKEY` to `NATS_BFF_CLINICAL_NKEY` on the backend?** _Recommendation:_ not in the follow-up; it touches the demo's `.env` and a test for no gain. Rename when production config is written.
-9. **Password auth in development.** _Recommendation:_ allow it only with `MHAI_DEPLOY_ENV=development` (R9), so the backend's dev and smoke stacks work as they are; production and the demo use NKeys.
-10. **A cancelled question (`error_code: cancelled`): show Try again?** The person's account or hospital was deactivated, so a retry ends in sign-out anyway. _Recommendation:_ the same failed view, no special case; revisit if a clinician-facing reason is wanted.
-11. **When does the HTTP transport go?** _Recommendation:_ in the PR after core turns `CORE_HTTP_API` off, which follows the last live BFF moving to `nats` (rollout step 6).
+The product owner approved the plan as recommended on 2026-11-03 ("yes"). Each question raised while planning is settled as below.
+
+1. **Live preview containers, not a live public demo.** The public sites stay on sample data, because most live screens would be 404 from core today (fact 3). `web-live` and `platform-live` run on loopback and are reached by SSH tunnel. The public demo switches only when core serves the screens it shows.
+2. **Today's HTTP path is fixed (R3, R4).** The client IP is sent on both transports, because core needs it for sign-in on NATS too. The service key is sent on HTTP only, so the parity runs have a working HTTP baseline. Both go when the HTTP transport goes.
+3. **The seed lives in a file the backend writes.** The backend's `setup-host.sh` writes one file per app under `/srv/mhai-backend/secrets/bff/` (owned by uid 1001, mode 0400), and mhai-web's compose mounts it as a secret by that path (backend follow-up). Nobody copies it by hand, and it is rotated in one place.
+4. **`trust_band` is typed, not shown (R12),** until clinical sign-off says what each band means and how it sits next to the confidence bars.
+5. **The empty-citations wording** is "Sources for this answer can't be shown yet." and "Claim details can't be shown yet.", through `clinical-review`, until the pipeline stores citation details (backend TODO.md).
+6. **Readiness on NATS:** the BFF answers `readyz` from its own connection (R8). If the degraded strip should later reflect core's database and KV too, the backend can serve a `GET /readyz` on `api.v1`; it isn't needed now.
+7. **Letter uploads and file replies are out of scope.** The Plan 11 upload (up to 10 MB) can't ride `api.v1` (64 KB body, 1 MB message), and page images near 1 MB would fail; neither route exists in core yet. The documents service design picks the path (for example a short-lived upload grant over NATS and an object-store upload). Until then, on `nats` the BFF answers 413 for bodies over 64 KB (R6). It is listed in TODO.md (Task 11).
+8. **`NATS_BFF_NKEY` is not renamed** in the backend follow-up: the rename touches the demo's `.env` and a test for no gain. It is renamed when the production config is written.
+9. **Password auth only in development:** with `MHAI_DEPLOY_ENV=development` (R9), so the backend's dev and smoke stacks work as they are. Production and the demo use NKeys.
+10. **A cancelled question shows the same failed view,** with no special case: the person's account or hospital was deactivated, so a retry ends in sign-out anyway. Revisit if a clinician-facing reason is wanted.
+11. **The HTTP transport goes** in the PR after core turns `CORE_HTTP_API` off, which follows the last live BFF moving to `nats` (rollout step 6).
 
 ## Self-review notes
 
