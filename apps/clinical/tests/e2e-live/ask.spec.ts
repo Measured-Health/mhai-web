@@ -93,6 +93,17 @@ test("first sign-in, a question, sign out, and sign in again with the code", asy
   await expect(result.or(failed)).toBeVisible({ timeout: 120_000 });
   await expect(result).toBeVisible();
   await expectNoForbiddenWords(page);
+  // The safety rule holds whatever the transport: a needs-review result
+  // shows the banner and no confidence level.
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: /needs clinician review/ });
+  if (await banner.isVisible())
+    await expect(page.getByRole("status", { name: /confidence/i })).toHaveCount(
+      0,
+    );
+  // The cookie was rewritten; e2e-live.sh checks in core's database that
+  // the refresh token really rotated, with no reuse.
   expect(await sessionCookie(page)).not.toBe(before);
 
   // Sign out: nothing left in browser storage.

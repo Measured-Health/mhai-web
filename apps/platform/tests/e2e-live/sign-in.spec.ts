@@ -67,4 +67,5 @@ test("a new platform admin's first sign-in, then sign in again with the code", a
   await typeCode(page, await totp(secret, Date.now()));
   await expect(page).toHaveURL(/\/hospitals$/);
   await signOut(page);
+  await expectNoStorage(page);
 });
