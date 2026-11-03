@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, UpstreamError } from "./api";
+import { api, apiBase, UpstreamError } from "./api";
 
-beforeEach(() => vi.stubEnv("MHAI_API_URL", "http://api.test/"));
+beforeEach(() => {
+  vi.stubEnv("MHAI_API_URL", "http://api.test/");
+  vi.stubEnv("BACKEND_TRANSPORT", "http");
+});
 afterEach(() => vi.unstubAllEnvs());
 
 describe("api", () => {
@@ -53,6 +56,16 @@ describe("api", () => {
   it("returns nothing for 204", async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
     expect(await api("/x", { fetchImpl })).toBeUndefined();
+  });
+  it("on NATS, the base is the NATS origin and needs no MHAI_API_URL", async () => {
+    vi.stubEnv("BACKEND_TRANSPORT", "nats");
+    vi.stubEnv("MHAI_API_URL", "");
+    expect(apiBase()).toBe("http://core.nats.invalid/api/v1");
+    const fetchImpl = vi.fn(async () => Response.json({ ok: 1 }));
+    await api("/auth/logout", { fetchImpl });
+    expect((fetchImpl.mock.calls[0] as unknown as [string])[0]).toBe(
+      "http://core.nats.invalid/api/v1/auth/logout",
+    );
   });
   it("throws loudly when the API address isn't set", async () => {
     vi.stubEnv("MHAI_API_URL", "");

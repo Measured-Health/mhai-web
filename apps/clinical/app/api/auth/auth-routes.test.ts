@@ -326,6 +326,17 @@ describe("assumed endpoints", () => {
     upstream.mockResolvedValueOnce(LOGIN_OK);
     expect((await oidcExchange(post({ code: "good" }))).status).toBe(200);
   });
+  it("hospital sign-on is unavailable on NATS (no browser-facing core)", async () => {
+    vi.stubEnv("BACKEND_TRANSPORT", "nats");
+    const res = await oidcLogin(
+      new Request("http://demo.test/api/auth/oidc/login", {
+        headers: { host: "demo.test" },
+      }),
+    );
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Location")).toBeNull();
+    expect(await res.json()).toEqual({ code: "unavailable" });
+  });
   it("maps the smaller failure cases", async () => {
     upstream.mockRejectedValueOnce(new UpstreamError(422, "validation_failed"));
     expect((await forgot(post({ email: "bad" }))).status).toBe(202);

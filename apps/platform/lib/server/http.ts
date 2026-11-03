@@ -1,22 +1,33 @@
 import { UpstreamError, callUpstream } from "@mhai/api-client/server/upstream";
+import type { BackendFetch } from "@mhai/api-client/server/backend-fetch";
+import { NATS_API_ORIGIN, backendFetch, onNats } from "./backend";
 
 export { UpstreamError };
 
-/** Sent on every upstream call so the API issues platform-audience tokens (spec §13). */
+/**
+ * Sent on every upstream call so the API issues platform-audience tokens
+ * (spec §13). On NATS the subject carries the audience and the transport
+ * drops this header.
+ */
 export const AUDIENCE_HEADER = "X-MHAI-Audience";
 export const AUDIENCE = "platform";
 
+/**
+ * Core's API base. On NATS the origin is a name that never resolves and only
+ * selects the transport (R2): MHAI_API_URL isn't needed there.
+ */
 export function apiBase(): string {
+  if (onNats()) return `${NATS_API_ORIGIN}/api/v1`;
   const u = process.env.MHAI_API_URL;
   if (!u) throw new Error("MHAI_API_URL is not set");
   return `${u.replace(/\/+$/, "")}/api/v1`;
 }
 
-/** `fetch` with the platform audience header added. */
-export const platformFetch: typeof fetch = (input, init) => {
+/** The backend transport with the platform audience header added. */
+export const platformFetch: BackendFetch = (input, init) => {
   const headers = new Headers(init?.headers);
   headers.set(AUDIENCE_HEADER, AUDIENCE);
-  return fetch(input, { ...init, headers });
+  return backendFetch(input, { ...init, headers });
 };
 
 /** Server-side call to the MHAI API. Keeps only the problem `code`. */
