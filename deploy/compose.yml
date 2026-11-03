@@ -24,3 +24,59 @@ services:
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
+
+  # The live preview (docs/adr/0005): the clinical app built for live mode
+  # (image tag `live`, USE_MOCK=false), reaching core over NATS as
+  # bff_clinical. Under the profile `live`, so `docker compose up -d web`
+  # never starts it. Loopback only and no nginx site: reached by SSH tunnel
+  # (deploy/README.md, "Live preview over NATS"). The only container here on
+  # mhai-bff and the only one holding a NATS seed; the public `web` above is
+  # unchanged.
+  web-live:
+    profiles: ["live"]
+    image: ${WEB_LIVE_IMAGE:-ghcr.io/measured-health/mhai-web:live}
+    pull_policy: missing
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8093:8080"
+    mem_limit: 384m
+    environment:
+      BACKEND_TRANSPORT: ${WEB_LIVE_TRANSPORT:-nats}
+      # As core on the demo: one host, no NATS TLS (the backend's deploy/README).
+      MHAI_DEPLOY_ENV: development
+      NATS_URL: nats://mhai-nats:4222
+      # A file, mounted below; the seed is never in the environment.
+      NATS_NKEY_SEED_FILE: /run/secrets/nats-bff-clinical.nk
+      TRUSTED_CLIENT_IP_HEADER: x-real-ip
+      # Not :? here: the whole file is checked even when the profile is off,
+      # and the public deploy must never stop on it. The deploy step checks it.
+      SESSION_SECRET: ${WEB_LIVE_SESSION_SECRET:-}
+    secrets: [nats-bff-clinical.nk]
+    networks: [default, mhai-bff]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+secrets:
+  # Written by the backend's setup-host.sh: mode 400, owned by uid 1001 (the
+  # image's nextjs user). Rotate with its --rotate-bff clinical.
+  nats-bff-clinical.nk:
+    file: /srv/mhai-backend/secrets/bff/nats-bff-clinical.nk
+
+networks:
+  # The backend's internal network to NATS (mhai-nats:4222), made by its
+  # setup-host.sh.
+  mhai-bff:
+    external: true

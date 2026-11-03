@@ -21,3 +21,49 @@ services:
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
+
+  # The live preview of the platform app (docs/adr/0005): built for live
+  # mode (image tag `live`), reaching core over NATS as bff_platform. Under
+  # the profile `live`; loopback only, no nginx site, reached by SSH tunnel
+  # (deploy/README.md). Core serves sign-in only for this app so far.
+  platform-live:
+    profiles: ["live"]
+    image: ${PLATFORM_LIVE_IMAGE:-ghcr.io/measured-health/mhai-web-platform:live}
+    pull_policy: missing
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8094:8080"
+    mem_limit: 256m
+    environment:
+      BACKEND_TRANSPORT: ${PLATFORM_LIVE_TRANSPORT:-nats}
+      MHAI_DEPLOY_ENV: development
+      NATS_URL: nats://mhai-nats:4222
+      NATS_NKEY_SEED_FILE: /run/secrets/nats-bff-platform.nk
+      TRUSTED_CLIENT_IP_HEADER: x-real-ip
+      # Not :? here (see compose.yml): the deploy step checks it.
+      PLATFORM_SESSION_SECRET: ${PLATFORM_LIVE_SESSION_SECRET:-}
+    secrets: [nats-bff-platform.nk]
+    networks: [default, mhai-bff]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+secrets:
+  nats-bff-platform.nk:
+    file: /srv/mhai-backend/secrets/bff/nats-bff-platform.nk
+
+networks:
+  mhai-bff:
+    external: true

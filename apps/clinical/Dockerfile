@@ -23,8 +23,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Read at build time and inlined into the client bundle, so it can't be set
-# when the container starts. The demo always runs on sample data.
-ENV NEXT_PUBLIC_USE_MOCK=true \
+# when the container starts. The public demo always runs on sample data.
+# USE_MOCK=false builds the live image (the loopback-only live preview,
+# deploy/README.md); every other build is sample data.
+ARG USE_MOCK=true
+ENV NEXT_PUBLIC_USE_MOCK=$USE_MOCK \
     NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w @mhai/clinical
 
