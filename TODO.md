@@ -16,13 +16,12 @@ The frontend was called finished for the team demo on 23 Oct 2026. Everything be
   - once every live BFF is on `nats` and core turns `CORE_HTTP_API` off, delete the HTTP transport, `MHAI_API_URL` and `BFF_SERVICE_KEY_FILE`;
   - letter uploads and file replies over NATS need the documents service (bodies over 64 KB are 413 on `nats`);
   - hospital sign-on on `nats` (it redirects the browser to core, which has no browser-facing address there).
-- **Auth contract drift found by the live e2e (both apps, either transport):**
-  - the clinical welcome flow changes a temporary password with no current password; core requires `current_password` (422 `validation_failed`, shown as "too common");
-  - the platform app sends a new admin to the code page on `mfa_required`; core expects a challenge with no code, which gives an enrolment-only session;
-  - refresh: core's `POST /auth/refresh` takes a `refresh_token` body; the BFFs send the access token as bearer;
-  - the live e2e (`scripts/it/e2e-live.sh`) does these steps through core's API until the apps do.
 - **Contract v1.2.0 in the clinical app** (plan Task 7, its own PR): `trust_band`, `cited_chunk_ids`, the new codes; show `trust_band` only after clinical sign-off.
 - **Reference documents for MHAI** (guidelines, protocols). Upload isn't in any plan yet; it needs scoping.
+
+## Before a second BFF instance
+
+- **A shared refresh store.** Each app's BFF keeps a rotated refresh token's successor in memory for a minute (`@mhai/api-client/server/refresh`), so requests still carrying the old cookie use the new pair instead of reaching core with a rotated-out token (core would revoke the session). That needs one BFF instance per app, as the demo runs. Before running two, move it to a shared store: NATS KV keyed by sha256 of the refresh token, value the sealed successor, TTL about a minute.
 
 ## Sign-offs and live switches
 

@@ -35,6 +35,16 @@ export function authCode(
       return { status: 429, code: "rate_limited" };
     case "mfa_invalid":
       return { status: 401, code: "mfa_invalid" };
+    case "mfa_locked":
+      // Core: 5 wrong codes in 15 minutes. The page says "locked for 15 minutes".
+      return { status: 429, code: "locked" };
+    case "weak_password":
+      return { status: 422, code: "weak_password" };
+    case "forbidden":
+      // Core: a wrong current password is 403 forbidden.
+      return ctx === "current"
+        ? { status: 403, code: "wrong_password" }
+        : { status: 503, code: "unavailable" };
     case "validation_failed":
       return {
         status: 422,
@@ -48,9 +58,9 @@ export function authCode(
             ? "invalid_credentials"
             : ctx === "mfa"
               ? "mfa_expired"
-              : ctx === "current"
-                ? "wrong_password"
-                : "session_expired",
+              : // Core: a wrong current password is 403 forbidden; 401 is the
+                // session itself.
+                "session_expired",
       };
     case "token_expired":
       return {

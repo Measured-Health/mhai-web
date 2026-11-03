@@ -96,6 +96,7 @@ async function session(
   const now = Date.now();
   await writeSession({
     token: "tok",
+    refreshToken: "rtok",
     expiresAt: now + (over.expiresInMs ?? 10 * 60_000),
     lastSeenAt: over.lastSeenAt ?? now,
     user: {
@@ -926,7 +927,11 @@ describe("platform API proxy", () => {
       await session({ expiresInMs: 2 * 60_000, lastSeenAt: seenAt });
       fetchMock
         .mockResolvedValueOnce(
-          Response.json({ access_token: "tok2", expires_in: 900 }),
+          Response.json({
+            access_token: "tok2",
+            refresh_token: "rtok2",
+            expires_in: 900,
+          }),
         )
         .mockResolvedValueOnce(Response.json({}));
       await call("GET", ["platform", "notifications"], { headers: BG });
@@ -970,7 +975,11 @@ describe("platform API proxy", () => {
     await session({ expiresInMs: 2 * 60_000 });
     fetchMock
       .mockResolvedValueOnce(
-        Response.json({ access_token: "tok2", expires_in: 900 }),
+        Response.json({
+          access_token: "tok2",
+          refresh_token: "rtok2",
+          expires_in: 900,
+        }),
       )
       .mockResolvedValueOnce(Response.json({}));
     const res = await call("GET", ["platform", "team"]);
@@ -978,7 +987,14 @@ describe("platform API proxy", () => {
     expect(calls()[0][0]).toBe("http://api.test/api/v1/auth/refresh");
     expect(headersOf(calls()[0]).get("X-MHAI-Audience")).toBe("platform");
     expect(headersOf(calls()[1]).get("Authorization")).toBe("Bearer tok2");
-    expect((await readSession())!.token).toBe("tok2");
+    expect(headersOf(calls()[0]).get("Authorization")).toBeNull();
+    expect(JSON.parse(String(calls()[0][1].body))).toEqual({
+      refresh_token: "rtok",
+    });
+    expect((await readSession())!).toMatchObject({
+      token: "tok2",
+      refreshToken: "rtok2",
+    });
   });
 });
 

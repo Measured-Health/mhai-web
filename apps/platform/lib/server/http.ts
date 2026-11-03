@@ -96,7 +96,12 @@ export function authCode(
       // can't use this app.
       return ctx === "login" || ctx === "mfa"
         ? { status: 403, code: "not_platform" }
-        : { status: 503, code: "unavailable" };
+        : ctx === "current"
+          ? // Core: a wrong current password is 403 forbidden.
+            { status: 403, code: "wrong_password" }
+          : { status: 503, code: "unavailable" };
+    case "weak_password":
+      return { status: 422, code: "weak_password" };
     case "mfa_invalid":
       return { status: 401, code: "mfa_invalid" };
     case "validation_failed":
@@ -112,9 +117,9 @@ export function authCode(
             ? "invalid_credentials"
             : ctx === "mfa"
               ? "mfa_expired"
-              : ctx === "current"
-                ? "wrong_password"
-                : "session_expired",
+              : // Core: a wrong current password is 403 forbidden; 401 is the
+                // session itself.
+                "session_expired",
       };
     case "token_expired":
       return {

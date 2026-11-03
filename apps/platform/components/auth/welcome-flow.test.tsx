@@ -29,9 +29,10 @@ async function startAsNewAdmin() {
   await act(() => auth.current.signIn(NEW_ADMIN_EMAIL, "temporary"));
 }
 
-async function passwordAndTerms(user: ReturnType<typeof userEvent.setup>) {
+async function passwordStep(user: ReturnType<typeof userEvent.setup>) {
   expect(screen.getByText("Step 1 of 4 · Your password")).toBeInTheDocument();
   expectNoSkip();
+  await user.type(screen.getByLabelText("Temporary password"), "temporary");
   await user.type(screen.getByLabelText("New password"), "tram-lantern-okra");
   await user.type(
     screen.getByLabelText("Confirm password"),
@@ -40,25 +41,50 @@ async function passwordAndTerms(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Save password" }));
 
   expect(
-    await screen.findByText("Step 2 of 4 · Terms of use"),
+    await screen.findByText("Step 2 of 4 · Protect your account"),
+  ).toBeInTheDocument();
+  expectNoSkip();
+}
+
+async function termsStep(user: ReturnType<typeof userEvent.setup>) {
+  expect(
+    await screen.findByText("Step 4 of 4 · Terms of use"),
   ).toBeInTheDocument();
   expectNoSkip();
   const go = screen.getByRole("button", { name: "Continue" });
   expect(go).toBeDisabled();
   await user.click(screen.getByLabelText("I understand and agree"));
   await user.click(go);
-
-  expect(
-    await screen.findByText("Step 3 of 4 · Protect your account"),
-  ).toBeInTheDocument();
-  expectNoSkip();
 }
 
 describe("WelcomeFlow", () => {
-  it("the new admin must set a password, accept terms and set up two-step, with no way to skip", async () => {
+  it("the password step needs the temporary password, and says when it's wrong", async () => {
     await startAsNewAdmin();
     const user = userEvent.setup();
-    await passwordAndTerms(user);
+    await user.type(screen.getByLabelText("New password"), "tram-lantern-okra");
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "tram-lantern-okra",
+    );
+    await user.click(screen.getByRole("button", { name: "Save password" }));
+    expect(screen.getByLabelText("Temporary password")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    await user.type(screen.getByLabelText("Temporary password"), "wrong");
+    await user.click(screen.getByRole("button", { name: "Save password" }));
+    expect(
+      await screen.findByText(
+        "That isn't the temporary password you were given.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Temporary password")).toHaveFocus();
+  });
+
+  it("the new admin must set a password, set up two-step, then accept the terms, with no way to skip", async () => {
+    await startAsNewAdmin();
+    const user = userEvent.setup();
+    await passwordStep(user);
 
     expect(
       await screen.findByRole("img", {
@@ -69,15 +95,16 @@ describe("WelcomeFlow", () => {
     await user.keyboard("123456");
 
     expect(
-      await screen.findByText("Step 4 of 4 · Backup codes"),
+      await screen.findByText("Step 3 of 4 · Backup codes"),
     ).toBeInTheDocument();
     expectNoSkip();
     // Still owed until the codes are saved: no way round.
-    expect(auth.current.steps).toEqual(["mfa"]);
+    expect(auth.current.steps).toEqual(["mfa", "terms"]);
     await user.click(
       screen.getByLabelText("I've saved these codes somewhere safe"),
     );
     await user.click(screen.getByRole("button", { name: "Finish setup" }));
+    await termsStep(user);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/hospitals"));
     expect(auth.current.steps).toEqual([]);
     expect(auth.current.user?.mfaEnabled).toBe(true);
@@ -86,7 +113,7 @@ describe("WelcomeFlow", () => {
   it("a wrong setup code clears the boxes", async () => {
     await startAsNewAdmin();
     const user = userEvent.setup();
-    await passwordAndTerms(user);
+    await passwordStep(user);
     await screen.findByRole("img", {
       name: "QR code for your authenticator app",
     });
@@ -101,7 +128,7 @@ describe("WelcomeFlow", () => {
   it("backup codes are shown once after two-step setup", async () => {
     await startAsNewAdmin();
     const user = userEvent.setup();
-    await passwordAndTerms(user);
+    await passwordStep(user);
     await screen.findByRole("img", {
       name: "QR code for your authenticator app",
     });
@@ -122,7 +149,8 @@ describe("WelcomeFlow", () => {
       expect(screen.queryByRole("list", { name: "Backup codes" })).toBeNull(),
     );
     expect(screen.queryByText(MOCK_BACKUP_CODES[0])).toBeNull();
-    expect(replace).toHaveBeenCalledWith("/hospitals");
+    await termsStep(user);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/hospitals"));
   });
 
   it("sends someone with nothing owed home", () => {

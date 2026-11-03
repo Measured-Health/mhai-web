@@ -1,5 +1,6 @@
 import { sealSync, unsealSync } from "@mhai/api-client/server/seal";
 import { cookies } from "next/headers";
+import { refresher, resolveCurrent } from "./refresher";
 import type { FirstStep, Role, SignInResult, User } from "../auth/types";
 import { stepsFor, toUser, type ApiLoginOk } from "./map-user";
 
@@ -11,6 +12,12 @@ export const TRUST_TTL_S = 30 * 86_400;
 
 export interface ServerSession {
   token: string;
+  /**
+   * Core's refresh token (rotated on every refresh). Sealed in this
+   * httpOnly cookie, never readable by the page. Missing in sessions
+   * sealed before it was kept: those aren't refreshed.
+   */
+  refreshToken?: string | null;
   expiresAt: number;
   user: User;
   steps: FirstStep[];
@@ -50,10 +57,20 @@ export async function readSession(
   // Sealed before roles combined (Plan 4): one `role`.
   if (!Array.isArray(s.user.roles))
     s.user = { ...s.user, roles: s.user.role ? [s.user.role] : [] };
-  return s;
+  // Signed out here lately (a stale copy of the cookie): no session.
+  if (s.refreshToken && refresher.isForgotten(s.refreshToken)) return null;
+  // A cookie still holding a pair this process has rotated: use the newer
+  // one (core denylists the old access token on refresh).
+  return resolveCurrent(s);
 }
 
 export async function writeSession(s: ServerSession, now = Date.now()) {
+  // Never the rotated-out pair: a route still holding the old cookie
+  // writes the successor this process rotated it to.
+  // Never a cookie for a session signed out here (a refresh or a step
+  // that finished after the sign-out).
+  if (s.refreshToken && refresher.isForgotten(s.refreshToken)) return;
+  s = resolveCurrent(s);
   (await cookies()).set(
     SESSION_COOKIE,
     seal(s),
@@ -64,6 +81,10 @@ export async function writeSession(s: ServerSession, now = Date.now()) {
 /** Ends the session and any MFA step. The trusted-device cookie stays. */
 export async function clearSession() {
   const jar = await cookies();
+  // The session has ended: no stale copy of its cookie may resolve to a
+  // successor any more (its next refresh goes to core, which refuses it).
+  const ended = unseal<ServerSession>(jar.get(SESSION_COOKIE)?.value);
+  if (ended?.refreshToken) refresher.forget(ended.refreshToken);
   jar.delete(SESSION_COOKIE);
   jar.delete(MFA_COOKIE);
 }
@@ -103,6 +124,10 @@ export async function startSession(
 ): Promise<Extract<SignInResult, { status: "signed_in" }>> {
   const s: ServerSession = {
     token: r.access_token,
+    refreshToken:
+      typeof r.refresh_token === "string" && r.refresh_token
+        ? r.refresh_token
+        : null,
     expiresAt: now + r.expires_in * 1000,
     user: toUser(r.user),
     steps: stepsFor(r.user),

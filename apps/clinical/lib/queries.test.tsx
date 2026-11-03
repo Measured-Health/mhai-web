@@ -479,10 +479,14 @@ describe("contract v1.2.0: status mapping", () => {
     const { result } = renderHook(() => useQueryStatus("q1"), {
       wrapper: wrapWith(makeClient()),
     });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000);
-    });
-    await waitFor(() => expect(result.current.failed).toBe(true));
+    // Retries back off with jitter: move the clock on until they give up,
+    // however late the first call started (no fixed real-time wait).
+    // (A loop, not waitFor: waitFor's own timeout runs on the faked clock.)
+    for (let i = 0; i < 30 && !result.current.failed; i++)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+    expect(result.current.failed).toBe(true);
     expect(status.mock.calls.length).toBeGreaterThan(1);
   });
 });

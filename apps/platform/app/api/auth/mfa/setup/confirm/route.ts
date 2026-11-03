@@ -8,6 +8,7 @@ import {
   sameOrigin,
   sessionExpired,
 } from "@/lib/server/http";
+import { refreshOnce, signedOutMeanwhile } from "@/lib/server/refresh";
 import { readSession, writeSession } from "@/lib/server/session";
 
 const Body = z.object({ code: z.string().trim().min(1).max(20) });
@@ -28,8 +29,15 @@ export async function POST(req: Request) {
     const { status, code } = authCode(e, "other");
     return json(status, { code });
   }
+  // Verify only marks this session as proven by a code; the next refresh
+  // mints a full token (an enrolment-only one reaches nothing else). If the
+  // refresh fails, the terms step refreshes again before it gives up.
+  const fresh = s.refreshToken ? await refreshOnce(s.refreshToken) : null;
+  // Signed out while this was running: no session to update.
+  if (signedOutMeanwhile(s)) return sessionExpired();
   await writeSession({
     ...s,
+    ...(fresh ?? {}),
     lastSeenAt: Date.now(),
     user: { ...s.user, mfaEnabled: true },
     steps: s.steps.filter((x) => x !== "mfa"),

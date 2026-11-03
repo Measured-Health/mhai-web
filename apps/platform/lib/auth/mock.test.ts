@@ -52,7 +52,7 @@ describe("mock auth client", () => {
     const r = await client.signIn(NEW_ADMIN_EMAIL, "temporary");
     expect(r).toMatchObject({
       status: "signed_in",
-      steps: ["password", "terms", "mfa"],
+      steps: ["password", "mfa", "terms"],
     });
   });
 
@@ -125,7 +125,7 @@ describe("mock auth client", () => {
 
   it("two-step setup confirms with the code and drops the step", async () => {
     await client.signIn(NEW_ADMIN_EMAIL, "temporary");
-    await client.changePassword(null, "tram-lantern-okra");
+    await client.changePassword("temporary", "tram-lantern-okra");
     await client.acceptTerms();
     const setup = await client.startMfaSetup();
     expect(setup.backupCodes).toEqual([...MOCK_BACKUP_CODES]);

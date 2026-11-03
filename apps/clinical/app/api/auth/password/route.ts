@@ -3,8 +3,9 @@ import { api } from "@/lib/server/api";
 import { authCode, forbidden, json, sameOrigin } from "@/lib/server/http";
 import { readSession, writeSession } from "@/lib/server/session";
 
+// Core needs the current password, the temporary one at first sign-in too.
 const Body = z.object({
-  current: z.string().max(1024).nullable(),
+  current: z.string().min(1).max(1024),
   next: z.string().min(1).max(1024),
 });
 
@@ -15,7 +16,6 @@ export async function POST(req: Request) {
   const s = await readSession();
   if (!s) return json(401, { code: "session_expired" });
   try {
-    // Field names are an assumption until the backend's openapi.json lands.
     await api("/auth/password", {
       method: "POST",
       token: s.token,
@@ -25,10 +25,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (e) {
-    const { status, code } = authCode(
-      e,
-      body.data.current === null ? "other" : "current",
-    );
+    const { status, code } = authCode(e, "current");
     return json(status, { code });
   }
   await writeSession({ ...s, steps: s.steps.filter((x) => x !== "password") });

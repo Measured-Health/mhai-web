@@ -24,7 +24,8 @@ export const MOCK_NEW_BACKUP_CODES = MOCK_BACKUP_CODES.map((c) =>
 );
 const LOCK_MS = 15 * 60_000;
 const MAX_TRIES = 5;
-const ALL_STEPS: FirstStep[] = ["password", "terms", "mfa"];
+// Core's order: password and two-step first, then the terms.
+const ALL_STEPS: FirstStep[] = ["password", "mfa", "terms"];
 
 interface Account {
   name: string;
@@ -156,7 +157,7 @@ export function createMockAuthClient({
         return { status: "mfa_required" };
       }
       // Not set up yet (the new admin, an unaccepted invite): every first
-      // sign-in step is owed, two-step last. The sample team never records
+      // sign-in step is owed, the terms last. The sample team never records
       // the setup, so the new admin repeats it on each sign-in (on purpose).
       start(u, ALL_STEPS);
       return { status: "signed_in", user: u, steps: [...ALL_STEPS] };

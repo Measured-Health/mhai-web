@@ -113,8 +113,8 @@ export interface AuthClient {
   completeHospitalSignIn(code: string): Promise<SignInResult>;
   signOut(): Promise<void>;
   acceptTerms(): Promise<void>;
-  /** `current` is null during first sign-in (temporary password). */
-  changePassword(current: string | null, next: string): Promise<void>;
+  /** `current` is the temporary password during first sign-in (core needs it). */
+  changePassword(current: string, next: string): Promise<void>;
   startMfaSetup(): Promise<MfaSetup>;
   confirmMfaSetup(code: string): Promise<void>;
   /** Replaces all backup codes; returns the new ones (shown once). */

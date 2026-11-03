@@ -268,6 +268,9 @@ the network `mhai-bff`. Compose mounts the seed read-only at
 - Stop (the rollback; nothing public depends on it):
   `docker compose --profile live stop web-live-proxy web-live`, and
   `cd /srv/mhai-web-platform && docker compose -f compose.platform.yml --profile live stop platform-live-proxy platform-live`.
+- Run **one** container per live app: the BFF keeps each rotated refresh
+  token's successor in memory, so a second instance would send core a
+  rotated-out token and end the session (TODO.md, "A shared refresh store").
 - Never publish the app containers' own ports: without the proxy in front,
   a browser's `X-Real-IP` would reach core as the client IP.
 - A bad image: `WEB_LIVE_IMAGE=ghcr.io/measured-health/mhai-web:live-sha-<previous> docker compose --profile live up -d web-live`.

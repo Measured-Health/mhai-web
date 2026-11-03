@@ -25,7 +25,8 @@ declare -A built
 run() { # app transport role
   local app=$1 transport=$2 role=$3 file
   file="users/$app-$transport.json"
-  "$here/backend-stack.sh" user "$role" "$state/$file" --ready >/dev/null || return 1
+  # Only a temporary password: the app does every first sign-in step.
+  "$here/backend-stack.sh" user "$role" "$state/$file" >/dev/null || return 1
   # One build per app (the transport is read at run time, not build time).
   local build=""
   [ -n "${built[$app]:-}" ] && build="E2E_LIVE_SKIP_BUILD=1"
@@ -44,7 +45,27 @@ run() { # app transport role
   IN_CI_NETWORK="container:$proxy" timeout 1200 "$here/in-ci.sh" "export NEXT_TELEMETRY_DISABLED=1 BACKEND_TRANSPORT=$transport E2E_LIVE_USER_FILE=/state/$file E2E_LIVE_BASE_URL=http://localhost:8080 $build; npm run e2e:live -w @mhai/$app || { for f in apps/$app/test-results/*/error-context.md; do [ -f \"\$f\" ] && sed -E -n -e '/textbox/s/: .*/: [value hidden]/' -e 1,120p \"\$f\"; done; exit 1; }"
   local rc=$?
   docker rm -f "$proxy" >/dev/null 2>&1
-  return $rc
+  [ $rc = 0 ] || return $rc
+  check_refresh "$state/$file" "$app" "$transport"
+}
+
+# Proof in core's own records that the app refreshed: this user's refresh
+# tokens were rotated (SESSION_REFRESH_WITHIN_S makes every call refresh),
+# and core never saw a rotated-out token come back (no auth.refresh.reuse,
+# which would also have revoked the session). The audit drainer runs every
+# few seconds, so wait for it first.
+check_refresh() { # user-file app transport
+  local email pg_pw rotated reuse sql_user
+  email=$(jq -r .email "$1")
+  case "$email" in *[!A-Za-z0-9@.-]*) echo "!! unexpected email" >&2; return 1 ;; esac
+  pg_pw=$(grep '^POSTGRES_PASSWORD=' "$state/env" | cut -d= -f2)
+  sleep 15
+  q() { docker exec -e PGPASSWORD="$pg_pw" "${MHAI_IT_PROJECT:-mhai-it}-postgres-1" psql -U mhai -d mhai -tAc "$1"; }
+  sql_user="SELECT id FROM users WHERE email = '$email'"
+  rotated=$(q "SELECT count(*) FROM refresh_tokens rt JOIN sessions s ON s.id = rt.session_id WHERE s.user_id = ($sql_user) AND rt.rotated_at IS NOT NULL")
+  reuse=$(q "SELECT count(*) FROM audit_log WHERE action = 'auth.refresh.reuse' AND actor_id = ($sql_user)")
+  echo "   refresh ($2 over $3): $rotated rotations, $reuse reuses"
+  [ "${rotated:-0}" -ge 1 ] && [ "${reuse:-1}" = 0 ]
 }
 
 # E2E_LIVE_APPS and E2E_LIVE_TRANSPORTS narrow a run (default: all).

@@ -1,5 +1,6 @@
 import { sealSync, unsealSync } from "@mhai/api-client/server/seal";
 import { cookies } from "next/headers";
+import { refresher, resolveCurrent } from "./refresher";
 import type { ApiLoginOk, ApiUser } from "../api/auth-contract";
 import { api } from "./http";
 import { apiRolesOf, toPlatformRoles, type PlatformRole } from "./roles";
@@ -24,6 +25,12 @@ export interface PlatformUser {
 
 export interface ServerSession {
   token: string;
+  /**
+   * Core's refresh token (rotated on every refresh). Sealed in this
+   * httpOnly cookie, never readable by the page. Missing in sessions
+   * sealed before it was kept: those aren't refreshed.
+   */
+  refreshToken?: string | null;
   expiresAt: number;
   lastSeenAt: number;
   user: PlatformUser;
@@ -70,7 +77,11 @@ async function rawSession(): Promise<ServerSession | null> {
     !Array.isArray(s.steps)
   )
     return null;
-  return s;
+  // Signed out here lately (a stale copy of the cookie): no session.
+  if (s.refreshToken && refresher.isForgotten(s.refreshToken)) return null;
+  // A cookie still holding a pair this process has rotated: use the newer
+  // one (core denylists the old access token on refresh).
+  return resolveCurrent(s);
 }
 
 const live = (s: ServerSession, now: number) =>
@@ -85,6 +96,12 @@ export async function readSession(
 }
 
 export async function writeSession(s: ServerSession, now = Date.now()) {
+  // Never the rotated-out pair: a route still holding the old cookie (a
+  // keep-alive, say) writes the successor this process rotated it to.
+  // Never a cookie for a session signed out here (a refresh or a step
+  // that finished after the sign-out).
+  if (s.refreshToken && refresher.isForgotten(s.refreshToken)) return;
+  s = resolveCurrent(s);
   // The cookie never outlives the token or the idle limit.
   const maxAgeMs = Math.min(s.expiresAt - now, IDLE_LIMIT_MS);
   (await cookies()).set(
@@ -107,6 +124,10 @@ export async function touchSession(
 /** Ends the session and any two-step in progress. */
 export async function clearSession() {
   const jar = await cookies();
+  // The session has ended: no stale copy of its cookie may resolve to a
+  // successor any more (its next refresh goes to core, which refuses it).
+  const ended = unseal<ServerSession>(jar.get(SESSION_COOKIE)?.value);
+  if (ended?.refreshToken) refresher.forget(ended.refreshToken);
   jar.delete(SESSION_COOKIE);
   jar.delete(MFA_COOKIE);
 }
@@ -140,11 +161,19 @@ export async function writeMfa(mfaToken: string, now = Date.now()) {
   );
 }
 
+/** Core's stable id (or the older username); never empty, else no session. */
+function stableId(u: ApiUser): string {
+  for (const k of [u.id, u.username])
+    if (typeof k === "string" && k.trim() !== "") return k;
+  throw new Error("user without a stable id");
+}
+
 export function toPlatformUser(u: ApiUser): PlatformUser {
+  const id = stableId(u);
   return {
-    id: u.username,
-    email: u.email || u.username,
-    name: u.display_name || u.full_name || u.username,
+    id,
+    email: u.email || u.username || "",
+    name: u.display_name || u.full_name || u.email || u.username || "",
     roles: toPlatformRoles(apiRolesOf(u)),
     mfaEnabled: u.mfa_enabled === true,
     backupCodesLeft: u.recovery_codes_left ?? null,
@@ -152,16 +181,17 @@ export function toPlatformUser(u: ApiUser): PlatformUser {
 }
 
 /**
- * First sign-in steps, in order: a new password if required, the terms, then
- * two-step. Two-step is owed whenever the API doesn't say it's on, so it can
- * never be skipped.
+ * First sign-in steps, in core's order: a new password if required, then
+ * two-step (an enrolment-only session reaches only those), then the terms,
+ * which need a full session. Two-step is owed whenever the API doesn't say
+ * it's on, so it can never be skipped.
  */
 export function stepsFor(u: ApiUser): FirstStep[] {
   const steps: FirstStep[] = [];
   if (u.must_change_password) steps.push("password");
+  if (u.mfa_enabled !== true) steps.push("mfa");
   if (u.must_change_password || u.terms_accepted_at === null)
     steps.push("terms");
-  if (u.mfa_enabled !== true) steps.push("mfa");
   return steps;
 }
 
@@ -203,6 +233,10 @@ export async function startSession(
   }
   const s: ServerSession = {
     token: r.access_token,
+    refreshToken:
+      typeof r.refresh_token === "string" && r.refresh_token
+        ? r.refresh_token
+        : null,
     expiresAt: now + r.expires_in * 1000,
     lastSeenAt: now,
     user,

@@ -1,5 +1,5 @@
 import { analysisSignedOff } from "@/lib/server/features";
-import { refreshOnce } from "@/lib/server/refresh";
+import { refreshSession, refreshWithinMs } from "@/lib/server/refresh";
 import {
   apiBase,
   forbidden,
@@ -13,11 +13,8 @@ import {
   endSession,
   readSession,
   touchSession,
-  writeSession,
-  type ServerSession,
 } from "@/lib/server/session";
 
-const REFRESH_WITHIN_MS = 5 * 60_000;
 const MAX_BODY = 64 * 1024;
 const TIMEOUT_MS = 30_000;
 const ID = /^[A-Za-z0-9_-]+$/; // ids are opaque; no dots, slashes or escapes
@@ -218,14 +215,6 @@ function shapeOf(method: string, path: string[]): string | null {
   return match ? `${match.method} ${match.shape}` : null;
 }
 
-async function refresh(s: ServerSession): Promise<ServerSession> {
-  const r = await refreshOnce(s.token);
-  if (!r) return s; // still valid for a few minutes; the next call tries again
-  const next = { ...s, ...r };
-  await writeSession(next);
-  return next;
-}
-
 /**
  * The problem body sent back: only the code, plus who blocks a removal, and
  * how many entries an export would hold.
@@ -290,7 +279,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   const background =
     method === "GET" && req.headers.get("x-mhai-background") === "1";
   if (!background) s = await touchSession(s);
-  if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
+  if (s.expiresAt - Date.now() < refreshWithinMs()) s = await refreshSession(s);
 
   const body = method === "GET" ? undefined : await req.text();
   if (body && Buffer.byteLength(body) > MAX_BODY)

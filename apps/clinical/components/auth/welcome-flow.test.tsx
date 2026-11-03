@@ -36,19 +36,22 @@ describe("WelcomeFlow", () => {
     );
     await act(() => auth.signIn("new.nurse@havanahospital.org", "temp"));
     const out = () => screen.getByRole("link", { name: "Not you? Sign out" });
-    expect(screen.getByText("Step 1 of 4 · First sign-in")).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 4 · Your password")).toBeInTheDocument();
     expect(out()).toHaveAttribute("href", "/sign-out");
-    await user.click(
-      screen.getByLabelText("I understand and agree to use MHAI this way"),
+    await user.type(screen.getByLabelText("Temporary password"), "temp");
+    await user.type(screen.getByLabelText("New password"), "tram-lantern-okra");
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "tram-lantern-okra",
     );
-    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Save password" }));
     expect(
-      await screen.findByText("Step 2 of 4 · Your password"),
+      await screen.findByText("Step 2 of 4 · Protect your account"),
     ).toBeInTheDocument();
     expect(out()).toHaveAttribute("href", "/sign-out");
   });
 
-  it("walks a new account through all four steps, then home", async () => {
+  it("walks a new account through password, two-step, codes, then the terms, then home", async () => {
     const user = userEvent.setup();
     renderWithAuth(
       <ToastProvider>
@@ -59,17 +62,8 @@ describe("WelcomeFlow", () => {
     );
     await act(() => auth.signIn("new.nurse@havanahospital.org", "temp"));
 
-    expect(screen.getByText("Step 1 of 4 · First sign-in")).toBeInTheDocument();
-    const go = screen.getByRole("button", { name: "Continue" });
-    expect(go).toBeDisabled();
-    await user.click(
-      screen.getByLabelText("I understand and agree to use MHAI this way"),
-    );
-    await user.click(go);
-
-    expect(
-      await screen.findByText("Step 2 of 4 · Your password"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 4 · Your password")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Temporary password"), "temp");
     await user.type(screen.getByLabelText("New password"), "tram-lantern-okra");
     await user.type(
       screen.getByLabelText("Confirm password"),
@@ -78,7 +72,7 @@ describe("WelcomeFlow", () => {
     await user.click(screen.getByRole("button", { name: "Save password" }));
 
     expect(
-      await screen.findByText("Step 3 of 4 · Protect your account"),
+      await screen.findByText("Step 2 of 4 · Protect your account"),
     ).toBeInTheDocument();
     expect(
       await screen.findByRole("img", { name: /QR code/ }),
@@ -91,14 +85,55 @@ describe("WelcomeFlow", () => {
     await user.keyboard("123456");
 
     expect(
-      await screen.findByText("Step 4 of 4 · Just in case"),
+      await screen.findByText("Step 3 of 4 · Just in case"),
     ).toBeInTheDocument();
     expect(auth.user?.mfaEnabled).toBe(true);
     await user.click(
       screen.getByLabelText("I've saved these codes somewhere safe"),
     );
     await user.click(screen.getByRole("button", { name: "Finish setup" }));
+
+    expect(
+      await screen.findByText("Step 4 of 4 · Terms of use"),
+    ).toBeInTheDocument();
+    const go = screen.getByRole("button", { name: "Continue" });
+    expect(go).toBeDisabled();
+    await user.click(
+      screen.getByLabelText("I understand and agree to use MHAI this way"),
+    );
+    await user.click(go);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+  });
+
+  it("the password step needs the temporary password, and says when it's wrong", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(
+      <ToastProvider>
+        <Grab />
+        <WelcomeFlow />
+      </ToastProvider>,
+      null,
+    );
+    await act(() => auth.signIn("new.nurse@havanahospital.org", "temp"));
+    await user.type(screen.getByLabelText("New password"), "tram-lantern-okra");
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "tram-lantern-okra",
+    );
+    await user.click(screen.getByRole("button", { name: "Save password" }));
+    expect(screen.getByLabelText("Temporary password")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByText("Step 1 of 4 · Your password")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Temporary password"), "wrong");
+    await user.click(screen.getByRole("button", { name: "Save password" }));
+    expect(
+      await screen.findByText(
+        "That isn't the temporary password you were given.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Temporary password")).toHaveFocus();
   });
 
   it("sends a new hospital admin through the steps, then to the admin side", async () => {
@@ -111,11 +146,8 @@ describe("WelcomeFlow", () => {
       null,
     );
     await act(() => auth.signIn("newadmin.eze@havanahospital.org", "temp"));
-    expect(screen.getByText("Step 1 of 4 · First sign-in")).toBeInTheDocument();
-    await user.click(
-      screen.getByLabelText("I understand and agree to use MHAI this way"),
-    );
-    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByText("Step 1 of 4 · Your password")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Temporary password"), "temp");
     await user.type(
       await screen.findByLabelText("New password"),
       "tram-lantern-okra",
@@ -131,6 +163,12 @@ describe("WelcomeFlow", () => {
       await screen.findByLabelText("I've saved these codes somewhere safe"),
     );
     await user.click(screen.getByRole("button", { name: "Finish setup" }));
+    await user.click(
+      await screen.findByLabelText(
+        "I understand and agree to use MHAI this way",
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/admin/staff"));
   });
 
@@ -176,7 +214,7 @@ describe("WelcomeFlow", () => {
     const client = createMockAuthClient();
     await client.signIn("new@h.org", "temp");
     await client.acceptTerms();
-    await client.changePassword(null, "tram-lantern-okra");
+    await client.changePassword("temp", "tram-lantern-okra");
     renderWithAuth(
       <ToastProvider>
         <WelcomeFlow />
@@ -200,7 +238,7 @@ describe("WelcomeFlow", () => {
     const client = createMockAuthClient();
     await client.signIn("new@h.org", "temp");
     await client.acceptTerms();
-    await client.changePassword(null, "tram-lantern-okra");
+    await client.changePassword("temp", "tram-lantern-okra");
     renderWithAuth(
       <ToastProvider>
         <Grab />

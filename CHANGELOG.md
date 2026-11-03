@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Sign-in, two-step enrolment, password change and refresh follow core's
+  contract** (openapi 1.4.0), in both apps:
+  - a new account whose two-step isn't set up (`mfa_enrolled: false`) gets
+    core's enrolment-only session and sets it up in the welcome flow; an
+    empty code is never sent for an enrolled account;
+  - the welcome flow is now password, two-step (and backup codes), then
+    the terms (product owner, 3 Nov), because core takes the terms only
+    from a session that passed two-step; after two-step the BFF refreshes
+    to the full session;
+  - the first password step asks for the temporary password again (core's
+    `current_password`), and says when it's wrong;
+  - the BFF keeps core's refresh token sealed in the httpOnly session
+    cookie and refreshes with it (`POST /auth/refresh {refresh_token}`),
+    rotating it every time; a result is shared only within core's
+    10-second reuse grace.
+
 ### Added
 
 - **The BFF can reach core over NATS** (ADR 0005), behind

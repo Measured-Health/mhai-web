@@ -311,7 +311,7 @@ describe("OutboxProvider", () => {
     await act(async () => {
       await result.current.auth.signIn("new@h.org", "pw");
     });
-    expect(result.current.auth.steps).toEqual(["terms", "password", "mfa"]);
+    expect(result.current.auth.steps).toEqual(["password", "mfa", "terms"]);
     await act(async () => {
       await result.current.box.queueQuery(Q);
       await result.current.box.queueFeedback({

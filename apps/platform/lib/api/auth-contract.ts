@@ -4,7 +4,9 @@
 
 /** The user as the MHAI API returns it. */
 export interface ApiUser {
-  username: string;
+  /** Older shape; core (contract v1.2.0) sends `id` and no username. */
+  username?: string;
+  id?: string;
   role: string;
   /** Every role (assumed); `role` stays the primary one. */
   roles?: string[];
@@ -13,7 +15,7 @@ export interface ApiUser {
   full_name?: string | null;
   role_title?: string | null;
   specialty?: string | null;
-  hospital?: string | null;
+  hospital?: string | { id: string; name: string } | null;
   mfa_enabled?: boolean;
   must_change_password?: boolean;
   terms_accepted_at?: string | null;
@@ -22,11 +24,18 @@ export interface ApiUser {
 export interface ApiLoginOk {
   access_token: string;
   expires_in: number;
+  /** For the BFF only: sealed in the session cookie, never sent to the page. */
+  refresh_token?: string;
   user: ApiUser;
 }
 export interface ApiMfaRequired {
   mfa_required: true;
   mfa_token: string;
+  /**
+   * false: two-step isn't set up yet, so the challenge with an empty code
+   * gives the enrolment-only session. Anything else: ask for the code.
+   */
+  mfa_enrolled?: boolean;
 }
 export interface ApiSession {
   id: string;

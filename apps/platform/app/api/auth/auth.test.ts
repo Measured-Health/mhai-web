@@ -14,6 +14,7 @@ const jar = vi.hoisted(() => {
 vi.mock("next/headers", () => ({ cookies: async () => jar }));
 
 import { MFA_COOKIE, SESSION_COOKIE, readSession } from "@/lib/server/session";
+import { __resetRefreshCacheForTests, refreshOnce } from "@/lib/server/refresh";
 import { POST as login } from "./login/route";
 import { POST as mfa } from "./mfa/route";
 import { POST as setup } from "./mfa/setup/route";
@@ -61,7 +62,12 @@ const ADMIN = {
   terms_accepted_at: "2026-10-01T00:00:00Z" as string | null,
   recovery_codes_left: 8,
 };
-const LOGIN_OK = { access_token: "tok-123", expires_in: 3600, user: ADMIN };
+const LOGIN_OK = {
+  access_token: "tok-123",
+  expires_in: 3600,
+  refresh_token: "rtok-123",
+  user: ADMIN,
+};
 const CLINICIAN = {
   ...LOGIN_OK,
   access_token: "tok-clin",
@@ -83,6 +89,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockReset();
   jar.values.clear();
+  __resetRefreshCacheForTests();
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -122,6 +129,77 @@ describe("login", () => {
     expect(init.method).toBe("POST");
     expect(await readSession()).toMatchObject({ token: "tok-123" });
   });
+
+  it("reads core's user (an id, no username) and keeps the refresh token sealed", async () => {
+    fetchMock.mockResolvedValueOnce(
+      reply({
+        ...LOGIN_OK,
+        user: {
+          ...ADMIN,
+          username: undefined,
+          id: "0b5c4e1a-1d2e-4f00-9a00-000000000009",
+          role: "platform_admin",
+          roles: ["platform_admin"],
+        },
+      }),
+    );
+    const res = await login(post({ login: ADMIN.email, password: "pw" }));
+    const body = await res.json();
+    expect(body.user.id).toBe("0b5c4e1a-1d2e-4f00-9a00-000000000009");
+    expect(JSON.stringify(body)).not.toContain("rtok-123");
+    expect(jar.values.get(SESSION_COOKIE)).not.toContain("rtok-123");
+    expect((await readSession())?.refreshToken).toBe("rtok-123");
+  });
+
+  it("a user with no stable id gets no session", async () => {
+    fetchMock.mockResolvedValueOnce(
+      reply({ ...LOGIN_OK, user: { ...ADMIN, username: undefined } }),
+    );
+    const res = await login(post({ login: ADMIN.email, password: "pw" }));
+    expect(res.status).toBe(503);
+    expect(jar.values.get(SESSION_COOKIE)).toBeUndefined();
+  });
+
+  it("mfa_enrolled false: a new admin gets core's enrolment-only session (empty code)", async () => {
+    fetchMock.mockResolvedValueOnce(
+      reply({ mfa_required: true, mfa_token: "m", mfa_enrolled: false }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      reply({
+        ...LOGIN_OK,
+        user: {
+          ...ADMIN,
+          mfa_enabled: false,
+          must_change_password: true,
+          terms_accepted_at: null,
+        },
+      }),
+    );
+    const res = await login(post({ login: ADMIN.email, password: "pw" }));
+    expect(await res.json()).toMatchObject({
+      status: "signed_in",
+      steps: ["password", "mfa", "terms"],
+    });
+    expect(lastCall()[0]).toBe("http://api.test/api/v1/auth/mfa/challenge");
+    expect(bodyOf(lastCall())).toEqual({ mfa_token: "m", code: "" });
+    expect(jar.values.get(MFA_COOKIE)).toBeUndefined();
+  });
+
+  it.each([[true], [undefined], ["false"]])(
+    "mfa_enrolled %j: asks for the code, never sends an empty one",
+    async (enrolled) => {
+      fetchMock.mockResolvedValueOnce(
+        reply({
+          mfa_required: true,
+          mfa_token: "m",
+          ...(enrolled === undefined ? {} : { mfa_enrolled: enrolled }),
+        }),
+      );
+      const res = await login(post({ login: ADMIN.email, password: "pw" }));
+      expect(await res.json()).toEqual({ status: "mfa_required" });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("login as a clinician account returns 403 not_platform and clears the cookie", async () => {
     await signedIn(); // an earlier platform session in the same browser
@@ -390,21 +468,17 @@ describe("first sign-in and account", () => {
       terms_accepted_at: null,
       mfa_enabled: false,
     });
-    expect((await readSession())?.steps).toEqual(["password", "terms", "mfa"]);
+    expect((await readSession())?.steps).toEqual(["password", "mfa", "terms"]);
 
     fetchMock.mockResolvedValueOnce(reply());
     expect(
-      (await password(post({ current: null, next: "tram-lantern-okra" })))
+      (await password(post({ current: "temp-pw", next: "tram-lantern-okra" })))
         .status,
     ).toBe(204);
     expect(bodyOf(lastCall())).toEqual({
-      current_password: null,
+      current_password: "temp-pw",
       new_password: "tram-lantern-okra",
     });
-
-    fetchMock.mockResolvedValueOnce(reply());
-    expect((await terms(post())).status).toBe(204);
-    expect(bodyOf(lastCall())).toEqual({ version: "2026-10" });
 
     fetchMock.mockResolvedValueOnce(
       reply({
@@ -418,11 +492,113 @@ describe("first sign-in and account", () => {
       backupCodes: ["AAAA-1111"],
     });
     fetchMock.mockResolvedValueOnce(reply());
+    fetchMock.mockResolvedValueOnce(
+      reply({
+        access_token: "tok-full",
+        refresh_token: "rtok-2",
+        expires_in: 900,
+      }),
+    );
     expect((await confirm(post({ code: "123456" }))).status).toBe(204);
+    // Verify marks the session; the next refresh mints the full token.
+    expect(lastCall()[0]).toBe("http://api.test/api/v1/auth/refresh");
+    expect(bodyOf(lastCall())).toEqual({ refresh_token: "rtok-123" });
     expect(await readSession()).toMatchObject({
+      token: "tok-full",
+      refreshToken: "rtok-2",
       user: { mfaEnabled: true },
-      steps: [],
+      steps: ["terms"],
     });
+
+    fetchMock.mockResolvedValueOnce(reply());
+    expect((await terms(post())).status).toBe(204);
+    expect(bodyOf(lastCall())).toEqual({ version: "2026-10" });
+    expect(new Headers(lastCall()[1].headers).get("Authorization")).toBe(
+      "Bearer tok-full",
+    );
+    expect((await readSession())?.steps).toEqual([]);
+  });
+
+  it("terms while two-step or the password is still owed: refused before core", async () => {
+    for (const extra of [
+      { mfa_enabled: false, terms_accepted_at: null },
+      { must_change_password: true },
+    ]) {
+      await signedIn(extra);
+      fetchMock.mockClear();
+      const res = await terms(post());
+      expect(res.status).toBe(403);
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  });
+
+  it("a keep-alive with the old cookie after a rotation writes the successor", async () => {
+    await signedIn();
+    const old = jar.values.get(SESSION_COOKIE)!;
+    fetchMock.mockResolvedValueOnce(
+      reply({
+        access_token: "tok-2",
+        refresh_token: "rtok-2",
+        expires_in: 900,
+      }),
+    );
+    expect((await refreshOnce("rtok-123"))?.refreshToken).toBe("rtok-2");
+    jar.values.set(SESSION_COOKIE, old); // the browser hasn't seen the new one
+    expect((await keepAlive(post())).status).toBe(204);
+    expect(await readSession()).toMatchObject({
+      token: "tok-2",
+      refreshToken: "rtok-2",
+    });
+  });
+
+  it.each(["unauthenticated", "token_expired"])(
+    "a password change answered %s is session_expired, not wrong_password",
+    async (code) => {
+      await signedIn();
+      fetchMock.mockResolvedValueOnce(reply({ code }, 401));
+      const res = await password(
+        post({ current: "x", next: "tram-lantern-okra" }),
+      );
+      expect(await res.json()).toEqual({ code: "session_expired" });
+    },
+  );
+
+  it("the first password change needs the temporary password", async () => {
+    await signedIn({ must_change_password: true });
+    for (const current of [null, ""])
+      expect(
+        (await password(post({ current, next: "tram-lantern-okra" }))).status,
+      ).toBe(400);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [403, "forbidden", "wrong_password"],
+    [422, "weak_password", "weak_password"],
+  ])("maps core's password refusal %s %s", async (status, code, mapped) => {
+    await signedIn();
+    fetchMock.mockResolvedValueOnce(reply({ code }, status));
+    const res = await password(
+      post({ current: "x", next: "tram-lantern-okra" }),
+    );
+    expect(await res.json()).toEqual({ code: mapped });
+  });
+
+  it("terms refused for an enrolment-only session: refreshes, then retries once", async () => {
+    await signedIn({ terms_accepted_at: null });
+    fetchMock.mockResolvedValueOnce(reply({ code: "mfa_required" }, 403));
+    fetchMock.mockResolvedValueOnce(
+      reply({
+        access_token: "tok-full",
+        refresh_token: "rtok-2",
+        expires_in: 900,
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(reply());
+    expect((await terms(post())).status).toBe(204);
+    expect(new Headers(lastCall()[1].headers).get("Authorization")).toBe(
+      "Bearer tok-full",
+    );
   });
 
   it("issues new backup codes, lists and drops devices", async () => {
@@ -483,7 +659,7 @@ describe("guards", () => {
       setup(post(undefined, evil)),
       confirm(post({ code: "123456" }, evil)),
       newCodes(post(undefined, evil)),
-      password(post({ current: null, next: "x".repeat(12) }, evil)),
+      password(post({ current: "temp", next: "x".repeat(12) }, evil)),
       terms(post(undefined, evil)),
       logout(post(undefined, evil)),
       dropDevice(del("s2", evil), params("s2")),
@@ -514,7 +690,7 @@ describe("guards", () => {
     );
     await mfa(post({ code: "123456", backup: false }));
     fetchMock.mockResolvedValueOnce(reply());
-    await password(post({ current: null, next: "tram-lantern-okra" }));
+    await password(post({ current: "temp", next: "tram-lantern-okra" }));
     fetchMock.mockResolvedValueOnce(reply());
     await terms(post());
     fetchMock.mockResolvedValueOnce(
@@ -522,6 +698,9 @@ describe("guards", () => {
     );
     await setup(post());
     fetchMock.mockResolvedValueOnce(reply());
+    fetchMock.mockResolvedValueOnce(
+      reply({ access_token: "t2", refresh_token: "r2", expires_in: 900 }),
+    );
     await confirm(post({ code: "123456" }));
     fetchMock.mockResolvedValueOnce(reply({ recovery_codes: [] }));
     await newCodes(post());
@@ -543,6 +722,7 @@ describe("guards", () => {
       "/api/v1/auth/terms",
       "/api/v1/auth/mfa/enroll",
       "/api/v1/auth/mfa/verify",
+      "/api/v1/auth/refresh",
       "/api/v1/auth/mfa/recovery-codes",
       "/api/v1/auth/sessions",
       "/api/v1/auth/sessions/s2",

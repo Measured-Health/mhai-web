@@ -163,7 +163,7 @@ describe("stepsFor", () => {
         must_change_password: true,
         mfa_enabled: false,
       }),
-    ).toEqual(["terms", "password", "mfa"]);
+    ).toEqual(["password", "mfa", "terms"]);
     expect(
       stepsFor({ username: "u", role: "clinician", mfa_enabled: true }),
     ).toEqual([]);
@@ -186,7 +186,7 @@ describe("stepsFor", () => {
         must_change_password: true,
         terms_accepted_at: null,
       }),
-    ).toEqual(["terms", "password"]);
+    ).toEqual(["password", "terms"]);
   });
 });
 

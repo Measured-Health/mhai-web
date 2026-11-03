@@ -15,11 +15,12 @@ const LABEL: Record<Shown, string> = {
   mfa: "Protect your account",
   codes: "Backup codes",
 };
-const ORDER: FirstStep[] = ["password", "terms", "mfa"];
+const ORDER: FirstStep[] = ["password", "mfa", "terms"];
 
 /**
- * First sign-in: a new password (if owed), the terms, then two-step setup
- * and the backup codes. Every step is required; none can be skipped.
+ * First sign-in, in core's order: a new password (if owed), two-step setup
+ * and the backup codes, then the terms (core takes them only from a session
+ * that has passed two-step). Every step is required; none can be skipped.
  */
 export function WelcomeFlow() {
   const auth = useAuth();
