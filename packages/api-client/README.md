@@ -15,6 +15,7 @@ admin apps. The package is TypeScript source; each app compiles it
 | `@mhai/api-client/password-rules`          | `passwordRules`, `passwordError`, `COMMON_PASSWORDS`                                                                                                                                                           |
 | `@mhai/api-client/server/seal`             | Server only. `seal`, `unseal` (AES-256-GCM, key sha256(secret), base64url(iv \| tag \| ciphertext); a secret under 32 characters throws)                                                                       |
 | `@mhai/api-client/server/upstream`         | Server only. `callUpstream(base, path, opts)` and `UpstreamError`                                                                                                                                              |
+| `@mhai/api-client/server/nats/mapping`     | Server only. `toNatsRequest`, `fromNatsReply`: one backend request as one NATS message on `api.v1.<app>` and core's reply back as a `Response` (core's `natsapi` rules)                                        |
 | `@mhai/api-client/server/security-headers` | Server only. `newNonce`, `contentSecurityPolicy(nonce, dev)`, `securityHeaders({ nonce, dev, hsts, referrerPolicy })`, `wantsHsts(nodeEnv, hostname)`: the CSP and security headers both apps' `proxy.ts` send |
 
 Nothing here holds app copy, routes or state: each app passes its own API
