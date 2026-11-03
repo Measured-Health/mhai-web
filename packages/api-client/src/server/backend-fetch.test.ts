@@ -346,6 +346,53 @@ describe("BACKEND_TRANSPORT=nats", () => {
   });
 });
 
+describe("a path and query over 2048 bytes (natsapi.MaxPath)", () => {
+  const long = (origin: string) =>
+    `${origin}/api/v1/analysis/patients?${"f=x&".repeat(600)}`;
+
+  it.each([
+    ["http", "clinical", "application/problem+json"],
+    ["nats", "clinical", "application/problem+json"],
+    ["http", "platform", "application/json"],
+    ["nats", "platform", "application/json"],
+  ] as const)(
+    "%s (%s): a local 414 uri_too_long, never sent",
+    async (transport, app, type) => {
+      const r = recorder(async () => reply("200"));
+      const f = createBackendFetch({
+        app,
+        clientIp: ipOf(undefined),
+        env: { BACKEND_TRANSPORT: transport },
+        requester: r,
+        log: () => {},
+      });
+      const res = await f(
+        long(transport === "nats" ? NATS_API_ORIGIN : "http://api.test"),
+      );
+      expect(res.status).toBe(414);
+      expect(res.headers.get("Content-Type")).toBe(type);
+      expect(((await res.json()) as { code: string }).code).toBe(
+        "uri_too_long",
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(r.calls).toHaveLength(0);
+    },
+  );
+
+  it("exactly 2048 bytes still goes through", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({}));
+    const f = createBackendFetch({
+      app: "clinical",
+      clientIp: ipOf(undefined),
+      env: {},
+      log: () => {},
+    });
+    const path = "/api/v1/x?q=";
+    const url = `http://api.test${path}${"a".repeat(2048 - path.length)}`;
+    expect((await f(url)).status).toBe(200);
+  });
+});
+
 describe("an unknown BACKEND_TRANSPORT", () => {
   it("refuses every call and logs once", async () => {
     const logs: string[] = [];

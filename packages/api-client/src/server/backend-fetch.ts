@@ -8,6 +8,7 @@ import {
   type NatsRequester,
 } from "./nats/connection";
 import {
+  MAX_PATH,
   NATS_API_ORIGIN,
   fromNatsReply,
   toNatsRequest,
@@ -83,6 +84,42 @@ function hasAny(h: HeadersInit | undefined): boolean {
         ? h.map(([k]) => k)
         : Object.keys(h);
   return keys.some((k) => lower.includes(k.toLowerCase()));
+}
+
+/** Path and query of `url`, or null when it doesn't parse. */
+function pathAndQuery(url: string): string | null {
+  try {
+    const u = new URL(url);
+    return u.pathname + u.search;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Core takes at most 2048 bytes of path and query over NATS
+ * (natsapi.MaxPath). Longer is a local 414 `uri_too_long` on both
+ * transports, so a long filter fails the same way whichever is on.
+ */
+function uriTooLong(app: BackendApp): Response {
+  const platform = app === "platform";
+  return new Response(
+    JSON.stringify(
+      platform
+        ? { code: "uri_too_long" }
+        : { code: "uri_too_long", status: 414 },
+    ),
+    {
+      status: 414,
+      headers: {
+        "Content-Type": platform
+          ? "application/json"
+          : "application/problem+json",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    },
+  );
 }
 
 export function createBackendFetch(opts: {
@@ -196,6 +233,9 @@ export function createBackendFetch(opts: {
   };
 
   return (url, init) => {
+    const pq = pathAndQuery(url);
+    if (pq !== null && pq.length > MAX_PATH)
+      return Promise.resolve(uriTooLong(app));
     switch (backendTransport(env())) {
       case "http":
         return viaHttp(url, init);
