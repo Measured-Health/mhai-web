@@ -69,7 +69,9 @@ export function SafetyChecks({ view }: { view: ResultView }) {
           Evidence-backed claims
           <small className="block text-[11.5px] text-ink-3">
             {total === 0
-              ? "No claims could be checked against guidelines"
+              ? view.detailsNotStored
+                ? "Claim details can't be shown yet."
+                : "No claims could be checked against guidelines"
               : `${verified} of ${total} claims verified`}
           </small>
         </span>
@@ -132,7 +134,9 @@ export function SourceCards({ view }: { view: ResultView }) {
   if (!view.sources.length)
     return (
       <p className="text-[12.5px] text-ink-3">
-        No sources were used for this answer.
+        {view.detailsNotStored
+          ? "Sources for this answer can't be shown yet."
+          : "No sources were used for this answer."}
       </p>
     );
   return (

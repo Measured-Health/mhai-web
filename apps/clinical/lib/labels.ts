@@ -28,6 +28,11 @@ export function stageIndex(stage: Stage | null | undefined): number {
 
 export const FORBIDDEN_TERMS = [
   "trust score",
+  // Contract v1.2.0 (core): field names and codes never shown.
+  "trust_band",
+  "cited_chunk_ids",
+  "method_not_allowed",
+  "payload_too_large",
   "NLI",
   "entropy",
   "PASS",

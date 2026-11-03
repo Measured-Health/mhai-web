@@ -43,6 +43,13 @@ export function useSubmitQuery() {
   };
 }
 
+const KNOWN_STATUS: ReadonlySet<string> = new Set([
+  "queued",
+  "processing",
+  "completed",
+  "failed",
+]);
+
 export function useQueryStatus(
   id: string,
   { stallMs = 120_000 }: { stallMs?: number } = {},
@@ -61,7 +68,13 @@ export function useQueryStatus(
     enabled: !isLocalId(id),
     refetchInterval: (query) => {
       const s = query.state.data?.status;
-      if (s === "completed" || s === "failed" || stalled || !net.online)
+      if (
+        s === "completed" ||
+        s === "failed" ||
+        (s !== undefined && !KNOWN_STATUS.has(s)) ||
+        stalled ||
+        !net.online
+      )
         return false;
       return pollDelay(Date.now() - (startedAt.current ?? Date.now()), net);
     },
@@ -77,7 +90,11 @@ export function useQueryStatus(
     if (net.online && last.current) last.current.at = Date.now();
   }, [net.online]);
   const progress = q.data?.progress ?? 0;
-  const status = q.data?.status;
+  // Fail closed: a status this app doesn't know is the failed view, never
+  // "analysing" for ever.
+  const raw = q.data?.status;
+  const status =
+    raw === undefined || KNOWN_STATUS.has(raw) ? raw : ("failed" as const);
   useEffect(() => {
     if (
       last.current === null ||
@@ -107,6 +124,8 @@ export function useQueryStatus(
     stage: q.data?.current_stage ?? null,
     stalled,
     error: q.error,
+    /** The failed view: failed, stalled, or the status call gave up. */
+    failed: status === "failed" || stalled || q.isError,
   };
 }
 

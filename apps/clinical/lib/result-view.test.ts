@@ -33,7 +33,9 @@ const base = (o: Partial<ClinicalResultOut> = {}): ClinicalResultOut => ({
   icd10_code: "I20.0",
   response_text: "Summary.",
   trust_score: 0.82,
+  trust_band: "high",
   citations: [cite("PASS")],
+  cited_chunk_ids: ["c-PASS-AHA 2021 Chest Pain"],
   guardrail_details: {
     l1_persona: null,
     l2_entropy: null,
@@ -258,5 +260,46 @@ describe("resultKind", () => {
     expect(resultKind({ decision: "REGENERATE", degraded: true })).toBe(
       "review",
     );
+  });
+});
+
+describe("contract v1.2.0", () => {
+  it("cited, details not stored: kind and banner rules hold, sources are flagged as not shown", async () => {
+    const { CITED_NOT_STORED } = await import("./api/fixtures");
+    const v = toResultView(CITED_NOT_STORED);
+    expect(v.kind).toBe("high");
+    expect(v.banner).toBeNull();
+    expect(v.sources).toEqual([]);
+    expect(v.claims).toEqual({ verified: 0, total: 0 });
+    expect(v.detailsNotStored).toBe(true);
+    expect(toResultView(base()).detailsNotStored).toBe(false);
+    expect(
+      toResultView(base({ citations: [], cited_chunk_ids: [] }))
+        .detailsNotStored,
+    ).toBe(false);
+  });
+  it("confidence comes from trust_score, never trust_band (R12)", () => {
+    for (const band of ["low", "mid", "high", null] as const) {
+      const v = toResultView(base({ trust_score: 0.9, trust_band: band }));
+      expect(v.confidence?.bars).toBe(5);
+    }
+    expect(
+      toResultView(base({ trust_score: null, trust_band: "high" })).confidence,
+    ).toBeNull();
+  });
+  it("needs review never shows a confidence level, whatever trust_band says", () => {
+    for (const r of [
+      base({ decision: "ESCALATE", trust_band: "high" }),
+      base({ degraded: true, trust_band: "high" }),
+    ]) {
+      const v = toResultView(r);
+      expect(v.kind).toBe("review");
+      expect(v.confidence).toBeNull();
+    }
+  });
+  it("trust_band appears nowhere in the view model", () => {
+    const v = toResultView(base({ trust_band: "mid" }));
+    expect(JSON.stringify(v)).not.toMatch(/trust_band|"mid"/);
+    expect(Object.keys(v)).not.toContain("trustBand");
   });
 });

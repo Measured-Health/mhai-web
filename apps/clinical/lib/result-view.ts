@@ -27,6 +27,12 @@ export interface ResultView {
     excerpt: string;
   }[];
   seconds: string;
+  /**
+   * The answer cites sources, but their details aren't stored yet
+   * (contract v1.2.0): the evidence panel says they can't be shown, never
+   * that none were used.
+   */
+  detailsNotStored: boolean;
 }
 
 // Worst status wins when one source backs several claims.
@@ -123,5 +129,7 @@ export function toResultView(r: ClinicalResultOut): ResultView {
     stability: r.guardrail_details.l2_entropy?.stability ?? null,
     sources: [...byTitle.values()],
     seconds: ((r.retrieval_ms + r.generation_ms) / 1000).toFixed(1),
+    detailsNotStored:
+      r.citations.length === 0 && (r.cited_chunk_ids?.length ?? 0) > 0,
   };
 }

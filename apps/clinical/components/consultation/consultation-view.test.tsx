@@ -36,7 +36,7 @@ type Status = {
   progress: number;
   stage: null;
   stalled: boolean;
-  error: null;
+  error: Error | null;
 };
 const status = vi.fn((): Status => ({
   status: "processing",
@@ -189,6 +189,33 @@ describe("ConsultationView", () => {
     );
     expect(push).toHaveBeenCalledWith("/?edit=q1");
   });
+
+  it.each([
+    [405, "method_not_allowed"],
+    [413, "payload_too_large"],
+    [503, "unavailable"],
+  ])(
+    "a status that ends in %s %s shows Couldn't complete, never the code",
+    async (code, name) => {
+      status.mockReturnValue({
+        status: undefined,
+        progress: 0,
+        stage: null,
+        stalled: false,
+        error: new ApiError(code, name),
+      });
+      mount();
+      expect(
+        await screen.findByRole("heading", {
+          name: "We couldn't complete this one",
+        }),
+      ).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain(name);
+      expect(
+        screen.getByRole("button", { name: /Try again/ }),
+      ).toBeInTheDocument();
+    },
+  );
 
   it("shows Couldn't complete when the query stalls", async () => {
     status.mockReturnValue({
