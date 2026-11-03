@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The BFF can reach core over NATS** (ADR 0005), behind
+  `BACKEND_TRANSPORT=http|nats` (default `http`). One `fetch`-shaped
+  transport per app, one NATS connection per server process as the app's
+  own NKey user, server only; the BFF unit suites run on both transports
+  (`npm run test:nats`), and integration and live e2e suites run against the
+  backend's smoke stack (`scripts/it/`). `GET /api/health` in both apps.
+- **Live preview containers** `web-live` and `platform-live` (compose
+  profile `live`, loopback only), built with `USE_MOCK=false` on a manual
+  deploy run; the public demo stays on sample data.
+
+### Security
+
+- `check:no-nats` fails the build check if a client chunk holds NATS code,
+  and ESLint keeps `@nats-io/*` and the server transport out of client code.
+- The NKey seed is a mounted file read once, never in an image, the
+  environment or a log; the transport logs no token, body, path or query.
+
+### Fixed
+
+- The clinical app reads core's user as built: `hospital` is `{id, name}`
+  and there is no `username` (the outbox is bound to the user id).
+
 ### Security
 
 - The demo deploy now checks the preview instance's SSH host key

@@ -432,8 +432,21 @@ With `NEXT_PUBLIC_USE_MOCK` unset, the app talks to the MHAI API through
 its own server routes (`/api/auth/*`, `/api/v1/*`). The API token is
 sealed in an `httpOnly` cookie and never reaches browser JavaScript. Set:
 
-- `MHAI_API_URL`: the API base, without `/api/v1`;
-- `SESSION_SECRET`: at least 32 characters (`openssl rand -base64 48`).
+- `SESSION_SECRET`: at least 32 characters (`openssl rand -base64 48`);
+- `BACKEND_TRANSPORT`: how the server reaches core, `http` (default) or
+  `nats` (ADR 0005);
+- on `http`: `MHAI_API_URL` (the API base, without `/api/v1`) and
+  `BFF_SERVICE_KEY_FILE` (a file holding the BFF service key);
+- on `nats`: `NATS_URL`, `NATS_NKEY_SEED_FILE` (the app's NKey seed, a
+  mounted file, never in the environment) and, outside
+  `MHAI_DEPLOY_ENV=development`, a `tls://` URL with `NATS_TLS_CA_FILE`,
+  `NATS_TLS_CERT_FILE` and `NATS_TLS_KEY_FILE` (development also accepts
+  `NATS_USER` and `NATS_PASSWORD_FILE`);
+- `TRUSTED_CLIENT_IP_HEADER`: the header the host's nginx overwrites with
+  the user's IP (`x-real-ip`); core needs it for sign-in.
+
+The platform admin app takes the same backend settings. Each app's
+`GET /api/health` answers 200 while it can reach core (always on `http`).
 
 Platform admin and auditor accounts get a 403 page that says to use the
 platform admin app, with no link to it. Hospital admins use the hospital
