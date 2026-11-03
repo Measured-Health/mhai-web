@@ -35,13 +35,16 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
-  # Unit tests run per app, alongside lint and typecheck.
+  # Unit tests run per app, alongside lint and typecheck. The BFF suites run
+  # on both backend transports: on nats, an in-memory fake of core's NATS
+  # adapter sits in front of the suites' stubbed fetch (test:nats).
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         part: [clinical, platform, shared]
+        transport: [http, nats]
     steps:
       - uses: actions/checkout@v7
 
@@ -53,7 +56,8 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Test (${{ matrix.part }})
+      - name: Test (${{ matrix.part }}, ${{ matrix.transport }})
+        if: matrix.transport == 'http'
         run: |
           case "${{ matrix.part }}" in
             clinical) npm test -w @mhai/clinical ;;
@@ -62,6 +66,15 @@ jobs:
               npm test -w packages --if-present
               node --test "scripts/**/*.test.mjs"
               ;;
+          esac
+
+      - name: Test the BFF over NATS (${{ matrix.part }})
+        if: matrix.transport == 'nats'
+        run: |
+          case "${{ matrix.part }}" in
+            clinical) npm run test:nats -w @mhai/clinical ;;
+            platform) npm run test:nats -w @mhai/platform ;;
+            shared) npm run test:nats -w @mhai/api-client ;;
           esac
 
   build:
@@ -92,6 +105,9 @@ jobs:
 
       - name: Bundle check
         run: npm run check:bundle
+
+      - name: No NATS code in client chunks
+        run: npm run check:no-nats
 
       - name: Platform marker check
         run: npm run check:platform-marker

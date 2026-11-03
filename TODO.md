@@ -10,7 +10,18 @@ The frontend was called finished for the team demo on 23 Oct 2026. Everything be
   - "Open patient record" links;
   - patient-facing explanations, which a clinician reviews before anything is sent;
   - the rest of the EMR design follow-ups.
-- **BFF over NATS (backend decision, 28 Oct).** The BFF stops calling the core service with `fetch` and becomes a NATS client: nats.js over TCP, from the Node server side only, never from the browser. Each app has its own NATS user (`bff_clinical`, `bff_platform`) with its NKey seed in the server environment, and inbox prefix `_INBOX_bff.<app>`. A call is one message on `api.v1.clinical` or `api.v1.platform` with headers `Mhai-Method`, `Mhai-Path` and the same `Authorization`, `Idempotency-Key` and `X-MHAI-Client-IP` as today; the reply carries `Mhai-Status-Code`, the headers and the body. The NATS identity replaces the `X-MHAI-Service` key. The backend keeps HTTP on until this lands. Design: mhai-multiagent `docs/specs/2026-10-28-intelligence-boundary-design.md` §17 and ADR 0011.
+- **BFF over NATS: what's left** (ADR 0005; the transport is built, default `http`):
+  - turn on the live previews on the demo host (deploy/README.md, "Live preview over NATS");
+  - production: NATS TLS with client certificates for the BFFs;
+  - once every live BFF is on `nats` and core turns `CORE_HTTP_API` off, delete the HTTP transport, `MHAI_API_URL` and `BFF_SERVICE_KEY_FILE`;
+  - letter uploads and file replies over NATS need the documents service (bodies over 64 KB are 413 on `nats`);
+  - hospital sign-on on `nats` (it redirects the browser to core, which has no browser-facing address there).
+- **Auth contract drift found by the live e2e (both apps, either transport):**
+  - the clinical welcome flow changes a temporary password with no current password; core requires `current_password` (422 `validation_failed`, shown as "too common");
+  - the platform app sends a new admin to the code page on `mfa_required`; core expects a challenge with no code, which gives an enrolment-only session;
+  - refresh: core's `POST /auth/refresh` takes a `refresh_token` body; the BFFs send the access token as bearer;
+  - the live e2e (`scripts/it/e2e-live.sh`) does these steps through core's API until the apps do.
+- **Contract v1.2.0 in the clinical app** (plan Task 7, its own PR): `trust_band`, `cited_chunk_ids`, the new codes; show `trust_band` only after clinical sign-off.
 - **Reference documents for MHAI** (guidelines, protocols). Upload isn't in any plan yet; it needs scoping.
 
 ## Sign-offs and live switches

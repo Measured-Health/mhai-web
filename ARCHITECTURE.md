@@ -282,8 +282,20 @@ flowchart LR
     ui --> q
     q -->|mock mode| mock
     q -->|live| bff
-    bff -->|Bearer token| gw["MHAI API /api/v1"]
+    bff -->|"NATS api.v1.&lt;app&gt; (BACKEND_TRANSPORT=nats)"| nats["NATS"]
+    nats --> gw["MHAI API /api/v1 (core)"]
+    bff -.->|"HTTP, until the switch"| gw
 ```
+
+- **Transport (ADR 0005):** the BFF reaches core through one `fetch`-shaped
+  function per app (`createBackendFetch`, `@mhai/api-client/server/backend-fetch`),
+  switched by `BACKEND_TRANSPORT`. On `nats`, each call is one request on
+  `api.v1.clinical` or `api.v1.platform` as the app's own NKey user, with
+  `Mhai-Method`, `Mhai-Path`, `Mhai-Timeout-Ms` and core's six request
+  headers; the reply's status is `Mhai-Status-Code`. The connection is
+  server only (`server-only`, an ESLint rule and `check:no-nats`). Any
+  failure is 503 `unavailable` at the browser, as on HTTP. The HTTP
+  transport (with `X-MHAI-Service`) goes once core turns its HTTP API off.
 
 - **Session:** the Next.js server keeps the API token in an `httpOnly`,
   `Secure`, `SameSite=Strict` cookie and forwards calls to the API. Browser

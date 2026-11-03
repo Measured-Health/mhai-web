@@ -21,6 +21,43 @@ describe("toUser", () => {
         .displayName,
     ).toBe("Dr. Ana Reyes");
   });
+  it("reads core's user (contract v1.2.0): hospital object, no username", () => {
+    const core = {
+      id: "0b5c4e1a-1d2e-4f00-9a00-000000000001",
+      role: "clinician",
+      roles: ["clinician"],
+      email: "it@hit.example.test",
+      display_name: "Synthetic IT Clinician",
+      hospital: {
+        id: "0b5c4e1a-1d2e-4f00-9a00-000000000002",
+        name: "Synthetic Hospital HIT",
+      },
+      mfa_enabled: false,
+    } as unknown as ApiUser;
+    const u = toUser(core);
+    expect(u.hospital).toBe("Synthetic Hospital HIT");
+    // The stable id binds the offline outbox to this person.
+    expect(u.username).toBe("0b5c4e1a-1d2e-4f00-9a00-000000000001");
+    expect(u.displayName).toBe("Synthetic IT Clinician");
+  });
+  it("refuses a user with no stable id: the outbox is never keyed by an empty name", () => {
+    for (const u of [
+      { role: "clinician", email: "a@hit.example.test" },
+      { role: "clinician", id: "", username: "" },
+      { role: "clinician", id: 7 },
+    ])
+      expect(() => toUser(u as unknown as ApiUser)).toThrow();
+  });
+  it("a hospital that is neither a name nor {name} is null, never rendered", () => {
+    for (const hospital of [{ id: "x" }, 42, ["a"], { name: 7 }])
+      expect(
+        toUser({
+          username: "u",
+          role: "clinician",
+          hospital,
+        } as unknown as ApiUser).hospital,
+      ).toBeNull();
+  });
   it("treats an unknown role as non-clinical", () => {
     expect(toUser({ username: "u", role: "system" }).roles).toEqual([
       "researcher",

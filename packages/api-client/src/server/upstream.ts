@@ -1,3 +1,5 @@
+import type { BackendFetch } from "./backend-fetch";
+
 export class UpstreamError extends Error {
   constructor(
     readonly status: number,
@@ -23,7 +25,7 @@ export async function callUpstream<T>(
     body?: unknown;
     token?: string;
     timeoutMs?: number;
-    fetchImpl?: typeof fetch;
+    fetchImpl?: BackendFetch;
   } = {},
 ): Promise<T> {
   const url = `${base}${path}`;
@@ -38,6 +40,7 @@ export async function callUpstream<T>(
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
+      timeoutMs,
       cache: "no-store",
     });
   } catch {

@@ -8,8 +8,10 @@
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
+    "test:nats": "BACKEND_TRANSPORT=nats vitest run app/api lib/server",
     "test:watch": "vitest",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:live": "playwright test -c playwright.live.config.ts"
   },
   "dependencies": {
     "@mhai/api-client": "*",

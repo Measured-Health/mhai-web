@@ -8,7 +8,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:nats": "BACKEND_TRANSPORT=nats vitest run src/server",
+    "test:it": "vitest run src/server/nats/nats.integration.test.ts"
   },
   "peerDependencies": {
     "@tanstack/react-query": "5.104.2",
@@ -22,5 +24,10 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "vitest": "5.0.4"
+  },
+  "dependencies": {
+    "@nats-io/nats-core": "3.4.0",
+    "@nats-io/transport-node": "3.4.0",
+    "server-only": "0.0.1"
   }
 }

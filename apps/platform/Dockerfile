@@ -27,8 +27,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Read at build time and inlined into the client bundle. The preview always
-# runs on sample data.
-ENV NEXT_PUBLIC_USE_MOCK=true \
+# runs on sample data (the public app).
+# USE_MOCK=false builds the live image (the loopback-only live preview,
+# deploy/README.md); every other build is sample data.
+ARG USE_MOCK=true
+ENV NEXT_PUBLIC_USE_MOCK=$USE_MOCK \
     NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w @mhai/platform
 

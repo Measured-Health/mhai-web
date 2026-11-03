@@ -110,6 +110,11 @@ async function session(
 type Call = [string, RequestInit];
 const calls = () => fetchMock.mock.calls as Call[];
 const headersOf = (c: Call) => new Headers(c[1].headers);
+// The suite runs on both transports (npm run test:nats). On NATS, Accept is
+// HTTP-only (never sent) and the audience comes from the subject.
+const onNats = process.env.BACKEND_TRANSPORT === "nats";
+/** The Accept the BFF asks for: none on NATS. */
+const accept = (v: string) => (onNats ? null : v);
 
 /** The 15 audit shapes. */
 const AUDIT_SHAPES: [Method, string][] = [
@@ -854,12 +859,14 @@ describe("platform API proxy", () => {
         expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
       }
       expect(headersOf(calls()[0]!).get("Accept")).toBe(
-        "image/png, image/jpeg",
+        accept("image/png, image/jpeg"),
       );
       // JSON calls still ask for JSON, and an export isn't inline.
       fetchMock.mockResolvedValueOnce(Response.json({ clearances: [] }));
       await call("GET", ["platform", "clearances"]);
-      expect(headersOf(calls()[2]!).get("Accept")).toBe("application/json");
+      expect(headersOf(calls()[2]!).get("Accept")).toBe(
+        accept("application/json"),
+      );
       fetchMock.mockResolvedValueOnce(upstream(FILE));
       const exp = await call("GET", [
         "platform",
@@ -1198,7 +1205,7 @@ describe("the Analysis shapes", () => {
     expect(csv.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
     expect(await csv.text()).toBe("a,b\n");
     expect(headersOf(calls()[0]!).get("Accept")).toBe(
-      "text/csv, application/zip",
+      accept("text/csv, application/zip"),
     );
     fetchMock.mockResolvedValueOnce(
       new Response(new Uint8Array([80, 75, 3, 4]), {

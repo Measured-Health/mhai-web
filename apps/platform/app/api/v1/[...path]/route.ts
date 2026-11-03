@@ -313,6 +313,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
       },
       body: body || undefined,
       signal: AbortSignal.timeout(TIMEOUT_MS),
+      timeoutMs: TIMEOUT_MS,
       cache: "no-store",
     });
   } catch {

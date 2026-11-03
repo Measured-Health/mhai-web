@@ -115,8 +115,89 @@ jobs:
           cache-from: type=gha,scope=platform
           cache-to: type=gha,mode=max,scope=platform
 
+  # The live preview images (docs/adr/0005): the same apps built with
+  # USE_MOCK=false, tagged `live` and `live-sha-<commit>`. Only on a manual
+  # run from main: the public demo's images and steps above never change.
+  build-web-live:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The metadata action lowercases the image name (the organisation
+      # has capitals; Docker refuses them).
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=live
+            type=sha,format=long,prefix=live-sha-
+
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: apps/clinical/Dockerfile
+          platforms: linux/arm64
+          build-args: USE_MOCK=false
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=web-live
+          cache-to: type=gha,mode=max,scope=web-live
+
+  build-platform-live:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The metadata action lowercases the image name (the organisation
+      # has capitals; Docker refuses them).
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ghcr.io/${{ github.repository }}-platform
+          tags: |
+            type=raw,value=live
+            type=sha,format=long,prefix=live-sha-
+
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: apps/platform/Dockerfile
+          platforms: linux/arm64
+          build-args: USE_MOCK=false
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=platform-live
+          cache-to: type=gha,mode=max,scope=platform-live
+
   deploy:
-    needs: [build-web, build-platform]
+    needs: [build-web, build-platform, build-web-live, build-platform-live]
     runs-on: ubuntu-latest
     environment: preview
     # Set the repo variable DEPLOY_ENABLED=true once the instance is set up
@@ -147,8 +228,11 @@ jobs:
           GHCR_USER: ${{ github.actor }}
           # "success" only when the platform image was built and pushed.
           PLATFORM_BUILD: ${{ needs.build-platform.result }}
+          # "success" only on a manual run that built the live images.
+          WEB_LIVE_BUILD: ${{ needs.build-web-live.result }}
+          PLATFORM_LIVE_BUILD: ${{ needs.build-platform-live.result }}
         with:
-          envs: GHCR_TOKEN,GHCR_USER,PLATFORM_BUILD
+          envs: GHCR_TOKEN,GHCR_USER,PLATFORM_BUILD,WEB_LIVE_BUILD,PLATFORM_LIVE_BUILD
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -206,5 +290,40 @@ jobs:
             else
               echo "Platform not set up yet; skipped"
             fi
+
+            # The live previews (docs/adr/0005), after the public apps and
+            # only when their image was built on this run, their session
+            # secret is set and the backend's seed file exists
+            # (deploy/README.md, "Live preview over NATS"). Never fatal for
+            # the public deploy above.
+            live() { # name dir composefile service port secretvar seed build
+              local name=$1 dir=$2 file=$3 svc=$4 port=$5 var=$6 seed=$7 build=$8
+              if [ "$build" != success ]; then echo "$name: no live image on this run; skipped"; return 0; fi
+              if ! [ -f "$dir/.env" ] || ! grep -q "^$var=." "$dir/.env"; then echo "$name: $var not set in $dir/.env; skipped"; return 0; fi
+              if ! [ -e "$seed" ]; then echo "$name: no NATS seed file at $seed; skipped"; return 0; fi
+              if ! docker network inspect mhai-bff >/dev/null 2>&1; then echo "$name: no mhai-bff network; skipped"; return 0; fi
+              if ! [ -f "$dir/live-proxy.conf.template" ]; then echo "$name: no live-proxy.conf.template in $dir; skipped"; return 0; fi
+              # The app and its loopback proxy, the only way in (it sets X-Real-IP).
+              ( cd "$dir"
+                docker compose -f "$file" --profile live pull "$svc" "$svc-proxy"
+                docker compose -f "$file" --profile live up -d "$svc" "$svc-proxy" )
+              ok=0
+              for _ in $(seq 1 24); do
+                h=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/api/health" || echo 000)
+                if [ "$h" = 200 ]; then ok=1; break; fi
+                sleep 5
+              done
+              if [ "$ok" = 1 ]; then echo "$name healthy through its proxy (connected to NATS)."
+              else
+                echo "::warning::$name not healthy (/api/health=$h); the public apps are unaffected. Recent logs:"
+                ( cd "$dir" && docker compose -f "$file" --profile live logs --tail=60 "$svc" "$svc-proxy" )
+              fi
+            }
+            live web-live /srv/mhai-web compose.yml web-live 8093 WEB_LIVE_SESSION_SECRET \
+              /srv/mhai-backend/secrets/bff/nats-bff-clinical.nk "$WEB_LIVE_BUILD" \
+              || echo "::warning::web-live deploy failed; the public apps are unaffected"
+            live platform-live /srv/mhai-web-platform compose.platform.yml platform-live 8094 PLATFORM_LIVE_SESSION_SECRET \
+              /srv/mhai-backend/secrets/bff/nats-bff-platform.nk "$PLATFORM_LIVE_BUILD" \
+              || echo "::warning::platform-live deploy failed; the public apps are unaffected"
 
             docker image prune -f

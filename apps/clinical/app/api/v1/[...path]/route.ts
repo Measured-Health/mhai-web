@@ -7,6 +7,7 @@ import {
   type User,
 } from "@/lib/auth/types";
 import { apiBase } from "@/lib/server/api";
+import { backendFetch, backendReady, onNats } from "@/lib/server/backend";
 import { analysisSignedOff, namedSignedOff } from "@/lib/server/features";
 import { forbidden, json, sameOrigin } from "@/lib/server/http";
 import { refreshOnce } from "@/lib/server/refresh";
@@ -416,12 +417,17 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   }
   const files = fileTypes(req.method, path);
 
+  // Core doesn't serve its probes over NATS: there, readiness is this
+  // app's own connection (R8).
+  if (path[0] === "readyz" && onNats())
+    return json(backendReady() ? 200 : 503, {});
+
   // Only reads carry filters; a write's query string is never forwarded.
   const search = req.method === "GET" ? new URL(req.url).search : "";
   const url = `${apiBase()}/${path.map(encodeURIComponent).join("/")}${search}`;
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await backendFetch(url, {
       method: req.method,
       headers: {
         Accept: files ? files.join(", ") : "application/json",
@@ -431,6 +437,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
       },
       body,
       signal: AbortSignal.timeout(30_000),
+      timeoutMs: 30_000,
       cache: "no-store",
     });
   } catch {

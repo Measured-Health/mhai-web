@@ -15,8 +15,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:bundle": "node scripts/check-no-platform-code.mjs apps/clinical/.next",
+    "check:no-nats": "node scripts/check-no-nats.mjs apps/clinical/.next apps/platform/.next",
     "check:platform-marker": "node scripts/check-no-platform-code.mjs apps/platform/.next --expect-found",
     "test": "npm test --workspaces --if-present && node --test \"scripts/**/*.test.mjs\"",
+    "test:nats": "npm run test:nats -w @mhai/clinical && npm run test:nats -w @mhai/platform && npm run test:nats -w @mhai/api-client",
     "e2e": "npm run e2e -w @mhai/clinical && npm run e2e -w @mhai/platform"
   },
   "devDependencies": {

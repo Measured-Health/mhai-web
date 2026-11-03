@@ -24,6 +24,15 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: repositoryRoot,
   // Shared workspace packages ship TypeScript source.
   transpilePackages: ["@mhai/api-client", "@mhai/tokens", "@mhai/ui"],
+  // The NATS client (server only, BACKEND_TRANSPORT=nats) is required at
+  // run time from node_modules, never bundled; output tracing copies it into
+  // the standalone server.
+  serverExternalPackages: [
+    "@nats-io/transport-node",
+    "@nats-io/nats-core",
+    "@nats-io/nkeys",
+    "@nats-io/nuid",
+  ],
   // A full page load of a consultation or its printout starts a new, empty
   // in-memory session, so the consultation can't be there: send those loads
   // to a 404 page. In-app navigation (RSC requests and prefetches) skips this
