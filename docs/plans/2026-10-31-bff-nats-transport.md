@@ -77,16 +77,16 @@ Read before planning; each point shapes a ruling below.
 
 ### The NATS client (`packages/api-client/src/server/nats/connection.ts`)
 
-| Setting | From | Notes |
-| --- | --- | --- |
-| servers | `NATS_URL` | e.g. `nats://mhai-nats:4222` on the demo, `tls://...` in production. Required on `nats`. |
-| auth | `NATS_NKEY_SEED_FILE` | Read once, checked to start with `SU`, passed to `nkeyAuthenticator`; the buffer is zeroed after the authenticator copies it. Development only: `NATS_USER` + `NATS_PASSWORD_FILE`. Both set, or neither: refuse. |
-| inbox prefix | the app | `_INBOX_bff.clinical` or `_INBOX_bff.platform`, from the app name, never from the environment. |
-| name | the app | `mhai-web-clinical` / `mhai-web-platform` (shows in NATS monitoring). |
-| TLS | `NATS_TLS_CA_FILE`, `NATS_TLS_CERT_FILE`, `NATS_TLS_KEY_FILE` | All three required unless `MHAI_DEPLOY_ENV=development`. The BFF is INFO-first; the server's `handshake_first: 300ms` falls back to an ordinary TLS handshake for it (spec §18), once per process. |
-| reconnect | fixed | Unlimited attempts, 2 s apart with jitter; `waitOnFirstConnect: true`; ping every 20 s, 2 missed pings mark it down. |
-| readiness | `nc.status()` | `ready()` is true only while connected (after `connect`/`reconnect`, before `disconnect`/`reconnecting`/`close`). |
-| shutdown | `SIGTERM` | `drain()` with a 5 s cap; in-flight requests finish or time out. |
+| Setting      | From                                                          | Notes                                                                                                                                                                                                             |
+| ------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| servers      | `NATS_URL`                                                    | e.g. `nats://mhai-nats:4222` on the demo, `tls://...` in production. Required on `nats`.                                                                                                                          |
+| auth         | `NATS_NKEY_SEED_FILE`                                         | Read once, checked to start with `SU`, passed to `nkeyAuthenticator`; the buffer is zeroed after the authenticator copies it. Development only: `NATS_USER` + `NATS_PASSWORD_FILE`. Both set, or neither: refuse. |
+| inbox prefix | the app                                                       | `_INBOX_bff.clinical` or `_INBOX_bff.platform`, from the app name, never from the environment.                                                                                                                    |
+| name         | the app                                                       | `mhai-web-clinical` / `mhai-web-platform` (shows in NATS monitoring).                                                                                                                                             |
+| TLS          | `NATS_TLS_CA_FILE`, `NATS_TLS_CERT_FILE`, `NATS_TLS_KEY_FILE` | All three required unless `MHAI_DEPLOY_ENV=development`. The BFF is INFO-first; the server's `handshake_first: 300ms` falls back to an ordinary TLS handshake for it (spec §18), once per process.                |
+| reconnect    | fixed                                                         | Unlimited attempts, 2 s apart with jitter; `waitOnFirstConnect: true`; ping every 20 s, 2 missed pings mark it down.                                                                                              |
+| readiness    | `nc.status()`                                                 | `ready()` is true only while connected (after `connect`/`reconnect`, before `disconnect`/`reconnecting`/`close`).                                                                                                 |
+| shutdown     | `SIGTERM`                                                     | `drain()` with a 5 s cap; in-flight requests finish or time out.                                                                                                                                                  |
 
 - **One connection per process,** kept on `globalThis` under a symbol so dev hot reload doesn't open a second one.
 - **Fail fast while down:** a request when `ready()` is false throws at once (503), rather than sitting in nats.js's reconnect buffer.
@@ -98,34 +98,37 @@ Pure functions, no I/O, so every rule is a unit test.
 
 `toNatsRequest(app, url, init)`:
 
-| Today's HTTP request | NATS message |
-| --- | --- |
-| `app` | subject `api.v1.<app>` (`clinical` or `platform`; anything else throws) |
-| `init.method` (default `GET`) | header `Mhai-Method`, upper-case, one of `GET HEAD POST PUT PATCH DELETE`, else throw |
-| URL path and query | header `Mhai-Path` = `pathname + search`. The URL must have the origin `http://core.nats.invalid` and a path starting `/api/v1/`; at most 2048 bytes; printable ASCII only (the proxies already `encodeURIComponent` each segment); no `#`. Else throw |
-| `Authorization`, `Content-Type`, `Idempotency-Key`, `If-None-Match`, `X-MHAI-Client-IP`, `traceparent` from `init.headers` | the same headers, one value each. Names matched without case; values must be 1–4096 bytes of printable ASCII (no CR, LF or NUL), else throw |
-| any other header (`Accept`, `X-MHAI-Audience`, `X-MHAI-Service`, `X-MHAI-Background`, any `Mhai-*` ...) | dropped. `Accept` is HTTP-only; the audience is the subject's |
-| `timeoutMs` | header `Mhai-Timeout-Ms` per R5 |
-| body (`string` or `Uint8Array`) | message data, at most 64 KB, else the local 413 of R6 |
+| Today's HTTP request                                                                                                       | NATS message                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `app`                                                                                                                      | subject `api.v1.<app>` (`clinical` or `platform`; anything else throws)                                                                                                                                                                                |
+| `init.method` (default `GET`)                                                                                              | header `Mhai-Method`, upper-case, one of `GET HEAD POST PUT PATCH DELETE`, else throw                                                                                                                                                                  |
+| URL path and query                                                                                                         | header `Mhai-Path` = `pathname + search`. The URL must have the origin `http://core.nats.invalid` and a path starting `/api/v1/`; at most 2048 bytes; printable ASCII only (the proxies already `encodeURIComponent` each segment); no `#`. Else throw |
+| `Authorization`, `Content-Type`, `Idempotency-Key`, `If-None-Match`, `X-MHAI-Client-IP`, `traceparent` from `init.headers` | the same headers, one value each. Names matched without case; values must be 1–4096 bytes of printable ASCII (no CR, LF or NUL), else throw                                                                                                            |
+| any other header (`Accept`, `X-MHAI-Audience`, `X-MHAI-Service`, `X-MHAI-Background`, any `Mhai-*` ...)                    | dropped. `Accept` is HTTP-only; the audience is the subject's                                                                                                                                                                                          |
+| `timeoutMs`                                                                                                                | header `Mhai-Timeout-Ms` per R5                                                                                                                                                                                                                        |
+| body (`string` or `Uint8Array`)                                                                                            | message data, at most 64 KB, else the local 413 of R6                                                                                                                                                                                                  |
 
 The reply inbox is not part of the mapping: nats.js sets it from the connection's `inboxPrefix`, as `_INBOX_bff.<app>.<nuid>.<token>`. The connection test checks it (Task 2), and the integration test proves core answers it (Task 8).
 
 `fromNatsReply(app, msg)`:
 
-| NATS reply | `Response` |
-| --- | --- |
-| `Mhai-Status-Code` | `status`. Exactly one value, a whole number 200–599, else throw (503) |
-| the ten reply headers of fact 7 | the same headers. Any other header in the reply is dropped |
-| data | body; none for `HEAD`, 204 and 304 |
-| a NATS status reply (no responders) | throw (503 `unavailable`, spec §17.5) |
-| timeout, abort, closed connection | throw (503 `unavailable`) |
+| NATS reply                          | `Response`                                                            |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| `Mhai-Status-Code`                  | `status`. Exactly one value, a whole number 200–599, else throw (503) |
+| the ten reply headers of fact 7     | the same headers. Any other header in the reply is dropped            |
+| data                                | body; none for `HEAD`, 204 and 304                                    |
+| a NATS status reply (no responders) | throw (503 `unavailable`, spec §17.5)                                 |
+| timeout, abort, closed connection   | throw (503 `unavailable`)                                             |
 
 ### The switch (`packages/api-client/src/server/backend-fetch.ts`)
 
 ```ts
 export type BackendApp = "clinical" | "platform";
 export type BackendInit = RequestInit & { timeoutMs?: number };
-export type BackendFetch = (url: string, init?: BackendInit) => Promise<Response>;
+export type BackendFetch = (
+  url: string,
+  init?: BackendInit,
+) => Promise<Response>;
 
 export function createBackendFetch(opts: {
   app: BackendApp;
@@ -164,28 +167,28 @@ browser ──https──> nginx (host) ──> app container (Next.js server = 
                                      └─ BACKEND_TRANSPORT=nats: nats.js ──mhai-bff (internal)──> NATS ──> core (api.v1.<app>, queue core)
 ```
 
-| Crossing | Checked there |
-| --- | --- |
-| browser → BFF route | unchanged: shapes, switches, same origin, session, steps, two-step, role, body caps. The browser has no NATS code, no NATS address and no credential (Task 6). |
-| BFF → NATS | the connection's NKey (or, in development, password) user; NATS permissions: `bff_<app>` may publish only `api.v1.<app>` and subscribe only `_INBOX_bff.<app>.>`. TLS with `verify` outside development. |
-| NATS → core | core's adapter: subject fixes the audience; reply prefix; method, path, size; header allow-list; then the full Plan 2 chain (token, session, MFA, route rule, RLS, audit). |
-| core → BFF | the reply goes only to the inbox; the transport keeps only `Mhai-Status-Code` and ten headers; the proxies keep only the problem `code` and their checked fields, as today. |
+| Crossing            | Checked there                                                                                                                                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| browser → BFF route | unchanged: shapes, switches, same origin, session, steps, two-step, role, body caps. The browser has no NATS code, no NATS address and no credential (Task 6).                                           |
+| BFF → NATS          | the connection's NKey (or, in development, password) user; NATS permissions: `bff_<app>` may publish only `api.v1.<app>` and subscribe only `_INBOX_bff.<app>.>`. TLS with `verify` outside development. |
+| NATS → core         | core's adapter: subject fixes the audience; reply prefix; method, path, size; header allow-list; then the full Plan 2 chain (token, session, MFA, route rule, RLS, audit).                               |
+| core → BFF          | the reply goes only to the inbox; the transport keeps only `Mhai-Status-Code` and ten headers; the proxies keep only the problem `code` and their checked fields, as today.                              |
 
 ### Threats (STRIDE) and their controls
 
-| # | Threat | Control | Test |
-| --- | --- | --- | --- |
-| T1 | **Leaked seed (S, E).** Someone with `bff_clinical`'s seed connects to NATS and calls core as the BFF, with a stolen or their own token, and a forged client IP to dodge sign-in counters. | The seed alone gives nothing a user token doesn't: every route still needs a valid access token, session and MFA. NATS is not reachable from outside the host (`mhai-bff` is internal; the host port is loopback). The seed is a Compose secret file (mode 0400, uid 1001), never in the image, `docker inspect` env, logs or the repo; per-app users bound the blast radius to one app's subject. Rotation: a new pair from the backend's `setup-host.sh`, NATS restarted, the app restarted (deploy/README, Task 10). gitleaks already scans history. | A2, A3, A10 |
-| T2 | **The browser sees NATS (I, E).** nats.js or the seed's path ends up in a client chunk, or a client component imports the transport. | `import "server-only"` in every transport module (the build fails on a client import); ESLint limits `@nats-io/*` and `@mhai/api-client/server/*` to server folders; `check:no-nats` scans `.next/static` for NATS markers after each build; nats.js is in `serverExternalPackages`, so it is `require`d at runtime, never bundled. | A1 |
-| T3 | **Header smuggling (T, S).** A browser header (`X-MHAI-Client-IP`, `Mhai-Path`, `X-MHAI-Audience`, `traceparent`) reaches core; or a CR/LF in a value splits a NATS header; or two `Mhai-Method`s. | The proxies already build headers themselves; the mapping sends only its six allow-listed headers plus the three `Mhai-*` it sets, one value each, printable ASCII only, else throws. Core takes exactly one `Mhai-Method`/`Mhai-Path` and drops the rest too (defence in depth). The client IP comes only from the nginx-set header, checked as an IP literal. | A4, A5, A6 |
-| T4 | **Reply subject abuse (T, E).** The requester chooses the reply subject, and core's one reply is a publish with core's rights (services/nats/README). A wrong prefix would also mean core never answers. | nats.js sets it from `inboxPrefix`, which the code fixes per app (not from the environment). Core refuses any reply not under `_INBOX_bff.<app>.` with literal tokens; NATS lets `bff_<app>` subscribe only there. A unit test captures the reply subject of a real `request()` against an in-process responder; the integration test proves core answers it. | A7, A12 |
-| T5 | **Audience mix-up (S, E).** The platform BFF's request lands on the clinical audience or the reverse. | The subject comes from the app constant; `X-MHAI-Audience` is never sent on NATS (core ignores it anyway); separate NATS users can't publish each other's subject. | A8, A12 |
-| T6 | **Tokens or bodies in logs (I).** | The transport logs only app, method, status, duration, `X-Request-ID`; errors are logged by class name; no path or query (filters can be sensitive); nats.js debug off. | A9 |
-| T7 | **Spoofed core (S).** Something else answers on `api.v1.<app>`. | Only `gateway` (core) may subscribe `api.v1.*` (queue `core`); TLS with `verify` in production. | A12 (permissions) |
-| T8 | **Denial of service (D).** NATS down, core's pool full, a slow core. | Fail fast while disconnected; per-call timeout as today; core answers 503 `unavailable` at once when full; no retries in the transport; bodies capped before publish. The readiness signal turns the clinical degraded strip on. | A11, A13 |
-| T9 | **Replayed or duplicated writes (T).** A reply lost after core acted. | Clients reuse one `Idempotency-Key` per write; core replays it (72 h). | A14 |
-| T10 | **Request ids forged into audit (R).** | The transport never sends `X-Request-ID`/`Mhai-Request-Id`; core drops them anyway and makes its own. | A5 |
-| T11 | **Downgrade to plaintext (I).** | Outside `MHAI_DEPLOY_ENV=development` the transport refuses to start without the three TLS files and a `tls://` URL. | A10 |
+| #   | Threat                                                                                                                                                                                                   | Control                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Test              |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| T1  | **Leaked seed (S, E).** Someone with `bff_clinical`'s seed connects to NATS and calls core as the BFF, with a stolen or their own token, and a forged client IP to dodge sign-in counters.               | The seed alone gives nothing a user token doesn't: every route still needs a valid access token, session and MFA. NATS is not reachable from outside the host (`mhai-bff` is internal; the host port is loopback). The seed is a Compose secret file (mode 0400, uid 1001), never in the image, `docker inspect` env, logs or the repo; per-app users bound the blast radius to one app's subject. Rotation: a new pair from the backend's `setup-host.sh`, NATS restarted, the app restarted (deploy/README, Task 10). gitleaks already scans history. | A2, A3, A10       |
+| T2  | **The browser sees NATS (I, E).** nats.js or the seed's path ends up in a client chunk, or a client component imports the transport.                                                                     | `import "server-only"` in every transport module (the build fails on a client import); ESLint limits `@nats-io/*` and `@mhai/api-client/server/*` to server folders; `check:no-nats` scans `.next/static` for NATS markers after each build; nats.js is in `serverExternalPackages`, so it is `require`d at runtime, never bundled.                                                                                                                                                                                                                     | A1                |
+| T3  | **Header smuggling (T, S).** A browser header (`X-MHAI-Client-IP`, `Mhai-Path`, `X-MHAI-Audience`, `traceparent`) reaches core; or a CR/LF in a value splits a NATS header; or two `Mhai-Method`s.       | The proxies already build headers themselves; the mapping sends only its six allow-listed headers plus the three `Mhai-*` it sets, one value each, printable ASCII only, else throws. Core takes exactly one `Mhai-Method`/`Mhai-Path` and drops the rest too (defence in depth). The client IP comes only from the nginx-set header, checked as an IP literal.                                                                                                                                                                                         | A4, A5, A6        |
+| T4  | **Reply subject abuse (T, E).** The requester chooses the reply subject, and core's one reply is a publish with core's rights (services/nats/README). A wrong prefix would also mean core never answers. | nats.js sets it from `inboxPrefix`, which the code fixes per app (not from the environment). Core refuses any reply not under `_INBOX_bff.<app>.` with literal tokens; NATS lets `bff_<app>` subscribe only there. A unit test captures the reply subject of a real `request()` against an in-process responder; the integration test proves core answers it.                                                                                                                                                                                           | A7, A12           |
+| T5  | **Audience mix-up (S, E).** The platform BFF's request lands on the clinical audience or the reverse.                                                                                                    | The subject comes from the app constant; `X-MHAI-Audience` is never sent on NATS (core ignores it anyway); separate NATS users can't publish each other's subject.                                                                                                                                                                                                                                                                                                                                                                                      | A8, A12           |
+| T6  | **Tokens or bodies in logs (I).**                                                                                                                                                                        | The transport logs only app, method, status, duration, `X-Request-ID`; errors are logged by class name; no path or query (filters can be sensitive); nats.js debug off.                                                                                                                                                                                                                                                                                                                                                                                 | A9                |
+| T7  | **Spoofed core (S).** Something else answers on `api.v1.<app>`.                                                                                                                                          | Only `gateway` (core) may subscribe `api.v1.*` (queue `core`); TLS with `verify` in production.                                                                                                                                                                                                                                                                                                                                                                                                                                                         | A12 (permissions) |
+| T8  | **Denial of service (D).** NATS down, core's pool full, a slow core.                                                                                                                                     | Fail fast while disconnected; per-call timeout as today; core answers 503 `unavailable` at once when full; no retries in the transport; bodies capped before publish. The readiness signal turns the clinical degraded strip on.                                                                                                                                                                                                                                                                                                                        | A11, A13          |
+| T9  | **Replayed or duplicated writes (T).** A reply lost after core acted.                                                                                                                                    | Clients reuse one `Idempotency-Key` per write; core replays it (72 h).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | A14               |
+| T10 | **Request ids forged into audit (R).**                                                                                                                                                                   | The transport never sends `X-Request-ID`/`Mhai-Request-Id`; core drops them anyway and makes its own.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | A5                |
+| T11 | **Downgrade to plaintext (I).**                                                                                                                                                                          | Outside `MHAI_DEPLOY_ENV=development` the transport refuses to start without the three TLS files and a `tls://` URL.                                                                                                                                                                                                                                                                                                                                                                                                                                    | A10               |
 
 ### Abuse-case tests (carried into the tasks' first steps)
 
@@ -228,7 +231,7 @@ browser ──https──> nginx (host) ──> app container (Next.js server = 
       mem_limit: 384m
       environment:
         BACKEND_TRANSPORT: ${WEB_LIVE_TRANSPORT:-nats}
-        MHAI_DEPLOY_ENV: development        # as core on the demo (no NATS TLS on one host)
+        MHAI_DEPLOY_ENV: development # as core on the demo (no NATS TLS on one host)
         NATS_URL: nats://mhai-nats:4222
         NATS_NKEY_SEED_FILE: /run/secrets/nats-bff-clinical.nk
         TRUSTED_CLIENT_IP_HEADER: x-real-ip
@@ -236,20 +239,27 @@ browser ──https──> nginx (host) ──> app container (Next.js server = 
       secrets: [nats-bff-clinical.nk]
       networks: [default, mhai-bff]
       healthcheck:
-        test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+        test:
+          [
+            "CMD",
+            "node",
+            "-e",
+            "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          ]
         interval: 30s
         timeout: 5s
         start_period: 20s
         retries: 3
   secrets:
     nats-bff-clinical.nk:
-      file: /srv/mhai-backend/secrets/bff/nats-bff-clinical.nk   # written by the backend's setup-host.sh (backend follow-up)
+      file: /srv/mhai-backend/secrets/bff/nats-bff-clinical.nk # written by the backend's setup-host.sh (backend follow-up)
   networks:
     mhai-bff:
       external: true
   ```
 
   The seed file is mode 0400, owned by uid 1001 (the image's `nextjs` user); Compose bind-mounts it read-only at `/run/secrets/`. It is never in `.env`, the environment or the image. `X-Real-IP` reaches the app only from the tunnel's own requests here, so the client IP on the live preview is the tunnel's (acceptable for a team preview; the sign-in counters are per IP and login).
+
 - **`deploy/compose.platform.yml`:** the same `platform-live` block, commented out, with `nats-bff-platform.nk`, until the backend follow-up lands.
 - **Dockerfiles:** `ARG USE_MOCK=true` feeds `NEXT_PUBLIC_USE_MOCK`; the default build is unchanged. `HEALTHCHECK` stays on `/` for the mock image; compose overrides it for `-live`.
 - **`.github/workflows/deploy.yml`:** a `build-web-live` job (clinical, `USE_MOCK=false`, tag `live` and `live-sha-<commit>`) that runs on `workflow_dispatch` only, and a deploy step that runs `docker compose --profile live up -d web-live` only when `/srv/mhai-web/.env` has `WEB_LIVE_SESSION_SECRET` and the seed file exists, else prints why it skipped (as the platform step does). The public demo's steps don't change and run first.
@@ -355,8 +365,26 @@ export const NATS_API_ORIGIN = "http://core.nats.invalid";
 export const MAX_BODY = 64 * 1024; // httpx.MaxBody
 export const MAX_PATH = 2048; // natsapi.MaxPath
 export const STATUS_HEADER = "Mhai-Status-Code"; // natsapi.HeaderStatus
-export const REQUEST_HEADERS = ["Authorization", "Content-Type", "Idempotency-Key", "If-None-Match", "X-MHAI-Client-IP", "traceparent"] as const;
-export const REPLY_HEADERS = ["Content-Type", "Cache-Control", "ETag", "Retry-After", "X-Request-ID", "Idempotent-Replayed", "Deprecation", "Sunset", "Link", "X-Content-Type-Options"] as const;
+export const REQUEST_HEADERS = [
+  "Authorization",
+  "Content-Type",
+  "Idempotency-Key",
+  "If-None-Match",
+  "X-MHAI-Client-IP",
+  "traceparent",
+] as const;
+export const REPLY_HEADERS = [
+  "Content-Type",
+  "Cache-Control",
+  "ETag",
+  "Retry-After",
+  "X-Request-ID",
+  "Idempotent-Replayed",
+  "Deprecation",
+  "Sunset",
+  "Link",
+  "X-Content-Type-Options",
+] as const;
 
 export type NatsRequestSpec = {
   subject: `api.v1.${BackendApp}`;
@@ -365,10 +393,32 @@ export type NatsRequestSpec = {
   timeoutMs: number;
 };
 /** A Response for requests answered without core (the local 413 of R6). */
-export type Mapped = { kind: "send"; spec: NatsRequestSpec } | { kind: "answer"; response: Response };
+export type Mapped =
+  | { kind: "send"; spec: NatsRequestSpec }
+  | { kind: "answer"; response: Response };
 
-export function toNatsRequest(app: BackendApp, url: string, init: { method?: string; headers?: HeadersInit; body?: BodyInit | null; timeoutMs?: number }): Mapped;
-export function fromNatsReply(app: BackendApp, method: string, reply: { headers?: { get(k: string): string; values(k: string): string[]; keys(): string[] }; data: Uint8Array }): Response;
+export function toNatsRequest(
+  app: BackendApp,
+  url: string,
+  init: {
+    method?: string;
+    headers?: HeadersInit;
+    body?: BodyInit | null;
+    timeoutMs?: number;
+  },
+): Mapped;
+export function fromNatsReply(
+  app: BackendApp,
+  method: string,
+  reply: {
+    headers?: {
+      get(k: string): string;
+      values(k: string): string[];
+      keys(): string[];
+    };
+    data: Uint8Array;
+  },
+): Response;
 ```
 
 - [ ] **Step 1: Failing tests first** (`mapping.test.ts`), one `it` each:
@@ -380,7 +430,7 @@ export function fromNatsReply(app: BackendApp, method: string, reply: { headers?
   - R6: a 64 KB body sends; 64 KB + 1 answers 413 locally with `{ "code": "payload_too_large" }` (`application/problem+json` on clinical; `application/json` and `{code}` only on platform) and builds no spec; a string body is UTF-8 bytes; a `Uint8Array` passes as is; `FormData`/streams throw (no caller sends them on JSON paths; the multipart upload arrives as bytes already);
   - `fromNatsReply`: `Mhai-Status-Code: 201` → status 201; missing, two values, `abc`, `99`, `600` throw; reply headers outside `REPLY_HEADERS` (e.g. `Set-Cookie`, `Mhai-Status`) are dropped; `HEAD`, 204 and 304 have a null body; the body bytes are passed unchanged (a PNG round-trips byte for byte).
 - [ ] **Step 2:** run `npm test -w @mhai/api-client` on steven-reid; expect the new tests to fail.
-- [ ] **Step 3:** implement. Header values via `Headers` iteration on a copy of `init.headers`; duplicates found with `getSetCookie`-free logic (`Headers` joins duplicates with `, `, so build from the raw `HeadersInit` when it's an array or a record, and treat a `, ` inside `Authorization`, `Idempotency-Key` or `X-MHAI-Client-IP` as a duplicate).
+- [ ] **Step 3:** implement. Read headers from the raw `HeadersInit` (array of pairs, record, or `Headers`), so a name given twice is seen and throws. A `Headers` object joins repeated values with `, `, so for `Authorization`, `Idempotency-Key` and `X-MHAI-Client-IP` a `, ` in the value also counts as a repeat.
 - [ ] **Step 4:** tests pass; `npm run typecheck`; commit `api-client: map a backend request to a NATS message and back`.
 
 ### Task 2: The connection
@@ -415,7 +465,7 @@ export function __setNatsRequesterForTests(app: BackendApp, r: NatsRequester | n
 - [ ] **Step 1: Failing tests first:**
   - `config.test.ts`: A2 (a seed file not starting `SU` refuses with `NATS_NKEY_SEED_FILE`, and the refusal text holds no file content); A10 (without `MHAI_DEPLOY_ENV=development`: `nats://` refuses, a missing TLS file refuses, password auth refuses); development accepts `nats://` and `NATS_USER` + `NATS_PASSWORD_FILE`; seed and password both set refuses; neither refuses; `inboxPrefix` comes from the app even if the environment sets `NATS_INBOX_PREFIX`;
   - `connection.test.ts`, with an injected `connect` fake that records options and emits status events: one `connect` per app per process (two calls, one connection; a second app gets its own); options carry `inboxPrefix`, `name`, `maxReconnectAttempts: -1`, `waitOnFirstConnect: true`, the authenticator (never the seed in plain options); `ready()` follows `disconnect` / `reconnecting` / `reconnect` / `close`; a request while not ready rejects at once without calling `request`; a refused config makes every request reject and logs `nats: config refused (<setting>)` once; A3 (captured logs hold no seed, password, token, body or path); SIGTERM calls `drain()` once;
-  - A7: start an in-process `nats-server`? No: use nats.js against a **NATS container** only in Task 8. Here, capture the reply subject nats.js generates by giving the fake `connect` a real `@nats-io/nats-core` inbox builder with the same prefix, and assert `^_INBOX_bff\.clinical\.[A-Za-z0-9]+(\.[A-Za-z0-9]+)*$`. The real proof is A12 in Task 8.
+  - A7 (unit part; no NATS server in unit tests, that is Task 8): capture the reply subject nats.js generates by giving the fake `connect` a real `@nats-io/nats-core` inbox builder with the same prefix, and assert `^_INBOX_bff\.clinical\.[A-Za-z0-9]+(\.[A-Za-z0-9]+)*$`. The real proof is A12 in Task 8.
 - [ ] **Step 2:** tests fail (steven-reid).
 - [ ] **Step 3:** implement with `connect` from `@nats-io/transport-node`, `nkeyAuthenticator` / `usernamePasswordAuthenticator` and `headers()` from `@nats-io/nats-core`. Read the installed version's README for the exact option and error names (`inboxPrefix`, the no-responders and timeout errors); map every nats.js error to one thrown `BackendUnavailable` with the original class name only. Keep the singleton on `globalThis[Symbol.for("mhai.nats.<app>")]`.
 - [ ] **Step 4:** pass; commit `api-client: the BFF's NATS connection, one per app process`.
@@ -518,7 +568,9 @@ export interface ClinicalResultOut {
   /** The ids the answer cited. `citations` stays empty until the pipeline stores their details. */
   cited_chunk_ids: string[];
 }
-export interface QueryCreateIn { /* ... */ client_created_at?: string; }
+export interface QueryCreateIn {
+  /* ... */ client_created_at?: string;
+}
 ```
 
 - [ ] **Step 1: Failing tests first:**
@@ -592,28 +644,28 @@ Lands after the backend follow-up is merged and `setup-host.sh` has run on the i
 
 ## Where each check runs
 
-| Check | Where |
-| --- | --- |
-| Unit suites, both transports (Tasks 1–5, 7) | GitHub CI (matrix) and steven-reid |
-| `check:no-nats`, `check:bundle`, build | GitHub CI and steven-reid |
+| Check                                                           | Where                                                                                                       |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Unit suites, both transports (Tasks 1–5, 7)                     | GitHub CI (matrix) and steven-reid                                                                          |
+| `check:no-nats`, `check:bundle`, build                          | GitHub CI and steven-reid                                                                                   |
 | Integration (Task 8), live e2e (Task 9), image checks (Task 10) | steven-reid only (`.remote-run.sh`, wrapped in `timeout`); mt5-lab with its CPU caps if steven-reid is down |
-| Mock e2e | GitHub CI, unchanged |
+| Mock e2e                                                        | GitHub CI, unchanged                                                                                        |
 
 Nothing heavy runs on the laptop.
 
 ## Open questions (each with a recommendation)
 
-1. **Switch the public demo to live, or add live preview containers?** Today both public sites are sample data, and most live screens would be 404 from core (fact 3). *Recommendation:* keep the public sites on sample data and add `web-live` / `platform-live` on loopback, reached by tunnel (as planned). Switch the public demo only when core serves the screens it shows.
-2. **Fix today's HTTP path (service key and client IP)?** It has never worked against core (fact 4). *Recommendation:* yes, as R3 and R4: the client IP on both transports (core needs it on NATS too); the service key on HTTP only, so the parity runs have a working HTTP baseline. Both go when the HTTP transport goes.
-3. **Where does the frontend's seed live on the instance?** Today it is a line in the backend's `.env`. *Recommendation:* the backend's `setup-host.sh` writes one file per app under `/srv/mhai-backend/secrets/bff/`, owned by uid 1001, mode 0400, and mhai-web's compose mounts it as a secret by that path (backend follow-up). No copying by hand, and one place to rotate.
-4. **Show `trust_band`?** Core marks it provisional. *Recommendation:* type it and don't show it (R12) until clinical sign-off says what each band means and how it sits next to the confidence bars.
-5. **The empty-citations wording.** *Recommendation:* "Sources for this answer can't be shown yet." and "Claim details can't be shown yet.", through `clinical-review`, until the pipeline stores citation details (backend TODO.md).
-6. **Readiness on NATS.** Core serves no probes over NATS. *Recommendation:* the BFF answers `readyz` from its own connection (R8). If the degraded strip should also reflect core's database and KV, ask the backend for a `GET /readyz` on `api.v1` later; not needed now.
-7. **Letter uploads and file replies.** The Plan 11 upload (up to 10 MB) can't ride `api.v1` (64 KB body, 1 MB message), and page images near 1 MB would fail. Neither route exists in core yet. *Recommendation:* out of scope; the documents service design picks the path (for example a short-lived upload grant over NATS and an object-store upload). Until then, on `nats` the BFF answers 413 for bodies over 64 KB (R6). Listed in TODO.md (Task 11).
-8. **Rename `NATS_BFF_NKEY` to `NATS_BFF_CLINICAL_NKEY` on the backend?** *Recommendation:* not in the follow-up; it touches the demo's `.env` and a test for no gain. Rename when production config is written.
-9. **Password auth in development.** *Recommendation:* allow it only with `MHAI_DEPLOY_ENV=development` (R9), so the backend's dev and smoke stacks work as they are; production and the demo use NKeys.
-10. **A cancelled question (`error_code: cancelled`): show Try again?** The person's account or hospital was deactivated, so a retry ends in sign-out anyway. *Recommendation:* the same failed view, no special case; revisit if a clinician-facing reason is wanted.
-11. **When does the HTTP transport go?** *Recommendation:* in the PR after core turns `CORE_HTTP_API` off, which follows the last live BFF moving to `nats` (rollout step 6).
+1. **Switch the public demo to live, or add live preview containers?** Today both public sites are sample data, and most live screens would be 404 from core (fact 3). _Recommendation:_ keep the public sites on sample data and add `web-live` / `platform-live` on loopback, reached by tunnel (as planned). Switch the public demo only when core serves the screens it shows.
+2. **Fix today's HTTP path (service key and client IP)?** It has never worked against core (fact 4). _Recommendation:_ yes, as R3 and R4: the client IP on both transports (core needs it on NATS too); the service key on HTTP only, so the parity runs have a working HTTP baseline. Both go when the HTTP transport goes.
+3. **Where does the frontend's seed live on the instance?** Today it is a line in the backend's `.env`. _Recommendation:_ the backend's `setup-host.sh` writes one file per app under `/srv/mhai-backend/secrets/bff/`, owned by uid 1001, mode 0400, and mhai-web's compose mounts it as a secret by that path (backend follow-up). No copying by hand, and one place to rotate.
+4. **Show `trust_band`?** Core marks it provisional. _Recommendation:_ type it and don't show it (R12) until clinical sign-off says what each band means and how it sits next to the confidence bars.
+5. **The empty-citations wording.** _Recommendation:_ "Sources for this answer can't be shown yet." and "Claim details can't be shown yet.", through `clinical-review`, until the pipeline stores citation details (backend TODO.md).
+6. **Readiness on NATS.** Core serves no probes over NATS. _Recommendation:_ the BFF answers `readyz` from its own connection (R8). If the degraded strip should also reflect core's database and KV, ask the backend for a `GET /readyz` on `api.v1` later; not needed now.
+7. **Letter uploads and file replies.** The Plan 11 upload (up to 10 MB) can't ride `api.v1` (64 KB body, 1 MB message), and page images near 1 MB would fail. Neither route exists in core yet. _Recommendation:_ out of scope; the documents service design picks the path (for example a short-lived upload grant over NATS and an object-store upload). Until then, on `nats` the BFF answers 413 for bodies over 64 KB (R6). Listed in TODO.md (Task 11).
+8. **Rename `NATS_BFF_NKEY` to `NATS_BFF_CLINICAL_NKEY` on the backend?** _Recommendation:_ not in the follow-up; it touches the demo's `.env` and a test for no gain. Rename when production config is written.
+9. **Password auth in development.** _Recommendation:_ allow it only with `MHAI_DEPLOY_ENV=development` (R9), so the backend's dev and smoke stacks work as they are; production and the demo use NKeys.
+10. **A cancelled question (`error_code: cancelled`): show Try again?** The person's account or hospital was deactivated, so a retry ends in sign-out anyway. _Recommendation:_ the same failed view, no special case; revisit if a clinician-facing reason is wanted.
+11. **When does the HTTP transport go?** _Recommendation:_ in the PR after core turns `CORE_HTTP_API` off, which follows the last live BFF moving to `nats` (rollout step 6).
 
 ## Self-review notes
 
