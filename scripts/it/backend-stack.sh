@@ -149,8 +149,10 @@ user() {
 
 # One call to core's HTTP API on the host port, as a BFF would make it.
 core_args() { # audience method path token body
+  # The service key goes in a mode-600 header file, never on a command line.
+  [ -f "$state/service.header" ] || printf 'X-MHAI-Service: %s\n' "$(cat "$state/service.key")" > "$state/service.header"
   local args=(-s -X "$2" -H "Content-Type: application/json" -H "X-MHAI-Client-IP: 198.51.100.15"
-    -H "X-MHAI-Audience: $1" -H "X-MHAI-Service: $(cat "$state/service.key")")
+    -H "X-MHAI-Audience: $1" -H "@$state/service.header")
   [ -n "$4" ] && args+=(-H "Authorization: Bearer $4")
   [ -n "$5" ] && args+=(--data "$5")
   printf '%s\0' "${args[@]}" "http://127.0.0.1:$core_port/api/v1$3"

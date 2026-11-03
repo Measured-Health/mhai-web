@@ -30,7 +30,7 @@ run() { # app transport role
   [ -n "${built[$app]:-}" ] && build="E2E_LIVE_SKIP_BUILD=1"
   built[$app]=1
   echo "== $app over $transport"
-  timeout 1200 "$here/in-ci.sh" "export NEXT_TELEMETRY_DISABLED=1 BACKEND_TRANSPORT=$transport E2E_LIVE_USER_FILE=/state/$file $build; npm run e2e:live -w @mhai/$app || { for f in apps/$app/test-results/*/error-context.md; do [ -f \"\$f\" ] && sed -n 1,120p \"\$f\"; done; exit 1; }"
+  timeout 1200 "$here/in-ci.sh" "export NEXT_TELEMETRY_DISABLED=1 BACKEND_TRANSPORT=$transport E2E_LIVE_USER_FILE=/state/$file $build; npm run e2e:live -w @mhai/$app || { for f in apps/$app/test-results/*/error-context.md; do [ -f \"\$f\" ] && sed -E -n -e '/textbox/s/: .*/: [value hidden]/' -e 1,120p \"\$f\"; done; exit 1; }"
 }
 
 # E2E_LIVE_APPS and E2E_LIVE_TRANSPORTS narrow a run (default: all).
