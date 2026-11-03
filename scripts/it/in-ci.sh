@@ -21,7 +21,9 @@ if [ "${MHAI_IT_DOCKER:-0}" = 1 ]; then
   docker_args=(-v /var/run/docker.sock:/var/run/docker.sock -e "MHAI_IT_CORE_CONTAINER=$project-core-1")
   prelude='curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar -xz -C /usr/local/bin --strip-components=1 docker/docker; '
 fi
-exec docker run --rm --init --ipc=host --network "${project}_default" \
+# IN_CI_NETWORK: another network, e.g. container:<proxy> to share the
+# loopback proxy's network (e2e-live.sh).
+exec docker run --rm --init --ipc=host --network "${IN_CI_NETWORK:-${project}_default}" \
   -v "$work:/work" -v "$volume:/work/node_modules" -v "$state:/state:ro" \
   -v mhai-web-npm-cache:/root/.npm \
   -e CI=1 -e MHAI_IT_NATS_URL=nats://nats:4222 -e MHAI_IT_CORE_URL=http://core:8080 \

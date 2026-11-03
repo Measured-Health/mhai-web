@@ -19,13 +19,14 @@ export default defineConfig({
   retries: 0,
   reporter: "list",
   use: {
-    baseURL: `http://localhost:${PORT}`,
+    // Through the loopback proxy, as the live preview is reached
+    // (deploy/nginx/live-proxy.conf.template): it sets X-Real-IP, which core
+    // needs for sign-in. No header is injected here.
+    baseURL: process.env.E2E_LIVE_BASE_URL ?? `http://localhost:${PORT}`,
     // The question holds (synthetic) patient details: no screenshots or video.
     trace: "retain-on-failure",
     screenshot: "off",
     video: "off",
-    // As the host's nginx would set it (TEST-NET-2).
-    extraHTTPHeaders: { "X-Real-IP": "198.51.100.15" },
   },
   webServer: {
     // e2e-live.sh builds once and runs both transports on that build.
