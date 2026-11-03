@@ -38,6 +38,19 @@ describe("callUpstream", () => {
     expect(e).toMatchObject({ status: 429, code: "login_locked" });
     expect(JSON.stringify(e)).not.toContain("secret detail");
   });
+  it("passes its timeout to the transport beside the signal", async () => {
+    const fetchImpl = vi.fn(async () => Response.json({}));
+    await callUpstream("http://api.test", "/x", { fetchImpl });
+    await callUpstream("http://api.test", "/y", { fetchImpl, timeoutMs: 5000 });
+    const inits = fetchImpl.mock.calls.map(
+      (c) =>
+        (
+          c as unknown as [string, { timeoutMs?: number; signal?: AbortSignal }]
+        )[1],
+    );
+    expect(inits.map((i) => i.timeoutMs)).toEqual([15_000, 5000]);
+    expect(inits.every((i) => i.signal instanceof AbortSignal)).toBe(true);
+  });
   it("a timeout throws UpstreamError(503,'unavailable')", async () => {
     const fetchImpl = vi.fn(
       (_url: string | URL | Request, init?: RequestInit) =>
