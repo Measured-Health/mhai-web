@@ -17,5 +17,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./tests/setup.ts"],
     include: ["src/**/*.test.ts"],
+    // The integration test needs the backend's smoke stack (test:it).
+    exclude: process.env.MHAI_IT_NATS_URL
+      ? ["**/node_modules/**"]
+      : ["**/node_modules/**", "**/*.integration.test.ts"],
   },
 });

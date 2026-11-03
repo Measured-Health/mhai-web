@@ -41,6 +41,8 @@ export interface NatsRequester {
   ): Promise<NatsReply>;
   /** True only while connected. */
   ready(): boolean;
+  /** Drains the connection (tests and shutdown). */
+  close?(): Promise<void>;
 }
 
 type ConnectOptions = Parameters<typeof natsConnect>[0];
@@ -177,7 +179,7 @@ function liveRequester(
   open();
 
   let drained: Promise<void> | null = null;
-  deps.onShutdown(() => {
+  const drain = () => {
     drained ??= (async () => {
       const conn = nc;
       connected = false;
@@ -188,9 +190,11 @@ function liveRequester(
       ]);
     })();
     return drained;
-  });
+  };
+  deps.onShutdown(drain);
 
   return {
+    close: drain,
     ready: () => connected && nc !== null && !nc.isClosed(),
     async request(subject, data, { headers, timeoutMs, signal }) {
       const conn = nc;
@@ -226,6 +230,19 @@ function liveRequester(
   };
 }
 
+/** A new requester with its own connection (not the process's one). */
+export function openNatsRequester(
+  app: BackendApp,
+  deps: ConnectDeps,
+): NatsRequester {
+  const cfg = readNatsConfig(app, deps.env, deps.readFile);
+  if ("refused" in cfg) {
+    deps.log(formatLog(`nats: config refused (${cfg.refused})`, { app }));
+    return refusedRequester();
+  }
+  return liveRequester(app, cfg, deps);
+}
+
 /** The app's requester, made once per process (tests pass their own deps). */
 export function createNatsRequester(
   app: BackendApp,
@@ -233,14 +250,7 @@ export function createNatsRequester(
 ): NatsRequester {
   const existing = slots[key(app)];
   if (existing) return existing;
-  const cfg = readNatsConfig(app, deps.env, deps.readFile);
-  let r: NatsRequester;
-  if ("refused" in cfg) {
-    deps.log(formatLog(`nats: config refused (${cfg.refused})`, { app }));
-    r = refusedRequester();
-  } else {
-    r = liveRequester(app, cfg, deps);
-  }
+  const r = openNatsRequester(app, deps);
   slots[key(app)] = r;
   return r;
 }
