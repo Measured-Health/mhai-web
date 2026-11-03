@@ -5,8 +5,9 @@
 # never the demo host.
 #
 #   scripts/it/backend-stack.sh up          start it, seed a synthetic hospital
-#   scripts/it/backend-stack.sh user <clinician|platform_admin> <out.json>
-#                                           a fresh synthetic user (mode 600)
+#   scripts/it/backend-stack.sh user <clinician|platform_admin> <out.json> [--ready]
+#                                           a fresh synthetic user (mode 600);
+#                                           --ready: first password and terms done
 #   scripts/it/backend-stack.sh stop-core | start-core
 #   scripts/it/backend-stack.sh down        remove it, volumes included
 #
@@ -108,10 +109,75 @@ user() {
         --name "Synthetic IT Admin" --roles platform_admin >/dev/null ;;
     *) echo "unknown role" >&2; exit 2 ;;
   esac
-  printf '{"email":"%s","password":"%s"}' "$email" "$pw" > "$out"
+  local totp_secret=""
+  if [ "${3:-}" = --ready ]; then
+    # The first sign-in steps done through core's HTTP API (sign in, change
+    # the temporary password, accept the terms, and for a platform admin set
+    # up two-step), so the browser test starts signed-in-ready. The apps'
+    # welcome flows can't do some of these against core yet (TODO.md: the
+    # clinical password step sends no current password; the platform app
+    # doesn't take core's enrolment-only session for a new admin).
+    local audience=clinical second token code uri
+    [ "$role" = platform_admin ] && audience=platform
+    second="It-second-$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
+    token=$(signin "$audience" "$email" "$pw")
+    [ -n "$token" ] || { echo "user: sign-in failed" >&2; exit 1; }
+    code=$(core_status "$audience" POST /auth/password "$token" \
+      "$(jq -nc --arg c "$pw" --arg n "$second" '{current_password:$c,new_password:$n}')")
+    [ "$code" = 204 ] || { echo "user: password change answered $code" >&2; exit 1; }
+    pw=$second
+    token=$(signin "$audience" "$email" "$pw")
+    if [ "$role" = platform_admin ]; then
+      # An enrolment-only session reaches enrol and verify, not the terms:
+      # turn two-step on, then sign in again with a fresh code.
+      uri=$(core_call "$audience" POST /auth/mfa/enroll "$token" '{}' | jq -r '.otpauth_uri // empty')
+      totp_secret=$(python3 -c 'import sys,urllib.parse as u; print(u.parse_qs(u.urlparse(sys.argv[1]).query)["secret"][0])' "$uri")
+      code=$(core_status "$audience" POST /auth/mfa/verify "$token" \
+        "$(jq -nc --arg c "$(totp_now "$totp_secret")" '{code:$c}')")
+      [ "$code" = 204 ] || { echo "user: two-step verify answered $code" >&2; exit 1; }
+      sleep $(( 31 - $(date +%s) % 30 ))   # a code is good once: the next step's
+      token=$(signin "$audience" "$email" "$pw" "$(totp_now "$totp_secret")")
+    fi
+    code=$(core_status "$audience" POST /auth/terms "$token" '{"version":"2026-10"}')
+    [ "$code" = 204 ] || { echo "user: terms answered $code" >&2; exit 1; }
+  fi
+  jq -nc --arg e "$email" --arg p "$pw" --arg t "$totp_secret" \
+    '{email:$e,password:$p} + (if $t == "" then {} else {totp_secret:$t} end)' > "$out"
   chmod 600 "$out"
   echo "user: $role -> $out"
 }
+
+# One call to core's HTTP API on the host port, as a BFF would make it.
+core_args() { # audience method path token body
+  local args=(-s -X "$2" -H "Content-Type: application/json" -H "X-MHAI-Client-IP: 198.51.100.15"
+    -H "X-MHAI-Audience: $1" -H "X-MHAI-Service: $(cat "$state/service.key")")
+  [ -n "$4" ] && args+=(-H "Authorization: Bearer $4")
+  [ -n "$5" ] && args+=(--data "$5")
+  printf '%s\0' "${args[@]}" "http://127.0.0.1:$core_port/api/v1$3"
+}
+core_call() { core_args "$@" | xargs -0 curl; }
+# An access token: sign in, and when core asks for two-step, answer with the
+# code given, or with none for an account without two-step (core's
+# enrolment-only session).
+signin() { # audience email password [code]
+  local r mfa
+  r=$(core_call "$1" POST /auth/login "" "$(jq -nc --arg u "$2" --arg p "$3" '{username:$u,password:$p}')")
+  mfa=$(printf '%s' "$r" | jq -r '.mfa_token // empty')
+  if [ -n "$mfa" ]; then
+    r=$(core_call "$1" POST /auth/mfa/challenge "" "$(jq -nc --arg t "$mfa" --arg c "${4:-}" '{mfa_token:$t,code:$c}')")
+  fi
+  printf '%s' "$r" | jq -r '.access_token // empty'
+}
+totp_now() { # base32 secret → the current 6-digit code
+  python3 - "$1" <<'PY'
+import base64, hmac, struct, sys, time
+s = sys.argv[1].upper(); s += "=" * (-len(s) % 8)
+h = hmac.new(base64.b32decode(s), struct.pack(">Q", int(time.time()) // 30), "sha1").digest()
+o = h[-1] & 15
+print("%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7FFFFFFF) % 1000000))
+PY
+}
+core_status() { core_args "$@" | xargs -0 curl -o /dev/null -w '%{http_code}'; }
 
 case "${1:-}" in
   up) up ;;
