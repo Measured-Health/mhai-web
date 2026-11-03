@@ -41,6 +41,9 @@ export default defineConfig({
       BACKEND_TRANSPORT: transport,
       MHAI_DEPLOY_ENV: "development",
       TRUSTED_CLIENT_IP_HEADER: "x-real-ip",
+      // Above the access token's 15 minutes: every call refreshes, so the
+      // run rotates core's refresh token many times, concurrently too.
+      SESSION_REFRESH_WITHIN_S: "1200",
       SESSION_SECRET: randomBytes(36).toString("base64url"),
       ...(transport === "nats"
         ? {

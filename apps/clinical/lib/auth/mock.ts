@@ -343,7 +343,8 @@ export function createMockAuthClient({
       }
       if (word === "new" || word === "newadmin") {
         const u = userFor(key, ROLES_FOR[word] ?? ["clinician"], false);
-        const owed: FirstStep[] = ["terms", "password", "mfa"];
+        // Core's order: password and two-step first, then the terms.
+        const owed: FirstStep[] = ["password", "mfa", "terms"];
         startSession(u, owed);
         return { status: "signed_in", user: u, steps: [...owed] };
       }

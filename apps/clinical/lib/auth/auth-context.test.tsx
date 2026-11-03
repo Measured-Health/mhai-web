@@ -67,7 +67,7 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("status")).toHaveTextContent("loading");
     await waitFor(() => {
       expect(screen.getByTestId("status")).toHaveTextContent("signed_in");
-      expect(api.steps).toEqual(["terms", "password", "mfa"]);
+      expect(api.steps).toEqual(["password", "mfa", "terms"]);
     });
   });
 
@@ -82,7 +82,7 @@ describe("AuthProvider", () => {
     expect(api.status).toBe("signed_in");
     expect(api.mfaPending).toBe(false);
     await act(() => api.signIn("new@h.org", "pw"));
-    expect(api.steps).toEqual(["terms", "password", "mfa"]);
+    expect(api.steps).toEqual(["password", "mfa", "terms"]);
     act(() => api.completeStep("terms"));
     expect(api.steps).toEqual(["password", "mfa"]);
   });

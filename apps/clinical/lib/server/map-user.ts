@@ -75,13 +75,17 @@ export function toUser(u: ApiUser): User {
   };
 }
 
-/** First sign-in steps, only from what the API says (never guessed). */
+/**
+ * First sign-in steps, only from what the API says (never guessed), in
+ * core's order: the password and two-step first (an enrolment-only session
+ * reaches only those), then the terms, which need a full session.
+ */
 export function stepsFor(u: ApiUser): FirstStep[] {
   const steps: FirstStep[] = [];
-  if (u.must_change_password || u.terms_accepted_at === null)
-    steps.push("terms");
   if (u.must_change_password) steps.push("password");
   if (u.mfa_enabled === false) steps.push("mfa");
+  if (u.must_change_password || u.terms_accepted_at === null)
+    steps.push("terms");
   return steps;
 }
 

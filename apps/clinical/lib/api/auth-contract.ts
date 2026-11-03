@@ -29,11 +29,18 @@ export interface ApiUser {
 export interface ApiLoginOk {
   access_token: string;
   expires_in: number;
+  /** For the BFF only: sealed in the session cookie, never sent to the page. */
+  refresh_token?: string;
   user: ApiUser;
 }
 export interface ApiMfaRequired {
   mfa_required: true;
   mfa_token: string;
+  /**
+   * false: two-step isn't set up yet, so the challenge with an empty code
+   * gives the enrolment-only session. Anything else: ask for the code.
+   */
+  mfa_enrolled?: boolean;
 }
 export interface ApiSession {
   id: string;

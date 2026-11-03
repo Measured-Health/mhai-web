@@ -24,6 +24,17 @@ export async function POST(req: Request) {
       },
     });
     if ("mfa_required" in r && r.mfa_required) {
+      // Two-step not set up yet (exactly false): core's challenge with an
+      // empty code gives the enrolment-only session, and the welcome flow
+      // sets it up. Anything else asks for the code: an empty one is never
+      // sent for an enrolled account (it would spend one of its attempts).
+      if (r.mfa_enrolled === false) {
+        const t = await api<ApiLoginOk>("/auth/mfa/challenge", {
+          method: "POST",
+          body: { mfa_token: r.mfa_token, code: "" },
+        });
+        return json(200, await startSession(t));
+      }
       await writeMfa(r.mfa_token);
       return json(200, { status: "mfa_required" });
     }

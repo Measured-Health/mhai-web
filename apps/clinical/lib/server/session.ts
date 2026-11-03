@@ -11,6 +11,12 @@ export const TRUST_TTL_S = 30 * 86_400;
 
 export interface ServerSession {
   token: string;
+  /**
+   * Core's refresh token (rotated on every refresh). Sealed in this
+   * httpOnly cookie, never readable by the page. Missing in sessions
+   * sealed before it was kept: those aren't refreshed.
+   */
+  refreshToken?: string | null;
   expiresAt: number;
   user: User;
   steps: FirstStep[];
@@ -103,6 +109,10 @@ export async function startSession(
 ): Promise<Extract<SignInResult, { status: "signed_in" }>> {
   const s: ServerSession = {
     token: r.access_token,
+    refreshToken:
+      typeof r.refresh_token === "string" && r.refresh_token
+        ? r.refresh_token
+        : null,
     expiresAt: now + r.expires_in * 1000,
     user: toUser(r.user),
     steps: stepsFor(r.user),

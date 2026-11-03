@@ -132,11 +132,11 @@ describe("mock auth client", () => {
     const r = await c.signIn("new.nurse@h.org", "temp");
     expect(r).toMatchObject({
       status: "signed_in",
-      steps: ["terms", "password", "mfa"],
+      steps: ["password", "mfa", "terms"],
       user: { mfaEnabled: false },
     });
     await c.acceptTerms();
-    await c.changePassword(null, "a-long-enough-password");
+    await c.changePassword("temp", "a-long-enough-password");
     expect((await c.getSession())?.steps).toEqual(["mfa"]);
     const setup = await c.startMfaSetup();
     expect(setup.otpauthUri).toMatch(
@@ -189,7 +189,7 @@ describe("mock auth client", () => {
     if (r.status !== "signed_in") throw new Error();
     expect(r.user.roles).toEqual(["hospital_admin"]);
     expect(isClinical(r.user)).toBe(false);
-    expect(r.steps).toEqual(["terms", "password", "mfa"]);
+    expect(r.steps).toEqual(["password", "mfa", "terms"]);
     expect(r.user.mfaEnabled).toBe(false);
   });
 
@@ -221,7 +221,7 @@ describe("mock auth client", () => {
     await expect(
       c.changePassword("wrong", "a-long-enough-password"),
     ).rejects.toMatchObject({ code: "wrong_password" });
-    await c.changePassword(null, "a-long-enough-password");
+    await c.changePassword("temp", "a-long-enough-password");
     await c.requestPasswordReset("anyone@anywhere.org");
     await expect(
       c.resetPassword("old", "a-long-enough-password"),

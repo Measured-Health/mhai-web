@@ -72,13 +72,12 @@ test("a deep link to the code step with nothing pending goes to sign-in", async 
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
-test("first sign-in: terms, password, two-step, backup codes", async ({
+test("first sign-in: password, two-step, backup codes, then terms", async ({
   page,
 }) => {
   await signIn(page, "new.bello@havanahospital.org");
   await expect(page).toHaveURL(/\/welcome$/);
-  await page.getByLabel("I understand and agree to use MHAI this way").check();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Temporary password").fill("demo-password");
   await page.getByLabel("New password").fill("tram-lantern-okra");
   await page.getByLabel("Confirm password").fill("tram-lantern-okra");
   await page.getByRole("button", { name: "Save password" }).click();
@@ -88,6 +87,8 @@ test("first sign-in: terms, password, two-step, backup codes", async ({
   await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
   await page.getByLabel("I've saved these codes somewhere safe").check();
   await page.getByRole("button", { name: "Finish setup" }).click();
+  await page.getByLabel("I understand and agree to use MHAI this way").check();
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/$/);
 });
 

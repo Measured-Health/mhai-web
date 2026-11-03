@@ -135,13 +135,12 @@ test("an admin who isn't a clinician can't reach clinical screens", async ({
   }
 });
 
-test("a new hospital admin accepts the terms, sets a password and two-step, then lands on Staff", async ({
+test("a new hospital admin sets a password and two-step, accepts the terms, then lands on Staff", async ({
   page,
 }) => {
   await signIn(page, DEMO_EMAILS.newAdmin);
   await expect(page).toHaveURL(/\/welcome$/);
-  await page.getByLabel("I understand and agree to use MHAI this way").check();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Temporary password").fill("demo-password");
   await page.getByLabel("New password").fill("tram-lantern-okra");
   await page.getByLabel("Confirm password").fill("tram-lantern-okra");
   await page.getByRole("button", { name: "Save password" }).click();
@@ -159,6 +158,8 @@ test("a new hospital admin accepts the terms, sets a password and two-step, then
   await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
   await page.getByLabel("I've saved these codes somewhere safe").check();
   await page.getByRole("button", { name: "Finish setup" }).click();
+  await page.getByLabel("I understand and agree to use MHAI this way").check();
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/admin\/staff$/);
   await expect(manage(page, "Dr. Kofi Mensah")).toBeVisible();
   await expect(

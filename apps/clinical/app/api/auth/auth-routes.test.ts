@@ -18,6 +18,7 @@ vi.mock("@/lib/server/api", async (orig) => ({
 }));
 
 import { UpstreamError } from "@/lib/server/api";
+import { __resetRefreshCacheForTests } from "@/lib/server/refresh";
 import type { ApiUser } from "@/lib/api/auth-contract";
 import {
   MFA_COOKIE,
@@ -51,10 +52,12 @@ const post = (body?: unknown, origin = "http://demo.test") =>
 const LOGIN_OK = {
   access_token: "tok",
   expires_in: 900,
+  refresh_token: "rtok",
   user: { username: "a.reyes", role: "clinician", mfa_enabled: true },
 };
 
 beforeEach(() => {
+  __resetRefreshCacheForTests();
   vi.stubEnv("SESSION_SECRET", "s".repeat(40));
   jar.values.clear();
   upstream.mockReset();
@@ -88,6 +91,52 @@ describe("login", () => {
     expect(jar.values.get(SESSION_COOKIE)).toBeTruthy();
     expect(res.headers.get("Cache-Control")).toBe("no-store");
   });
+  it("keeps core's refresh token sealed in the session cookie, never in the reply", async () => {
+    upstream.mockResolvedValueOnce(LOGIN_OK);
+    const res = await login(post({ login: "a.reyes", password: "pw" }));
+    expect(JSON.stringify(await res.json())).not.toContain("rtok");
+    expect(jar.values.get(SESSION_COOKIE)).not.toContain("rtok");
+    expect((await readSession())?.refreshToken).toBe("rtok");
+  });
+  it("mfa_enrolled false: takes core's enrolment-only session with an empty code", async () => {
+    upstream.mockResolvedValueOnce({
+      mfa_required: true,
+      mfa_token: "m",
+      mfa_enrolled: false,
+    });
+    upstream.mockResolvedValueOnce({
+      ...LOGIN_OK,
+      user: {
+        ...LOGIN_OK.user,
+        mfa_enabled: false,
+        must_change_password: true,
+      },
+    });
+    const res = await login(post({ login: "a", password: "pw" }));
+    expect(await res.json()).toMatchObject({
+      status: "signed_in",
+      steps: ["password", "mfa", "terms"],
+    });
+    expect(upstream).toHaveBeenLastCalledWith("/auth/mfa/challenge", {
+      method: "POST",
+      body: { mfa_token: "m", code: "" },
+    });
+    expect(jar.values.get(MFA_COOKIE)).toBeUndefined();
+  });
+  it.each([[true], [undefined], ["false"], [0]])(
+    "mfa_enrolled %j: asks for the code and never sends an empty one",
+    async (enrolled) => {
+      upstream.mockResolvedValueOnce({
+        mfa_required: true,
+        mfa_token: "m",
+        ...(enrolled === undefined ? {} : { mfa_enrolled: enrolled }),
+      });
+      const res = await login(post({ login: "a", password: "pw" }));
+      expect(await res.json()).toEqual({ status: "mfa_required" });
+      expect(upstream).toHaveBeenCalledTimes(1);
+      expect(jar.values.get(MFA_COOKIE)).toBeTruthy();
+    },
+  );
   it("holds the MFA step token in its own cookie", async () => {
     upstream.mockResolvedValueOnce({ mfa_required: true, mfa_token: "m" });
     const res = await login(post({ login: "a", password: "pw" }));
@@ -143,10 +192,20 @@ describe("session, terms, password, logout", () => {
     expect((await session()).status).toBe(401);
     await signedIn({ must_change_password: true });
     const res = await session();
-    expect(await res.json()).toMatchObject({ steps: ["terms", "password"] });
+    expect(await res.json()).toMatchObject({ steps: ["password", "terms"] });
   });
-  it("clears first sign-in steps as they're done", async () => {
+  it("clears first sign-in steps as they're done: password, then terms", async () => {
     await signedIn({ must_change_password: true });
+    upstream.mockResolvedValueOnce(undefined);
+    expect(
+      (await password(post({ current: "temp-pw", next: "tram-lantern-okra" })))
+        .status,
+    ).toBe(204);
+    expect(upstream).toHaveBeenLastCalledWith("/auth/password", {
+      method: "POST",
+      token: "tok",
+      body: { current_password: "temp-pw", new_password: "tram-lantern-okra" },
+    });
     upstream.mockResolvedValueOnce(undefined);
     expect((await terms(post())).status).toBe(204);
     expect(upstream).toHaveBeenLastCalledWith("/auth/terms", {
@@ -154,17 +213,52 @@ describe("session, terms, password, logout", () => {
       token: "tok",
       body: { version: "2026-10" },
     });
-    upstream.mockResolvedValueOnce(undefined);
-    expect(
-      (await password(post({ current: null, next: "tram-lantern-okra" })))
-        .status,
-    ).toBe(204);
-    expect(upstream).toHaveBeenLastCalledWith("/auth/password", {
-      method: "POST",
-      token: "tok",
-      body: { current_password: null, new_password: "tram-lantern-okra" },
-    });
     expect((await readSession())?.steps).toEqual([]);
+  });
+  it("the first password change needs the temporary password (core's current_password)", async () => {
+    await signedIn({ must_change_password: true });
+    for (const current of [null, ""]) {
+      const res = await password(post({ current, next: "tram-lantern-okra" }));
+      expect(res.status).toBe(400);
+    }
+    expect(upstream).toHaveBeenCalledTimes(1); // the sign-in only
+  });
+  it.each([
+    [new UpstreamError(403, "forbidden"), 403, "wrong_password"],
+    [new UpstreamError(422, "weak_password"), 422, "weak_password"],
+    [new UpstreamError(429, "login_locked"), 429, "locked"],
+  ])("maps core's password refusal %o", async (err, status, code) => {
+    await signedIn();
+    upstream.mockRejectedValueOnce(err);
+    const res = await password(
+      post({ current: "x", next: "tram-lantern-okra" }),
+    );
+    expect(res.status).toBe(status);
+    expect(await res.json()).toEqual({ code });
+  });
+  it("terms refused for an enrolment-only session: refreshes, then retries once", async () => {
+    await signedIn();
+    upstream.mockRejectedValueOnce(new UpstreamError(403, "mfa_required"));
+    upstream.mockResolvedValueOnce({
+      access_token: "tok2",
+      refresh_token: "rtok2",
+      expires_in: 900,
+    });
+    upstream.mockResolvedValueOnce(undefined);
+    expect((await terms(post())).status).toBe(204);
+    expect(upstream).toHaveBeenCalledWith("/auth/refresh", {
+      method: "POST",
+      body: { refresh_token: "rtok" },
+    });
+    expect(upstream).toHaveBeenLastCalledWith("/auth/terms", {
+      method: "POST",
+      token: "tok2",
+      body: { version: "2026-10" },
+    });
+    expect(await readSession()).toMatchObject({
+      token: "tok2",
+      refreshToken: "rtok2",
+    });
   });
   it("calls a wrong current password what it is", async () => {
     await signedIn();
@@ -175,7 +269,7 @@ describe("session, terms, password, logout", () => {
     expect(await res.json()).toEqual({ code: "wrong_password" });
   });
   it("needs a session for account changes", async () => {
-    const res = await password(post({ current: null, next: "x".repeat(12) }));
+    const res = await password(post({ current: "temp", next: "x".repeat(12) }));
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ code: "session_expired" });
   });
@@ -212,8 +306,20 @@ describe("two-step setup", () => {
       backupCodes: ["AAAA-1111"],
     });
     upstream.mockResolvedValueOnce(undefined);
+    upstream.mockResolvedValueOnce({
+      access_token: "tok2",
+      refresh_token: "rtok2",
+      expires_in: 900,
+    });
     expect((await confirm(post({ code: "123456" }))).status).toBe(204);
+    // Verify only marks the session; the next refresh mints a full token.
+    expect(upstream).toHaveBeenLastCalledWith("/auth/refresh", {
+      method: "POST",
+      body: { refresh_token: "rtok" },
+    });
     expect(await readSession()).toMatchObject({
+      token: "tok2",
+      refreshToken: "rtok2",
       user: { mfaEnabled: true },
       steps: [],
     });

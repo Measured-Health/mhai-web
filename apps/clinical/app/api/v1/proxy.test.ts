@@ -61,6 +61,7 @@ const post = (
 const session = (expiresInMs = 10 * 60_000) =>
   writeSession({
     token: "tok",
+    refreshToken: "rtok",
     expiresAt: Date.now() + expiresInMs,
     user: TEST_USER,
     steps: [],
@@ -177,17 +178,23 @@ describe("clinical API proxy", () => {
     expect(jar.values.get(SESSION_COOKIE)).toBeUndefined();
   });
 
-  it("refreshes a token close to expiry", async () => {
+  it("refreshes a token close to expiry with core's refresh token, and rotates it", async () => {
     await session(60_000);
     fetchMock
       .mockResolvedValueOnce(
-        Response.json({ access_token: "tok2", expires_in: 900 }),
+        Response.json({
+          access_token: "tok2",
+          refresh_token: "rtok2",
+          expires_in: 900,
+        }),
       )
       .mockResolvedValueOnce(Response.json({}));
     await GET(get(), ctx("queries", "q1"));
-    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(
-      "http://api.test/api/v1/auth/refresh",
-    );
+    const [rurl, rinit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(rurl).toBe("http://api.test/api/v1/auth/refresh");
+    expect(JSON.parse(String(rinit.body))).toEqual({ refresh_token: "rtok" });
+    expect(new Headers(rinit.headers).get("Authorization")).toBeNull();
+    expect((await readSession())?.refreshToken).toBe("rtok2");
     expect(
       (fetchMock.mock.calls[1] as [string, RequestInit])[1].headers,
     ).toMatchObject({
@@ -267,7 +274,9 @@ describe("clinical API proxy", () => {
     await session(60_000);
     const before = jar.values.get(SESSION_COOKIE);
     fetchMock
-      .mockResolvedValueOnce(Response.json({ access_token: "t2" }))
+      .mockResolvedValueOnce(
+        Response.json({ access_token: "t2", expires_in: 900 }), // no refresh_token
+      )
       .mockResolvedValueOnce(Response.json({}));
     await GET(get(), ctx("queries", "q1"));
     expect(
@@ -276,11 +285,62 @@ describe("clinical API proxy", () => {
     expect(jar.values.get(SESSION_COOKIE)).toBe(before);
   });
 
+  it("409 (rotated elsewhere): keeps the current token and session", async () => {
+    await session(60_000);
+    const before = jar.values.get(SESSION_COOKIE);
+    fetchMock
+      .mockResolvedValueOnce(
+        Response.json({ code: "conflict" }, { status: 409 }),
+      )
+      .mockResolvedValueOnce(Response.json({}));
+    const res = await GET(get(), ctx("queries", "q1"));
+    expect(res.status).toBe(200);
+    expect(
+      (fetchMock.mock.calls[1] as [string, RequestInit])[1].headers,
+    ).toMatchObject({ Authorization: "Bearer tok" });
+    expect(jar.values.get(SESSION_COOKIE)).toBe(before);
+  });
+
+  it("a session sealed before refresh tokens never calls refresh", async () => {
+    await writeSession({
+      token: "tok",
+      refreshToken: null,
+      expiresAt: Date.now() + 60_000,
+      user: TEST_USER,
+      steps: [],
+    });
+    fetchMock.mockResolvedValueOnce(Response.json({}));
+    await GET(get(), ctx("queries", "q1"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("SESSION_REFRESH_WITHIN_S widens the refresh window", async () => {
+    vi.stubEnv("SESSION_REFRESH_WITHIN_S", "1200");
+    await session(10 * 60_000);
+    fetchMock
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: "t3",
+          refresh_token: "r3",
+          expires_in: 900,
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({}));
+    await GET(get(), ctx("queries", "q1"));
+    expect((fetchMock.mock.calls[0] as [string])[0]).toMatch(
+      /\/auth\/refresh$/,
+    );
+  });
+
   it("refreshes once for concurrent requests", async () => {
     await session(60_000);
     fetchMock.mockImplementation(async (url: string) =>
       url.endsWith("/auth/refresh")
-        ? Response.json({ access_token: "t2", expires_in: 900 })
+        ? Response.json({
+            access_token: "t2",
+            refresh_token: "r2",
+            expires_in: 900,
+          })
         : Response.json({}),
     );
     await Promise.all([

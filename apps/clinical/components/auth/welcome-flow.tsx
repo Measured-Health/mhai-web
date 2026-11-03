@@ -10,7 +10,7 @@ import { TermsStep } from "./terms-step";
 
 type Shown = FirstStep | "codes";
 const LABEL: Record<Shown, string> = {
-  terms: "First sign-in",
+  terms: "Terms of use",
   password: "Your password",
   mfa: "Protect your account",
   codes: "Just in case",

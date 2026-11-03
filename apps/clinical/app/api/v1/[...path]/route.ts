@@ -10,13 +10,8 @@ import { apiBase } from "@/lib/server/api";
 import { backendFetch, backendReady, onNats } from "@/lib/server/backend";
 import { analysisSignedOff, namedSignedOff } from "@/lib/server/features";
 import { forbidden, json, sameOrigin } from "@/lib/server/http";
-import { refreshOnce } from "@/lib/server/refresh";
-import {
-  clearSession,
-  readSession,
-  writeSession,
-  type ServerSession,
-} from "@/lib/server/session";
+import { refreshSession, refreshWithinMs } from "@/lib/server/refresh";
+import { clearSession, readSession } from "@/lib/server/session";
 
 const ALLOWED = new Set([
   "queries",
@@ -30,7 +25,6 @@ const ALLOWED = new Set([
 ]);
 // Anything else (HEAD, PUT, OPTIONS...) never reaches a read or write branch.
 const METHODS = new Set(["GET", "POST", "PATCH", "DELETE"]);
-const REFRESH_WITHIN_MS = 5 * 60_000;
 const MAX_BODY = 64 * 1024;
 const SEGMENT = /^[A-Za-z0-9_-]+$/; // ids are opaque; no dots, slashes or escapes
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9-]{1,64}$/;
@@ -336,14 +330,6 @@ function shapeAllowed(method: string, path: string[]): boolean {
   return true;
 }
 
-async function refresh(s: ServerSession): Promise<ServerSession> {
-  const r = await refreshOnce(s.token);
-  if (!r) return s; // still valid for a few minutes; the next call tries again
-  const next = { ...s, ...r };
-  await writeSession(next);
-  return next;
-}
-
 /** Same-origin proxy for clinical, alert and hospital admin calls: adds the token the browser never sees. */
 async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   const { path } = await ctx.params;
@@ -394,7 +380,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     !(key && IDEMPOTENCY_KEY.test(key))
   )
     return json(422, { code: "invalid" });
-  if (s.expiresAt - Date.now() < REFRESH_WITHIN_MS) s = await refresh(s);
+  if (s.expiresAt - Date.now() < refreshWithinMs()) s = await refreshSession(s);
 
   let body: string | Uint8Array<ArrayBuffer> | undefined;
   let type: string | undefined;
