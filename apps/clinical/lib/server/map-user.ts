@@ -22,16 +22,30 @@ export function rolesOf(u: Pick<ApiUser, "role" | "roles">): Role[] {
   return known.length ? known : ["researcher"];
 }
 
+/**
+ * The hospital's name: core sends `{id, name}` (contract v1.2.0), older
+ * shapes a string. Anything else is null, so it can never be rendered.
+ */
+function hospitalName(h: unknown): string | null {
+  if (typeof h === "string") return h;
+  if (h && typeof h === "object" && !Array.isArray(h)) {
+    const name = (h as { name?: unknown }).name;
+    if (typeof name === "string") return name;
+  }
+  return null;
+}
+
 export function toUser(u: ApiUser): User {
   return {
-    username: u.username,
+    // Core has no username: its stable id binds the outbox to this person.
+    username: u.username ?? u.id ?? u.email ?? "",
     email: u.email ?? null,
-    displayName: u.display_name || u.full_name || u.username,
+    displayName: u.display_name || u.full_name || u.username || u.email || "",
     fullName: u.full_name ?? null,
     roles: rolesOf(u),
     roleTitle: u.role_title ?? null,
     specialty: u.specialty ?? null,
-    hospital: u.hospital ?? null,
+    hospital: hospitalName(u.hospital),
     mfaEnabled: u.mfa_enabled === true,
     backupCodesLeft: u.recovery_codes_left ?? null,
     // On only when the API says so and the hospital has signed it off.

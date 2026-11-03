@@ -3,7 +3,9 @@
 
 /** The user as the MHAI API returns it. Optional fields arrive with backend §10 work. */
 export interface ApiUser {
-  username: string;
+  /** Older shape; core (contract v1.2.0) sends `id` and no username. */
+  username?: string;
+  id?: string;
   role: string;
   /** Every role (assumed, spec §10 item 2); `role` stays the primary one. */
   roles?: string[];
@@ -12,7 +14,8 @@ export interface ApiUser {
   full_name?: string | null;
   role_title?: string | null;
   specialty?: string | null;
-  hospital?: string | null;
+  /** `{id, name}` from core (contract v1.2.0); a name in older shapes. */
+  hospital?: string | { id: string; name: string } | null;
   mfa_enabled?: boolean;
   must_change_password?: boolean;
   terms_accepted_at?: string | null;
