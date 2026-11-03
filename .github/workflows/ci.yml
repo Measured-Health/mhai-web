@@ -106,6 +106,9 @@ jobs:
       - name: Bundle check
         run: npm run check:bundle
 
+      - name: No NATS code in client chunks
+        run: npm run check:no-nats
+
       - name: Platform marker check
         run: npm run check:platform-marker
 
