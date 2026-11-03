@@ -98,6 +98,25 @@ describe("createRefresher (core's POST /auth/refresh {refresh_token})", () => {
     expect(call).toHaveBeenLastCalledWith({ refresh_token: "r1" });
   });
 
+  it("a refresh still in flight at sign-out never brings its successor back", async () => {
+    let release!: (v: unknown) => void;
+    const call = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((res) => (release = res)))
+      .mockResolvedValue(ok(9));
+    const r = createRefresher(call);
+    const pending = r.refreshOnce("r1");
+    r.forget("r1"); // sign-out while the refresh is still running
+    release(ok(2));
+    await pending;
+    expect(r.successor("r1")).toBeNull();
+    expect(r.successor("r2")).toBeNull();
+    // A stale cookie's token goes to core (which refuses it).
+    await r.refreshOnce("r1");
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(call).toHaveBeenLastCalledWith({ refresh_token: "r1" });
+  });
+
   it("a refresh that ends the session (401) forgets its chain", async () => {
     const call = vi
       .fn()

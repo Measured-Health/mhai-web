@@ -40,6 +40,11 @@ export type Refreshed = {
 
 /** How long a successor is kept: the longest request (30 s) and a margin. */
 const KEEP_MS = 60_000;
+/**
+ * How long a forgotten token stays forgotten: past any successor's life and
+ * any refresh still in flight (its request times out within 30 s).
+ */
+const FORGET_MS = KEEP_MS + 30_000;
 /** Rotations followed by `successor`; past this it fails closed (no successor). */
 const MAX_CHAIN = 8;
 
@@ -50,6 +55,12 @@ export function createRefresher(
 ) {
   const inflight = new Map<string, Promise<Refreshed | null>>();
   const resolved = new Map<string, Refreshed>();
+  /** Tokens of ended sessions: never resolved again, even by a late reply. */
+  const forgotten = new Set<string>();
+  const tombstone = (t: string) => {
+    forgotten.add(t);
+    setTimeout(() => forgotten.delete(t), FORGET_MS).unref?.();
+  };
 
   async function doRefresh(refreshToken: string): Promise<Refreshed | null> {
     try {
@@ -95,11 +106,15 @@ export function createRefresher(
     return chain;
   }
 
-  /** Drops the whole chain: after it, none of its tokens resolves here. */
+  /**
+   * Drops the whole chain and tombstones every token in it: none resolves
+   * here again, not even when a refresh still in flight answers later.
+   */
   function forget(refreshToken: string) {
     for (const t of chainOf(refreshToken)) {
       resolved.delete(t);
       inflight.delete(t);
+      tombstone(t);
     }
   }
 
@@ -111,12 +126,23 @@ export function createRefresher(
       if (!p) {
         p = doRefresh(refreshToken);
         inflight.set(refreshToken, p);
+        const mine = p;
         void p.then((r) => {
-          if (!r) return void inflight.delete(refreshToken); // may retry later
+          if (!r) {
+            if (inflight.get(refreshToken) === mine) inflight.delete(refreshToken);
+            return; // may retry later
+          }
+          // Signed out while this was in flight: the session has ended, so
+          // its successor is never kept (and is forgotten too).
+          if (forgotten.has(refreshToken) || forgotten.has(r.refreshToken)) {
+            tombstone(r.refreshToken);
+            if (inflight.get(refreshToken) === mine) inflight.delete(refreshToken);
+            return;
+          }
           resolved.set(refreshToken, r);
           setTimeout(() => {
-            inflight.delete(refreshToken);
-            resolved.delete(refreshToken);
+            if (inflight.get(refreshToken) === mine) inflight.delete(refreshToken);
+            if (resolved.get(refreshToken) === r) resolved.delete(refreshToken);
           }, KEEP_MS).unref?.();
         });
       }
@@ -127,12 +153,14 @@ export function createRefresher(
      * too), or null when it hasn't been rotated here lately.
      */
     successor(refreshToken: string): Refreshed | null {
+      if (forgotten.has(refreshToken)) return null;
       let found: Refreshed | null = null;
       const seen = new Set([refreshToken]);
       let key = refreshToken;
       for (let i = 0; ; i++) {
         const next = resolved.get(key);
         if (!next) return found;
+        if (forgotten.has(next.refreshToken)) return null;
         // A loop or an over-long chain: fail closed, the token goes to core.
         if (i >= MAX_CHAIN || seen.has(next.refreshToken)) return null;
         seen.add(next.refreshToken);
@@ -145,6 +173,7 @@ export function createRefresher(
     __resetForTests() {
       inflight.clear();
       resolved.clear();
+      forgotten.clear();
     },
   };
 }
