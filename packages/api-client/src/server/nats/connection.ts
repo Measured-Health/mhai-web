@@ -54,6 +54,8 @@ export type ConnectDeps = {
   log: LogLine;
   /** Registers the SIGTERM handler. */
   onShutdown: (fn: () => Promise<void>) => void;
+  /** How long to wait before opening again after NATS closed the connection. */
+  reopenAfterMs?: number;
 };
 
 const RECONNECT_WAIT_MS = 2000;
@@ -129,6 +131,7 @@ function liveRequester(
 ): NatsRequester {
   let nc: NatsConnection | null = null;
   let connected = false;
+  let drained: Promise<void> | null = null;
   const log = (event: string, error?: string) =>
     deps.log(formatLog(event, { app, ...(error ? { error } : {}) }));
 
@@ -136,6 +139,11 @@ function liveRequester(
     void conn.closed().then(() => {
       connected = false;
       log("nats: closed");
+      // Closed by NATS (reconnects given up, say after an auth refusal),
+      // not by a drain: open a new connection rather than stay down until
+      // the container restarts.
+      if (!drained)
+        setTimeout(open, deps.reopenAfterMs ?? RECONNECT_WAIT_MS).unref?.();
     });
     for await (const s of conn.status()) {
       switch (s.type) {
@@ -178,7 +186,6 @@ function liveRequester(
   };
   open();
 
-  let drained: Promise<void> | null = null;
   const drain = () => {
     drained ??= (async () => {
       const conn = nc;

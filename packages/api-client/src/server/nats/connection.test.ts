@@ -65,8 +65,10 @@ function deps(over: Partial<ConnectDeps> = {}) {
   const f = fakeNats();
   const logs: string[] = [];
   const shutdown: (() => Promise<void>)[] = [];
+  // The first connection is `f`; a reconnect after a close gets a new one.
+  let opened = 0;
   const connect = vi.fn<(opts: Record<string, unknown>) => Promise<unknown>>(
-    async () => f.nc,
+    async () => (opened++ === 0 ? f.nc : fakeNats().nc),
   );
   const d: ConnectDeps = {
     connect: connect as unknown as ConnectDeps["connect"],
@@ -279,6 +281,26 @@ describe("the NATS connection", () => {
       expect(all).not.toContain("SECRET");
       expect(all).not.toContain("u:p@");
     }
+  });
+
+  it("a connection closed by NATS (not drained) is opened again", async () => {
+    const { d, f, connect } = deps({ reopenAfterMs: 0 });
+    const r = createNatsRequester("clinical", d);
+    await tick();
+    expect(connect).toHaveBeenCalledTimes(1);
+    f.close();
+    await new Promise((res) => setTimeout(res, 10));
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(r.ready()).toBe(true);
+  });
+
+  it("a drained connection stays closed", async () => {
+    const { d, connect, shutdown } = deps({ reopenAfterMs: 0 });
+    createNatsRequester("clinical", d);
+    await tick();
+    await shutdown[0]!();
+    await new Promise((res) => setTimeout(res, 10));
+    expect(connect).toHaveBeenCalledTimes(1);
   });
 
   it("SIGTERM drains once", async () => {
