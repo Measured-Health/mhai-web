@@ -1,6 +1,6 @@
 import { sealSync, unsealSync } from "@mhai/api-client/server/seal";
 import { cookies } from "next/headers";
-import { resolveCurrent } from "./refresher";
+import { refresher, resolveCurrent } from "./refresher";
 import type { FirstStep, Role, SignInResult, User } from "../auth/types";
 import { stepsFor, toUser, type ApiLoginOk } from "./map-user";
 
@@ -76,6 +76,10 @@ export async function writeSession(s: ServerSession, now = Date.now()) {
 /** Ends the session and any MFA step. The trusted-device cookie stays. */
 export async function clearSession() {
   const jar = await cookies();
+  // The session has ended: no stale copy of its cookie may resolve to a
+  // successor any more (its next refresh goes to core, which refuses it).
+  const ended = unseal<ServerSession>(jar.get(SESSION_COOKIE)?.value);
+  if (ended?.refreshToken) refresher.forget(ended.refreshToken);
   jar.delete(SESSION_COOKIE);
   jar.delete(MFA_COOKIE);
 }

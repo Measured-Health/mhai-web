@@ -288,6 +288,23 @@ describe("session, terms, password, logout", () => {
       expect(upstream).not.toHaveBeenCalled();
     }
   });
+  it("after sign-out a stale cookie no longer resolves to the successor", async () => {
+    await signedIn();
+    const old = jar.values.get(SESSION_COOKIE)!;
+    upstream.mockResolvedValueOnce({
+      access_token: "tok2",
+      refresh_token: "rtok2",
+      expires_in: 900,
+    });
+    await refreshOnce("rtok");
+    upstream.mockResolvedValueOnce(undefined);
+    expect((await logout(post())).status).toBe(204);
+    jar.values.set(SESSION_COOKIE, old); // a stale copy of the old cookie
+    expect(await readSession()).toMatchObject({
+      token: "tok",
+      refreshToken: "rtok",
+    });
+  });
   it("a route writing back the session after a rotation writes the successor, not the old pair", async () => {
     await signedIn({ must_change_password: true });
     upstream.mockResolvedValueOnce({

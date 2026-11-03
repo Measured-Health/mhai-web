@@ -1,4 +1,5 @@
 import "server-only";
+import { UpstreamError } from "./upstream";
 
 /**
  * The BFF side of core's refresh contract (openapi `/auth/refresh`):
@@ -12,8 +13,17 @@ import "server-only";
  * carry the old sealed cookie. So each rotation's successor is kept here
  * for a minute: a request with the old token gets the same newer pair (and
  * its cookie is rewritten with it, see `successor`) instead of reaching
- * core with a rotated-out token. Whoever holds the old sealed cookie
- * already holds the session, so this hands out nothing new.
+ * core with a rotated-out token.
+ *
+ * Accepted residual risk (product owner's ruling, 3 Nov): for that minute,
+ * someone holding an old sealed cookie gets the successor and never trips
+ * core's reuse detection. They already hold that cookie's access token,
+ * valid for up to 15 minutes, so the extra minute adds little; a 10-second
+ * window instead revoked sessions mid-consultation. Bounded by: the chain
+ * is dropped at sign-out, sign-out everywhere and any refresh that ends the
+ * session (`forget`); past the minute a stale token goes to core unchanged,
+ * so its reuse check and revocation run; and a loop or an over-long chain
+ * resolves to nothing, so the token goes to core too.
  *
  * The cache is per process: one BFF instance per app (the demo runs one).
  * More than one needs a shared store (TODO.md).
@@ -30,7 +40,7 @@ export type Refreshed = {
 
 /** How long a successor is kept: the longest request (30 s) and a margin. */
 const KEEP_MS = 60_000;
-/** Rotations followed by `successor`, at most. */
+/** Rotations followed by `successor`; past this it fails closed (no successor). */
 const MAX_CHAIN = 8;
 
 export function createRefresher(
@@ -63,8 +73,33 @@ export function createRefresher(
         refreshToken: r.refresh_token,
         expiresAt: now() + r.expires_in * 1000,
       };
-    } catch {
+    } catch (e) {
+      // Core ended the session (unknown, revoked or reused token): nothing
+      // in its chain may resolve any more.
+      if (e instanceof UpstreamError && e.status === 401) forget(refreshToken);
       return null;
+    }
+  }
+
+  /** Every token in the chain `refreshToken` belongs to, both ways. */
+  function chainOf(refreshToken: string): Set<string> {
+    const chain = new Set([refreshToken]);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const [from, to] of resolved)
+        if (chain.has(from) !== chain.has(to.refreshToken)) {
+          chain.add(from).add(to.refreshToken);
+          grew = true;
+        }
+    }
+    return chain;
+  }
+
+  /** Drops the whole chain: after it, none of its tokens resolves here. */
+  function forget(refreshToken: string) {
+    for (const t of chainOf(refreshToken)) {
+      resolved.delete(t);
+      inflight.delete(t);
     }
   }
 
@@ -93,15 +128,20 @@ export function createRefresher(
      */
     successor(refreshToken: string): Refreshed | null {
       let found: Refreshed | null = null;
+      const seen = new Set([refreshToken]);
       let key = refreshToken;
-      for (let i = 0; i < MAX_CHAIN; i++) {
+      for (let i = 0; ; i++) {
         const next = resolved.get(key);
-        if (!next) break;
+        if (!next) return found;
+        // A loop or an over-long chain: fail closed, the token goes to core.
+        if (i >= MAX_CHAIN || seen.has(next.refreshToken)) return null;
+        seen.add(next.refreshToken);
         found = next;
         key = next.refreshToken;
       }
-      return found;
     },
+    /** Sign-out: nothing in this session's chain resolves any more. */
+    forget,
     __resetForTests() {
       inflight.clear();
       resolved.clear();

@@ -1,6 +1,6 @@
 import { sealSync, unsealSync } from "@mhai/api-client/server/seal";
 import { cookies } from "next/headers";
-import { resolveCurrent } from "./refresher";
+import { refresher, resolveCurrent } from "./refresher";
 import type { ApiLoginOk, ApiUser } from "../api/auth-contract";
 import { api } from "./http";
 import { apiRolesOf, toPlatformRoles, type PlatformRole } from "./roles";
@@ -119,6 +119,10 @@ export async function touchSession(
 /** Ends the session and any two-step in progress. */
 export async function clearSession() {
   const jar = await cookies();
+  // The session has ended: no stale copy of its cookie may resolve to a
+  // successor any more (its next refresh goes to core, which refuses it).
+  const ended = unseal<ServerSession>(jar.get(SESSION_COOKIE)?.value);
+  if (ended?.refreshToken) refresher.forget(ended.refreshToken);
   jar.delete(SESSION_COOKIE);
   jar.delete(MFA_COOKIE);
 }

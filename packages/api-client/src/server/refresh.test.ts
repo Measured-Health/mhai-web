@@ -69,6 +69,73 @@ describe("createRefresher (core's POST /auth/refresh {refresh_token})", () => {
     expect(r.successor("r3")).toBeNull();
   });
 
+  it("past the minute, a stale token goes to core unchanged (its reuse check runs)", async () => {
+    vi.useFakeTimers();
+    try {
+      const call = vi.fn(async () => ok(2));
+      const r = createRefresher(call);
+      await r.refreshOnce("r1");
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(r.successor("r1")).toBeNull();
+      await r.refreshOnce("r1");
+      expect(call).toHaveBeenCalledTimes(2);
+      expect(call).toHaveBeenLastCalledWith({ refresh_token: "r1" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("forget() drops a session's whole chain: a stale cookie can't resolve after sign-out", async () => {
+    let n = 1;
+    const call = vi.fn(async () => ok(++n));
+    const r = createRefresher(call);
+    await r.refreshOnce("r1"); // r1 -> r2
+    await r.refreshOnce("r2"); // r2 -> r3
+    r.forget("r3"); // the current one, as sign-out holds it
+    expect(r.successor("r1")).toBeNull();
+    expect(r.successor("r2")).toBeNull();
+    await r.refreshOnce("r1");
+    expect(call).toHaveBeenLastCalledWith({ refresh_token: "r1" });
+  });
+
+  it("a refresh that ends the session (401) forgets its chain", async () => {
+    const call = vi
+      .fn()
+      .mockResolvedValueOnce(ok(2))
+      .mockRejectedValueOnce(new UpstreamError(401, "unauthenticated"));
+    const r = createRefresher(call);
+    await r.refreshOnce("r1"); // r1 -> r2
+    expect(await r.refreshOnce("r2")).toBeNull();
+    expect(r.successor("r1")).toBeNull();
+  });
+
+  it("a loop or an over-long chain fails closed: no successor (the token goes to core)", async () => {
+    const r = createRefresher(
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          access_token: "a",
+          refresh_token: "r2",
+          expires_in: 900,
+        })
+        .mockResolvedValueOnce({
+          access_token: "b",
+          refresh_token: "r1",
+          expires_in: 900,
+        }),
+    );
+    await r.refreshOnce("r1"); // r1 -> r2
+    await r.refreshOnce("r2"); // r2 -> r1: a loop
+    expect(r.successor("r1")).toBeNull();
+    expect(r.successor("r2")).toBeNull();
+
+    let n = 0;
+    const long = createRefresher(vi.fn(async () => ok(++n + 100)));
+    let t = "s0";
+    for (let i = 0; i < 12; i++) t = (await long.refreshOnce(t))!.refreshToken;
+    expect(long.successor("s0")).toBeNull();
+  });
+
   it("409 conflict (rotated elsewhere within 10 s): keep the newer token known here, else nothing", async () => {
     const call = vi.fn(async () => {
       throw new UpstreamError(409, "conflict");
