@@ -600,3 +600,23 @@ Lands after the backend follow-up is merged and `setup-host.sh` has run on the i
 | Mock e2e | GitHub CI, unchanged |
 
 Nothing heavy runs on the laptop.
+
+## Open questions (each with a recommendation)
+
+1. **Switch the public demo to live, or add live preview containers?** Today both public sites are sample data, and most live screens would be 404 from core (fact 3). *Recommendation:* keep the public sites on sample data and add `web-live` / `platform-live` on loopback, reached by tunnel (as planned). Switch the public demo only when core serves the screens it shows.
+2. **Fix today's HTTP path (service key and client IP)?** It has never worked against core (fact 4). *Recommendation:* yes, as R3 and R4: the client IP on both transports (core needs it on NATS too); the service key on HTTP only, so the parity runs have a working HTTP baseline. Both go when the HTTP transport goes.
+3. **Where does the frontend's seed live on the instance?** Today it is a line in the backend's `.env`. *Recommendation:* the backend's `setup-host.sh` writes one file per app under `/srv/mhai-backend/secrets/bff/`, owned by uid 1001, mode 0400, and mhai-web's compose mounts it as a secret by that path (backend follow-up). No copying by hand, and one place to rotate.
+4. **Show `trust_band`?** Core marks it provisional. *Recommendation:* type it and don't show it (R12) until clinical sign-off says what each band means and how it sits next to the confidence bars.
+5. **The empty-citations wording.** *Recommendation:* "Sources for this answer can't be shown yet." and "Claim details can't be shown yet.", through `clinical-review`, until the pipeline stores citation details (backend TODO.md).
+6. **Readiness on NATS.** Core serves no probes over NATS. *Recommendation:* the BFF answers `readyz` from its own connection (R8). If the degraded strip should also reflect core's database and KV, ask the backend for a `GET /readyz` on `api.v1` later; not needed now.
+7. **Letter uploads and file replies.** The Plan 11 upload (up to 10 MB) can't ride `api.v1` (64 KB body, 1 MB message), and page images near 1 MB would fail. Neither route exists in core yet. *Recommendation:* out of scope; the documents service design picks the path (for example a short-lived upload grant over NATS and an object-store upload). Until then, on `nats` the BFF answers 413 for bodies over 64 KB (R6). Listed in TODO.md (Task 11).
+8. **Rename `NATS_BFF_NKEY` to `NATS_BFF_CLINICAL_NKEY` on the backend?** *Recommendation:* not in the follow-up; it touches the demo's `.env` and a test for no gain. Rename when production config is written.
+9. **Password auth in development.** *Recommendation:* allow it only with `MHAI_DEPLOY_ENV=development` (R9), so the backend's dev and smoke stacks work as they are; production and the demo use NKeys.
+10. **A cancelled question (`error_code: cancelled`): show Try again?** The person's account or hospital was deactivated, so a retry ends in sign-out anyway. *Recommendation:* the same failed view, no special case; revisit if a clinician-facing reason is wanted.
+11. **When does the HTTP transport go?** *Recommendation:* in the PR after core turns `CORE_HTTP_API` off, which follows the last live BFF moving to `nats` (rollout step 6).
+
+## Self-review notes
+
+- **Spec coverage:** the client (Design, Task 2), the mapping with `Mhai-Status-Code` named (Design, Task 1), the switch and parity (Tasks 3–5), `contract.ts` and screens (Task 7), the demo deploy, rollout and rollback (Task 10 and its section), the backend follow-up, the threat model with tests A1–A14, integration and e2e on both transports on steven-reid (Tasks 8–9).
+- **Checked against the backend at `220ed33`:** header names and limits from `natsapi.go` / `headers.go` (`If-None-Match` is allowed too, and the plan passes it); `unavailable` 503, `method_not_allowed` 405, `payload_too_large` 413 from `httpx/errors.go`; NATS permissions from `services/nats/nats.conf` and `deploy/nats/nats.conf`.
+- **Not verified here:** nats.js v3's exact option and error names (Task 2 Step 3 reads the installed README); Next 16's `instrumentation` and `serverExternalPackages` details (AGENTS.md: read `node_modules/next/dist/docs/` first).
