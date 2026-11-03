@@ -284,3 +284,319 @@ Needed before step 1 of the rollout; nothing in core's Go code changes.
 5. **`deploy/README.md`** ("The frontend and NATS"): both users, the seed files and their owner, rotation; **`TODO.md`**: drop "no `bff_platform` user", keep "turn core's HTTP API off" pointing at mhai-web's rollout step 6.
 
 (Renaming `NATS_BFF_NKEY` to `NATS_BFF_CLINICAL_NKEY` is optional; see Open questions.)
+
+## Review Focus
+
+- The mapping's two tables (Design) against `natsapi.go` and `headers.go` at `220ed33`: a name or limit that drifts is a bug.
+- That no call site changes beyond `fetch` → `backendFetch` and `timeoutMs` (Task 4's diff should read as a substitution).
+- The abuse cases A1–A14: each red before its code.
+- The deploy: no seed in an image, an env var or `.env`; the public demo's compose and nginx unchanged.
+
+## File structure
+
+```
+packages/api-client/
+  package.json                              + @nats-io/transport-node, @nats-io/nats-core (exact), server-only
+  src/server/backend-fetch.ts (+ .test)     createBackendFetch, backendReady, NATS_API_ORIGIN (the switch)
+  src/server/nats/mapping.ts (+ .test)      toNatsRequest, fromNatsReply, NatsRequestSpec (pure)
+  src/server/nats/config.ts (+ .test)       readNatsConfig(env, app): validated settings or a refusal
+  src/server/nats/connection.ts (+ .test)   the per-process connection, NatsRequester, ready(), drain
+  src/server/nats/fake-core.ts              test helper: core's adapter rules in memory, forwards to fetch
+  src/server/nats/nats.integration.test.ts  against the backend smoke stack (skipped without MHAI_IT_NATS_URL)
+  src/server/upstream.ts (+ .test)          callUpstream passes timeoutMs to its fetchImpl
+apps/clinical/
+  lib/server/backend.ts (+ .test)           backendFetch for "clinical", clientIp from TRUSTED_CLIENT_IP_HEADER
+  lib/server/api.ts (+ .test)               apiBase() per transport; api() uses backendFetch
+  app/api/v1/[...path]/route.ts             fetch → backendFetch; readyz on nats from backendReady
+  app/api/health/route.ts (+ .test)         readiness for Docker
+  instrumentation.ts                        connect at start on nats
+  next.config.ts                            serverExternalPackages
+  tests/setup.ts                            installs the fake core when BACKEND_TRANSPORT=nats
+  lib/api/contract.ts, fixtures.ts, mock.ts trust_band, cited_chunk_ids
+  lib/result-view.ts (+ .test), lib/labels.ts, lib/queries.ts (+ .test)
+  components/evidence/evidence-panel.tsx (+ .test), components/result/result-card.test.tsx
+  playwright.live.config.ts, tests/e2e-live/ask.spec.ts
+  Dockerfile                                ARG USE_MOCK
+  .env.example
+apps/platform/
+  lib/server/backend.ts (+ .test), lib/server/http.ts, app/api/v1/[...path]/route.ts,
+  app/api/health/route.ts (+ .test), instrumentation.ts, next.config.ts, tests/setup.ts,
+  playwright.live.config.ts, tests/e2e-live/sign-in.spec.ts, Dockerfile, .env.example
+scripts/
+  check-no-nats.mjs (+ .test.mjs)           client chunks hold no NATS marker
+  import-boundaries.test.mjs                + the @nats-io rule
+  it/backend-stack.sh                       the backend smoke stack for Tasks 8 and 9 (steven-reid)
+  it/e2e-live.sh                            the live e2e on both transports
+eslint.config.mjs                           no-restricted-imports for @nats-io/* and server/nats
+.github/workflows/ci.yml                    unit tests × transport; check:no-nats
+.github/workflows/deploy.yml                build-web-live (dispatch only), web-live deploy step
+deploy/compose.yml, compose.platform.yml, README.md
+docs/adr/0005-bff-talks-to-core-over-nats.md
+ARCHITECTURE.md, README.md, TODO.md, CHANGELOG.md
+```
+
+Two PRs: **`agent/bff-nats-transport`** (Tasks 1–6, 8, 9, 11) and **`agent/clinical-contract-1-2`** (Task 7), which touches only the clinical contract and screens and can go first or in parallel. Task 10 (deploy) lands on the first PR after the backend follow-up merges, or on its own PR.
+
+## Tasks
+
+### Task 1: The request mapping
+
+**Files:**
+
+- Create: `packages/api-client/src/server/nats/mapping.ts`, `mapping.test.ts`.
+- Modify: `packages/api-client/package.json` (`@nats-io/nats-core` exact, `server-only`), `packages/api-client/README.md` (one row).
+
+**Interfaces:**
+
+```ts
+import "server-only";
+export type BackendApp = "clinical" | "platform";
+export const NATS_API_ORIGIN = "http://core.nats.invalid";
+export const MAX_BODY = 64 * 1024; // httpx.MaxBody
+export const MAX_PATH = 2048; // natsapi.MaxPath
+export const STATUS_HEADER = "Mhai-Status-Code"; // natsapi.HeaderStatus
+export const REQUEST_HEADERS = ["Authorization", "Content-Type", "Idempotency-Key", "If-None-Match", "X-MHAI-Client-IP", "traceparent"] as const;
+export const REPLY_HEADERS = ["Content-Type", "Cache-Control", "ETag", "Retry-After", "X-Request-ID", "Idempotent-Replayed", "Deprecation", "Sunset", "Link", "X-Content-Type-Options"] as const;
+
+export type NatsRequestSpec = {
+  subject: `api.v1.${BackendApp}`;
+  headers: [name: string, value: string][];
+  data: Uint8Array;
+  timeoutMs: number;
+};
+/** A Response for requests answered without core (the local 413 of R6). */
+export type Mapped = { kind: "send"; spec: NatsRequestSpec } | { kind: "answer"; response: Response };
+
+export function toNatsRequest(app: BackendApp, url: string, init: { method?: string; headers?: HeadersInit; body?: BodyInit | null; timeoutMs?: number }): Mapped;
+export function fromNatsReply(app: BackendApp, method: string, reply: { headers?: { get(k: string): string; values(k: string): string[]; keys(): string[] }; data: Uint8Array }): Response;
+```
+
+- [ ] **Step 1: Failing tests first** (`mapping.test.ts`), one `it` each:
+  - subject per app; an unknown app throws;
+  - method upper-cased; `HEAD`/`PUT` pass; `OPTIONS`, `TRACE`, `get ` with a space throw;
+  - `Mhai-Path` is `pathname + search` for `http://core.nats.invalid/api/v1/queries/q1?x=1`; another origin, `/api/v2/`, `/api/v1` without slash, a `#`, a path over 2048 bytes, a non-ASCII byte each throw;
+  - A5: only the six headers pass, matched without case and sent in the spelling above; `Accept`, `X-MHAI-Audience`, `X-MHAI-Service`, `X-Request-ID`, `Mhai-Request-Id`, `Mhai-Method`, `mhai-path`, `tracestate`, `baggage`, `Cookie` are dropped; a value with `\r`, `\n`, `\0` or a byte ≥ 0x7f throws; `Authorization` given twice (`Headers.append`) throws;
+  - R5: `timeoutMs` 30 000 → `Mhai-Timeout-Ms: 29500`, 15 000 → `14500`, 1200 → `1000`, missing → 15 000 / `14500`;
+  - R6: a 64 KB body sends; 64 KB + 1 answers 413 locally with `{ "code": "payload_too_large" }` (`application/problem+json` on clinical; `application/json` and `{code}` only on platform) and builds no spec; a string body is UTF-8 bytes; a `Uint8Array` passes as is; `FormData`/streams throw (no caller sends them on JSON paths; the multipart upload arrives as bytes already);
+  - `fromNatsReply`: `Mhai-Status-Code: 201` → status 201; missing, two values, `abc`, `99`, `600` throw; reply headers outside `REPLY_HEADERS` (e.g. `Set-Cookie`, `Mhai-Status`) are dropped; `HEAD`, 204 and 304 have a null body; the body bytes are passed unchanged (a PNG round-trips byte for byte).
+- [ ] **Step 2:** run `npm test -w @mhai/api-client` on steven-reid; expect the new tests to fail.
+- [ ] **Step 3:** implement. Header values via `Headers` iteration on a copy of `init.headers`; duplicates found with `getSetCookie`-free logic (`Headers` joins duplicates with `, `, so build from the raw `HeadersInit` when it's an array or a record, and treat a `, ` inside `Authorization`, `Idempotency-Key` or `X-MHAI-Client-IP` as a duplicate).
+- [ ] **Step 4:** tests pass; `npm run typecheck`; commit `api-client: map a backend request to a NATS message and back`.
+
+### Task 2: The connection
+
+**Files:**
+
+- Create: `packages/api-client/src/server/nats/config.ts`, `config.test.ts`, `connection.ts`, `connection.test.ts`.
+- Modify: `packages/api-client/package.json` (`@nats-io/transport-node` exact).
+
+**Interfaces:**
+
+```ts
+// config.ts
+export type NatsConfig = {
+  servers: string;
+  auth: { kind: "nkey"; seed: Uint8Array } | { kind: "password"; user: string; pass: string };
+  tls: { ca: string; cert: string; key: string } | null;
+  inboxPrefix: `_INBOX_bff.${BackendApp}`;
+  name: `mhai-web-${BackendApp}`;
+};
+export function readNatsConfig(app: BackendApp, env: NodeJS.ProcessEnv, readFile: (p: string) => Buffer): NatsConfig | { refused: string /* the setting's name only */ };
+
+// connection.ts
+export interface NatsRequester {
+  request(subject: string, data: Uint8Array, opts: { headers: [string, string][]; timeoutMs: number; signal?: AbortSignal }): Promise<{ headers?: ...; data: Uint8Array }>;
+  ready(): boolean;
+}
+export function natsRequester(app: BackendApp): NatsRequester; // the per-process singleton
+export function __setNatsRequesterForTests(app: BackendApp, r: NatsRequester | null): void;
+```
+
+- [ ] **Step 1: Failing tests first:**
+  - `config.test.ts`: A2 (a seed file not starting `SU` refuses with `NATS_NKEY_SEED_FILE`, and the refusal text holds no file content); A10 (without `MHAI_DEPLOY_ENV=development`: `nats://` refuses, a missing TLS file refuses, password auth refuses); development accepts `nats://` and `NATS_USER` + `NATS_PASSWORD_FILE`; seed and password both set refuses; neither refuses; `inboxPrefix` comes from the app even if the environment sets `NATS_INBOX_PREFIX`;
+  - `connection.test.ts`, with an injected `connect` fake that records options and emits status events: one `connect` per app per process (two calls, one connection; a second app gets its own); options carry `inboxPrefix`, `name`, `maxReconnectAttempts: -1`, `waitOnFirstConnect: true`, the authenticator (never the seed in plain options); `ready()` follows `disconnect` / `reconnecting` / `reconnect` / `close`; a request while not ready rejects at once without calling `request`; a refused config makes every request reject and logs `nats: config refused (<setting>)` once; A3 (captured logs hold no seed, password, token, body or path); SIGTERM calls `drain()` once;
+  - A7: start an in-process `nats-server`? No: use nats.js against a **NATS container** only in Task 8. Here, capture the reply subject nats.js generates by giving the fake `connect` a real `@nats-io/nats-core` inbox builder with the same prefix, and assert `^_INBOX_bff\.clinical\.[A-Za-z0-9]+(\.[A-Za-z0-9]+)*$`. The real proof is A12 in Task 8.
+- [ ] **Step 2:** tests fail (steven-reid).
+- [ ] **Step 3:** implement with `connect` from `@nats-io/transport-node`, `nkeyAuthenticator` / `usernamePasswordAuthenticator` and `headers()` from `@nats-io/nats-core`. Read the installed version's README for the exact option and error names (`inboxPrefix`, the no-responders and timeout errors); map every nats.js error to one thrown `BackendUnavailable` with the original class name only. Keep the singleton on `globalThis[Symbol.for("mhai.nats.<app>")]`.
+- [ ] **Step 4:** pass; commit `api-client: the BFF's NATS connection, one per app process`.
+
+### Task 3: The switch
+
+**Files:**
+
+- Create: `packages/api-client/src/server/backend-fetch.ts`, `backend-fetch.test.ts`, `src/server/nats/fake-core.ts`.
+- Modify: `packages/api-client/src/server/upstream.ts` and `upstream.test.ts` (pass `timeoutMs` in the init it gives `fetchImpl`, beside the signal; type `fetchImpl` as `BackendFetch`).
+
+**`fake-core.ts`** (test helper, exported for the apps' setup files): a `NatsRequester` that applies core's adapter rules (fact 7) to the spec it receives — subject is `api.v1.<app>`, `Mhai-Method` and `Mhai-Path` exactly once and valid, only the allow-listed headers, body ≤ 64 KB, the reply subject prefix it would have been given — and then calls `globalThis.fetch` (looked up at call time, so `vi.stubGlobal` still works) with `${process.env.MHAI_API_URL ?? "http://api.test"}${Mhai-Path}`, the method, the passed headers plus `X-MHAI-Audience: <app>` (what core derives from the subject), and the body. It turns the `Response` back into a reply with `Mhai-Status-Code` and only the ten reply headers. A rule broken answers like core (405, 404, 413) or, for a wrong reply prefix, never answers (a timeout).
+
+- [ ] **Step 1: Failing tests first** (`backend-fetch.test.ts`):
+  - unset or `http`: calls `fetch` with the URL, method, body, the caller's headers, `cache: "no-store"`, plus `X-MHAI-Client-IP` from `clientIp()` and `X-MHAI-Service` from `BFF_SERVICE_KEY_FILE` (A6: neither when absent or invalid; the key never in a log);
+  - `nats`: A8 (the subject is the app's, whatever the URL); the URL must start with `NATS_API_ORIGIN` (another origin throws before any request); the client IP rides as `X-MHAI-Client-IP`; `X-MHAI-Service` is never read or sent on `nats`;
+  - A11: no responders, timeout, closed, and a bad `Mhai-Status-Code` each reject (the callers' `catch` makes them 503); an `AbortSignal` that fires rejects;
+  - `BACKEND_TRANSPORT=grpc` (anything else): every call rejects and one `transport refused` log line;
+  - `backendReady`: `http` true; `nats` follows the requester.
+- [ ] **Step 2:** fail; **Step 3:** implement; **Step 4:** pass; `upstream.test.ts` still passes unchanged plus one case for `timeoutMs`; commit `api-client: BACKEND_TRANSPORT switch between fetch and NATS`.
+
+### Task 4: Wire both apps
+
+**Files:**
+
+- Create: `apps/clinical/lib/server/backend.ts`, `backend.test.ts`, `apps/clinical/instrumentation.ts`; the same three in `apps/platform`.
+- Modify:
+  - `apps/clinical/lib/server/api.ts` (+ test): `apiBase()` returns `${NATS_API_ORIGIN}/api/v1` on `nats` (no `MHAI_API_URL` needed), as today on `http`; `api()` passes `fetchImpl: backendFetch`;
+  - `apps/clinical/app/api/v1/[...path]/route.ts`: `fetch(url, {...})` → `backendFetch(url, {..., timeoutMs: 30_000})`; on `nats`, `GET readyz` answers `json(backendReady("clinical") ? 200 : 503, {})` before any upstream call (R8; after the session checks, as today);
+  - `apps/platform/lib/server/http.ts`: `platformFetch` and `api()` go through `backendFetch` (the `X-MHAI-Audience` header stays for `http` and is dropped by the mapping on `nats`); `apiBase()` as clinical;
+  - `apps/platform/app/api/v1/[...path]/route.ts`: `platformFetch(url, {...})` → the same call with `timeoutMs: TIMEOUT_MS`;
+  - both `next.config.ts`: `serverExternalPackages: ["@nats-io/transport-node", "@nats-io/nats-core", "@nats-io/nkeys", "@nats-io/nuid"]` (whatever the installed packages are; read `node_modules/next/dist/docs/` on `serverExternalPackages` and output tracing first, per AGENTS.md);
+  - both `.env.example`: `BACKEND_TRANSPORT`, `NATS_URL`, `NATS_NKEY_SEED_FILE`, `TRUSTED_CLIENT_IP_HEADER`, `BFF_SERVICE_KEY_FILE`, `MHAI_DEPLOY_ENV`, commented.
+
+**`lib/server/backend.ts`:**
+
+```ts
+import "server-only";
+import { headers } from "next/headers";
+import { isIP } from "node:net";
+import { createBackendFetch } from "@mhai/api-client/server/backend-fetch";
+
+async function clientIp(): Promise<string | undefined> {
+  const name = process.env.TRUSTED_CLIENT_IP_HEADER;
+  if (!name) return undefined;
+  try {
+    const v = (await headers()).get(name)?.trim();
+    return v && isIP(v) ? v : undefined;
+  } catch {
+    return undefined; // outside a request (or a test's next/headers mock without headers)
+  }
+}
+export const backendFetch = createBackendFetch({ app: "clinical", clientIp });
+```
+
+- **`instrumentation.ts`:** `export async function register() { if (process.env.NEXT_RUNTIME === "nodejs" && process.env.BACKEND_TRANSPORT === "nats") (await import("@mhai/api-client/server/nats/connection")).natsRequester("clinical"); }` (read Next 16's `instrumentation` guide first).
+
+- [ ] **Step 1: Failing tests first:** `backend.test.ts` (A6 against the `next/headers` mock: `x-real-ip: 198.51.100.7` → sent; `not-an-ip` → not sent; setting unset → not sent); `api.test.ts` (`apiBase()` on `nats` needs no `MHAI_API_URL`); the clinical proxy test gains: on `nats`, `GET readyz` → 200 `{}` when ready and 503 `{}` when not, and never reaches the fake core.
+- [ ] **Step 2:** fail; **Step 3:** implement; the diff in both proxies and `http.ts` is the substitution and `timeoutMs` only.
+- [ ] **Step 4:** the full suites pass on `http` unchanged; commit `clinical, platform: call core through the backend transport`.
+
+### Task 5: Parity — every BFF suite on both transports
+
+**Files:**
+
+- Modify: `apps/clinical/tests/setup.ts`, `apps/platform/tests/setup.ts`, `packages/api-client/tests/setup.ts`; `apps/*/package.json` and `packages/api-client/package.json` (`"test:nats": "BACKEND_TRANSPORT=nats vitest run app/api lib/server src/server"`); root `package.json` (`"test:nats"` across workspaces); `.github/workflows/ci.yml` (`test` matrix gains `transport: [http, nats]`; the `nats` leg runs `test:nats` for `clinical`, `platform` and `shared`).
+- Modify where needed: the few assertions on HTTP-only headers (`Accept` today: eight lines across the proxy and auth suites) become `it.runIf(transport === "http")`, each with a `nats` twin asserting the header is **absent** from the message. `X-MHAI-Audience: platform` assertions stay as they are: the fake core adds it from the subject, as core does.
+
+- [ ] **Step 1:** in each setup file: `if (process.env.BACKEND_TRANSPORT === "nats") { __setNatsRequesterForTests("clinical", fakeCore("clinical")); ... }`, and stub `MHAI_API_URL` as the suites do.
+- [ ] **Step 2:** run `npm run test:nats` on steven-reid; list every failure. Each one is either an HTTP-only header assertion (split it as above) or a real difference, which is a bug in Tasks 1–4: fix there, never in the suite.
+- [ ] **Step 3:** A4 and A14 hold on `nats` through the existing suites (client headers never forwarded; `Idempotency-Key` passes). Add any missing case to the existing suite so both legs run it.
+- [ ] **Step 4:** both legs green in CI; commit `test: run the BFF suites on both transports`.
+
+### Task 6: Keep NATS out of the browser
+
+**Files:**
+
+- Create: `scripts/check-no-nats.mjs`, `scripts/check-no-nats.test.mjs`.
+- Modify: `eslint.config.mjs`, `scripts/import-boundaries.test.mjs`, root `package.json` (`check:no-nats`: both apps' `.next/static`), `.github/workflows/ci.yml` (after `check:bundle`).
+
+- [ ] **Step 1: Failing tests first:**
+  - `check-no-nats.test.mjs` (A1): a temp folder with a chunk containing each marker (`@nats-io`, `_INBOX_bff`, `nkeyAuthenticator`, `Mhai-Timeout-Ms`, `NATS_NKEY_SEED_FILE`) fails; a clean folder passes; files under `server/` are not scanned (only `static/`);
+  - `import-boundaries.test.mjs`: importing `@nats-io/transport-node` from `apps/clinical/components/x.tsx`, `apps/platform/lib/queries/x.ts` or `packages/ui/src/x.ts` is an error; from `packages/api-client/src/server/nats/x.ts` it is not; importing `@mhai/api-client/server/backend-fetch` from `components/**` is an error.
+- [ ] **Step 2:** fail; **Step 3:** implement (copy `check-no-platform-code.mjs`'s walker); **Step 4:** on steven-reid, `npm run build && npm run check:no-nats` passes for both apps; also build once with a deliberate `"use client"` import of the transport and confirm `next build` fails on `server-only` (record the message in the PR, then revert); commit `check: no NATS code in client bundles`.
+
+### Task 7: Contract v1.2.0 in the clinical app (PR `agent/clinical-contract-1-2`)
+
+**Files:**
+
+- Modify: `apps/clinical/lib/api/contract.ts`, `fixtures.ts`, `mock.ts`, `mock.test.ts`; `lib/result-view.ts` and its test; `lib/queries.ts` and `queries.test.tsx`; `lib/labels.ts` (`FORBIDDEN_TERMS` + `trust_band`, `cited_chunk_ids`, `method_not_allowed`, `payload_too_large`); `components/evidence/evidence-panel.tsx` and its test; `components/result/result-card.test.tsx`; `components/consultation/consultation-view.test.tsx`.
+
+**Contract changes:**
+
+```ts
+export type TrustBand = "low" | "mid" | "high";
+export interface ClinicalResultOut {
+  // ...unchanged fields...
+  /** Provisional banding of a verified answer's trust; null when unverified. Not shown (R12). */
+  trust_band: TrustBand | null;
+  /** The ids the answer cited. `citations` stays empty until the pipeline stores their details. */
+  cited_chunk_ids: string[];
+}
+export interface QueryCreateIn { /* ... */ client_created_at?: string; }
+```
+
+- [ ] **Step 1: Failing tests first:**
+  - fixtures and the mock carry `trust_band` and `cited_chunk_ids` for every scenario, including one **"cited, details not stored"** fixture: `citations: []`, `cited_chunk_ids: ["c1", "c2"]`, `decision: "PASS"`;
+  - `result-view.test.ts`: that fixture's view keeps its kind and banner rules; confidence still comes from `trust_score` (R12); a needs-review result never shows a confidence level whatever `trust_band` says; `trust_band` appears nowhere in the view model;
+  - `evidence-panel.test.tsx`: with `citations: []` and `cited_chunk_ids` non-empty, the sources block reads **"Sources for this answer can't be shown yet."** and the claims line **"Claim details can't be shown yet."** (not "No sources were used", which would be false); with both empty, today's wording stays; no number, id or backend term is shown;
+  - `result-card.test.tsx`: no "0 sources" chip; numbered steps without a matching citation show no tag (`parseBody` already drops the marker);
+  - `queries.test.tsx` and `consultation-view.test.tsx`, the status mapping: `queued` and `processing` → analysing; `completed` → the result; `failed` with `error_code: "cancelled"`, any other `error_code`, or none → the existing failed view ("Couldn't complete", **Try again**); an unknown `status` value → the failed view (fail closed), never analysing forever;
+  - error codes on submit, status and result: 503 `unavailable` is retried as transient (`isTransient`, unchanged) and then shows the failed view; 405 `method_not_allowed` and 413 `payload_too_large` are not retried and show the failed view at once; none of the three codes appears on screen;
+  - `FORBIDDEN_TERMS` test covers the four new terms.
+- [ ] **Step 2:** fail (steven-reid); **Step 3:** implement; the only new words are the two lines above, marked for `clinical-review`.
+- [ ] **Step 4:** the clinical unit suite and the mock e2e pass; commit `clinical: contract v1.2.0 (trust_band, cited_chunk_ids, new codes)`; open the PR with the `clinical-review` label.
+
+### Task 8: Integration against a real NATS and core
+
+**Files:**
+
+- Create: `scripts/it/backend-stack.sh`, `packages/api-client/src/server/nats/nats.integration.test.ts`.
+- Modify: `packages/api-client/package.json` (`"test:it": "vitest run src/server/nats/nats.integration.test.ts"`), `packages/api-client/vitest.config.mts` (the integration file is excluded from `test` and needs `MHAI_IT_NATS_URL`).
+
+**`backend-stack.sh`** (runs on steven-reid only): checks out mhai-multiagent at a pinned commit (`MHAI_BACKEND_REF`, default `220ed33`) into `~/claude-work/mhai-it-backend`, generates throwaway secrets as its `.github/scripts/boundary-smoke.sh` does (letters and digits, mode-600 env file, never printed), runs `docker compose -f docker-compose.yml -f docker-compose.smoke.yml -p mhai-it up -d --wait` with the stub pipeline, creates one synthetic hospital and clinician with `core-cli` and activates the hospital as the backend smoke test does, writes the BFF passwords to mode-600 files, prints only the ports and file paths, and with `down` removes the stack and its volumes.
+
+- [ ] **Step 1: write the tests** (they need the stack, so "red first" is: run them against core's HTTP-only build, `CORE_HTTP_API=on` and the `api.v1` subscription off, or before the stack starts, and see them fail):
+  - happy path on `nats`, as `bff_clinical`: `POST /api/v1/auth/login` with the synthetic clinician → 200 (or `mfa_required`, then enrol with `@mhai/api-client/totp`) → `POST /queries` with an `Idempotency-Key` → 202 → `GET /queries/{id}` → `queued` or `processing` → with the stub pipeline, `completed` → `GET /queries/{id}/result` has `trust_band` and `cited_chunk_ids`;
+  - the same sequence on `http` with `BFF_SERVICE_KEY_FILE`: **status, body and the shared headers equal** the `nats` run (request ids and times aside) — the parity check against the real core;
+  - A12: a connection as `bff_clinical` publishing `api.v1.platform` gets a permissions error and the transport answers 503; a hand-built nats.js connection as `bff_clinical` with `inboxPrefix: "_INBOX_bff.platform"` can't subscribe its inbox (permissions) and gets no answer;
+  - A13: `docker compose stop core`, then a sign-in → 503 `unavailable` in under 1 s; start it again → the next call succeeds without restarting the BFF (reconnect is NATS's; core rejoins the queue group);
+  - 413: a 65 KB body sent with the local check bypassed (a test-only option) → core's 413 `payload_too_large`, mapped through unchanged;
+  - `If-None-Match`, `Idempotent-Replayed: true` on a retried `POST /queries` with the same key (A14 against core).
+- [ ] **Step 2:** `scripts/it/backend-stack.sh up`, then `MHAI_IT_NATS_URL=... npm run test:it -w @mhai/api-client` through `.remote-run.sh`; all pass; `backend-stack.sh down`.
+- [ ] **Step 3:** commit `test: BFF transport against the backend smoke stack, both transports`. Not in GitHub CI (the stack needs the backend's images); the PR description carries the run's summary.
+
+### Task 9: Live e2e on both transports
+
+**Files:**
+
+- Create: `apps/clinical/playwright.live.config.ts`, `apps/clinical/tests/e2e-live/ask.spec.ts`, `apps/platform/playwright.live.config.ts`, `apps/platform/tests/e2e-live/sign-in.spec.ts`, `scripts/it/e2e-live.sh`.
+- Modify: both `vitest.config.mts` and `playwright.config.ts` (exclude `tests/e2e-live/**`), both `package.json` (`"e2e:live": "playwright test -c playwright.live.config.ts"`).
+
+- **Config:** the web server builds with `NEXT_PUBLIC_USE_MOCK=false` and starts with `BACKEND_TRANSPORT` from the environment, `MHAI_DEPLOY_ENV=development`, the stack's NATS URL and password file (or `MHAI_API_URL` and the service key file on `http`), `TRUSTED_CLIENT_IP_HEADER=x-real-ip`; Playwright sends `X-Real-IP: 198.51.100.15` (TEST-NET-2) as an extra header. Synthetic data only; `trace: "retain-on-failure"` is fine (no real patient data), and `screenshot: "off"` anyway, since the question has (synthetic) patient details.
+- **`ask.spec.ts`:** sign in (enrol two-step if asked), ask a question with synthetic details, see "Analysing", then the result (stub pipeline) with its review banner rule intact, the evidence panel's empty-citations wording if the stub stores none, sign out, and the query cache and storage hold nothing afterwards.
+- **`sign-in.spec.ts`** (platform): sign in as a synthetic platform admin, land on the home page, sign out. (No platform data route exists in core; the rest stays on sample data.)
+- **`e2e-live.sh`:** stack up, run both specs with `BACKEND_TRANSPORT=http`, then with `nats`, stack down; non-zero if either leg fails.
+
+- [ ] **Step 1:** write the specs; **Step 2:** run `scripts/it/e2e-live.sh` on steven-reid through `.remote-run.sh` with `timeout`; both legs green; **Step 3:** the mock e2e (`npm run e2e`) still passes, unchanged; commit `e2e: live sign-in and question on both transports`.
+
+### Task 10: The demo deploy
+
+Lands after the backend follow-up is merged and `setup-host.sh` has run on the instance.
+
+**Files:**
+
+- Modify: `apps/clinical/Dockerfile`, `apps/platform/Dockerfile` (`ARG USE_MOCK=true` → `ENV NEXT_PUBLIC_USE_MOCK=$USE_MOCK`; nothing else), `deploy/compose.yml` (`web-live`, the `secrets` and `networks` blocks, as in "Demo deploy" above), `deploy/compose.platform.yml` (`platform-live`, commented until the platform flip), `.github/workflows/deploy.yml` (`build-web-live` on `workflow_dispatch`, and the guarded `web-live` step after the demo and platform steps), `deploy/README.md` (a "Live preview over NATS" section: the one-time secret, the tunnel `ssh -N -L 8093:127.0.0.1:8093 ubuntu@<host>`, checks, logs, rollout and rollback, seed rotation).
+
+- [ ] **Step 1:** `docker compose config` with the profile on and off, on steven-reid with a dummy seed file: the public `web` service is byte-for-byte what it was; `web-live` has no seed in `environment`; the secret mounts at `/run/secrets/nats-bff-clinical.nk`.
+- [ ] **Step 2:** build the `-live` image on steven-reid (arm64 via buildx) and start it against the smoke stack on a throwaway `mhai-bff`-like internal network: `/api/health` 200, a sign-in works over NATS; `docker inspect` shows no seed; `docker run --rm --entrypoint sh <image> -c 'grep -r SU /app || true'` finds no seed in the image.
+- [ ] **Step 3:** commit `deploy: live preview over NATS beside the sample-data demo`; the PR lists the operator steps in order (rollout steps 1, 4, 5).
+
+### Task 11: Docs
+
+**Files:**
+
+- Create: `docs/adr/0005-bff-talks-to-core-over-nats.md` (from `0000-template.md`): context (backend ADR 0011), decision (R1–R12 in short), consequences (the trust boundary moves from an HTTP key to a NATS identity; the seed is a new secret on the host; the HTTP transport is temporary; live preview containers).
+- Modify:
+  - `ARCHITECTURE.md`: the BFF diagram (`bff -->|NATS api.v1.<app>| core`, HTTP marked "until the switch"), the transport section;
+  - `README.md`: the new environment variables;
+  - `TODO.md`: the "BFF over NATS" entry becomes the remaining steps (production TLS, the platform flip, deleting the HTTP transport after core turns `CORE_HTTP_API` off); add "letter uploads and file replies over NATS need the documents service" and "show `trust_band` after clinical sign-off";
+  - `CHANGELOG.md`; `packages/api-client/README.md` (the new modules).
+- [ ] **Step 1:** write; `npm run format:check`; commit `docs: the BFF over NATS`.
+- [ ] **Step 2:** run the `security-review` skill on each PR's diff before opening it; fix findings on the branch.
+
+## Where each check runs
+
+| Check | Where |
+| --- | --- |
+| Unit suites, both transports (Tasks 1–5, 7) | GitHub CI (matrix) and steven-reid |
+| `check:no-nats`, `check:bundle`, build | GitHub CI and steven-reid |
+| Integration (Task 8), live e2e (Task 9), image checks (Task 10) | steven-reid only (`.remote-run.sh`, wrapped in `timeout`); mt5-lab with its CPU caps if steven-reid is down |
+| Mock e2e | GitHub CI, unchanged |
+
+Nothing heavy runs on the laptop.
