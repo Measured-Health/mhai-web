@@ -142,3 +142,145 @@ export const NATS_API_ORIGIN = "http://core.nats.invalid";
 - `http`: `fetch(url, { ...init, cache: "no-store", headers: + X-MHAI-Client-IP, + X-MHAI-Service })`.
 - `nats`: `toNatsRequest` → `requester.request(subject, data, { headers, timeout })` → `fromNatsReply`.
 - `NatsRequester` is the one-method interface the real connection and the test fake both implement.
+
+## Security and threat model
+
+Following both repos' `secure-design` skills. This plan moves a trust boundary (the BFF's link to core), so Task 11 records it in an ADR whose Consequences say so.
+
+### Assets
+
+- **The NKey seeds** of `bff_clinical` and `bff_platform`: whoever holds one can put any request on that app's `api.v1` subject, and core trusts `X-MHAI-Client-IP` on it.
+- **Users' access tokens** (in `Authorization`), and on HTTP while it lasts, the BFF service key.
+- **Request and reply bodies:** questions with synthetic (later real) patient details, results, MFA codes, passwords on sign-in and password change.
+- **Hospital and audience separation:** a clinical session must never reach platform routes, and the reverse.
+- **The audit trail's request ids** (core makes its own; none from the BFF may enter it).
+- **Availability** of sign-in and questions; **clinical safety** (an escalated or degraded result always shows the review banner, whatever the transport).
+
+### Actors and trust boundaries
+
+```
+browser ──https──> nginx (host) ──> app container (Next.js server = BFF)
+                                     │  BACKEND_TRANSPORT=http: fetch ──> core HTTP (steven-reid tests only; not reachable on the demo)
+                                     └─ BACKEND_TRANSPORT=nats: nats.js ──mhai-bff (internal)──> NATS ──> core (api.v1.<app>, queue core)
+```
+
+| Crossing | Checked there |
+| --- | --- |
+| browser → BFF route | unchanged: shapes, switches, same origin, session, steps, two-step, role, body caps. The browser has no NATS code, no NATS address and no credential (Task 6). |
+| BFF → NATS | the connection's NKey (or, in development, password) user; NATS permissions: `bff_<app>` may publish only `api.v1.<app>` and subscribe only `_INBOX_bff.<app>.>`. TLS with `verify` outside development. |
+| NATS → core | core's adapter: subject fixes the audience; reply prefix; method, path, size; header allow-list; then the full Plan 2 chain (token, session, MFA, route rule, RLS, audit). |
+| core → BFF | the reply goes only to the inbox; the transport keeps only `Mhai-Status-Code` and ten headers; the proxies keep only the problem `code` and their checked fields, as today. |
+
+### Threats (STRIDE) and their controls
+
+| # | Threat | Control | Test |
+| --- | --- | --- | --- |
+| T1 | **Leaked seed (S, E).** Someone with `bff_clinical`'s seed connects to NATS and calls core as the BFF, with a stolen or their own token, and a forged client IP to dodge sign-in counters. | The seed alone gives nothing a user token doesn't: every route still needs a valid access token, session and MFA. NATS is not reachable from outside the host (`mhai-bff` is internal; the host port is loopback). The seed is a Compose secret file (mode 0400, uid 1001), never in the image, `docker inspect` env, logs or the repo; per-app users bound the blast radius to one app's subject. Rotation: a new pair from the backend's `setup-host.sh`, NATS restarted, the app restarted (deploy/README, Task 10). gitleaks already scans history. | A2, A3, A10 |
+| T2 | **The browser sees NATS (I, E).** nats.js or the seed's path ends up in a client chunk, or a client component imports the transport. | `import "server-only"` in every transport module (the build fails on a client import); ESLint limits `@nats-io/*` and `@mhai/api-client/server/*` to server folders; `check:no-nats` scans `.next/static` for NATS markers after each build; nats.js is in `serverExternalPackages`, so it is `require`d at runtime, never bundled. | A1 |
+| T3 | **Header smuggling (T, S).** A browser header (`X-MHAI-Client-IP`, `Mhai-Path`, `X-MHAI-Audience`, `traceparent`) reaches core; or a CR/LF in a value splits a NATS header; or two `Mhai-Method`s. | The proxies already build headers themselves; the mapping sends only its six allow-listed headers plus the three `Mhai-*` it sets, one value each, printable ASCII only, else throws. Core takes exactly one `Mhai-Method`/`Mhai-Path` and drops the rest too (defence in depth). The client IP comes only from the nginx-set header, checked as an IP literal. | A4, A5, A6 |
+| T4 | **Reply subject abuse (T, E).** The requester chooses the reply subject, and core's one reply is a publish with core's rights (services/nats/README). A wrong prefix would also mean core never answers. | nats.js sets it from `inboxPrefix`, which the code fixes per app (not from the environment). Core refuses any reply not under `_INBOX_bff.<app>.` with literal tokens; NATS lets `bff_<app>` subscribe only there. A unit test captures the reply subject of a real `request()` against an in-process responder; the integration test proves core answers it. | A7, A12 |
+| T5 | **Audience mix-up (S, E).** The platform BFF's request lands on the clinical audience or the reverse. | The subject comes from the app constant; `X-MHAI-Audience` is never sent on NATS (core ignores it anyway); separate NATS users can't publish each other's subject. | A8, A12 |
+| T6 | **Tokens or bodies in logs (I).** | The transport logs only app, method, status, duration, `X-Request-ID`; errors are logged by class name; no path or query (filters can be sensitive); nats.js debug off. | A9 |
+| T7 | **Spoofed core (S).** Something else answers on `api.v1.<app>`. | Only `gateway` (core) may subscribe `api.v1.*` (queue `core`); TLS with `verify` in production. | A12 (permissions) |
+| T8 | **Denial of service (D).** NATS down, core's pool full, a slow core. | Fail fast while disconnected; per-call timeout as today; core answers 503 `unavailable` at once when full; no retries in the transport; bodies capped before publish. The readiness signal turns the clinical degraded strip on. | A11, A13 |
+| T9 | **Replayed or duplicated writes (T).** A reply lost after core acted. | Clients reuse one `Idempotency-Key` per write; core replays it (72 h). | A14 |
+| T10 | **Request ids forged into audit (R).** | The transport never sends `X-Request-ID`/`Mhai-Request-Id`; core drops them anyway and makes its own. | A5 |
+| T11 | **Downgrade to plaintext (I).** | Outside `MHAI_DEPLOY_ENV=development` the transport refuses to start without the three TLS files and a `tls://` URL. | A10 |
+
+### Abuse-case tests (carried into the tasks' first steps)
+
+- **A1** A client chunk in `.next/static` with `@nats-io`, `_INBOX_bff`, `nkeyAuthenticator` or `Mhai-Timeout-Ms` fails `check:no-nats`; a test plants each marker and expects the failure. Importing `@mhai/api-client/server/nats/*` from `components/**` is an ESLint error.
+- **A2** With `NATS_NKEY_SEED_FILE` pointing at a file that isn't a user seed (`SU...`), the transport refuses to start and logs `config refused (NATS_NKEY_SEED_FILE)` without the file's contents.
+- **A3** No log line, error message or thrown error from the transport contains the seed, a token, a password, a body or a query string (a test sends known secrets through every path and scans captured logs).
+- **A4** A browser request carrying `X-MHAI-Client-IP`, `Mhai-Path`, `Mhai-Method`, `X-MHAI-Audience`, `traceparent` and `X-MHAI-Service` reaches the fake core with none of them (the proxies' existing "never pass a client header through" tests, run on `nats`).
+- **A5** `toNatsRequest` drops every header outside the allow-list, `X-Request-ID` and `Mhai-*` from the caller included, and throws on a value with CR, LF, NUL or a non-ASCII byte, and on a header given twice.
+- **A6** With `TRUSTED_CLIENT_IP_HEADER=x-real-ip`, a value that isn't an IP literal is not sent; with the setting unset, no client IP is sent.
+- **A7** The reply subject of a real nats.js `request()` starts with `_INBOX_bff.<app>.` and its tokens are literal, for both apps.
+- **A8** The clinical transport only ever publishes `api.v1.clinical`, the platform one only `api.v1.platform`, whatever URL or header the caller passes.
+- **A9** A failed request logs its status class and request id, never the path.
+- **A10** Outside development, a `nats://` URL or a missing TLS file refuses to start; password auth refuses to start.
+- **A11** No responders, a timeout, a closed connection, and a reply without (or with two, or a non-numeric) `Mhai-Status-Code` each become 503 `{ "code": "unavailable" }` at the browser.
+- **A12** (integration) `bff_clinical` can't publish `api.v1.platform` (permissions violation, then 503 `unavailable`); core answers a correct request; the same request on a hand-built connection with the inbox prefix `_INBOX_bff.platform` as `bff_clinical` gets no answer.
+- **A13** (integration) Core stopped: a sign-in answers 503 `unavailable` in under 1 s (no responders), not after the timeout.
+- **A14** (unit, both transports) A write's `Idempotency-Key` reaches core unchanged on retry.
+
+### Residual risk and sign-off
+
+- **Accepted:** a stolen seed plus a stolen access token can act as that user until the token expires (15 minutes) and the seed is rotated, the same as a stolen service key plus token on HTTP. NATS accounts aren't split yet on the backend (its TODO.md, "Split NATS accounts before production"); core's reply-prefix check is the defence until then.
+- **Accepted:** the demo runs NATS without TLS, on one host, as development (spec §17.6 requires TLS in production; this plan's config refuses to run without it there).
+- **Sign-off:** none clinical for the transport (what clinicians see doesn't change). The empty-citations wording and any display of `trust_band` need `clinical-review` (Task 7, Open questions).
+
+## Demo deploy, rollout and rollback
+
+### What changes on the instance
+
+- **Live containers, separate from the public demo.** The public demo (`web`, port 8090) and the platform app (`platform`, port 8091) stay sample data, built with `NEXT_PUBLIC_USE_MOCK=true`, unchanged, and don't join `mhai-bff`: they have no use for it, and a public container without a seed is the safer default. A new image tag (`-live`, built with `USE_MOCK=false`) runs as `web-live` in `/srv/mhai-web/compose.yml` under the profile `live`, on `127.0.0.1:8093` only, reached by SSH tunnel (no nginx site), like core's Redoc. It is the only container that joins `mhai-bff` and holds the seed. The platform gets `platform-live` the same way (`127.0.0.1:8094`, `/srv/mhai-web-platform`) once `bff_platform` exists. (Open question 1 offers the alternative of switching the public demo itself.)
+- **`deploy/compose.yml`:**
+
+  ```yaml
+  services:
+    web-live:
+      profiles: ["live"]
+      image: ${WEB_LIVE_IMAGE:-ghcr.io/measured-health/mhai-web:live}
+      pull_policy: missing
+      restart: unless-stopped
+      ports: ["127.0.0.1:8093:8080"]
+      mem_limit: 384m
+      environment:
+        BACKEND_TRANSPORT: ${WEB_LIVE_TRANSPORT:-nats}
+        MHAI_DEPLOY_ENV: development        # as core on the demo (no NATS TLS on one host)
+        NATS_URL: nats://mhai-nats:4222
+        NATS_NKEY_SEED_FILE: /run/secrets/nats-bff-clinical.nk
+        TRUSTED_CLIENT_IP_HEADER: x-real-ip
+        SESSION_SECRET: ${WEB_LIVE_SESSION_SECRET:?set in /srv/mhai-web/.env}
+      secrets: [nats-bff-clinical.nk]
+      networks: [default, mhai-bff]
+      healthcheck:
+        test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+        interval: 30s
+        timeout: 5s
+        start_period: 20s
+        retries: 3
+  secrets:
+    nats-bff-clinical.nk:
+      file: /srv/mhai-backend/secrets/bff/nats-bff-clinical.nk   # written by the backend's setup-host.sh (backend follow-up)
+  networks:
+    mhai-bff:
+      external: true
+  ```
+
+  The seed file is mode 0400, owned by uid 1001 (the image's `nextjs` user); Compose bind-mounts it read-only at `/run/secrets/`. It is never in `.env`, the environment or the image. `X-Real-IP` reaches the app only from the tunnel's own requests here, so the client IP on the live preview is the tunnel's (acceptable for a team preview; the sign-in counters are per IP and login).
+- **`deploy/compose.platform.yml`:** the same `platform-live` block, commented out, with `nats-bff-platform.nk`, until the backend follow-up lands.
+- **Dockerfiles:** `ARG USE_MOCK=true` feeds `NEXT_PUBLIC_USE_MOCK`; the default build is unchanged. `HEALTHCHECK` stays on `/` for the mock image; compose overrides it for `-live`.
+- **`.github/workflows/deploy.yml`:** a `build-web-live` job (clinical, `USE_MOCK=false`, tag `live` and `live-sha-<commit>`) that runs on `workflow_dispatch` only, and a deploy step that runs `docker compose --profile live up -d web-live` only when `/srv/mhai-web/.env` has `WEB_LIVE_SESSION_SECRET` and the seed file exists, else prints why it skipped (as the platform step does). The public demo's steps don't change and run first.
+
+### Rollout order (keeps the public demo up throughout)
+
+1. **Backend follow-up PR** (below) merged and `setup-host.sh` re-run on the instance: seed files in `/srv/mhai-backend/secrets/bff/`, `bff_platform` in NATS. The demo's NATS restarts once, which core rides out (it reconnects).
+2. **This plan's PRs merge with `BACKEND_TRANSPORT` defaulting to `http`.** The public demo and platform redeploy unchanged (sample data; the transport is never called).
+3. **HTTP proven first, on steven-reid** (the demo has no HTTP route from a container to core, fact 5): the integration and live e2e suites against the backend smoke stack with `BACKEND_TRANSPORT=http`, then with `nats`, both green (Tasks 8 and 9).
+4. **Flip on the instance:** set `WEB_LIVE_SESSION_SECRET`, run the deploy by hand with the live build; `web-live` starts with `nats`. Checks: `/api/health` 200; through the tunnel, sign in, ask a question (it queues, and with no pipeline on the demo fails at its 10-minute deadline, shown as the failed view), sign out; `docker compose logs web-live` shows `nats: connected` and no request content.
+5. **Platform:** the same for `platform-live` (sign-in only: no platform data routes exist in core yet).
+6. **Later, outside this plan:** production gets NATS TLS; once every live BFF is on `nats`, core sets `CORE_HTTP_API=off` (backend TODO.md) and a mhai-web PR deletes the HTTP transport, `MHAI_API_URL` and `BFF_SERVICE_KEY_FILE`.
+
+### Rollback
+
+- **A live container misbehaves:** `docker compose --profile live stop web-live` (or `platform-live`). Nothing public depends on it.
+- **The transport code misbehaves anywhere:** set `BACKEND_TRANSPORT=http` in that service's environment and `up -d` it; the NATS client is then never constructed. On the demo that leaves `web-live` without a route to core (it answers 503), so stopping it is the real rollback there.
+- **Bad image:** redeploy the previous tag (`WEB_IMAGE` / `WEB_LIVE_IMAGE=...:sha-<previous>`).
+- **Leaked seed:** stop the live containers, run the backend's seed rotation (follow-up PR), restart NATS, start them again.
+
+## Backend follow-up (one small PR in mhai-multiagent, `agent/demo-bff-platform-nkey`)
+
+Needed before step 1 of the rollout; nothing in core's Go code changes.
+
+1. **`deploy/setup-host.sh`:**
+   - make the `bff_platform` NKey pair like the clinical one (in a throwaway container with no network, never printed): public key `NATS_BFF_PLATFORM_NKEY` in `.env`;
+   - write each BFF seed to a file instead of `.env`: `secrets/bff/nats-bff-clinical.nk` and `secrets/bff/nats-bff-platform.nk`, mode 0400, owned by uid 1001 (mhai-web's container user), folder mode 0750. Move the existing `NATS_BFF_NKEY_SEED` from `.env` into its file (same key pair, so nothing re-keys), then delete it from `.env`;
+   - a `--rotate-bff <clinical|platform>` option that makes a new pair, replaces the public key in `.env` and the seed file, and says to restart `nats` and the app.
+2. **`deploy/nats/nats.conf`:** a `bff_platform` user, `nkey: $NATS_BFF_PLATFORM_NKEY`, publish `["api.v1.platform"]`, subscribe `["_INBOX_bff.platform.>"]`; update the header comment.
+3. **`deploy/compose.yml`:** `NATS_BFF_PLATFORM_NKEY: ${NATS_BFF_PLATFORM_NKEY:?set in /srv/mhai-backend/.env}` in the `nats` service. (Merge only after `setup-host.sh` has run on the instance, or the deploy stops at `:?`.)
+4. **`services/core/internal/bus/conf_test.go`:** the demo's `bff_platform` permissions equal `services/nats/nats.conf`'s, as for the clinical user.
+5. **`deploy/README.md`** ("The frontend and NATS"): both users, the seed files and their owner, rotation; **`TODO.md`**: drop "no `bff_platform` user", keep "turn core's HTTP API off" pointing at mhai-web's rollout step 6.
+
+(Renaming `NATS_BFF_NKEY` to `NATS_BFF_CLINICAL_NKEY` is optional; see Open questions.)
