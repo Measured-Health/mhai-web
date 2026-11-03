@@ -28,6 +28,10 @@ export async function refreshSession(s: ServerSession): Promise<ServerSession> {
   return next;
 }
 
+/** Whether this session was signed out here while a call was in flight. */
+export const signedOutMeanwhile = (s: { refreshToken?: string | null }) =>
+  Boolean(s.refreshToken && refresher.isForgotten(s.refreshToken));
+
 export function __resetRefreshCacheForTests() {
   refresher.__resetForTests();
 }

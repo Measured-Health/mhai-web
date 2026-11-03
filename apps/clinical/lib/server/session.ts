@@ -57,6 +57,8 @@ export async function readSession(
   // Sealed before roles combined (Plan 4): one `role`.
   if (!Array.isArray(s.user.roles))
     s.user = { ...s.user, roles: s.user.role ? [s.user.role] : [] };
+  // Signed out here lately (a stale copy of the cookie): no session.
+  if (s.refreshToken && refresher.isForgotten(s.refreshToken)) return null;
   // A cookie still holding a pair this process has rotated: use the newer
   // one (core denylists the old access token on refresh).
   return resolveCurrent(s);
@@ -65,6 +67,9 @@ export async function readSession(
 export async function writeSession(s: ServerSession, now = Date.now()) {
   // Never the rotated-out pair: a route still holding the old cookie
   // writes the successor this process rotated it to.
+  // Never a cookie for a session signed out here (a refresh or a step
+  // that finished after the sign-out).
+  if (s.refreshToken && refresher.isForgotten(s.refreshToken)) return;
   s = resolveCurrent(s);
   (await cookies()).set(
     SESSION_COOKIE,

@@ -124,24 +124,34 @@ export function createRefresher(
       if (!refreshToken) return Promise.resolve(null);
       let p = inflight.get(refreshToken);
       if (!p) {
-        p = doRefresh(refreshToken);
+        const raw = doRefresh(refreshToken);
+        // Every waiter sees null if the session was signed out while this
+        // was in flight: nobody may write a cookie for the new pair.
+        p = raw.then((r) =>
+          r && (forgotten.has(refreshToken) || forgotten.has(r.refreshToken))
+            ? null
+            : r,
+        );
         inflight.set(refreshToken, p);
         const mine = p;
-        void p.then((r) => {
+        void raw.then((r) => {
           if (!r) {
-            if (inflight.get(refreshToken) === mine) inflight.delete(refreshToken);
+            if (inflight.get(refreshToken) === mine)
+              inflight.delete(refreshToken);
             return; // may retry later
           }
           // Signed out while this was in flight: the session has ended, so
           // its successor is never kept (and is forgotten too).
           if (forgotten.has(refreshToken) || forgotten.has(r.refreshToken)) {
             tombstone(r.refreshToken);
-            if (inflight.get(refreshToken) === mine) inflight.delete(refreshToken);
+            if (inflight.get(refreshToken) === mine)
+              inflight.delete(refreshToken);
             return;
           }
           resolved.set(refreshToken, r);
           setTimeout(() => {
-            if (inflight.get(refreshToken) === mine) inflight.delete(refreshToken);
+            if (inflight.get(refreshToken) === mine)
+              inflight.delete(refreshToken);
             if (resolved.get(refreshToken) === r) resolved.delete(refreshToken);
           }, KEEP_MS).unref?.();
         });
@@ -170,6 +180,8 @@ export function createRefresher(
     },
     /** Sign-out: nothing in this session's chain resolves any more. */
     forget,
+    /** Whether this token's session was signed out here lately. */
+    isForgotten: (refreshToken: string) => forgotten.has(refreshToken),
     __resetForTests() {
       inflight.clear();
       resolved.clear();

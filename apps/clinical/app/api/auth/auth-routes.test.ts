@@ -300,10 +300,23 @@ describe("session, terms, password, logout", () => {
     upstream.mockResolvedValueOnce(undefined);
     expect((await logout(post())).status).toBe(204);
     jar.values.set(SESSION_COOKIE, old); // a stale copy of the old cookie
-    expect(await readSession()).toMatchObject({
-      token: "tok",
-      refreshToken: "rtok",
-    });
+    // Neither the successor nor the old session: signed out.
+    expect(await readSession()).toBeNull();
+  });
+  it("a refresh that finishes after sign-out writes no cookie", async () => {
+    await signedIn({ mfa_enabled: false });
+    let release!: (v: unknown) => void;
+    upstream.mockResolvedValueOnce(undefined); // verify
+    upstream.mockImplementationOnce(
+      () => new Promise((res) => (release = res)),
+    ); // the refresh after verify, still in flight
+    const confirming = confirm(post({ code: "123456" }));
+    await new Promise((r) => setTimeout(r, 0));
+    upstream.mockResolvedValueOnce(undefined);
+    await logout(post());
+    release({ access_token: "tok2", refresh_token: "rtok2", expires_in: 900 });
+    await confirming;
+    expect(jar.values.get(SESSION_COOKIE)).toBeUndefined();
   });
   it("a route writing back the session after a rotation writes the successor, not the old pair", async () => {
     await signedIn({ must_change_password: true });

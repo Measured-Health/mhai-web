@@ -117,6 +117,21 @@ describe("createRefresher (core's POST /auth/refresh {refresh_token})", () => {
     expect(call).toHaveBeenLastCalledWith({ refresh_token: "r1" });
   });
 
+  it("every waiter on a refresh in flight at sign-out gets null, never the new pair", async () => {
+    let release!: (v: unknown) => void;
+    const call = vi.fn(() => new Promise((res) => (release = res)));
+    const r = createRefresher(call);
+    const a = r.refreshOnce("r1");
+    const b = r.refreshOnce("r1");
+    r.forget("r1");
+    release(ok(2));
+    expect(await a).toBeNull();
+    expect(await b).toBeNull();
+    expect(r.isForgotten("r1")).toBe(true);
+    expect(r.isForgotten("r2")).toBe(true);
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
   it("a refresh that ends the session (401) forgets its chain", async () => {
     const call = vi
       .fn()
