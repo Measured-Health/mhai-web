@@ -25,7 +25,8 @@ declare -A built
 run() { # app transport role
   local app=$1 transport=$2 role=$3 file
   file="users/$app-$transport.json"
-  "$here/backend-stack.sh" user "$role" "$state/$file" --ready >/dev/null || return 1
+  # Only a temporary password: the app does every first sign-in step.
+  "$here/backend-stack.sh" user "$role" "$state/$file" >/dev/null || return 1
   # One build per app (the transport is read at run time, not build time).
   local build=""
   [ -n "${built[$app]:-}" ] && build="E2E_LIVE_SKIP_BUILD=1"
