@@ -1,12 +1,7 @@
-import { createRefresher } from "@mhai/api-client/server/refresh";
-import { api } from "./api";
+import { refresher, resolveCurrent } from "./refresher";
 import { writeSession, type ServerSession } from "./session";
 
 export { refreshWithinMs } from "@mhai/api-client/server/refresh";
-
-const refresher = createRefresher((body) =>
-  api("/auth/refresh", { method: "POST", body }),
-);
 
 /** The rotated pair for this refresh token, or null (keep the current one). */
 export const refreshOnce = (refreshToken: string) =>
@@ -18,6 +13,13 @@ export const refreshOnce = (refreshToken: string) =>
  * is still valid, and a later call tries again).
  */
 export async function refreshSession(s: ServerSession): Promise<ServerSession> {
+  // Rotated lately by another request: use (and write) that pair, rather
+  // than rotate again.
+  const current = resolveCurrent(s);
+  if (current !== s) {
+    await writeSession(current);
+    return current;
+  }
   if (!s.refreshToken) return s;
   const r = await refreshOnce(s.refreshToken);
   if (!r) return s;

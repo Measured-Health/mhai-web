@@ -1,5 +1,6 @@
 import { sealSync, unsealSync } from "@mhai/api-client/server/seal";
 import { cookies } from "next/headers";
+import { resolveCurrent } from "./refresher";
 import type { FirstStep, Role, SignInResult, User } from "../auth/types";
 import { stepsFor, toUser, type ApiLoginOk } from "./map-user";
 
@@ -56,10 +57,15 @@ export async function readSession(
   // Sealed before roles combined (Plan 4): one `role`.
   if (!Array.isArray(s.user.roles))
     s.user = { ...s.user, roles: s.user.role ? [s.user.role] : [] };
-  return s;
+  // A cookie still holding a pair this process has rotated: use the newer
+  // one (core denylists the old access token on refresh).
+  return resolveCurrent(s);
 }
 
 export async function writeSession(s: ServerSession, now = Date.now()) {
+  // Never the rotated-out pair: a route still holding the old cookie
+  // writes the successor this process rotated it to.
+  s = resolveCurrent(s);
   (await cookies()).set(
     SESSION_COOKIE,
     seal(s),

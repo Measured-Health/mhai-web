@@ -41,7 +41,8 @@ function hospitalName(h: unknown): string | null {
  * can change): with neither, the sign-in is refused (the route answers 503).
  */
 function stableKey(u: ApiUser): string {
-  for (const k of [u.username, u.id])
+  // Core's id first, as the platform app does; the username is the older shape.
+  for (const k of [u.id, u.username])
     if (typeof k === "string" && k.trim() !== "") return k;
   throw new Error("user without a stable id");
 }

@@ -1,14 +1,7 @@
-import { createRefresher } from "@mhai/api-client/server/refresh";
-import { api } from "./http";
+import { refresher, resolveCurrent } from "./refresher";
 import { writeSession, type ServerSession } from "./session";
 
 export { refreshWithinMs } from "@mhai/api-client/server/refresh";
-
-// `api` adds the platform audience header; no bearer token: the refresh
-// token in the body is the credential (core's contract).
-const refresher = createRefresher((body) =>
-  api("/auth/refresh", { method: "POST", body }),
-);
 
 /** The rotated pair for this refresh token, or null (keep the current one). */
 export const refreshOnce = (refreshToken: string) =>
@@ -19,6 +12,13 @@ export const refreshOnce = (refreshToken: string) =>
  * untouched); unchanged when it holds no refresh token or the refresh fails.
  */
 export async function refreshSession(s: ServerSession): Promise<ServerSession> {
+  // Rotated lately by another request: use (and write) that pair, rather
+  // than rotate again.
+  const current = resolveCurrent(s);
+  if (current !== s) {
+    await writeSession(current);
+    return current;
+  }
   if (!s.refreshToken) return s;
   const r = await refreshOnce(s.refreshToken);
   if (!r) return s;

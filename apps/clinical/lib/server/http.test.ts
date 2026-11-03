@@ -47,7 +47,9 @@ describe("authCode", () => {
     [up("unauthenticated"), "login", 401, "invalid_credentials"],
     [up("unauthenticated"), "mfa", 401, "mfa_expired"],
     [up("mfa_invalid"), "mfa", 401, "mfa_invalid"],
-    [up("unauthenticated"), "current", 401, "wrong_password"],
+    [up("unauthenticated"), "current", 401, "session_expired"],
+    // Core: a wrong current password is 403 forbidden.
+    [up("forbidden", 403), "current", 403, "wrong_password"],
     [up("token_expired"), "current", 401, "session_expired"],
     [up("validation_failed", 422), "other", 422, "weak_password"],
     [up("internal", 500), "login", 503, "unavailable"],

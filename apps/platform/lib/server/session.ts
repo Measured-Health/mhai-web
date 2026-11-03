@@ -1,5 +1,6 @@
 import { sealSync, unsealSync } from "@mhai/api-client/server/seal";
 import { cookies } from "next/headers";
+import { resolveCurrent } from "./refresher";
 import type { ApiLoginOk, ApiUser } from "../api/auth-contract";
 import { api } from "./http";
 import { apiRolesOf, toPlatformRoles, type PlatformRole } from "./roles";
@@ -76,7 +77,9 @@ async function rawSession(): Promise<ServerSession | null> {
     !Array.isArray(s.steps)
   )
     return null;
-  return s;
+  // A cookie still holding a pair this process has rotated: use the newer
+  // one (core denylists the old access token on refresh).
+  return resolveCurrent(s);
 }
 
 const live = (s: ServerSession, now: number) =>
@@ -91,6 +94,9 @@ export async function readSession(
 }
 
 export async function writeSession(s: ServerSession, now = Date.now()) {
+  // Never the rotated-out pair: a route still holding the old cookie (a
+  // keep-alive, say) writes the successor this process rotated it to.
+  s = resolveCurrent(s);
   // The cookie never outlives the token or the idle limit.
   const maxAgeMs = Math.min(s.expiresAt - now, IDLE_LIMIT_MS);
   (await cookies()).set(

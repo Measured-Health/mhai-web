@@ -79,7 +79,6 @@ export interface AuthClient {
    */
   keepAlive(): Promise<void>;
   acceptTerms(): Promise<void>;
-  /** `current` is null during first sign-in (temporary password). */
   /** `current` is the temporary password during first sign-in (core needs it). */
   changePassword(current: string, next: string): Promise<void>;
   startMfaSetup(): Promise<MfaSetup>;

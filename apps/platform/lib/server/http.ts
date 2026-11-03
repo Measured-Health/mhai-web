@@ -117,9 +117,9 @@ export function authCode(
             ? "invalid_credentials"
             : ctx === "mfa"
               ? "mfa_expired"
-              : ctx === "current"
-                ? "wrong_password"
-                : "session_expired",
+              : // Core: a wrong current password is 403 forbidden; 401 is the
+                // session itself.
+                "session_expired",
       };
     case "token_expired":
       return {

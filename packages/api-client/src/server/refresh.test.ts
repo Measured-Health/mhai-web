@@ -40,22 +40,33 @@ describe("createRefresher (core's POST /auth/refresh {refresh_token})", () => {
     expect(call).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps a result only as long as core's 10-second reuse grace, so its theft check still applies", async () => {
+  it("a request still carrying the rotated-out token 15 s later gets the same pair, with no second call to core", async () => {
     vi.useFakeTimers();
     try {
       const call = vi.fn(async () => ok(2));
       const r = createRefresher(call);
-      await r.refreshOnce("r1");
-      await vi.advanceTimersByTimeAsync(9_000);
-      await r.refreshOnce("r1");
+      const first = await r.refreshOnce("r1");
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(await r.refreshOnce("r1")).toEqual(first);
       expect(call).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(2_000);
-      await r.refreshOnce("r1");
-      // Past the grace: sent to core again (which then revokes the family).
-      expect(call).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(40_000);
+      expect(await r.refreshOnce("r1")).toEqual(first);
+      expect(call).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("successor() follows the rotations a refresh token has had", async () => {
+    let n = 1;
+    const call = vi.fn(async () => ok(++n));
+    const r = createRefresher(call);
+    expect(r.successor("r1")).toBeNull();
+    await r.refreshOnce("r1"); // r1 -> r2
+    await r.refreshOnce("r2"); // r2 -> r3
+    expect(r.successor("r1")?.refreshToken).toBe("r3");
+    expect(r.successor("r2")?.refreshToken).toBe("r3");
+    expect(r.successor("r3")).toBeNull();
   });
 
   it("409 conflict (rotated elsewhere within 10 s): keep the newer token known here, else nothing", async () => {
@@ -104,12 +115,19 @@ describe("createRefresher (core's POST /auth/refresh {refresh_token})", () => {
 describe("refreshWithinMs", () => {
   it("is 5 minutes by default and reads SESSION_REFRESH_WITHIN_S", () => {
     expect(refreshWithinMs({})).toBe(300_000);
-    expect(refreshWithinMs({ SESSION_REFRESH_WITHIN_S: "1200" })).toBe(
-      1_200_000,
-    );
+    expect(refreshWithinMs({ SESSION_REFRESH_WITHIN_S: "540" })).toBe(540_000);
   });
-  it("ignores anything but a whole number of seconds from 1 to 3600", () => {
-    for (const v of ["0", "-5", "abc", "1.5", "3601", ""])
+  it("stays below the token's life (600 s at most) except in development", () => {
+    expect(refreshWithinMs({ SESSION_REFRESH_WITHIN_S: "1200" })).toBe(300_000);
+    expect(
+      refreshWithinMs({
+        SESSION_REFRESH_WITHIN_S: "1200",
+        MHAI_DEPLOY_ENV: "development",
+      }),
+    ).toBe(1_200_000);
+  });
+  it("ignores anything but a whole number of seconds in range", () => {
+    for (const v of ["0", "-5", "abc", "1.5", "3601", "601", ""])
       expect(refreshWithinMs({ SESSION_REFRESH_WITHIN_S: v })).toBe(300_000);
   });
 });
