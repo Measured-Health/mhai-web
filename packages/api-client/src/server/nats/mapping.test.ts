@@ -80,8 +80,43 @@ describe("toNatsRequest: path", () => {
     `${NATS_API_ORIGIN}/api/v1/a b`,
     `${NATS_API_ORIGIN}/api/v1/a\tb`,
     `${NATS_API_ORIGIN}/api/v1/${"a".repeat(2048)}`,
+    // Traversal and validator differentials (review): never sent, whatever
+    // core's router would make of them.
+    `${NATS_API_ORIGIN}/api/v1/../admin`,
+    `${NATS_API_ORIGIN}/api/v1/./queries`,
+    `${NATS_API_ORIGIN}/api/v1/queries/..`,
+    `${NATS_API_ORIGIN}/api/v1/%2e%2e/x`,
+    `${NATS_API_ORIGIN}/api/v1/%2E%2e/x`,
+    `${NATS_API_ORIGIN}/api/v1/.%2E/x`,
+    `${NATS_API_ORIGIN}/api/v1/%2e/x`,
+    `${NATS_API_ORIGIN}/api/v1/a%2Fb`,
+    `${NATS_API_ORIGIN}/api/v1/a%2fb`,
+    `${NATS_API_ORIGIN}/api/v1/a%5Cb`,
+    `${NATS_API_ORIGIN}/api/v1/a\\b`,
+    `${NATS_API_ORIGIN}\\api/v1/queries`,
+    `${NATS_API_ORIGIN}/api/v1//queries`,
+    "http://user@core.nats.invalid/api/v1/queries",
+    "http://user:pw@core.nats.invalid/api/v1/queries",
+    "HTTP://core.nats.invalid/api/v1/queries",
+    "http://CORE.nats.invalid/api/v1/queries",
+    `${NATS_API_ORIGIN}/api/v1/queries#`,
+    `${NATS_API_ORIGIN}/api/v1/queries?a=1#x`,
   ])("%s throws", (url) => {
     expect(() => toNatsRequest("clinical", url, {})).toThrow();
+  });
+  it("a query may carry encoded slashes and dots (filters)", () => {
+    expect(
+      header(
+        spec(
+          toNatsRequest(
+            "clinical",
+            `${NATS_API_ORIGIN}/api/v1/alerts?q=a%2Fb&r=..`,
+            {},
+          ),
+        ),
+        "Mhai-Path",
+      ),
+    ).toEqual(["/api/v1/alerts?q=a%2Fb&r=.."]);
   });
   it("a path of exactly 2048 bytes passes", () => {
     const p = `/api/v1/${"a".repeat(2048 - "/api/v1/".length)}`;

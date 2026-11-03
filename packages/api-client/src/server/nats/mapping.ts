@@ -163,17 +163,49 @@ function mapHeaders(h: HeadersInit | undefined): [string, string][] {
 }
 
 /** Path and query: under /api/v1/, printable ASCII, no fragment, ≤ 2048 bytes. */
+/**
+ * Core sends Mhai-Path to its router as given (natsapi.validPath doesn't
+ * clean it), so the path sent must be exactly the one the BFF checked: the
+ * URL is parsed, and refused if parsing would change any byte of it
+ * (dot segments, backslashes, case in the scheme or host, ...). No segment
+ * may be empty, `.` or `..` (raw or as %2e), or hold an encoded slash or
+ * backslash. The query is checked as printable ASCII only: filters may
+ * carry encoded slashes.
+ */
 function pathOf(url: string): string {
-  if (!url.startsWith(`${NATS_API_ORIGIN}/`))
-    throw new MappingError("not the NATS API origin");
-  const p = url.slice(NATS_API_ORIGIN.length);
+  if (url.includes("\\") || url.includes("#"))
+    throw new MappingError("path refused");
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    throw new MappingError("path refused");
+  }
   if (
-    !p.startsWith(API_PREFIX) ||
+    u.origin !== NATS_API_ORIGIN ||
+    u.username !== "" ||
+    u.password !== "" ||
+    u.hash !== "" ||
+    u.href !== url
+  )
+    throw new MappingError("not the NATS API origin");
+  const p = u.pathname + u.search;
+  if (
+    !u.pathname.startsWith(API_PREFIX) ||
     p.length > MAX_PATH ||
-    !printable(p, false) ||
-    p.includes("#")
+    !printable(p, false)
   )
     throw new MappingError("path refused");
+  for (const segment of u.pathname.slice(API_PREFIX.length).split("/")) {
+    const dots = segment.replace(/%2e/gi, ".");
+    if (
+      segment === "" ||
+      dots === "." ||
+      dots === ".." ||
+      /%2f|%5c/i.test(segment)
+    )
+      throw new MappingError("path refused");
+  }
   return p;
 }
 
