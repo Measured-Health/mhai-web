@@ -172,6 +172,11 @@ function liveRequester(
     deps
       .connect(optionsFor(app, cfg))
       .then((conn) => {
+        // Shutdown began while this was connecting: don't keep it.
+        if (drained) {
+          void conn.close().catch(() => {});
+          return;
+        }
         nc = conn;
         connected = !conn.isClosed();
         log("nats: connected");
@@ -181,7 +186,7 @@ function liveRequester(
         // waitOnFirstConnect retries on its own; this is an auth refusal or
         // a bad option. Try again later, as a reconnect would.
         log("nats: connect failed", errorName(e));
-        setTimeout(open, RECONNECT_WAIT_MS).unref?.();
+        if (!drained) setTimeout(open, RECONNECT_WAIT_MS).unref?.();
       });
   };
   open();

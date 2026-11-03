@@ -46,6 +46,10 @@ function fakeNats() {
       closed = true;
       resolveClosed();
     }),
+    close: vi.fn(async () => {
+      closed = true;
+      resolveClosed();
+    }),
   };
   const emit = (s: Status) => {
     const l = listeners.shift();
@@ -300,6 +304,24 @@ describe("the NATS connection", () => {
     await tick();
     await shutdown[0]!();
     await new Promise((res) => setTimeout(res, 10));
+    expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  it("a connection that opens after shutdown began is closed at once", async () => {
+    const f = fakeNats();
+    let open!: (v: unknown) => void;
+    const connect = vi.fn(() => new Promise((r) => (open = r)));
+    const { d, shutdown } = deps({
+      connect: connect as unknown as ConnectDeps["connect"],
+      reopenAfterMs: 0,
+    });
+    const r = createNatsRequester("clinical", d);
+    await tick();
+    await shutdown[0]!();
+    open(f.nc);
+    await new Promise((res) => setTimeout(res, 10));
+    expect(f.nc.close).toHaveBeenCalledTimes(1);
+    expect(r.ready()).toBe(false);
     expect(connect).toHaveBeenCalledTimes(1);
   });
 
