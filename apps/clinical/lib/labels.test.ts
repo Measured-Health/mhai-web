@@ -18,6 +18,15 @@ describe("labels", () => {
     for (const term of FORBIDDEN_TERMS)
       expect(shown.toLowerCase()).not.toContain(term.toLowerCase());
   });
+  it("forbids the contract v1.2.0 terms and codes", () => {
+    for (const term of [
+      "trust_band",
+      "cited_chunk_ids",
+      "method_not_allowed",
+      "payload_too_large",
+    ])
+      expect(FORBIDDEN_TERMS).toContain(term);
+  });
   it("forbids the correction codes", () => {
     for (const code of [
       "pending_review",

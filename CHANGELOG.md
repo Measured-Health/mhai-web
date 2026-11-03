@@ -19,6 +19,17 @@ All notable changes to this project are documented here. The format follows
   built with `USE_MOCK=false` on a manual deploy run; the public demo stays
   on sample data.
 
+### Changed
+
+- **The clinical app follows core's contract v1.2.0.** Results carry
+  `trust_band` (typed, not shown until clinical sign-off) and
+  `cited_chunk_ids`. When an answer cites sources whose details aren't
+  stored yet, the evidence panel says "Sources for this answer can't be
+  shown yet." and "Claim details can't be shown yet." instead of "No sources
+  were used". A question status the app doesn't know, and a status call
+  that ends in 405, 413 or (after its retries) 503, now show the failed view
+  at once instead of "Analysing" until the stall timer.
+
 ### Security
 
 - `check:no-nats` fails the build check if a client chunk holds NATS code,

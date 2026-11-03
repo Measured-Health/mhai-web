@@ -234,3 +234,31 @@ describe("clinician wording", () => {
     },
   );
 });
+
+describe("contract v1.2.0: cited, details not stored", () => {
+  it("says sources and claims can't be shown yet, never 'no sources'", async () => {
+    const { CITED_NOT_STORED } = await import("@/lib/api/fixtures");
+    panel(CITED_NOT_STORED);
+    expect(
+      screen.getByText("Sources for this answer can't be shown yet."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Claim details can't be shown yet."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No sources were used/)).toBeNull();
+    expect(screen.queryByText(/No claims could be checked/)).toBeNull();
+    // No number, id or backend term.
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/c1|c2|cited_chunk_ids|trust_band/);
+    for (const term of FORBIDDEN_TERMS) expect(text).not.toContain(term);
+  });
+  it("with nothing cited, today's wording stays", () => {
+    panel({ ...FIXTURES.high, citations: [], cited_chunk_ids: [] });
+    expect(
+      screen.getByText("No sources were used for this answer."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("No claims could be checked against guidelines"),
+    ).toBeInTheDocument();
+  });
+});

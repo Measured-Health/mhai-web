@@ -21,6 +21,8 @@ export interface QueryCreateIn {
   clinical_question: string;
   urgency: Urgency;
   specialty?: string;
+  /** When the app queued the question offline (contract v1.2.0); checked, not stored. */
+  client_created_at?: string;
 }
 
 export interface QueryStatusOut {
@@ -42,6 +44,9 @@ export interface Citation {
   reason: string;
 }
 
+/** Contract v1.2.0: provisional; typed, never shown (plan R12). */
+export type TrustBand = "low" | "mid" | "high";
+
 export interface ClinicalResultOut {
   query_id: string;
   decision: "PASS" | "REGENERATE" | "ESCALATE";
@@ -53,7 +58,11 @@ export interface ClinicalResultOut {
   icd10_code: string | null;
   response_text: string;
   trust_score: number | null;
+  /** Provisional banding of a verified answer's trust; null when unverified. Not shown (R12). */
+  trust_band: TrustBand | null;
   citations: Citation[];
+  /** The ids the answer cited. `citations` stays empty until the pipeline stores their details. */
+  cited_chunk_ids: string[];
   guardrail_details: {
     l1_persona: null;
     l2_entropy: { stability: number } | null;

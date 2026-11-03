@@ -404,3 +404,85 @@ describe("questions and feedback saved offline", () => {
     expect(r.current.box.items).toHaveLength(0);
   });
 });
+
+describe("contract v1.2.0: status mapping", () => {
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+  afterEach(() => {
+    vi.useRealTimers();
+    status.mockReset();
+  });
+  const st = (s: string, extra: object = {}) => ({
+    query_id: "q1",
+    status: s,
+    progress: 0.2,
+    current_stage: null,
+    ...extra,
+  });
+
+  it.each([
+    ["queued", false],
+    ["processing", false],
+    ["completed", false],
+    ["failed", true],
+  ])("%s → failed: %s", async (s, failed) => {
+    status.mockResolvedValue(st(s));
+    const { result } = renderHook(() => useQueryStatus("q1"), {
+      wrapper: wrapWith(makeClient()),
+    });
+    await waitFor(() => expect(result.current.status).toBe(s));
+    expect(result.current.failed).toBe(failed);
+  });
+
+  it.each([
+    [{ error_code: "cancelled" }],
+    [{ error_code: "pipeline_timeout" }],
+    [{}],
+  ])("failed with %j is the failed view", async (extra) => {
+    status.mockResolvedValue(st("failed", extra));
+    const { result } = renderHook(() => useQueryStatus("q1"), {
+      wrapper: wrapWith(makeClient()),
+    });
+    await waitFor(() => expect(result.current.failed).toBe(true));
+  });
+
+  it("an unknown status is the failed view at once (fail closed) and polling stops", async () => {
+    status.mockResolvedValue(st("archived"));
+    const { result } = renderHook(() => useQueryStatus("q1"), {
+      wrapper: wrapWith(makeClient()),
+    });
+    await waitFor(() => expect(result.current.failed).toBe(true));
+    expect(result.current.status).toBe("failed");
+    const calls = status.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+    expect(status.mock.calls.length).toBe(calls);
+  });
+
+  it.each([
+    [405, "method_not_allowed"],
+    [413, "payload_too_large"],
+  ])(
+    "%s %s on status is not retried and is the failed view",
+    async (code, name) => {
+      status.mockRejectedValue(new ApiError(code, name));
+      const { result } = renderHook(() => useQueryStatus("q1"), {
+        wrapper: wrapWith(makeClient()),
+      });
+      await waitFor(() => expect(result.current.failed).toBe(true));
+      expect(status).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("503 unavailable is retried as transient, then is the failed view", async () => {
+    status.mockRejectedValue(new ApiError(503, "unavailable"));
+    const { result } = renderHook(() => useQueryStatus("q1"), {
+      wrapper: wrapWith(makeClient()),
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    await waitFor(() => expect(result.current.failed).toBe(true));
+    expect(status.mock.calls.length).toBeGreaterThan(1);
+  });
+});

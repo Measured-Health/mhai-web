@@ -50,6 +50,7 @@ export const FIXTURES: Record<
     response_text:
       "Presentation is consistent with acute coronary syndrome in a high-risk patient (smoker, type 2 diabetes).\n- 12-lead ECG within 10 minutes of arrival [1]\n- Serial high-sensitivity troponin at 0 and 3 hours [2]\n- Aspirin 300 mg chewed, unless contraindicated [3]\n- Risk-stratify with HEART score before disposition [4]",
     trust_score: 0.82,
+    trust_band: "high",
     citations: [
       c(
         "AHA 2021 Chest Pain Guideline",
@@ -72,6 +73,7 @@ export const FIXTURES: Record<
         "Use a validated risk score…",
       ),
     ],
+    cited_chunk_ids: [],
     guardrail_details: gd(0.92, 4),
     retrieval_ms: 2100,
     generation_ms: 9700,
@@ -88,6 +90,7 @@ export const FIXTURES: Record<
     response_text:
       "Febrile illness with rash in an endemic area.\n- NS1 antigen test and full blood count [1]\n- Oral fluids, paracetamol for fever; avoid NSAIDs [2]\n- Admit if platelets fall below 100 × 10⁹/L [3]",
     trust_score: 0.42,
+    trust_band: "mid",
     citations: [
       c(
         "WHO Dengue Guidelines 2024",
@@ -106,6 +109,7 @@ export const FIXTURES: Record<
         "FLAG",
       ),
     ],
+    cited_chunk_ids: [],
     guardrail_details: gd(0.66, 3),
     retrieval_ms: 2400,
     generation_ms: 10100,
@@ -122,6 +126,7 @@ export const FIXTURES: Record<
     response_text:
       "Serum K⁺ 2.9 mmol/L. Several suggested causes and replacement doses could not be verified.\n- Check magnesium and renal function [1]\n- IV potassium 40 mmol over 1 hour via peripheral line [2]",
     trust_score: 0.21,
+    trust_band: null,
     citations: [
       c(
         "BNF: Potassium chloride",
@@ -136,8 +141,22 @@ export const FIXTURES: Record<
         "REDACT",
       ),
     ],
+    cited_chunk_ids: [],
     guardrail_details: gd(0.25, 4, false),
     retrieval_ms: 2600,
     generation_ms: 11600,
   },
+};
+
+/**
+ * Contract v1.2.0 as core sends it today: the answer cites chunks, but the
+ * pipeline doesn't store their details yet, so `citations` is empty.
+ */
+export const CITED_NOT_STORED: ClinicalResultOut = {
+  ...FIXTURES.high,
+  query_id: "q-cited",
+  response_text:
+    "Presentation is consistent with acute coronary syndrome.\n- 12-lead ECG within 10 minutes of arrival\n- Serial high-sensitivity troponin at 0 and 3 hours",
+  citations: [],
+  cited_chunk_ids: ["c1", "c2"],
 };

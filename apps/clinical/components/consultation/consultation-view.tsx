@@ -67,7 +67,10 @@ export function ConsultationView({ id }: { id: string }) {
     [data],
   );
   const done = view !== null && parsed !== null;
-  const failed = st.status === "failed" || st.stalled || result.isError;
+  // A status call that gave up (405, 413, or 503 after its retries) is the
+  // failed view too; no code is ever shown.
+  const failed =
+    st.status === "failed" || st.stalled || Boolean(st.error) || result.isError;
   const diagnosis = data?.diagnosis ?? undefined;
 
   useShortcuts(

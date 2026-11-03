@@ -192,3 +192,13 @@ describe("ResultCard", () => {
     );
   });
 });
+
+describe("ResultCard, contract v1.2.0", () => {
+  it("cited, details not stored: no '0 sources' chip and no tags on the steps", async () => {
+    const { CITED_NOT_STORED } = await import("@/lib/api/fixtures");
+    renderFor(CITED_NOT_STORED);
+    expect(screen.queryByText(/\b0 sources\b/)).toBeNull();
+    expect(screen.queryByText(/\[\d\]/)).toBeNull();
+    expect(document.body.textContent).not.toMatch(/cited_chunk_ids|c1|c2/);
+  });
+});
