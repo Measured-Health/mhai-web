@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { createInbox, type Status } from "@nats-io/nats-core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BackendUnavailable,
   __resetNatsForTests,
@@ -87,6 +87,9 @@ function deps(over: Partial<ConnectDeps> = {}) {
   return { d, f, logs, shutdown, connect };
 }
 
+// test:nats installs the fake core in each slot first; these tests make
+// their own connections.
+beforeEach(() => __resetNatsForTests());
 afterEach(() => __resetNatsForTests());
 
 describe("the NATS connection", () => {

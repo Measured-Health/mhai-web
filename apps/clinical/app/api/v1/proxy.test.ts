@@ -22,6 +22,10 @@ import type { Role, User } from "@/lib/auth/types";
 import { TEST_USER } from "@/tests/auth-wrapper";
 import { DELETE, GET, PATCH, POST } from "./[...path]/route";
 
+// The suite runs on both transports (npm run test:nats). On NATS, Accept is
+// HTTP-only (never sent) and the audience comes from the subject.
+const onNats = process.env.BACKEND_TRANSPORT === "nats";
+
 const fetchMock = vi.fn();
 beforeEach(() => {
   vi.stubEnv("SESSION_SECRET", "s".repeat(40));
@@ -74,10 +78,11 @@ describe("clinical API proxy", () => {
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://api.test/api/v1/queries/q1?x=1");
-    expect(init.headers).toEqual({
-      Accept: "application/json",
-      Authorization: "Bearer tok",
-    });
+    expect(init.headers).toEqual(
+      onNats
+        ? { Authorization: "Bearer tok", "X-MHAI-Audience": "clinical" }
+        : { Accept: "application/json", Authorization: "Bearer tok" },
+    );
   });
 
   it("posts the body through", async () => {
@@ -1515,28 +1520,47 @@ describe("clearance routes (Plan 11)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("a 2 MB upload is forwarded with its boundary", async () => {
-    await as();
-    fetchMock.mockResolvedValueOnce(
-      Response.json({ id: "cl_new" }, { status: 201 }),
-    );
-    const bytes = multipart(2 * 1024 * 1024);
-    const res = await POST(
-      upload(bytes, MULTIPART, { "Idempotency-Key": "k-1" }),
-      ctx("hospital", "clearances"),
-    );
-    expect(res.status).toBe(201);
-    expect(await res.json()).toEqual({ id: "cl_new" });
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("http://api.test/api/v1/hospital/clearances");
-    expect(init.headers).toEqual({
-      Accept: "application/json",
-      Authorization: "Bearer tok",
-      "Content-Type": MULTIPART,
-      "Idempotency-Key": "k-1",
-    });
-    expect(new Uint8Array(init.body as Uint8Array)).toEqual(bytes);
-  });
+  it.runIf(onNats)(
+    "on NATS, an upload over 64 KB is refused before core (Decision 7)",
+    async () => {
+      await as();
+      const res = await POST(
+        upload(multipart(2 * 1024 * 1024), MULTIPART, {
+          "Idempotency-Key": "k-1",
+        }),
+        ctx("hospital", "clearances"),
+      );
+      expect(res.status).toBe(413);
+      expect(await res.json()).toEqual({ code: "payload_too_large" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.runIf(!onNats)(
+    "a 2 MB upload is forwarded with its boundary",
+    async () => {
+      await as();
+      fetchMock.mockResolvedValueOnce(
+        Response.json({ id: "cl_new" }, { status: 201 }),
+      );
+      const bytes = multipart(2 * 1024 * 1024);
+      const res = await POST(
+        upload(bytes, MULTIPART, { "Idempotency-Key": "k-1" }),
+        ctx("hospital", "clearances"),
+      );
+      expect(res.status).toBe(201);
+      expect(await res.json()).toEqual({ id: "cl_new" });
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe("http://api.test/api/v1/hospital/clearances");
+      expect(init.headers).toEqual({
+        Accept: "application/json",
+        Authorization: "Bearer tok",
+        "Content-Type": MULTIPART,
+        "Idempotency-Key": "k-1",
+      });
+      expect(new Uint8Array(init.body as Uint8Array)).toEqual(bytes);
+    },
+  );
 
   it("an upload from another site is refused", async () => {
     await as();
@@ -1584,10 +1608,11 @@ describe("clearance routes (Plan 11)", () => {
     );
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(`http://api.test/api/v1/${path.join("/")}`);
-    expect(init.headers).toEqual({
-      Accept: "image/png, image/jpeg",
-      Authorization: "Bearer tok",
-    });
+    expect(init.headers).toEqual(
+      onNats
+        ? { Authorization: "Bearer tok", "X-MHAI-Audience": "clinical" }
+        : { Accept: "image/png, image/jpeg", Authorization: "Bearer tok" },
+    );
     fetchMock.mockResolvedValueOnce(
       new Response(new Uint8Array([0xff, 0xd8]), {
         headers: { "Content-Type": "Image/JPEG; foo=bar" },

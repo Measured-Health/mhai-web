@@ -308,24 +308,28 @@ describe("assumed endpoints", () => {
       body: { username: "a", password: "pw", device_token: "dev-1" },
     });
   });
-  it("sends hospital sign-on to the API and back to our return page", async () => {
-    vi.stubEnv("MHAI_API_URL", "http://api.test");
-    const res = await oidcLogin(
-      new Request("http://demo.test/api/auth/oidc/login", {
-        headers: { host: "demo.test" },
-      }),
-    );
-    expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe(
-      "http://api.test/api/v1/auth/oidc/login?return_to=http%3A%2F%2Fdemo.test%2Fsign-in%2Fhospital",
-    );
-    upstream.mockRejectedValueOnce(new UpstreamError(400, "invalid_code"));
-    expect(await (await oidcExchange(post({ code: "x" }))).json()).toEqual({
-      code: "sso_failed",
-    });
-    upstream.mockResolvedValueOnce(LOGIN_OK);
-    expect((await oidcExchange(post({ code: "good" }))).status).toBe(200);
-  });
+  // HTTP only: on NATS hospital sign-on is unavailable (the test below).
+  it.runIf(process.env.BACKEND_TRANSPORT !== "nats")(
+    "sends hospital sign-on to the API and back to our return page",
+    async () => {
+      vi.stubEnv("MHAI_API_URL", "http://api.test");
+      const res = await oidcLogin(
+        new Request("http://demo.test/api/auth/oidc/login", {
+          headers: { host: "demo.test" },
+        }),
+      );
+      expect(res.status).toBe(302);
+      expect(res.headers.get("Location")).toBe(
+        "http://api.test/api/v1/auth/oidc/login?return_to=http%3A%2F%2Fdemo.test%2Fsign-in%2Fhospital",
+      );
+      upstream.mockRejectedValueOnce(new UpstreamError(400, "invalid_code"));
+      expect(await (await oidcExchange(post({ code: "x" }))).json()).toEqual({
+        code: "sso_failed",
+      });
+      upstream.mockResolvedValueOnce(LOGIN_OK);
+      expect((await oidcExchange(post({ code: "good" }))).status).toBe(200);
+    },
+  );
   it("hospital sign-on is unavailable on NATS (no browser-facing core)", async () => {
     vi.stubEnv("BACKEND_TRANSPORT", "nats");
     const res = await oidcLogin(

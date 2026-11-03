@@ -8,6 +8,7 @@
     "start": "next start -p 3001",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
+    "test:nats": "BACKEND_TRANSPORT=nats vitest run app/api lib/server",
     "test:watch": "vitest",
     "e2e": "playwright test"
   },
