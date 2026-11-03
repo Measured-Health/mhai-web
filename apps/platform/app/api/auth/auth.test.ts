@@ -14,7 +14,7 @@ const jar = vi.hoisted(() => {
 vi.mock("next/headers", () => ({ cookies: async () => jar }));
 
 import { MFA_COOKIE, SESSION_COOKIE, readSession } from "@/lib/server/session";
-import { __resetRefreshCacheForTests } from "@/lib/server/refresh";
+import { __resetRefreshCacheForTests, refreshOnce } from "@/lib/server/refresh";
 import { POST as login } from "./login/route";
 import { POST as mfa } from "./mfa/route";
 import { POST as setup } from "./mfa/setup/route";
@@ -518,6 +518,50 @@ describe("first sign-in and account", () => {
     );
     expect((await readSession())?.steps).toEqual([]);
   });
+
+  it("terms while two-step or the password is still owed: refused before core", async () => {
+    for (const extra of [
+      { mfa_enabled: false, terms_accepted_at: null },
+      { must_change_password: true },
+    ]) {
+      await signedIn(extra);
+      fetchMock.mockClear();
+      const res = await terms(post());
+      expect(res.status).toBe(403);
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  });
+
+  it("a keep-alive with the old cookie after a rotation writes the successor", async () => {
+    await signedIn();
+    const old = jar.values.get(SESSION_COOKIE)!;
+    fetchMock.mockResolvedValueOnce(
+      reply({
+        access_token: "tok-2",
+        refresh_token: "rtok-2",
+        expires_in: 900,
+      }),
+    );
+    expect((await refreshOnce("rtok-123"))?.refreshToken).toBe("rtok-2");
+    jar.values.set(SESSION_COOKIE, old); // the browser hasn't seen the new one
+    expect((await keepAlive(post())).status).toBe(204);
+    expect(await readSession()).toMatchObject({
+      token: "tok-2",
+      refreshToken: "rtok-2",
+    });
+  });
+
+  it.each(["unauthenticated", "token_expired"])(
+    "a password change answered %s is session_expired, not wrong_password",
+    async (code) => {
+      await signedIn();
+      fetchMock.mockResolvedValueOnce(reply({ code }, 401));
+      const res = await password(
+        post({ current: "x", next: "tram-lantern-okra" }),
+      );
+      expect(await res.json()).toEqual({ code: "session_expired" });
+    },
+  );
 
   it("the first password change needs the temporary password", async () => {
     await signedIn({ must_change_password: true });

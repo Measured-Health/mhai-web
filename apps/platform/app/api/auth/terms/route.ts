@@ -16,6 +16,11 @@ export async function POST(req: Request) {
   if (!sameOrigin(req)) return forbidden();
   let s = await readSession();
   if (!s) return sessionExpired();
+  // The terms come last: never while the password or two-step is owed (core
+  // would refuse an enrolment-only session, and a refresh now would revoke
+  // it). Refused before any upstream call.
+  if (s.steps.includes("password") || s.steps.includes("mfa"))
+    return forbidden();
   const accept = (token: string) =>
     api("/auth/terms", {
       method: "POST",

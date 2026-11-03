@@ -18,7 +18,7 @@ vi.mock("@/lib/server/api", async (orig) => ({
 }));
 
 import { UpstreamError } from "@/lib/server/api";
-import { __resetRefreshCacheForTests } from "@/lib/server/refresh";
+import { __resetRefreshCacheForTests, refreshOnce } from "@/lib/server/refresh";
 import type { ApiUser } from "@/lib/api/auth-contract";
 import {
   MFA_COOKIE,
@@ -260,13 +260,50 @@ describe("session, terms, password, logout", () => {
       refreshToken: "rtok2",
     });
   });
-  it("calls a wrong current password what it is", async () => {
+  it("calls a wrong current password what it is, and an ended session what it is", async () => {
     await signedIn();
-    upstream.mockRejectedValueOnce(new UpstreamError(401, "unauthenticated"));
+    upstream.mockRejectedValueOnce(new UpstreamError(403, "forbidden"));
     const res = await password(
       post({ current: "nope", next: "tram-lantern-okra" }),
     );
     expect(await res.json()).toEqual({ code: "wrong_password" });
+    for (const code of ["unauthenticated", "token_expired"]) {
+      upstream.mockRejectedValueOnce(new UpstreamError(401, code));
+      const r = await password(
+        post({ current: "x", next: "tram-lantern-okra" }),
+      );
+      expect(await r.json()).toEqual({ code: "session_expired" });
+    }
+  });
+  it("terms while the password or two-step is still owed: refused before core", async () => {
+    for (const extra of [
+      { mfa_enabled: false, terms_accepted_at: null },
+      { must_change_password: true },
+    ]) {
+      upstream.mockReset();
+      await signedIn(extra);
+      upstream.mockClear();
+      const res = await terms(post());
+      expect(res.status).toBe(403);
+      expect(upstream).not.toHaveBeenCalled();
+    }
+  });
+  it("a route writing back the session after a rotation writes the successor, not the old pair", async () => {
+    await signedIn({ must_change_password: true });
+    upstream.mockResolvedValueOnce({
+      access_token: "tok2",
+      refresh_token: "rtok2",
+      expires_in: 900,
+    });
+    expect((await refreshOnce("rtok"))?.refreshToken).toBe("rtok2");
+    // The browser still sends the old cookie (the rotating reply hasn't
+    // reached it yet): the password route writes the session back.
+    upstream.mockResolvedValueOnce(undefined);
+    await password(post({ current: "temp", next: "tram-lantern-okra" }));
+    expect(await readSession()).toMatchObject({
+      token: "tok2",
+      refreshToken: "rtok2",
+    });
   });
   it("needs a session for account changes", async () => {
     const res = await password(post({ current: "temp", next: "x".repeat(12) }));

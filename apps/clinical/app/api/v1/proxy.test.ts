@@ -315,8 +315,8 @@ describe("clinical API proxy", () => {
   });
 
   it("SESSION_REFRESH_WITHIN_S widens the refresh window", async () => {
-    vi.stubEnv("SESSION_REFRESH_WITHIN_S", "1200");
-    await session(10 * 60_000);
+    vi.stubEnv("SESSION_REFRESH_WITHIN_S", "540");
+    await session(8 * 60_000);
     fetchMock
       .mockResolvedValueOnce(
         Response.json({
