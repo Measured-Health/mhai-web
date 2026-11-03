@@ -24,6 +24,12 @@ export interface PlatformUser {
 
 export interface ServerSession {
   token: string;
+  /**
+   * Core's refresh token (rotated on every refresh). Sealed in this
+   * httpOnly cookie, never readable by the page. Missing in sessions
+   * sealed before it was kept: those aren't refreshed.
+   */
+  refreshToken?: string | null;
   expiresAt: number;
   lastSeenAt: number;
   user: PlatformUser;
@@ -140,11 +146,19 @@ export async function writeMfa(mfaToken: string, now = Date.now()) {
   );
 }
 
+/** Core's stable id (or the older username); never empty, else no session. */
+function stableId(u: ApiUser): string {
+  for (const k of [u.id, u.username])
+    if (typeof k === "string" && k.trim() !== "") return k;
+  throw new Error("user without a stable id");
+}
+
 export function toPlatformUser(u: ApiUser): PlatformUser {
+  const id = stableId(u);
   return {
-    id: u.username,
-    email: u.email || u.username,
-    name: u.display_name || u.full_name || u.username,
+    id,
+    email: u.email || u.username || "",
+    name: u.display_name || u.full_name || u.email || u.username || "",
     roles: toPlatformRoles(apiRolesOf(u)),
     mfaEnabled: u.mfa_enabled === true,
     backupCodesLeft: u.recovery_codes_left ?? null,
@@ -152,16 +166,17 @@ export function toPlatformUser(u: ApiUser): PlatformUser {
 }
 
 /**
- * First sign-in steps, in order: a new password if required, the terms, then
- * two-step. Two-step is owed whenever the API doesn't say it's on, so it can
- * never be skipped.
+ * First sign-in steps, in core's order: a new password if required, then
+ * two-step (an enrolment-only session reaches only those), then the terms,
+ * which need a full session. Two-step is owed whenever the API doesn't say
+ * it's on, so it can never be skipped.
  */
 export function stepsFor(u: ApiUser): FirstStep[] {
   const steps: FirstStep[] = [];
   if (u.must_change_password) steps.push("password");
+  if (u.mfa_enabled !== true) steps.push("mfa");
   if (u.must_change_password || u.terms_accepted_at === null)
     steps.push("terms");
-  if (u.mfa_enabled !== true) steps.push("mfa");
   return steps;
 }
 
@@ -203,6 +218,10 @@ export async function startSession(
   }
   const s: ServerSession = {
     token: r.access_token,
+    refreshToken:
+      typeof r.refresh_token === "string" && r.refresh_token
+        ? r.refresh_token
+        : null,
     expiresAt: now + r.expires_in * 1000,
     lastSeenAt: now,
     user,

@@ -1,51 +1,32 @@
+import { createRefresher } from "@mhai/api-client/server/refresh";
 import { api } from "./http";
-import type { ServerSession } from "./session";
+import { writeSession, type ServerSession } from "./session";
 
-type Refreshed = Pick<ServerSession, "token" | "expiresAt">;
+export { refreshWithinMs } from "@mhai/api-client/server/refresh";
 
-const KEEP_MS = 60_000;
-// The backend denylists the old token on refresh, so concurrent requests (and
-// ones still carrying the old cookie) must share one refresh per old token.
-const inflight = new Map<string, Promise<Refreshed | null>>();
+// `api` adds the platform audience header; no bearer token: the refresh
+// token in the body is the credential (core's contract).
+const refresher = createRefresher((body) =>
+  api("/auth/refresh", { method: "POST", body }),
+);
 
-async function doRefresh(token: string): Promise<Refreshed | null> {
-  try {
-    // `api` adds the platform audience header.
-    const r = await api<{ access_token?: unknown; expires_in?: unknown }>(
-      "/auth/refresh",
-      { method: "POST", token },
-    );
-    if (
-      typeof r?.access_token !== "string" ||
-      !r.access_token ||
-      typeof r.expires_in !== "number" ||
-      !Number.isFinite(r.expires_in) ||
-      r.expires_in <= 0
-    )
-      return null;
-    return {
-      token: r.access_token,
-      expiresAt: Date.now() + r.expires_in * 1000,
-    };
-  } catch {
-    return null;
-  }
-}
+/** The rotated pair for this refresh token, or null (keep the current one). */
+export const refreshOnce = (refreshToken: string) =>
+  refresher.refreshOnce(refreshToken);
 
-/** The refreshed token for this old one, or null (keep using the old one). */
-export function refreshOnce(oldToken: string): Promise<Refreshed | null> {
-  let p = inflight.get(oldToken);
-  if (!p) {
-    p = doRefresh(oldToken);
-    inflight.set(oldToken, p);
-    void p.then((r) => {
-      if (!r) return void inflight.delete(oldToken); // a failure may retry
-      setTimeout(() => inflight.delete(oldToken), KEEP_MS).unref?.();
-    });
-  }
-  return p;
+/**
+ * The session with a fresh token, written back to the cookie (the idle clock
+ * untouched); unchanged when it holds no refresh token or the refresh fails.
+ */
+export async function refreshSession(s: ServerSession): Promise<ServerSession> {
+  if (!s.refreshToken) return s;
+  const r = await refreshOnce(s.refreshToken);
+  if (!r) return s;
+  const next = { ...s, ...r };
+  await writeSession(next);
+  return next;
 }
 
 export function __resetRefreshCacheForTests() {
-  inflight.clear();
+  refresher.__resetForTests();
 }

@@ -148,7 +148,7 @@ describe("platform session", () => {
         must_change_password: true,
         terms_accepted_at: null,
       }),
-    ).toEqual(["password", "terms", "mfa"]);
+    ).toEqual(["password", "mfa", "terms"]);
     expect(
       stepsFor({ ...u, mfa_enabled: true, terms_accepted_at: null }),
     ).toEqual(["terms"]);

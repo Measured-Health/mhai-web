@@ -52,19 +52,13 @@ test("the new admin can't skip two-step", async ({ page }) => {
 
   await expect(page.getByText("Step 1 of 4 · Your password")).toBeVisible();
   await expectNoSkip(page);
+  await page.getByLabel("Temporary password").fill("demo-password");
   await page.getByLabel("New password").fill("Quiet-harbour-lantern-42");
   await page.getByLabel("Confirm password").fill("Quiet-harbour-lantern-42");
   await page.getByRole("button", { name: "Save password" }).click();
 
-  await expect(page.getByText("Step 2 of 4 · Terms of use")).toBeVisible();
-  await expectNoSkip(page);
-  const go = page.getByRole("button", { name: "Continue" });
-  await expect(go).toBeDisabled();
-  await page.getByLabel("I understand and agree").check();
-  await go.click();
-
   await expect(
-    page.getByText("Step 3 of 4 · Protect your account"),
+    page.getByText("Step 2 of 4 · Protect your account"),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Set up two-step verification" }),
@@ -73,13 +67,20 @@ test("the new admin can't skip two-step", async ({ page }) => {
   await expect(page).toHaveURL(/\/welcome$/);
   await typeCode(page, CODE);
 
-  await expect(page.getByText("Step 4 of 4 · Backup codes")).toBeVisible();
+  await expect(page.getByText("Step 3 of 4 · Backup codes")).toBeVisible();
   await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
   await expectNoSkip(page);
   const finish = page.getByRole("button", { name: "Finish setup" });
   await expect(finish).toBeDisabled();
   await page.getByLabel("I've saved these codes somewhere safe").check();
   await finish.click();
+
+  await expect(page.getByText("Step 4 of 4 · Terms of use")).toBeVisible();
+  await expectNoSkip(page);
+  const go = page.getByRole("button", { name: "Continue" });
+  await expect(go).toBeDisabled();
+  await page.getByLabel("I understand and agree").check();
+  await go.click();
 
   await expect(page).toHaveURL(/\/hospitals$/);
   await expect(
