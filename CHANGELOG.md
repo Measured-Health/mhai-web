@@ -15,8 +15,9 @@ All notable changes to this project are documented here. The format follows
   (`npm run test:nats`), and integration and live e2e suites run against the
   backend's smoke stack (`scripts/it/`). `GET /api/health` in both apps.
 - **Live preview containers** `web-live` and `platform-live` (compose
-  profile `live`, loopback only), built with `USE_MOCK=false` on a manual
-  deploy run; the public demo stays on sample data.
+  profile `live`), each behind a loopback nginx proxy that sets `X-Real-IP`,
+  built with `USE_MOCK=false` on a manual deploy run; the public demo stays
+  on sample data.
 
 ### Security
 

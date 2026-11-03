@@ -40,7 +40,20 @@ on the internal network `mhai-bff` only.
   The seed is a file (`NATS_NKEY_SEED_FILE`), read once. TLS is required
   outside `MHAI_DEPLOY_ENV=development`; password users only in development.
   It connects at server start (`instrumentation.ts`), fails fast while down,
-  and drains on SIGTERM.
+  opens a new connection if NATS closes it, and drains on SIGTERM.
+  **Deviation from the plan's R10:** R10 said a call made before the first
+  connection is up waits at most its own timeout. As built, every call
+  while not connected, including before the first connection, fails at
+  once with 503 `unavailable`, the same rule as after a disconnect, so no
+  request waits in nats.js's buffer. The cost: in the second or so after a
+  start, a request can answer unavailable (the clients retry reads; a write
+  keeps its Idempotency-Key).
+- **Path and query over 2048 bytes** (core's limit on NATS) are a local
+  414 `uri_too_long` on both transports, so a long filter fails the same
+  way whichever is on.
+- **Live previews** sit behind a loopback proxy that overwrites
+  `X-Real-IP` with the connecting address (`deploy/nginx/live-proxy.conf.template`);
+  the app containers publish no port of their own.
 - **The client IP** (`X-MHAI-Client-IP`, which core needs for sign-in) comes
   only from the header the host's nginx overwrites
   (`TRUSTED_CLIENT_IP_HEADER`), and only as an IP literal, on both
