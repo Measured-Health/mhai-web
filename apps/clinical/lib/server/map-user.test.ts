@@ -40,6 +40,14 @@ describe("toUser", () => {
     expect(u.username).toBe("0b5c4e1a-1d2e-4f00-9a00-000000000001");
     expect(u.displayName).toBe("Synthetic IT Clinician");
   });
+  it("refuses a user with no stable id: the outbox is never keyed by an empty name", () => {
+    for (const u of [
+      { role: "clinician", email: "a@hit.example.test" },
+      { role: "clinician", id: "", username: "" },
+      { role: "clinician", id: 7 },
+    ])
+      expect(() => toUser(u as unknown as ApiUser)).toThrow();
+  });
   it("a hospital that is neither a name nor {name} is null, never rendered", () => {
     for (const hospital of [{ id: "x" }, 42, ["a"], { name: 7 }])
       expect(

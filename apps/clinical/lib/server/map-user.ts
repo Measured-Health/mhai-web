@@ -35,10 +35,20 @@ function hospitalName(h: unknown): string | null {
   return null;
 }
 
+/**
+ * The key that binds this person's offline outbox: the username, or core's
+ * stable id (it has no username). Never empty and never the email (which
+ * can change): with neither, the sign-in is refused (the route answers 503).
+ */
+function stableKey(u: ApiUser): string {
+  for (const k of [u.username, u.id])
+    if (typeof k === "string" && k.trim() !== "") return k;
+  throw new Error("user without a stable id");
+}
+
 export function toUser(u: ApiUser): User {
   return {
-    // Core has no username: its stable id binds the outbox to this person.
-    username: u.username ?? u.id ?? u.email ?? "",
+    username: stableKey(u),
     email: u.email ?? null,
     displayName: u.display_name || u.full_name || u.username || u.email || "",
     fullName: u.full_name ?? null,
