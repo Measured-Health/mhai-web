@@ -6,8 +6,8 @@ import "server-only";
  * refresh_token}`. The refresh token rotates on every use. A reuse within
  * 10 seconds of its rotation is 409 `conflict` (nothing revoked); a later
  * reuse revokes the whole session. So one refresh per refresh token: every
- * request still carrying the old token, here or arriving within the next
- * minute, gets the same newer pair instead of rotating again.
+ * request still carrying the old token, here or arriving within core's
+ * 10-second grace, gets the same newer pair instead of rotating again.
  *
  * Any failure is null: the caller keeps its current access token, which
  * is still valid, and a later call tries again.
@@ -19,8 +19,13 @@ export type Refreshed = {
   expiresAt: number;
 };
 
-/** How long a result is kept for requests still carrying the old token. */
-const KEEP_MS = 60_000;
+/**
+ * How long a result is kept for requests still carrying the old token:
+ * core's own reuse grace (10 seconds). Longer would hand the new pair to
+ * a stale (or stolen) old token that core would otherwise treat as a reuse
+ * and answer by revoking the whole session.
+ */
+const KEEP_MS = 10_000;
 
 export function createRefresher(
   /** Calls core: POST /auth/refresh with this body (no bearer token). */

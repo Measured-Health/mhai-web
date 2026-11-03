@@ -40,6 +40,24 @@ describe("createRefresher (core's POST /auth/refresh {refresh_token})", () => {
     expect(call).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a result only as long as core's 10-second reuse grace, so its theft check still applies", async () => {
+    vi.useFakeTimers();
+    try {
+      const call = vi.fn(async () => ok(2));
+      const r = createRefresher(call);
+      await r.refreshOnce("r1");
+      await vi.advanceTimersByTimeAsync(9_000);
+      await r.refreshOnce("r1");
+      expect(call).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(2_000);
+      await r.refreshOnce("r1");
+      // Past the grace: sent to core again (which then revokes the family).
+      expect(call).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("409 conflict (rotated elsewhere within 10 s): keep the newer token known here, else nothing", async () => {
     const call = vi.fn(async () => {
       throw new UpstreamError(409, "conflict");
