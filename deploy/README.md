@@ -204,13 +204,20 @@ The public demo and the platform app stay on sample data. Two more
 containers, `web-live` and `platform-live`, run the same apps built for live
 mode (image tag `live`, `USE_MOCK=false`) and reach core over NATS
 (`BACKEND_TRANSPORT=nats`, docs/adr/0005). They are under the compose
-profile `live`, published on loopback only (`127.0.0.1:8093` and `:8094`),
-with no nginx site: the team reaches them by SSH tunnel. They are the only
-containers on the backend's internal network `mhai-bff` and the only ones
-holding a NATS seed.
+profile `live`, with no nginx site: the team reaches them by SSH tunnel.
+Each has a small loopback proxy in front (`web-live-proxy`,
+`platform-live-proxy`: nginx, `deploy/nginx/live-proxy.conf.template`),
+the only published port (`127.0.0.1:8093` and `:8094`); the app containers
+publish nothing. The proxy overwrites `X-Real-IP` with the address that
+connected, which the app passes to core as the client IP (core refuses
+sign-in without one). So no browser can choose its own IP to get past the
+per-IP sign-in counters; every tunnel user shares the proxy's view of the
+connection (the Docker bridge address). The apps are the only containers on
+the backend's internal network `mhai-bff` and the only ones holding a NATS
+seed; the proxies are not on it.
 
 ```
-laptop ──ssh -L──> 127.0.0.1:8093 ──> web-live ──mhai-bff──> mhai-nats ──> core (api.v1.clinical)
+laptop ──ssh -L──> 127.0.0.1:8093 ──> web-live-proxy (sets X-Real-IP) ──> web-live ──mhai-bff──> mhai-nats ──> core
 ```
 
 **What it needs from the backend** (mhai-multiagent `deploy/setup-host.sh`,
@@ -224,7 +231,9 @@ the network `mhai-bff`. Compose mounts the seed read-only at
 
 1. Copy the new `deploy/compose.yml` to `/srv/mhai-web/compose.yml` and
    `deploy/compose.platform.yml` to `/srv/mhai-web-platform/`. The public
-   services in them are unchanged.
+   services in them are unchanged. Copy
+   `deploy/nginx/live-proxy.conf.template` into both folders (the proxies
+   mount it from there).
 2. Add a session secret for each live app (never the public one's):
 
    ```bash
@@ -235,13 +244,13 @@ the network `mhai-bff`. Compose mounts the seed read-only at
 
 3. Run **Deploy demo** by hand (Actions, `workflow_dispatch`, branch
    `main`). That run also builds the `live` images and, after the public
-   apps, starts `web-live` and `platform-live` if the secret and the seed
-   file are there (it says why when it skips one, and a live failure never
+   apps, starts `web-live` and `platform-live` with their proxies if the
+   secret, the seed file and the proxy template are there (it says why when it skips one, and a live failure never
    fails the public deploy).
 4. Check, on the instance:
 
    ```bash
-   curl -s http://127.0.0.1:8093/api/health   # {"status":"ok"} once connected to NATS
+   curl -s http://127.0.0.1:8093/api/health   # through the proxy: {"status":"ok"} once connected to NATS
    curl -s http://127.0.0.1:8094/api/health
    cd /srv/mhai-web && docker compose --profile live logs --tail=50 web-live   # "nats: connected", no request content
    docker inspect mhai-web-web-live-1 --format '{{json .Config.Env}}' | grep -c SU   # 0: no seed in the environment
@@ -257,8 +266,10 @@ the network `mhai-bff`. Compose mounts the seed read-only at
 
 - Logs: `cd /srv/mhai-web && docker compose --profile live logs --tail=100 web-live`
 - Stop (the rollback; nothing public depends on it):
-  `docker compose --profile live stop web-live`, and
-  `cd /srv/mhai-web-platform && docker compose -f compose.platform.yml --profile live stop platform-live`.
+  `docker compose --profile live stop web-live-proxy web-live`, and
+  `cd /srv/mhai-web-platform && docker compose -f compose.platform.yml --profile live stop platform-live-proxy platform-live`.
+- Never publish the app containers' own ports: without the proxy in front,
+  a browser's `X-Real-IP` would reach core as the client IP.
 - A bad image: `WEB_LIVE_IMAGE=ghcr.io/measured-health/mhai-web:live-sha-<previous> docker compose --profile live up -d web-live`.
 - **Seed rotation or a leaked seed:** stop the live containers, run the
   backend's `setup-host.sh --rotate-bff clinical` (or `platform`, or

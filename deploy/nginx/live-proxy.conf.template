@@ -1,0 +1,31 @@
+# The loopback proxy in front of a live preview container (web-live,
+# platform-live; deploy/README.md, "Live preview over NATS"). The nginx
+# image fills in ${LIVE_UPSTREAM} at start (envsubst replaces only variables
+# set in its environment, so nginx's own $variables stay as they are).
+#
+# Its one job: overwrite X-Real-IP with the address of whoever connected,
+# so the app's TRUSTED_CLIENT_IP_HEADER (x-real-ip) is never what a browser
+# sent. Without it, core refuses sign-in (no client IP), and a tunnel user
+# could pick their own IP to get past the per-IP sign-in counters.
+
+server {
+    listen 8080;
+    server_tokens off;
+    # Docker's DNS, so the app container can start after the proxy.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    # Letters (Plan 11) are bigger than nginx's 1 MB default; the app caps them.
+    client_max_body_size 12m;
+
+    location / {
+        set $upstream http://${LIVE_UPSTREAM};
+        proxy_pass $upstream;
+        proxy_http_version 1.1;
+        # With the port: the app's same-origin check compares Origin and Host.
+        proxy_set_header Host              $http_host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $http_host;
+        proxy_read_timeout 60s;
+    }
+}
