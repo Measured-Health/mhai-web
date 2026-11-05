@@ -2,6 +2,17 @@
 
 The frontend was called finished for the team demo on 23 Oct 2026. Everything below is what's left. Remove an entry once it's done or decided.
 
+## What's left (5 Nov 2026)
+
+In short: the screens are built, and most of what's left is wiring them to backend work that's still coming. The live previews over NATS are on the demo host (web and platform), and sign-in works against the real core service there. Still to do:
+
+- **Wire the screens on sample data to the real backend** as each contract lands (see "Backend contracts still marked Assumed"): Analysis, clearances and named access, EMR record connections and alert settings, and platform Analysis across hospitals.
+- **Platform admin 7c: the analytics screens.** These wait on the backend's 7c, which waits on decision R41a.
+- **Cloud models: the per-hospital switch and the notices.** The backend design is approved and its plan comes next (mhai-multiagent TODO.md). The frontend part is scoped with that plan.
+- **Plan 12b, the EMR work, BFF over NATS and contract v1.2.0** are under "Next plans" below.
+- **Sign-offs** (Analysis, named access, Analysis across hospitals) and the real IP allowlist for the platform admin app.
+- **Dependabot backlog.** 10 open PRs (npm and GitHub Actions); each needs CI and a merge.
+
 ## Next plans
 
 - **Plan 12b: the drill-down for one hospital (platform admin app).** Plan 12a (Analysis across hospitals) is built on sample data. 12b adds the de-identified patient list for one hospital; it uses Plan 11's letters that name Measured Health people. The spec and plan are on branch `agent/platform-designs`.
@@ -11,7 +22,6 @@ The frontend was called finished for the team demo on 23 Oct 2026. Everything be
   - patient-facing explanations, which a clinician reviews before anything is sent;
   - the rest of the EMR design follow-ups.
 - **BFF over NATS: what's left** (ADR 0005; the transport is built, default `http`):
-  - turn on the live previews on the demo host (deploy/README.md, "Live preview over NATS");
   - production: NATS TLS with client certificates for the BFFs;
   - once every live BFF is on `nats` and core turns `CORE_HTTP_API` off, delete the HTTP transport, `MHAI_API_URL` and `BFF_SERVICE_KEY_FILE`;
   - letter uploads and file replies over NATS need the documents service (bodies over 64 KB are 413 on `nats`);
