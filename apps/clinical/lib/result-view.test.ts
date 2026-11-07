@@ -346,6 +346,12 @@ describe("who drafted the answer (generated_by, core 1.10.0)", () => {
       });
   });
 
+  it("the notice claims only what the masker does", () => {
+    expect(MASKED_NOTICE).toBe(
+      "Identifying patient details were masked where detected before the question was sent.",
+    );
+  });
+
   it("shows nothing when it's absent or malformed", () => {
     for (const g of [undefined, null, "cloud", {}, { route: "edge" }])
       expect(view(g)).toBeNull();

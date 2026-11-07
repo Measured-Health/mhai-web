@@ -207,7 +207,7 @@ describe("ResultCard, contract v1.2.0", () => {
     expect(screen.getByText("Drafted by Anthropic (cloud AI)")).toBeVisible();
     expect(
       screen.getByText(
-        "Identifying patient details were masked before the question was sent.",
+        "Identifying patient details were masked where detected before the question was sent.",
       ),
     ).toBeVisible();
   });

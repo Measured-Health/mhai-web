@@ -36,7 +36,7 @@ All notable changes to this project are documented here. The format follows
   `GET` and `PUT platform/hospitals/{id}/model-policy`, and the live client
   reads replies through a fail-closed reader. The clinical result says who
   drafted the answer (`generated_by`), and a cloud draft notes that
-  identifying patient details were masked first. Sample data only.
+  identifying patient details were masked where detected. Sample data only.
 - **The BFF can reach core over NATS** (ADR 0005), behind
   `BACKEND_TRANSPORT=http|nats` (default `http`). One `fetch`-shaped
   transport per app, one NATS connection per server process as the app's

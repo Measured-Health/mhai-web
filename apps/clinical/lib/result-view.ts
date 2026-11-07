@@ -47,7 +47,7 @@ const PROVIDER_NAME: Record<string, string> = {
 };
 export const LOCAL_DRAFT = "Drafted by MHAI's own model";
 export const MASKED_NOTICE =
-  "Identifying patient details were masked before the question was sent.";
+  "Identifying patient details were masked where detected before the question was sent.";
 
 /**
  * Read defensively: "local" only when the reply says local; any cloud

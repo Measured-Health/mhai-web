@@ -65,7 +65,7 @@ test("the result says who drafted it: a cloud provider, with the masking notice"
   await expect(card.getByText("Drafted by Anthropic (cloud AI)")).toBeVisible();
   await expect(
     card.getByText(
-      "Identifying patient details were masked before the question was sent.",
+      "Identifying patient details were masked where detected before the question was sent.",
     ),
   ).toBeVisible();
 });
