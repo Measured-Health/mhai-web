@@ -146,12 +146,12 @@ describe("mock AI model policy", () => {
     ["a zero limit", { ...ON, monthly_token_budget: 0 }],
     ["a limit over the maximum", { ...ON, monthly_token_budget: 1e9 + 1 }],
     ["a fractional limit", { ...ON, monthly_token_budget: 2.5 }],
-  ])("%s is 422", async (_name, body) => {
+  ])("%s is 422 validation_failed, as core says it", async (_name, body) => {
     expect(
       await failure(
         setup().m.setModelPolicy("h_northgate", body as ModelPolicyIn, KEY()),
       ),
-    ).toEqual([422, "invalid"]);
+    ).toEqual([422, "validation_failed"]);
   });
 
   it("the body is checked before the provider, and the provider before the hospital", async () => {
@@ -164,7 +164,7 @@ describe("mock AI model policy", () => {
           KEY(),
         ),
       ),
-    ).toEqual([422, "invalid"]);
+    ).toEqual([422, "validation_failed"]);
     expect(
       await failure(
         s.m.setModelPolicy(

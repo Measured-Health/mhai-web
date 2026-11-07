@@ -216,6 +216,31 @@ describe("a hospital's AI model", () => {
     expect(within(d).getByLabelText("Digit 1 of 6")).toHaveValue("");
   });
 
+  it("core's 422 validation_failed closes the dialog and says to check the details", async () => {
+    vi.spyOn(api, "setModelPolicy").mockRejectedValueOnce(
+      new ApiError(422, "validation_failed"),
+    );
+    const r = await show("h_havana");
+    await change(r);
+    await userEvent.click(within(r).getByLabelText(/^MHAI's own model/));
+    await saveForm(r);
+    const d = await dialog();
+    await typeCode(d);
+    await userEvent.click(within(d).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(
+      await within(r).findByText("Check the details and try again."),
+    ).toBeVisible();
+    expect(within(r).getByText("Nothing was saved.")).toBeVisible();
+  });
+
+  it("the masking note claims only what the masker does", () => {
+    expect(MASKED_NOTE).toBe(
+      "Only masked text is sent: identifying patient details are masked where detected. Documents and images never leave.",
+    );
+    expect(MASKED_NOTE).not.toMatch(/removed/);
+  });
+
   it("too many changes in a minute says to wait, in the dialog", async () => {
     vi.spyOn(api, "setModelPolicy").mockRejectedValueOnce(
       new ApiError(429, "rate_limited"),

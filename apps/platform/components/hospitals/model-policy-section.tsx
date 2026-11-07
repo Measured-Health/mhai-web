@@ -45,7 +45,7 @@ export const NOT_ENABLED =
 export const REF_HINT =
   "AGR-YYYY-NNNN or DPA-YYYY-NNNN for the recorded agreement check, or DEMO-SYNTHETIC for sample data. A document reference, never a person's name.";
 export const MASKED_NOTE =
-  "Only masked text is sent: patient names and other identifying details are removed first. Documents and images never leave.";
+  "Only masked text is sent: identifying patient details are masked where detected. Documents and images never leave.";
 export const SAMPLE_ONLY =
   "Sample data only until the privacy, legal and clinical sign-offs are given.";
 export const LIMIT_REACHED =
@@ -284,7 +284,8 @@ function EditForm({
             onGone();
             return true;
           }
-          if (err.code === "invalid" && err.status === 422) {
+          // Core's body refusal (422 validation_failed).
+          if (err.code === "validation_failed" && err.status === 422) {
             close();
             setFailure("Check the details and try again.");
             return true;

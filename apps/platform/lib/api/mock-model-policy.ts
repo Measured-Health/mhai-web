@@ -22,7 +22,8 @@ const RATE_MAX = 10;
 const fail = (status: number, code: string): never => {
   throw new ApiError(status, code);
 };
-const invalid = (): never => fail(422, "invalid");
+/** Core's code for a body it refuses. */
+const invalid = (): never => fail(422, "validation_failed");
 const person = (m: TeamMember): Person => ({ id: m.id, name: m.name });
 const iso = (ms: number) => new Date(ms).toISOString();
 /** "2026-11": the month, UTC. */
