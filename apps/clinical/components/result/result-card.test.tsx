@@ -201,4 +201,26 @@ describe("ResultCard, contract v1.2.0", () => {
     expect(screen.queryByText(/\[\d\]/)).toBeNull();
     expect(document.body.textContent).not.toMatch(/cited_chunk_ids|c1|c2/);
   });
+
+  it("says who drafted it: a cloud draft names the provider and that details were masked", () => {
+    renderFor(FIXTURES.high);
+    expect(screen.getByText("Drafted by Anthropic (cloud AI)")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Identifying patient details were masked before the question was sent.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("a local draft says so, with no masking notice", () => {
+    renderFor(FIXTURES.caution);
+    expect(screen.getByText("Drafted by MHAI's own model")).toBeVisible();
+    expect(screen.queryByText(/were masked/)).toBeNull();
+  });
+
+  it("without generated_by, nothing is said about who drafted it", () => {
+    renderFor(FIXTURES.review);
+    expect(screen.queryByText(/^Drafted by/)).toBeNull();
+    expect(screen.queryByText(/were masked/)).toBeNull();
+  });
 });

@@ -40,7 +40,7 @@ export function ResultCard({
         </div>
       )}
       <article className="card-v3 px-5 py-6 md:px-[26px]">
-        {(review || icd10 || confidence) && (
+        {(review || icd10 || confidence || view.generatedBy) && (
           <div className="flex flex-wrap items-center gap-2.5">
             {review && (
               <span className="text-[11px] font-semibold uppercase tracking-[.1em] text-bad">
@@ -69,6 +69,11 @@ export function ResultCard({
                 ICD-10 · {icd10}
                 <Copy aria-hidden className="size-3 opacity-60" />
               </button>
+            )}
+            {view.generatedBy && (
+              <span className="inline-flex items-center rounded-full border border-line px-2.5 py-1 text-[11px] text-ink-2">
+                {view.generatedBy.label}
+              </span>
             )}
             {confidence && (
               <span className="ml-auto">
@@ -122,6 +127,11 @@ export function ResultCard({
           <span>Completed in {view.seconds} s</span>
           {n > 0 && <span>{n === 1 ? "1 source" : `${n} sources`}</span>}
         </p>
+        {view.generatedBy?.notice && (
+          <p className="mt-1 text-[11.5px] text-ink-3">
+            {view.generatedBy.notice}
+          </p>
+        )}
       </article>
       <p className="mt-4 text-center text-[11.5px] text-ink-3">
         Decision support only. Final clinical judgement rests with the treating

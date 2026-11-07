@@ -57,6 +57,28 @@ test("high confidence result with evidence and agreement", async ({ page }) => {
   await expect(page.getByText(/your agreement was recorded/)).toBeVisible();
 });
 
+test("the result says who drafted it: a cloud provider, with the masking notice", async ({
+  page,
+}) => {
+  await ask(page, "Central chest pain 40 min. Diagnosis?");
+  const card = page.getByRole("article");
+  await expect(card.getByText("Drafted by Anthropic (cloud AI)")).toBeVisible();
+  await expect(
+    card.getByText(
+      "Identifying patient details were masked before the question was sent.",
+    ),
+  ).toBeVisible();
+});
+
+test("a local draft says MHAI's own model, with no masking notice", async ({
+  page,
+}) => {
+  await ask(page, "Fever 3 days and rash, dengue area. Admit?");
+  const card = page.getByRole("article");
+  await expect(card.getByText("Drafted by MHAI's own model")).toBeVisible();
+  await expect(card.getByText(/were masked/)).toHaveCount(0);
+});
+
 test("use with caution shows the amber banner and accepts a correction", async ({
   page,
 }) => {

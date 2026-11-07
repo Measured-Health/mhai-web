@@ -47,6 +47,18 @@ export interface Citation {
 /** Contract v1.2.0: provisional; typed, never shown (plan R12). */
 export type TrustBand = "low" | "mid" | "high";
 
+/** Core 1.10.0 (additive): the cloud providers a hospital may opt in to. */
+export type CloudProvider = "anthropic" | "openai" | "xai";
+/**
+ * Where the answer was drafted (core 1.10.0, additive): `local`, or `cloud`
+ * with the provider. Absent when unknown (an older pipeline, or a cloud
+ * failure that produced no draft).
+ */
+export interface GeneratedBy {
+  route: "local" | "cloud";
+  provider: CloudProvider | null;
+}
+
 export interface ClinicalResultOut {
   query_id: string;
   decision: "PASS" | "REGENERATE" | "ESCALATE";
@@ -80,6 +92,7 @@ export interface ClinicalResultOut {
   };
   retrieval_ms: number;
   generation_ms: number;
+  generated_by?: GeneratedBy;
 }
 
 export type FeedbackIn =
