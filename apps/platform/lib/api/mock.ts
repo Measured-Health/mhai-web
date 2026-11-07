@@ -47,6 +47,10 @@ import { settingsMock, type SettingsMockOptions } from "./mock-settings";
 import { emrMock } from "./mock-emr";
 import { analysisMock, type AnalysisMode } from "./mock-analysis";
 import {
+  modelPolicyMock,
+  type ModelPolicyMockOptions,
+} from "./mock-model-policy";
+import {
   createClearanceMock,
   type ClearanceMockOptions,
 } from "./mock-clearances";
@@ -226,6 +230,7 @@ export function createMockPlatform({
   resetFails,
   clearances,
   analysis,
+  cloudProviders,
   onCore,
 }: {
   now?: () => number;
@@ -257,6 +262,8 @@ export function createMockPlatform({
   clearances?: ClearanceMockOptions["clearances"];
   /** Which sample Analysis to serve (see `AnalysisMode`). */
   analysis?: AnalysisMode;
+  /** The cloud providers the deployment enables (see `ModelPolicyMockOptions`). */
+  cloudProviders?: ModelPolicyMockOptions["cloudProviders"];
   /** For tests: the core the areas are built on, once it exists. */
   onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
@@ -1100,5 +1107,6 @@ export function createMockPlatform({
     ...emrMock(core),
     ...createClearanceMock(core, { clearances }),
     ...analysisMock(core, { analysis }),
+    ...modelPolicyMock(core, { cloudProviders }),
   };
 }

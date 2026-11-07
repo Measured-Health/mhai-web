@@ -57,6 +57,7 @@ const WITH: Record<ActivityAction, string> = {
   named_access_lowered: "turned named access down to Kemi",
   analysis_switched: "turned Analysis on or off",
   patient_views_switched: "turned patient lists on or off",
+  model_policy_changed: "changed the AI model",
 };
 const WITHOUT: Partial<Record<ActivityAction, string>> = {
   admin_invited: "invited the first hospital admin",
@@ -102,6 +103,7 @@ const WITHOUT: Partial<Record<ActivityAction, string>> = {
   named_access_lowered: "turned named access down",
   analysis_switched: "turned Analysis on or off",
   patient_views_switched: "turned patient lists on or off",
+  model_policy_changed: "changed the AI model",
 };
 
 describe("actionLabel", () => {
@@ -110,6 +112,14 @@ describe("actionLabel", () => {
   });
   it.each(Object.entries(WITHOUT))("%s without a target", (a, text) => {
     expect(actionLabel(a as ActivityAction, null)).toBe(text);
+  });
+  it("the AI model reads as the provider it was set to", () => {
+    expect(actionLabel("model_policy_changed", "anthropic")).toBe(
+      "set the AI model to Anthropic (cloud)",
+    );
+    expect(actionLabel("model_policy_changed", "none")).toBe(
+      "set the AI model to MHAI's own model",
+    );
   });
   it("realistic targets read as the brief words them", () => {
     expect(actionLabel("jobs_retried", "3 failed jobs")).toBe(

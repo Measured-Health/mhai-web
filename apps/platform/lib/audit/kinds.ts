@@ -537,6 +537,9 @@ export const KINDS: Record<string, Kind> = {
       ? `Turned patient lists ${e.facts.switched}`
       : "Switched patient lists on or off",
   ),
+  // A hospital's AI model (Plan 14; core's `hospital.model_policy_changed`).
+  // Which provider stays in Activity: the audit facts have no field for it.
+  model_policy_changed: k("platform", "Changed the AI model"),
   // Failed jobs and platform settings (Plan 8).
   // No target: the count, when sent, is `facts.job_count`.
   jobs_retried: k("platform", (e) =>
