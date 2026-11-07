@@ -186,7 +186,11 @@ describe("mock AI model policy", () => {
 
   it("needs the person's own code: none is 422, a wrong one 403", async () => {
     const s = setup();
-    const { mfa_code: _, ...noCode } = ON as { mfa_code: string };
+    const noCode = {
+      cloud_provider: ON.cloud_provider,
+      agreement_ref: ON.agreement_ref,
+      monthly_token_budget: ON.monthly_token_budget,
+    };
     expect(
       await failure(
         s.m.setModelPolicy("h_northgate", noCode as ModelPolicyIn, KEY()),

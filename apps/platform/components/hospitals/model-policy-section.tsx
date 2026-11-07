@@ -345,7 +345,6 @@ function EditForm({
                   name={`${id}-provider`}
                   value={o.value}
                   checked={choice === o.value}
-                  aria-invalid={errors.provider ? true : undefined}
                   onChange={() => {
                     setChoice(o.value);
                     setErrors((p) => ({
