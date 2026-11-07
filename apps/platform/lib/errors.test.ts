@@ -86,8 +86,11 @@ describe("platformError", () => {
 
   it("an unlisted 4xx is not called unreachable", () => {
     expect(e(418, "teapot").title).toBe("Something went wrong. Try again.");
+  });
+
+  it("too many writes in a minute says to wait", () => {
     expect(e(429, "rate_limited").title).toBe(
-      "Something went wrong. Try again.",
+      "Too many changes in a minute. Wait a moment and try again.",
     );
   });
 

@@ -12,6 +12,7 @@ import { Loading } from "../states/loading";
 import { DetailsSection } from "./details-section";
 import { FirstAdminSection } from "./first-admin-section";
 import { HospitalLinks } from "./hospital-links";
+import { ModelPolicySection } from "./model-policy-section";
 import { DangerZone } from "./danger-zone";
 import { RecentActions } from "./recent-actions";
 import { RemovalPanel } from "./removal-panel";
@@ -75,6 +76,7 @@ export function HospitalView({ id }: { id: string }) {
                 onGone={() => void refetch()}
               />
               <SsoSection hospitalId={h.id} hospitalName={h.name} />
+              <ModelPolicySection hospital={h} />
               <HospitalConnectionsSection hospital={h} />
               <RecentActions hospitalId={h.id} />
               <DangerZone hospital={h} />

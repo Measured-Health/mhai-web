@@ -77,6 +77,8 @@ export function platformError(
       return W("Test the saved settings first.", "", { stale: true });
     case "no_type":
       return W("Choose a connection type.");
+    case "rate_limited":
+      return W("Too many changes in a minute. Wait a moment and try again.");
   }
   if (e.status >= 500) return W(UNREACHABLE);
   return W("Something went wrong. Try again.");
