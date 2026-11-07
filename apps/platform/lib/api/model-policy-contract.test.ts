@@ -18,9 +18,12 @@ const OFF = {
   usage: { month: "2026-11", used: 0, reserved: 0 },
 };
 
+const ID = GOOD.hospital_id;
+/** The refusal for a reply (read for hospital ID), or for a read itself. */
 const refused = (v: unknown) => {
   try {
-    readModelPolicy(v);
+    if (typeof v === "function") v();
+    else readModelPolicy(v, ID);
   } catch (e) {
     return e instanceof ApiError ? `${e.status} ${e.code}` : "other";
   }
@@ -29,8 +32,8 @@ const refused = (v: unknown) => {
 
 describe("readModelPolicy", () => {
   it("reads a policy on a provider, and one that is off", () => {
-    expect(readModelPolicy(GOOD)).toEqual(GOOD);
-    expect(readModelPolicy(OFF)).toEqual(OFF);
+    expect(readModelPolicy(GOOD, ID)).toEqual(GOOD);
+    expect(readModelPolicy(OFF, ID)).toEqual(OFF);
   });
 
   it.each([
@@ -53,6 +56,15 @@ describe("readModelPolicy", () => {
     ["nothing", null],
   ])("fails closed on %s", (_name, v) => {
     expect(refused(v)).toBe("502 bad_gateway");
+  });
+
+  it("fails closed on another hospital's policy", () => {
+    expect(readModelPolicy(GOOD, ID)).toEqual(GOOD);
+    expect(
+      refused(() =>
+        readModelPolicy(GOOD, "0b8e7c1d-2f3a-4b5c-9d6e-7f8091a2b3c4"),
+      ),
+    ).toBe("502 bad_gateway");
   });
 
   it("the reference pattern is core's", () => {

@@ -1247,6 +1247,23 @@ describe("live platform client", () => {
       ).rejects.toMatchObject({ status: 502, code: "bad_gateway" });
     });
 
+    it("a reply for another hospital is refused", async () => {
+      reply(() =>
+        Response.json({
+          hospital_id: "h_south",
+          cloud_provider: null,
+          agreement_ref: null,
+          monthly_token_budget: 2_000_000,
+          updated_at: null,
+          usage: { month: "2026-11", used: 0, reserved: 0 },
+        }),
+      );
+      await expect(client().getModelPolicy("h_north")).rejects.toMatchObject({
+        status: 502,
+        code: "bad_gateway",
+      });
+    });
+
     it("a provider the deployment hasn't enabled is a 409 conflict", async () => {
       reply(() => Response.json({ code: "conflict" }, { status: 409 }));
       await expect(

@@ -81,10 +81,11 @@ const count = (v: unknown) =>
 /**
  * Reads a policy reply, failing closed: anything the contract doesn't allow
  * (an unknown provider, a bad reference, a provider with no reference, a
- * count that isn't a whole number, an extra key) is 502 `bad_gateway`, so
+ * count that isn't a whole number, an extra key, another hospital's id) is
+ * 502 `bad_gateway`, so
  * the screen says it couldn't load rather than show a guess.
  */
-export function readModelPolicy(v: unknown): ModelPolicy {
+export function readModelPolicy(v: unknown, hospitalId: string): ModelPolicy {
   const bad = (): never => {
     throw new ApiError(502, "bad_gateway");
   };
@@ -102,7 +103,8 @@ export function readModelPolicy(v: unknown): ModelPolicy {
     (budget as number) > BUDGET_MAX
   )
     bad();
-  if (typeof v.hospital_id !== "string" || v.hospital_id === "") bad();
+  // Only the hospital asked about: never another hospital's policy.
+  if (v.hospital_id !== hospitalId) bad();
   const at = v.updated_at;
   if (at !== null && !(typeof at === "string" && !Number.isNaN(Date.parse(at))))
     bad();

@@ -302,9 +302,10 @@ export function createLivePlatformClient({
     saveSso: (x, b, o) => ok(h(x, "/sso"), "PUT", b, o),
     testSso: (x, o) => ok(h(x, "/sso/test"), "POST", undefined, o),
     // The AI model (Plan 14): read through the reader, which fails closed.
-    getModelPolicy: (x) => ok(h(x, "/model-policy")).then(readModelPolicy),
+    getModelPolicy: (x) =>
+      ok(h(x, "/model-policy")).then((r) => readModelPolicy(r, x)),
     setModelPolicy: (x, b, o) =>
-      ok(h(x, "/model-policy"), "PUT", b, o).then(readModelPolicy),
+      ok(h(x, "/model-policy"), "PUT", b, o).then((r) => readModelPolicy(r, x)),
     inviteAdmin: (x, b, o) => ok(h(x, "/invites"), "POST", b, o),
     resendInvite: (x, inv, o) =>
       ok(h(x, `/invites/${id(inv)}/resend`), "POST", undefined, o),
