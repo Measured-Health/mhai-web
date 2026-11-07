@@ -453,6 +453,7 @@ describe("Plan 8's Activity actions", () => {
       named_access_lowered: true,
       analysis_switched: true,
       patient_views_switched: true,
+      model_policy_changed: true,
     };
     for (const action of Object.keys(ACTIONS))
       expect(KINDS[action], action).toBeDefined();

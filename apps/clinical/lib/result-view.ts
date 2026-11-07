@@ -33,6 +33,43 @@ export interface ResultView {
    * that none were used.
    */
   detailsNotStored: boolean;
+  /**
+   * Who drafted the answer, from `generated_by`, with the notice a cloud
+   * draft carries; null when the API didn't say.
+   */
+  generatedBy: { label: string; notice: string | null } | null;
+}
+
+const PROVIDER_NAME: Record<string, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  xai: "xAI",
+};
+export const LOCAL_DRAFT = "Drafted by MHAI's own model";
+export const MASKED_NOTICE =
+  "Identifying patient details were masked where detected before the question was sent.";
+
+/**
+ * Read defensively: "local" only when the reply says local; any cloud
+ * route says cloud, naming the provider when it is one this app knows.
+ * Anything else shows nothing (show only what the API returns).
+ */
+export function generatedByView(g: unknown): ResultView["generatedBy"] {
+  if (typeof g !== "object" || g === null) return null;
+  const { route, provider } = g as { route?: unknown; provider?: unknown };
+  if (route === "local" && provider === null)
+    return { label: LOCAL_DRAFT, notice: null };
+  if (route !== "cloud") return null;
+  const name =
+    typeof provider === "string" && Object.hasOwn(PROVIDER_NAME, provider)
+      ? PROVIDER_NAME[provider]
+      : null;
+  return {
+    label: name
+      ? `Drafted by ${name} (cloud AI)`
+      : "Drafted by a cloud AI model",
+    notice: MASKED_NOTICE,
+  };
 }
 
 // Worst status wins when one source backs several claims.
@@ -131,5 +168,6 @@ export function toResultView(r: ClinicalResultOut): ResultView {
     seconds: ((r.retrieval_ms + r.generation_ms) / 1000).toFixed(1),
     detailsNotStored:
       r.citations.length === 0 && (r.cited_chunk_ids?.length ?? 0) > 0,
+    generatedBy: generatedByView(r.generated_by),
   };
 }

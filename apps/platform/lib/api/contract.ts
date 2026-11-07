@@ -14,6 +14,7 @@ import type { AuditClient } from "./audit-contract";
 import type { EmrClient } from "./emr-contract";
 import type { ClearancesClient } from "./clearances-contract";
 import type { HoldShort, HoldsClient } from "./holds-contract";
+import type { ModelPolicyClient } from "./model-policy-contract";
 import type { EmailPref, NotificationsOut } from "./notifications-contract";
 import type { OpsClient } from "./ops-contract";
 import type { SettingsClient } from "./settings-contract";
@@ -212,7 +213,10 @@ export type ActivityAction =
   // The two Analysis switches (Plan 12), flipped by Measured Health in the
   // backend: `detail` is "on" or "off".
   | "analysis_switched"
-  | "patient_views_switched";
+  | "patient_views_switched"
+  // The AI model (Plan 14): `target` is the new provider ("anthropic",
+  // "openai", "xai" or "none"), `detail` the one before.
+  | "model_policy_changed";
 export type ActivityEvent = {
   id: string;
   at: string;
@@ -281,7 +285,8 @@ export interface PlatformClient
     SettingsClient,
     EmrClient,
     ClearancesClient,
-    AnalysisClient {
+    AnalysisClient,
+    ModelPolicyClient {
   listHospitals(
     q: HospitalQuery,
   ): Promise<{ hospitals: HospitalSummary[]; next_cursor: string | null }>;

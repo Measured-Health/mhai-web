@@ -37,6 +37,8 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["GET", "platform/hospitals/{id}/sso"],
   ["PUT", "platform/hospitals/{id}/sso"],
   ["POST", "platform/hospitals/{id}/sso/test"],
+  ["GET", "platform/hospitals/{id}/model-policy"],
+  ["PUT", "platform/hospitals/{id}/model-policy"],
   ["POST", "platform/hospitals/{id}/invites"],
   ["POST", "platform/hospitals/{id}/invites/{id}/resend"],
   ["GET", "platform/team"],

@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ClinicalResultOut, Citation } from "./api/contract";
 import { FORBIDDEN_TERMS } from "./labels";
-import { resultKind, toResultView } from "./result-view";
+import { FIXTURES } from "./api/fixtures";
+import {
+  LOCAL_DRAFT,
+  MASKED_NOTICE,
+  resultKind,
+  toResultView,
+} from "./result-view";
 
 const EVIDENCE_FAILED =
   "The evidence didn't support enough of this answer for the system to stand behind it.";
@@ -301,5 +307,66 @@ describe("contract v1.2.0", () => {
     const v = toResultView(base({ trust_band: "mid" }));
     expect(JSON.stringify(v)).not.toMatch(/trust_band|"mid"/);
     expect(Object.keys(v)).not.toContain("trustBand");
+  });
+});
+
+describe("who drafted the answer (generated_by, core 1.10.0)", () => {
+  const view = (g: unknown) =>
+    toResultView({
+      ...FIXTURES.high,
+      generated_by: g as ClinicalResultOut["generated_by"],
+    }).generatedBy;
+
+  it("names the cloud provider, with the masking notice", () => {
+    expect(view({ route: "cloud", provider: "anthropic" })).toEqual({
+      label: "Drafted by Anthropic (cloud AI)",
+      notice: MASKED_NOTICE,
+    });
+    expect(view({ route: "cloud", provider: "openai" })?.label).toBe(
+      "Drafted by OpenAI (cloud AI)",
+    );
+    expect(view({ route: "cloud", provider: "xai" })?.label).toBe(
+      "Drafted by xAI (cloud AI)",
+    );
+  });
+
+  it("says local only when the reply says local, with no notice", () => {
+    expect(view({ route: "local", provider: null })).toEqual({
+      label: LOCAL_DRAFT,
+      notice: null,
+    });
+    expect(view({ route: "local", provider: "anthropic" })).toBeNull();
+  });
+
+  it("a cloud route with a provider it doesn't know still says cloud", () => {
+    for (const provider of ["someone-new", null, 7, "toString"])
+      expect(view({ route: "cloud", provider })).toEqual({
+        label: "Drafted by a cloud AI model",
+        notice: MASKED_NOTICE,
+      });
+  });
+
+  it("the notice claims only what the masker does", () => {
+    expect(MASKED_NOTICE).toBe(
+      "Identifying patient details were masked where detected before the question was sent.",
+    );
+  });
+
+  it("shows nothing when it's absent or malformed", () => {
+    for (const g of [undefined, null, "cloud", {}, { route: "edge" }])
+      expect(view(g)).toBeNull();
+  });
+
+  it("no backend term reaches the words", () => {
+    const shown = [
+      LOCAL_DRAFT,
+      MASKED_NOTICE,
+      view({ route: "cloud", provider: "anthropic" })!.label,
+    ]
+      .join(" ")
+      .toLowerCase();
+    for (const term of FORBIDDEN_TERMS)
+      expect(shown).not.toContain(term.toLowerCase());
+    expect(shown).not.toMatch(/generated_by|route|provider/);
   });
 });

@@ -176,6 +176,8 @@ const SHAPES: [Method, string][] = [
   ["GET", "platform/hospitals/{id}/sso"],
   ["PUT", "platform/hospitals/{id}/sso"],
   ["POST", "platform/hospitals/{id}/sso/test"],
+  ["GET", "platform/hospitals/{id}/model-policy"],
+  ["PUT", "platform/hospitals/{id}/model-policy"],
   ["POST", "platform/hospitals/{id}/invites"],
   ["POST", "platform/hospitals/{id}/invites/{id}/resend"],
   ["GET", "platform/team"],
@@ -518,6 +520,55 @@ describe("platform API proxy", () => {
     });
     expect(res.status).toBe(413);
     expect(await res.json()).toEqual({ code: "too_large" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("the AI model: a hospital's uuid is one id, and a 409 is its code only", async () => {
+    await session();
+    const id = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { code: "conflict", detail: "CORE_CLOUD_PROVIDERS lacks xai" },
+        { status: 409 },
+      ),
+    );
+    const res = await call(
+      "PUT",
+      ["platform", "hospitals", id, "model-policy"],
+      {
+        body: '{"cloud_provider":"xai","agreement_ref":"AGR-2026-0042","monthly_token_budget":5,"mfa_code":"123456"}',
+        headers: { "idempotency-key": "k-policy-1" },
+      },
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ code: "conflict" });
+    const [url, init] = calls()[0];
+    expect(url).toBe(
+      `http://api.test/api/v1/platform/hospitals/${id}/model-policy`,
+    );
+    expect(init.method).toBe("PUT");
+    expect(headersOf(calls()[0]).get("Idempotency-Key")).toBe("k-policy-1");
+  });
+
+  it("the AI model: an auditor reads it, but a PUT never goes upstream", async () => {
+    await session({ roles: ["auditor"] });
+    fetchMock.mockResolvedValueOnce(Response.json({ ok: true }));
+    const read = await call("GET", [
+      "platform",
+      "hospitals",
+      "h1",
+      "model-policy",
+    ]);
+    expect(read.status).toBe(200);
+    fetchMock.mockClear();
+    const write = await call(
+      "PUT",
+      ["platform", "hospitals", "h1", "model-policy"],
+      {
+        body: '{"cloud_provider":"anthropic","agreement_ref":"DEMO-SYNTHETIC","monthly_token_budget":5,"mfa_code":"123456"}',
+      },
+    );
+    expect(write.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

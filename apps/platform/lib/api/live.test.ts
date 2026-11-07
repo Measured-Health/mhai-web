@@ -68,6 +68,16 @@ const LETTERS = () =>
 /** The switch as the server sends it: with Measured Health's day. */
 const SWITCH = () =>
   Response.json({ global: {}, hospitals: [], today: "2026-10-23" });
+/** A hospital's AI model as core sends it (Plan 14). */
+const POLICY = () =>
+  Response.json({
+    hospital_id: "h_north",
+    cloud_provider: "anthropic",
+    agreement_ref: "DEMO-SYNTHETIC",
+    monthly_token_budget: 2_000_000,
+    updated_at: "2026-11-05T09:00:00Z",
+    usage: { month: "2026-11", used: 10, reserved: 0 },
+  });
 const SIGNOFFS = {
   clinical: { by: "Dr. A. Musa", at: "2026-02-01", ref: "CS-014" },
   privacy: { by: "Ngozi Eke", at: "2026-02-02", ref: "PR-007" },
@@ -195,6 +205,37 @@ const ROWS: Row[] = [
     "POST",
     "/api/v1/platform/hospitals/h_north/sso/test",
     undefined,
+  ],
+  [
+    "getModelPolicy",
+    (c) => c.getModelPolicy("h_north"),
+    "GET",
+    "/api/v1/platform/hospitals/h_north/model-policy",
+    undefined,
+    POLICY,
+  ],
+  [
+    "setModelPolicy",
+    (c) =>
+      c.setModelPolicy(
+        "h_north",
+        {
+          cloud_provider: "anthropic",
+          agreement_ref: "DEMO-SYNTHETIC",
+          monthly_token_budget: 2_000_000,
+          ...CODE,
+        },
+        K,
+      ),
+    "PUT",
+    "/api/v1/platform/hospitals/h_north/model-policy",
+    {
+      cloud_provider: "anthropic",
+      agreement_ref: "DEMO-SYNTHETIC",
+      monthly_token_budget: 2_000_000,
+      ...CODE,
+    },
+    POLICY,
   ],
   [
     "inviteAdmin",
@@ -1173,6 +1214,70 @@ describe("live platform client", () => {
         status: 401,
       });
       expect(unauthorized).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("the AI model", () => {
+    it("a reply the contract doesn't allow is refused, read or written", async () => {
+      reply(() =>
+        Response.json({
+          hospital_id: "h_north",
+          cloud_provider: "somebody-else",
+          agreement_ref: "DEMO-SYNTHETIC",
+          monthly_token_budget: 2_000_000,
+          updated_at: null,
+          usage: { month: "2026-11", used: 0, reserved: 0 },
+        }),
+      );
+      await expect(client().getModelPolicy("h_north")).rejects.toMatchObject({
+        status: 502,
+        code: "bad_gateway",
+      });
+      await expect(
+        client().setModelPolicy(
+          "h_north",
+          {
+            cloud_provider: null,
+            agreement_ref: null,
+            monthly_token_budget: 5,
+            ...CODE,
+          },
+          K,
+        ),
+      ).rejects.toMatchObject({ status: 502, code: "bad_gateway" });
+    });
+
+    it("a reply for another hospital is refused", async () => {
+      reply(() =>
+        Response.json({
+          hospital_id: "h_south",
+          cloud_provider: null,
+          agreement_ref: null,
+          monthly_token_budget: 2_000_000,
+          updated_at: null,
+          usage: { month: "2026-11", used: 0, reserved: 0 },
+        }),
+      );
+      await expect(client().getModelPolicy("h_north")).rejects.toMatchObject({
+        status: 502,
+        code: "bad_gateway",
+      });
+    });
+
+    it("a provider the deployment hasn't enabled is a 409 conflict", async () => {
+      reply(() => Response.json({ code: "conflict" }, { status: 409 }));
+      await expect(
+        client().setModelPolicy(
+          "h_north",
+          {
+            cloud_provider: "xai",
+            agreement_ref: "AGR-2026-0042",
+            monthly_token_budget: 5,
+            ...CODE,
+          },
+          K,
+        ),
+      ).rejects.toMatchObject({ status: 409, code: "conflict" });
     });
   });
 

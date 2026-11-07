@@ -1,4 +1,5 @@
 import type { ActivityAction } from "@/lib/api/contract";
+import { targetLabel } from "@/lib/model-policy/labels";
 
 /** "the record connection “Main record”", or without a name. */
 const connection = (t: string | null) =>
@@ -174,6 +175,10 @@ export function actionLabel(
       return `turned Analysis ${position(detail)}`;
     case "patient_views_switched":
       return `turned patient lists ${position(detail)}`;
+    case "model_policy_changed": {
+      const to = targetLabel(t);
+      return to ? `set the AI model to ${to}` : "changed the AI model";
+    }
   }
 }
 
