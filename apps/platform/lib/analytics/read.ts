@@ -3,17 +3,21 @@
 // closed ("Couldn't load {area}") rather than show a value it should have
 // hidden, a wrong shape, or a What changed list the Critical guard can't
 // vouch for. An area that fails never shows zeros and never takes the
-// others down.
+// others down. It is strict (core openapi.yaml 1.15.0): an unknown key, a
+// period start that isn't one of its kind, or a change on a hidden value
+// fails the area too.
 import { SMALL_GROUP_MIN } from "@mhai/ui/small-groups";
 import {
+  CHANGE_MEASURES,
   MEASURES,
-  type AlertsRow,
+  PERIODS,
   type AnalyticsOut,
   type AreaBlock,
   type Change,
   type Guarded,
   type HospitalSize,
   type MeasureId,
+  type Period,
   type QualityRow,
   type UseRow,
 } from "../api/analytics-contract";
@@ -22,8 +26,9 @@ import { integrityNotificationOk } from "../audit/read";
 import type { Notification } from "../api/notifications-contract";
 import { rankChanges, type RankedChange } from "./changes";
 import { MEASURE_AREA, MEASURE_KIND, type MeasureKind } from "./measures";
+import { isPeriodStart, periodEnd, windowOk } from "./periods";
 import {
-  isCount,
+  hasOnlyKeys,
   isHiddenValue as hidden,
   isId,
   isNum,
@@ -33,7 +38,7 @@ import {
   type Obj,
 } from "@mhai/ui/guards";
 import {
-  usageGuardedOk as guardedOk,
+  usageGuardedOk,
   usageNumeratorLeaks as numeratorLeaks,
   usageScrub as scrub,
   usageSetGivesAway as setGivesAway,
@@ -63,7 +68,15 @@ export const failedText = (k: AreaKey) =>
   `Couldn't load ${AREA_TITLE[k].toLowerCase()}`;
 
 export type Failed = { status: "failed" };
-export type AreaState<T> = ({ status: "ok" } & T) | Failed;
+/** Before the first published period of the kind: "First figures after …". */
+export type NotYetState = {
+  status: "not_yet";
+  period: Period;
+  first_from: string;
+};
+/** Alert safety while patient alerts don't exist (F4). */
+export type OffState = { status: "off" };
+export type AreaState<T> = ({ status: "ok" } & T) | Failed | NotYetState;
 export type ChangesBlock = {
   updated_at: string;
   window: { from: string; to: string };
@@ -74,9 +87,13 @@ export type HospitalsBlock = {
   rows: { hospital: Person; size: HospitalSize }[];
 };
 export type AnalyticsState = {
-  changes: AreaState<ChangesBlock>;
+  /** The period kind, and the latest published one's start (null before it). */
+  period: Period;
+  from: string | null;
+  changes: ({ status: "ok" } & ChangesBlock) | Failed;
   use: AreaState<AreaBlock<UseRow>>;
-  alerts: AreaState<AreaBlock<AlertsRow>>;
+  /** Off while core sends `alerts: null` (F4); anything else fails closed. */
+  alerts: Failed | OffState;
   quality: AreaState<AreaBlock<QualityRow>>;
   hospitals: AreaState<HospitalsBlock>;
 };
@@ -84,17 +101,35 @@ export type AnalyticsState = {
 const FAILED: Failed = { status: "failed" };
 const HIDDEN: Guarded = { value: null, suppressed: true };
 const DIRECTIONS = new Set(["worse", "better", "rising", "falling"]);
-const CHANGE_AREAS = new Set(["use", "alerts", "quality"]);
 const MEASURE_IDS = new Set<string>(MEASURES);
+const CHANGE_MEASURE_IDS = new Set<string>(CHANGE_MEASURES);
 
 // ---- Shapes -------------------------------------------------------------------
 
+/** Exactly these keys, all present: an extra key may carry a name or a number. */
+const exactly = (o: Obj, keys: readonly string[]) =>
+  hasOnlyKeys(o, keys) && keys.every((k) => Object.hasOwn(o, k));
+
 const isPerson = (v: unknown): v is Person =>
   isObj(v) &&
+  exactly(v, ["id", "name"]) &&
   typeof v.id === "string" &&
   isId(v.id) &&
   typeof v.name === "string" &&
   v.name.trim() !== "";
+
+/**
+ * A guarded value: exactly `{value, suppressed}`, hidden with no number, and
+ * readable for its kind (a shown count is never 1–4).
+ */
+const guardedOk = (v: unknown, kind: MeasureKind, loose: boolean) =>
+  isObj(v) &&
+  exactly(v, ["value", "suppressed"]) &&
+  (v.suppressed !== true || v.value === null) &&
+  usageGuardedOk(v, kind, loose);
+
+const UNAVAILABLE = (v: unknown) =>
+  isObj(v) && exactly(v, ["unavailable"]) && v.unavailable === true;
 
 /** No two rows for the same hospital. */
 const uniqueHospitals = (rows: { hospital: Person }[]) =>
@@ -111,9 +146,11 @@ function blockOk(
   b: unknown,
   bodyOk: (r: Obj, median: boolean) => boolean,
   trend: MeasureKind,
+  period: Period,
 ): b is AreaBlock<Rowish> {
-  if (!isObj(b) || b.unavailable === true || !isTime(b.updated_at))
+  if (!isObj(b) || !exactly(b, ["updated_at", "rows", "median", "trend"]))
     return false;
+  if (!isTime(b.updated_at)) return false;
   if (!Array.isArray(b.rows) || !isObj(b.median) || !Array.isArray(b.trend))
     return false;
   const rows = b.rows as unknown[];
@@ -123,15 +160,31 @@ function blockOk(
   if (!bodyOk(b.median, true)) return false;
   // A trend across all hospitals is a count (or a share) under the same
   // rule: hidden points read, an unhidden 1–4 is a leak.
+  // One point per period of the kind, never a total over several.
   return (b.trend as unknown[]).every(
     (p) =>
       isObj(p) &&
-      isTime(p.start) &&
+      exactly(p, ["start", "value"]) &&
+      isPeriodStart(period, p.start) &&
       guardedOk(p.value, trend, trend !== "count"),
   );
 }
 
+const USE_KEYS = ["questions", "active_clinicians", "questions_per_clinician"];
+const QUALITY_KEYS = [
+  "answers",
+  "needs_review_share",
+  "confidence",
+  "reviews",
+  "agreement_rate",
+  "median_review_hours",
+];
+/** A row has its hospital and the body's keys; the median the body's only. */
+const keysOk = (r: Obj, median: boolean, keys: string[]) =>
+  exactly(r, median ? keys : ["hospital", ...keys]);
+
 function useOk(r: Obj, median: boolean): boolean {
+  if (!keysOk(r, median, USE_KEYS)) return false;
   if (
     !guardedOk(r.questions, "count", median) ||
     !guardedOk(r.active_clinicians, "count", median) ||
@@ -145,44 +198,12 @@ function useOk(r: Obj, median: boolean): boolean {
   );
 }
 
-const SEVERITIES = ["critical", "urgent", "info"] as const;
-
-function alertsOk(r: Obj, median: boolean): boolean {
-  const sev = r.by_severity;
-  if (
-    !isObj(sev) ||
-    !SEVERITIES.every((k) => guardedOk(sev[k], "count", median)) ||
-    !guardedOk(r.total, "count", median) ||
-    !guardedOk(r.unhandled, "count", median) ||
-    !guardedOk(r.critical_overdue, "count", median) ||
-    !guardedOk(r.median_ack_minutes, "minutes", true) ||
-    !guardedOk(r.critical_median_ack_minutes, "minutes", true) ||
-    !guardedOk(r.critical_within_target, "share", true) ||
-    !isNum(r.critical_target_minutes) ||
-    r.critical_target_minutes <= 0
-  )
-    return false;
-  const a = r as unknown as AlertsRow;
-  const crit = a.by_severity.critical;
-  const overCritical =
-    shows(a.critical_median_ack_minutes) || shows(a.critical_within_target);
-  if (hidden(crit) && overCritical) return false;
-  if (hidden(a.total) && (overCritical || shows(a.median_ack_minutes)))
-    return false;
-  // Within target, and outside it, are counts too (rows only: a median of
-  // shares isn't a share of the median count).
-  if (!median && numeratorLeaks(crit, a.critical_within_target)) return false;
-  // Medians don't add up to the median total: only the set itself.
-  return !setGivesAway(
-    median ? null : a.total,
-    SEVERITIES.map((k) => a.by_severity[k]),
-  );
-}
-
 const CONFIDENCE = ["high", "medium", "low"] as const;
 
 function qualityOk(r: Obj, median: boolean): boolean {
+  if (!keysOk(r, median, QUALITY_KEYS)) return false;
   const mix = r.confidence;
+  if (!isObj(mix) || !exactly(mix, CONFIDENCE)) return false;
   if (
     !guardedOk(r.answers, "count", median) ||
     !guardedOk(r.reviews, "count", median) ||
@@ -223,31 +244,37 @@ function qualityOk(r: Obj, median: boolean): boolean {
 }
 
 function hospitalsOk(h: unknown): h is HospitalsBlock {
-  if (!isObj(h) || h.unavailable === true || !isTime(h.updated_at))
-    return false;
-  if (!Array.isArray(h.rows)) return false;
+  if (!isObj(h) || !exactly(h, ["updated_at", "rows"])) return false;
+  if (!isTime(h.updated_at) || !Array.isArray(h.rows)) return false;
   const rows = h.rows as unknown[];
   return (
     rows.every(
       (r) =>
         isObj(r) &&
+        exactly(r, ["hospital", "size"]) &&
         isPerson(r.hospital) &&
         isObj(r.size) &&
-        isCount(r.size.staff) &&
+        exactly(r.size, ["staff", "active_clinicians", "questions"]) &&
+        guardedOk(r.size.staff, "count", false) &&
         guardedOk(r.size.active_clinicians, "count", false) &&
         guardedOk(r.size.questions, "count", false),
     ) && uniqueHospitals(rows as { hospital: Person }[])
   );
 }
 
+const isVersion = (v: unknown) =>
+  typeof v === "number" && Number.isSafeInteger(v) && v >= 1;
+
 function followUpOk(f: unknown): boolean {
   if (f === null) return true;
   return (
     isObj(f) &&
+    exactly(f, ["by", "at", "note", "by_you", "version"]) &&
     isPerson(f.by) &&
     isTime(f.at) &&
     (f.note === null || typeof f.note === "string") &&
-    isCount(f.version)
+    typeof f.by_you === "boolean" &&
+    isVersion(f.version)
   );
 }
 
@@ -330,50 +357,61 @@ export function notificationOk(n: unknown): n is Notification {
   );
 }
 
-/**
- * A change reads when its shape does. A side may be hidden (shown
- * "Fewer than 5", ranked unsized) when the summary doesn't give it away;
- * previous may be null: no previous period.
- */
-function changeOk(c: unknown): c is Change {
-  if (!isObj(c)) return false;
-  if (!isId(c.id)) return false;
-  if (!CHANGE_AREAS.has(c.area as string)) return false;
-  if (!sidesOk(c)) return false;
-  if (MEASURE_AREA[c.measure as Change["measure"]] !== c.area) return false;
-  return followUpOk(c.follow_up) && isCount(c.version);
-}
+const CHANGE_KEYS = [
+  "id",
+  "hospital",
+  "area",
+  "measure",
+  "direction",
+  "serious",
+  "previous",
+  "current",
+  "summary",
+  "follow_up",
+  "version",
+];
+/** Both sides shown: a change is never flagged on a hidden value (T7). */
+const shownSide = (g: unknown) =>
+  isObj(g) && g.suppressed === false && isNum(g.value);
 
 /**
- * The Critical guard (anti-goal 2): every hospital with unhandled Critical
- * alerts past target (above 0 or hidden) has a serious change in the list.
+ * A change reads when its shape does: one of core's measures, in its own
+ * area, moving the measure's way (counts rise and fall, shares get worse
+ * or better), with both sides shown.
  */
-function criticalCovered(items: Change[], alerts: AreaBlock<AlertsRow>) {
-  const serious = new Set(
-    items.filter((c) => c.serious && c.hospital).map((c) => c.hospital!.id),
-  );
-  return alerts.rows.every((r) => {
-    const o = r.critical_overdue;
-    const overdue = o.suppressed || (o.value !== null && o.value > 0);
-    return !overdue || serious.has(r.hospital.id);
-  });
+function changeOk(c: unknown): c is Change {
+  if (!isObj(c) || !exactly(c, CHANGE_KEYS)) return false;
+  if (!isId(c.id)) return false;
+  if (!CHANGE_MEASURE_IDS.has(c.measure as string)) return false;
+  if (!sidesOk(c)) return false;
+  if (!shownSide(c.previous) || !shownSide(c.current)) return false;
+  const m = c.measure as Change["measure"];
+  if (MEASURE_AREA[m] !== c.area) return false;
+  const counts = MEASURE_KIND[m] === "count";
+  if (counts !== (c.direction === "rising" || c.direction === "falling"))
+    return false;
+  return followUpOk(c.follow_up) && isVersion(c.version);
 }
 
 function readChanges(
   c: unknown,
-  alerts: AreaState<AreaBlock<AlertsRow>>,
-): AreaState<ChangesBlock> {
-  // Without readable alerts the guard can't be checked: fail closed.
-  if (alerts.status !== "ok") return FAILED;
-  if (!isObj(c) || c.unavailable === true || !isTime(c.updated_at))
+  alerts: AnalyticsState["alerts"],
+): AnalyticsState["changes"] {
+  // The Critical guard (anti-goal 2) has nothing to check while alerts are
+  // not switched on (null, F4). Alerts sent any other way can't be vouched
+  // for, so What changed fails closed rather than say "Nothing unusual".
+  if (alerts.status !== "off") return FAILED;
+  if (!isObj(c) || !exactly(c, ["updated_at", "window", "items"]))
     return FAILED;
+  if (!isTime(c.updated_at)) return FAILED;
   const w = c.window;
-  if (!isObj(w) || !isTime(w.from) || !isTime(w.to)) return FAILED;
+  if (!isObj(w) || !exactly(w, ["from", "to"])) return FAILED;
+  if (!isTime(w.from) || !isTime(w.to) || !windowOk({ from: w.from, to: w.to }))
+    return FAILED;
   if (!Array.isArray(c.items) || !(c.items as unknown[]).every(changeOk))
     return FAILED;
   const items = c.items as Change[];
   if (new Set(items.map((x) => x.id)).size !== items.length) return FAILED;
-  if (!criticalCovered(items, alerts)) return FAILED;
   return {
     status: "ok",
     updated_at: c.updated_at,
@@ -382,27 +420,97 @@ function readChanges(
   };
 }
 
+type Head = { period: Period; from: string | null };
+
+/**
+ * `{not_yet, first_from}` reads only before the first period (`from`
+ * null), with `first_from` a period start of the kind; data reads only
+ * after it.
+ */
+function notYet(b: unknown, head: Head): NotYetState | Failed | null {
+  if (!isObj(b) || !("not_yet" in b)) return null;
+  return head.from === null &&
+    exactly(b, ["not_yet", "first_from"]) &&
+    b.not_yet === true &&
+    isPeriodStart(head.period, b.first_from)
+    ? {
+        status: "not_yet",
+        period: head.period,
+        first_from: b.first_from as string,
+      }
+    : FAILED;
+}
+
 function area<R>(
   b: unknown,
+  head: Head,
   bodyOk: (r: Obj, median: boolean) => boolean,
   trend: MeasureKind,
 ): AreaState<AreaBlock<R>> {
-  if (!blockOk(b, bodyOk, trend)) return FAILED;
+  const ny = notYet(b, head);
+  if (ny) return ny;
+  if (head.from === null || !blockOk(b, bodyOk, trend, head.period))
+    return FAILED;
   return { status: "ok", ...(scrub(b) as unknown as AreaBlock<R>) };
 }
 
+const TOP_KEYS = [
+  "period",
+  "from",
+  "to",
+  "changes",
+  "use",
+  "alerts",
+  "quality",
+  "hospitals",
+  "what_changed",
+];
+
+/**
+ * The reply's head: exactly its keys, the kind asked for, `from`/`to` the
+ * bounds of one period of that kind (or both null), and `changes`
+ * unavailable (What changed is `what_changed`, F21). Null: none of it reads.
+ */
+function headOf(x: Obj, asked?: Period): Head | null {
+  if (!exactly(x, TOP_KEYS)) return null;
+  const period = x.period as Period;
+  if (!PERIODS.includes(period) || (asked && period !== asked)) return null;
+  if (!UNAVAILABLE(x.changes)) return null;
+  if (x.from === null && x.to === null) return { period, from: null };
+  if (!isPeriodStart(period, x.from) || typeof x.to !== "string") return null;
+  const from = x.from as string;
+  if (Date.parse(x.to) !== periodEnd(period, Date.parse(from))) return null;
+  return { period, from };
+}
+
 /** Each area read on its own; see the file comment. */
-export function readAnalytics(a: AnalyticsOut): AnalyticsState {
+export function readAnalytics(a: AnalyticsOut, asked?: Period): AnalyticsState {
   const x: Obj = isObj(a) ? a : {};
-  const alerts = area<AlertsRow>(x.alerts, alertsOk, "count");
+  const head = headOf(x, asked);
+  if (!head)
+    return {
+      period: asked ?? "month",
+      from: null,
+      changes: FAILED,
+      use: FAILED,
+      alerts: FAILED,
+      quality: FAILED,
+      hospitals: FAILED,
+    };
+  const alerts: AnalyticsState["alerts"] =
+    x.alerts === null ? { status: "off" } : FAILED;
+  const ny = notYet(x.hospitals, head);
   return {
-    changes: readChanges(x.changes, alerts),
-    use: area<UseRow>(x.use, useOk, "count"),
+    ...head,
+    changes: readChanges(x.what_changed, alerts),
+    use: area<UseRow>(x.use, head, useOk, "count"),
     alerts,
-    quality: area<QualityRow>(x.quality, qualityOk, "share"),
-    hospitals: hospitalsOk(x.hospitals)
-      ? { status: "ok", ...scrub(x.hospitals) }
-      : FAILED,
+    quality: area<QualityRow>(x.quality, head, qualityOk, "share"),
+    hospitals:
+      ny ??
+      (head.from !== null && hospitalsOk(x.hospitals)
+        ? { status: "ok", ...scrub(x.hospitals) }
+        : FAILED),
   };
 }
 
@@ -422,30 +530,50 @@ export type SeriesState =
   | {
       status: "ok";
       measure: MeasureId;
-      hospital: Person;
+      /** Null: a change across all hospitals (no median, F14). */
+      hospital: Person | null;
       points: SeriesPoint[];
     }
   | Failed;
 
 /**
- * Reads a compare-chart reply for the measure the app asked for. It fails
- * closed on a wrong shape, a different measure, or a count sent unhidden
- * between 0 and 5. A count median between 0 and 5 is hidden: no mark, not
- * in the scale, "Fewer than 5" in words.
+ * Reads a compare-chart reply for the measure and period kind the app asked
+ * for: a change's series (with its `change_id`, and a null hospital for a
+ * change across all hospitals) or a hospital's. It fails closed on a wrong
+ * shape or key, a different measure or change, a point that doesn't start
+ * a period of the kind, or a count sent unhidden between 0 and 5. A count
+ * median between 0 and 5 is hidden: no mark, not in the scale, "Fewer
+ * than 5" in words.
  */
-export function readSeries(s: unknown, measure: MeasureId): SeriesState {
-  if (!isObj(s) || s.measure !== measure || !isPerson(s.hospital))
-    return FAILED;
+export function readSeries(
+  s: unknown,
+  measure: MeasureId,
+  period: Period,
+  changeId?: string,
+): SeriesState {
+  if (!isObj(s) || s.measure !== measure) return FAILED;
+  if (changeId === undefined) {
+    if (!exactly(s, ["measure", "hospital", "points"])) return FAILED;
+    if (!isPerson(s.hospital)) return FAILED;
+  } else {
+    if (!exactly(s, ["change_id", "measure", "hospital", "points"]))
+      return FAILED;
+    if (s.change_id !== changeId) return FAILED;
+    if (s.hospital !== null && !isPerson(s.hospital)) return FAILED;
+  }
   if (!Array.isArray(s.points)) return FAILED;
   const kind = MEASURE_KIND[measure];
   const points: SeriesPoint[] = [];
   for (const p of s.points as unknown[]) {
-    if (!isObj(p) || !isTime(p.start)) return FAILED;
-    if (!guardedOk(p.value, kind, kind !== "count")) return FAILED;
+    if (!isObj(p) || !exactly(p, ["start", "value", "median"])) return FAILED;
+    if (!isPeriodStart(period, p.start)) return FAILED;
+    // `{value: null, suppressed: false}`: the period doesn't list it.
+    if (!guardedOk(p.value, kind, true)) return FAILED;
+    if (s.hospital === null && p.median !== null) return FAILED;
     const m = p.median;
     if (m !== null && (!isNum(m) || m < 0)) return FAILED;
     points.push({
-      start: p.start,
+      start: p.start as string,
       value: scrub(p.value as Guarded),
       median:
         m === null
@@ -455,10 +583,11 @@ export function readSeries(s: unknown, measure: MeasureId): SeriesState {
             : { value: m, suppressed: false },
     });
   }
+  const h = s.hospital as Person | null;
   return {
     status: "ok",
     measure,
-    hospital: { id: s.hospital.id, name: s.hospital.name },
+    hospital: h && { id: h.id, name: h.name },
     points,
   };
 }

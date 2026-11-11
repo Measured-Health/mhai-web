@@ -186,6 +186,7 @@ const SHAPES: [Method, string][] = [
   ["DELETE", "platform/team/{id}"],
   ["GET", "platform/activity"],
   ["GET", "platform/analytics"],
+  ["GET", "platform/guardrails/periods"],
   ["GET", "platform/analytics/changes/{id}/series"],
   ["GET", "platform/analytics/hospitals/{id}/series"],
   ["PUT", "platform/analytics/changes/{id}/follow-up"],
@@ -239,6 +240,21 @@ const upstream = (shape: string) =>
 let n = 0;
 const concrete = (shape: string) =>
   shape.split("/").map((p) => (p === "{id}" ? `id_${++n}-X` : p));
+/** A query and body each analytics shape accepts (they're checked strictly). */
+const VALID: Record<string, { query?: string; body?: string }> = {
+  "GET platform/analytics": { query: "?period=month" },
+  "GET platform/guardrails/periods": { query: "?period=week" },
+  "GET platform/analytics/changes/{id}/series": { query: "?period=quarter" },
+  "GET platform/analytics/hospitals/{id}/series": {
+    query: "?measure=needs_review_share&period=month",
+  },
+  "PUT platform/analytics/changes/{id}/follow-up": {
+    body: '{"note":"Called.","version":2}',
+  },
+  "DELETE platform/analytics/changes/{id}/follow-up": {
+    body: '{"version":2}',
+  },
+};
 const WRITES = SHAPES.filter(
   ([m, shape]) =>
     m !== "GET" && !AUDITOR_WRITES.some(([am, as]) => am === m && as === shape),
@@ -252,7 +268,9 @@ describe("platform API proxy", () => {
       await session();
       fetchMock.mockResolvedValueOnce(upstream(shape));
       const path = concrete(shape);
-      const res = await call(method, path, { body: '{"a":1}' });
+      const v = VALID[`${method} ${shape}`] ?? {};
+      const body = v.body ?? '{"a":1}';
+      const res = await call(method, path, { body, query: v.query });
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toBe("no-store");
       if (shape === FILE) expect(await res.text()).toBe("a,b\n");
@@ -261,12 +279,14 @@ describe("platform API proxy", () => {
       else expect(await res.json()).toEqual({ ok: true });
       expect(calls()).toHaveLength(1);
       const [url, init] = calls()[0];
-      expect(url).toBe(`http://api.test/api/v1/${path.join("/")}`);
+      expect(url).toBe(
+        `http://api.test/api/v1/${path.join("/")}${v.query ?? ""}`,
+      );
       expect(init.method).toBe(method);
       const h = headersOf(calls()[0]);
       expect(h.get("Authorization")).toBe("Bearer tok");
       expect(h.get("X-MHAI-Audience")).toBe("platform");
-      if (method !== "GET") expect(init.body).toBe('{"a":1}');
+      if (method !== "GET") expect(init.body).toBe(body);
     },
   );
 
@@ -329,7 +349,9 @@ describe("platform API proxy", () => {
           ? upstream(shape)
           : Response.json({ items: [] }),
       );
-      const res = await call(method, concrete(shape));
+      const res = await call(method, concrete(shape), {
+        query: VALID[`${method} ${shape}`]?.query,
+      });
       expect(res.status).toBe(200);
       expect(calls()).toHaveLength(1);
     },
@@ -1305,5 +1327,100 @@ describe("the Analysis shapes", () => {
     const res = await call("GET", ["platform", "analysis", "findings"]);
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ code: "analysis_off" });
+  });
+});
+
+describe("analytics query strings and bodies (core 1.15.0)", () => {
+  const refused = async (res: Response) => {
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ code: "validation_failed" });
+  };
+
+  it("only a finished calendar period goes upstream, never a rolling window", async () => {
+    await session();
+    for (const query of [
+      "",
+      "?period=30d",
+      "?period=7d",
+      "?period=month&period=week",
+      "?period=month&hospital=h1",
+    ]) {
+      await refused(await call("GET", ["platform", "analytics"], { query }));
+      await refused(
+        await call("GET", ["platform", "guardrails", "periods"], { query }),
+      );
+      await refused(
+        await call(
+          "GET",
+          ["platform", "analytics", "changes", "c1", "series"],
+          {
+            query,
+          },
+        ),
+      );
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("the hospital series takes only the two measures until alerts exist (F10)", async () => {
+    await session();
+    for (const query of [
+      "?measure=critical_within_target&period=month",
+      "?measure=questions&period=month",
+      "?period=month",
+      "?measure=needs_review_share&period=month&x=1",
+    ])
+      await refused(
+        await call(
+          "GET",
+          ["platform", "analytics", "hospitals", "h1", "series"],
+          { query },
+        ),
+      );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("a follow-up body is exactly {note?, version}: no other key, a note of 1 to 500 characters", async () => {
+    await session();
+    const path = ["platform", "analytics", "changes", "c1", "follow-up"];
+    for (const body of [
+      "{}",
+      "not json",
+      '{"version":0}',
+      '{"version":"2"}',
+      '{"version":1.5}',
+      '{"version":2,"by":"tm_tunde"}',
+      ...["", "x".repeat(501), "a\u202eb", "a\tb", "a\u2028b", "a\u0000b"].map(
+        (note) => JSON.stringify({ version: 2, note }),
+      ),
+    ])
+      await refused(await call("PUT", path, { body }));
+    await refused(
+      await call("DELETE", path, { body: '{"version":2,"note":"x"}' }),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Good bodies go: a note with newlines and 500 characters, or none.
+    for (const body of [
+      JSON.stringify({
+        version: 2,
+        note: `${"é".repeat(498)}\nok`.slice(0, 500),
+      }),
+      '{"version":2,"note":null}',
+      '{"version":2}',
+    ]) {
+      fetchMock.mockResolvedValueOnce(Response.json({ ok: true }));
+      expect((await call("PUT", path, { body })).status).toBe(200);
+    }
+  });
+
+  it("an auditor's follow-up is 403 before its body is even read", async () => {
+    await session({ roles: ["auditor"] });
+    const res = await call(
+      "PUT",
+      ["platform", "analytics", "changes", "c1", "follow-up"],
+      { body: '{"version":2}' },
+    );
+    expect(res.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

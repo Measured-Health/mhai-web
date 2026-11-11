@@ -1,6 +1,7 @@
 // The analytics export (spec §4, §5): every area for the chosen period plus
 // the What changed list, under the same small-group rule and the same
-// fail-closed reading as the screen. Counts only: no patient fields, and
+// fail-closed reading as the screen. Each row names its period by its dates
+// (F15); nothing adds periods together. Counts only: no patient fields, and
 // no follow-up notes (free text).
 import { CSV_MAX_ROWS, toCsv, type Cell } from "@mhai/ui/csv";
 import { FEWER_THAN_5 } from "@mhai/ui/small-groups";
@@ -12,17 +13,20 @@ import {
   type MeasureKind,
 } from "./measures";
 import { DIRECTION_WORD } from "./changes";
+import {
+  PERIOD_PICK,
+  firstFiguresText,
+  periodLabel,
+  windowText,
+} from "./periods";
 import { AREA_TITLE, AREAS, readAnalytics, type AreaKey } from "./read";
 
 /** The one row a failed or unavailable area leaves (as in Plan 5b). */
 export const CSV_FAILED = "Couldn't load";
+/** Alert safety while patient alerts don't exist (F4). */
+export const CSV_OFF = "Not switched on";
 export const CSV_SECTIONS: readonly string[] = AREAS.map((k) => AREA_TITLE[k]);
 
-const PERIOD_LABEL: Record<Period, string> = {
-  "7d": "Last 7 days",
-  "30d": "Last 30 days",
-  "90d": "Last 90 days",
-};
 const MEDIAN = "Median of all hospitals";
 
 /**
@@ -43,8 +47,22 @@ type Table = { header: string[]; rows: Cell[][] };
 
 /** Writes the file and keeps the data rows at CSV_MAX_ROWS at most. */
 export function analyticsCsv(a: AnalyticsOut, period: Period): string {
-  const s = readAnalytics(a);
+  const s = readAnalytics(a, period);
   const tables: Partial<Record<AreaKey, Table>> = {};
+  /** A line instead of a table: not yet, or not switched on. */
+  const notes: Partial<Record<AreaKey, string>> = {};
+  for (const k of ["use", "quality", "hospitals"] as const) {
+    const st = s[k];
+    if (st.status === "not_yet")
+      notes[k] = firstFiguresText(period, st.first_from);
+  }
+  if (s.alerts.status === "off") notes.alerts = CSV_OFF;
+  // Every figure of an area is the one period's.
+  const named = s.from ? periodLabel(period, s.from) : "";
+  const withPeriod = (t: Table): Table => ({
+    header: ["Period", ...t.header],
+    rows: t.rows.map((r) => [named, ...r]),
+  });
 
   if (s.use.status === "ok") {
     const body = (r: (typeof s.use.rows)[number] | typeof s.use.median) => [
@@ -62,42 +80,6 @@ export function analyticsCsv(a: AnalyticsOut, period: Period): string {
       rows: [
         ...s.use.rows.map((r) => [r.hospital.name, ...body(r)]),
         [MEDIAN, ...body(s.use.median)],
-      ],
-    };
-  }
-
-  if (s.alerts.status === "ok") {
-    const body = (
-      r: (typeof s.alerts.rows)[number] | typeof s.alerts.median,
-    ): Cell[] => [
-      cell(r.by_severity.critical, "count"),
-      cell(r.by_severity.urgent, "count"),
-      cell(r.by_severity.info, "count"),
-      cell(r.total, "count"),
-      cell(r.unhandled, "count"),
-      cell(r.median_ack_minutes, "minutes"),
-      cell(r.critical_median_ack_minutes, "minutes"),
-      cell(r.critical_within_target, "share"),
-      r.critical_target_minutes,
-      cell(r.critical_overdue, "count"),
-    ];
-    tables.alerts = {
-      header: [
-        "Hospital",
-        "Critical",
-        "Urgent",
-        "Info",
-        "Total",
-        "Unhandled",
-        "Median time to acknowledge (minutes)",
-        "Critical median time to acknowledge (minutes)",
-        "Critical within target (%)",
-        "Critical target (minutes)",
-        "Critical unhandled past target",
-      ],
-      rows: [
-        ...s.alerts.rows.map((r) => [r.hospital.name, ...body(r)]),
-        [MEDIAN, ...body(s.alerts.median)],
       ],
     };
   }
@@ -139,15 +121,19 @@ export function analyticsCsv(a: AnalyticsOut, period: Period): string {
       header: ["Hospital", "Staff", "Active clinicians", "Questions"],
       rows: s.hospitals.rows.map((r) => [
         r.hospital.name,
-        r.size.staff,
+        cell(r.size.staff, "count"),
         cell(r.size.active_clinicians, "count"),
         cell(r.size.questions, "count"),
       ]),
     };
 
-  if (s.changes.status === "ok")
+  if (s.changes.status === "ok") {
+    // The latest week against the month before it, per day: two periods,
+    // each its own figure, never a total.
+    const compared = windowText(s.changes.window);
     tables.changes = {
       header: [
+        "Compared",
         "Hospital",
         "Area",
         "Measure",
@@ -162,6 +148,7 @@ export function analyticsCsv(a: AnalyticsOut, period: Period): string {
       rows: s.changes.items.map((c) => {
         const k = MEASURE_KIND[c.measure];
         return [
+          compared,
           c.hospital?.name ?? "All hospitals",
           AREA_TITLE[c.area],
           measureLabel(c.measure),
@@ -175,13 +162,19 @@ export function analyticsCsv(a: AnalyticsOut, period: Period): string {
         ];
       }),
     };
+  }
+  for (const k of ["use", "quality", "hospitals"] as const) {
+    const t = tables[k];
+    if (t) tables[k] = withPeriod(t);
+  }
 
   const out: Cell[][] = [];
   for (const k of AREAS) {
     out.push([], [AREA_TITLE[k]]);
     const t = tables[k];
-    if (!t) out.push([CSV_FAILED]);
-    else out.push(t.header, ...t.rows);
+    const note = notes[k];
+    if (t) out.push(t.header, ...t.rows);
+    else out.push([note ?? CSV_FAILED]);
   }
   // The whole file stops at CSV_MAX_ROWS lines (the first one included).
   // Only the changes list can be long, so it's what is cut: every area is
@@ -194,11 +187,11 @@ export function analyticsCsv(a: AnalyticsOut, period: Period): string {
     out.push([], [`Stopped at ${CSV_MAX_ROWS} rows`]);
   }
   return toCsv(
-    ["Analytics", PERIOD_LABEL[period], `${day(a?.from)} to ${day(a?.to)}`],
+    ["Analytics", PERIOD_PICK[period], named || "No period published yet"],
     out,
   );
 }
 
-/** "analytics-last-30-days-2026-10-22.csv". */
+/** "analytics-last-month-2026-11-11.csv". */
 export const analyticsCsvName = (period: Period, now: number) =>
-  `analytics-${PERIOD_LABEL[period].toLowerCase().replace(/ /g, "-")}-${new Date(now).toISOString().slice(0, 10)}.csv`;
+  `analytics-${PERIOD_PICK[period].toLowerCase().replace(/ /g, "-")}-${new Date(now).toISOString().slice(0, 10)}.csv`;

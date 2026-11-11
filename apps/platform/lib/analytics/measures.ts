@@ -2,7 +2,12 @@
 // small-group rule (spec §5). Display only: the server computes every number.
 import type { GuardKind } from "@mhai/ui/guards";
 import { FEWER_THAN_5, isSmallCount } from "@mhai/ui/small-groups";
-import type { Area, Guarded, MeasureId } from "../api/analytics-contract";
+import {
+  SERIES_MEASURES,
+  type Area,
+  type Guarded,
+  type MeasureId,
+} from "../api/analytics-contract";
 
 /**
  * How a value reads. "rate" is a ratio of counts (questions per active
@@ -61,13 +66,11 @@ export const LOWER_IS_BETTER: ReadonlySet<MeasureId> = new Set<MeasureId>([
   "median_review_hours",
 ]);
 
-/** The Hospitals tab's measure picker, in order (spec §4). */
-export const COMPARE_MEASURES: MeasureId[] = [
-  "questions_per_clinician",
-  "critical_median_ack_minutes",
-  "critical_within_target",
-  "needs_review_share",
-];
+/**
+ * The Hospitals tab's measure picker, in order: the hospital series'
+ * measures until patient alerts exist (F10).
+ */
+export const COMPARE_MEASURES: readonly MeasureId[] = SERIES_MEASURES;
 
 /** "1,234": grouped the same in every locale. */
 export const countText = (n: number) =>

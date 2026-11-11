@@ -13,6 +13,7 @@ vi.mock("next/headers", () => ({ cookies: async () => jar }));
 import { ApiError } from "@mhai/api-client/errors";
 import { DELETE, GET, PATCH, POST, PUT } from "@/app/api/v1/[...path]/route";
 import type { AnalysisQuery } from "./analysis-contract";
+import { buildGuardrails } from "./analytics-fixtures";
 import { TooManyRowsError } from "./audit-contract";
 import { BlockedError, type PlatformClient } from "./contract";
 import { createLivePlatformClient } from "./live";
@@ -29,6 +30,10 @@ beforeEach(() => {
 });
 
 const K = { idempotencyKey: "key-1" };
+/** A guardrail reply for October 2026, as the mock builds it. */
+const guardrails = () =>
+  buildGuardrails("month", Date.parse("2026-11-11T09:30:00.000Z"));
+const GUARDRAILS = () => Response.json(guardrails());
 /** An Analysis query with most things unset: a null is never sent. */
 const ANALYSIS_Q: AnalysisQuery = {
   scope: "hospital",
@@ -283,24 +288,32 @@ const ROWS: Row[] = [
   ],
   [
     "getAnalytics",
-    (c) => c.getAnalytics("90d"),
+    (c) => c.getAnalytics("quarter"),
     "GET",
-    "/api/v1/platform/analytics?period=90d",
+    "/api/v1/platform/analytics?period=quarter",
     undefined,
   ],
   [
     "getChangeSeries",
-    (c) => c.getChangeSeries("chg_ngh_1", "7d"),
+    (c) => c.getChangeSeries("chg_ngh_1", "week"),
     "GET",
-    "/api/v1/platform/analytics/changes/chg_ngh_1/series?period=7d",
+    "/api/v1/platform/analytics/changes/chg_ngh_1/series?period=week",
     undefined,
   ],
   [
     "getHospitalSeries",
-    (c) => c.getHospitalSeries("h_north", "needs_review_share", "30d"),
+    (c) => c.getHospitalSeries("h_north", "needs_review_share", "month"),
     "GET",
-    "/api/v1/platform/analytics/hospitals/h_north/series?measure=needs_review_share&period=30d",
+    "/api/v1/platform/analytics/hospitals/h_north/series?measure=needs_review_share&period=month",
     undefined,
+  ],
+  [
+    "getGuardrailPeriods",
+    (c) => c.getGuardrailPeriods("month"),
+    "GET",
+    "/api/v1/platform/guardrails/periods?period=month",
+    undefined,
+    GUARDRAILS,
   ],
   [
     "followUp",
@@ -1066,7 +1079,7 @@ describe("live platform client", () => {
     await client().listHospitals({});
     await client().listActivity({});
     await client().getHospital("a b/c");
-    await client().getChangeSeries("a/b", "30d");
+    await client().getChangeSeries("a/b", "month");
     await client().followUp("a/b", { version: 1 }, K);
     await client().listHolds({});
     await client().approveLift("a/b", { version: 1, ...CODE }, K);
@@ -1075,7 +1088,7 @@ describe("live platform client", () => {
       "/api/v1/platform/hospitals",
       "/api/v1/platform/activity",
       "/api/v1/platform/hospitals/a%20b%2Fc",
-      "/api/v1/platform/analytics/changes/a%2Fb/series?period=30d",
+      "/api/v1/platform/analytics/changes/a%2Fb/series?period=month",
       "/api/v1/platform/analytics/changes/a%2Fb/follow-up",
       "/api/v1/platform/legal-holds",
       "/api/v1/platform/legal-holds/a%2Fb/lift/approve",
@@ -1214,6 +1227,50 @@ describe("live platform client", () => {
         status: 401,
       });
       expect(unauthorized).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("guardrail statistics (F20)", () => {
+    it("reads the latest period strictly", async () => {
+      reply(GUARDRAILS);
+      const g = await client().getGuardrailPeriods("month");
+      expect(g.from).toBe("2026-10-01T00:00:00.000Z");
+    });
+
+    it.each([
+      [
+        "another period kind",
+        (g: Record<string, unknown>) => void (g.period = "week"),
+      ],
+      ["an extra key", (g: Record<string, unknown>) => void (g.raw = 1)],
+      [
+        "a rolling window",
+        (g: Record<string, unknown>) =>
+          void (g.to = "2026-10-30T00:00:00.000Z"),
+      ],
+      [
+        "a shown 3",
+        (g: Record<string, unknown>) =>
+          void ((g.all as Record<string, unknown>).degraded = {
+            value: 3,
+            suppressed: false,
+          }),
+      ],
+      [
+        "a hidden value with its number",
+        (g: Record<string, unknown>) =>
+          void ((g.all as Record<string, unknown>).answers = {
+            value: 900,
+            suppressed: true,
+          }),
+      ],
+    ])("refuses %s", async (_name, spoil) => {
+      const g = guardrails() as unknown as Record<string, unknown>;
+      spoil(g);
+      reply(() => Response.json(g));
+      await expect(client().getGuardrailPeriods("month")).rejects.toMatchObject(
+        { status: 502, code: "bad_gateway" },
+      );
     });
   });
 

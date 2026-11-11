@@ -4,6 +4,10 @@ import { valueText } from "@/lib/analytics/measures";
 import { AreaPanel } from "./area-panel";
 import { FactsList } from "./facts-list";
 
+/** What the figures mean (F11). */
+export const QUALITY_HELP =
+  "High, medium and low confidence are answers passed, redrafted and sent for review. An answer needs review when it was sent for review. Agreement on reviews is the reviews that agreed with the answer, out of all reviews.";
+
 /**
  * Answer quality: per hospital the share needing review, the confidence
  * mix, how often reviewers agreed, and the median time to review.
@@ -47,21 +51,24 @@ export function QualityTab({
           },
         ];
         return (
-          <FactsList
-            label="Answer quality, by hospital"
-            cards={[
-              {
-                key: "median",
-                name: "Median of all hospitals",
-                facts: facts(q.median),
-              },
-              ...q.rows.map((r) => ({
-                key: r.hospital.id,
-                name: r.hospital.name,
-                facts: facts(r),
-              })),
-            ]}
-          />
+          <>
+            <p className="mb-3 text-[13px] text-ink-2">{QUALITY_HELP}</p>
+            <FactsList
+              label="Answer quality, by hospital"
+              cards={[
+                {
+                  key: "median",
+                  name: "Median of all hospitals",
+                  facts: facts(q.median),
+                },
+                ...q.rows.map((r) => ({
+                  key: r.hospital.id,
+                  name: r.hospital.name,
+                  facts: facts(r),
+                })),
+              ]}
+            />
+          </>
         );
       }}
     </AreaPanel>

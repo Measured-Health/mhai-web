@@ -20,36 +20,15 @@ export const noPrevious = (c: { previous: Guarded }) =>
   c.previous.value === null && !c.previous.suppressed;
 
 /**
- * |current − previous| ÷ previous. Null when it can't be worked out (no
- * previous period, or a hidden value); from 0 it is 0 or Infinity.
- */
-function size(c: Change): number | null {
-  const p = c.previous;
-  const n = c.current;
-  if (p.suppressed || n.suppressed || p.value === null || n.value === null)
-    return null;
-  if (p.value === 0) return n.value === 0 ? 0 : Infinity;
-  return Math.abs(n.value - p.value) / Math.abs(p.value);
-}
-
-/**
- * Not followed up before followed up; within each, serious first, then
- * the biggest change; changes without a size after those with one. Ties
- * keep the server's order.
+ * Not followed up before followed up; within each, serious first, then the
+ * server's order (core ranks by how far each change is past its threshold).
  */
 export function rankChanges(items: Change[]): RankedChange[] {
-  const keyed = items.map((c, i) => ({
-    c,
-    i,
-    done: c.follow_up !== null,
-    s: size(c),
-  }));
+  const keyed = items.map((c, i) => ({ c, i, done: c.follow_up !== null }));
   keyed.sort(
     (a, b) =>
       Number(a.done) - Number(b.done) ||
       Number(b.c.serious) - Number(a.c.serious) ||
-      Number(a.s === null) - Number(b.s === null) ||
-      (b.s ?? 0) - (a.s ?? 0) ||
       a.i - b.i,
   );
   return keyed.map(({ c, done }) => ({
@@ -82,7 +61,7 @@ export const DIRECTION_WORD: Record<Change["direction"], string> = {
 /** What the sign and words need of a change; a notification has them all. */
 export type LineSource = Pick<
   Change,
-  "direction" | "summary" | "measure" | "previous" | "current"
+  "hospital" | "direction" | "summary" | "measure" | "previous" | "current"
 >;
 
 /** Better points the way the value moved, or the measure's good way. */
@@ -111,6 +90,15 @@ export function changeLine(c: LineSource): { sign: Sign; words: string } {
           ? "↓"
           : betterSign(c);
   return { sign, words: `${DIRECTION_WORD[c.direction]}: ${c.summary}` };
+}
+
+/**
+ * The line with where it is: core's summary never names the hospital (F6).
+ * "Riverside Children's Hospital · Falling: Questions down: 140 to 83 a week".
+ */
+export function changeTitle(c: LineSource): { sign: Sign; words: string } {
+  const { sign, words } = changeLine(c);
+  return { sign, words: `${c.hospital?.name ?? "All hospitals"} · ${words}` };
 }
 
 export const followUpLine = (f: FollowUp) =>

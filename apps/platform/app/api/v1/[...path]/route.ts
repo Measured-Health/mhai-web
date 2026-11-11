@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { analysisSignedOff } from "@/lib/server/features";
 import { refreshSession, refreshWithinMs } from "@/lib/server/refresh";
 import {
@@ -47,6 +48,7 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["DELETE", "platform/team/{id}"],
   ["GET", "platform/activity"],
   ["GET", "platform/analytics"],
+  ["GET", "platform/guardrails/periods"],
   ["GET", "platform/analytics/changes/{id}/series"],
   ["GET", "platform/analytics/hospitals/{id}/series"],
   ["PUT", "platform/analytics/changes/{id}/follow-up"],
@@ -183,6 +185,72 @@ const ADMIN_ONLY_READS: ReadonlySet<string> = new Set([
  */
 const SIGNED_OFF_GATE: ReadonlySet<string> = ADMIN_ONLY_READS;
 
+/**
+ * The analytics calls' query strings and bodies (core openapi.yaml 1.15.0),
+ * checked strictly before anything goes upstream: only these keys, only
+ * these values, else 422 `validation_failed` (core's own code). A finished
+ * calendar period only (R41a); the series measures until alerts exist.
+ */
+const PERIOD = z.enum(["week", "month", "quarter"]);
+const PERIOD_QUERY = z.strictObject({ period: PERIOD });
+const FORMAT_OR_SEPARATOR = /[\p{Cf}\p{Zl}\p{Zp}]/u;
+/** A control character other than a newline, a format character or a separator. */
+function refusedChar(ch: string): boolean {
+  const c = ch.codePointAt(0)!;
+  if (c === 0x0a) return false;
+  return c < 0x20 || (c >= 0x7f && c <= 0x9f) || FORMAT_OR_SEPARATOR.test(ch);
+}
+/** 1 to 500 characters; newlines allowed, no other control or format character. */
+const NOTE = z
+  .string()
+  .refine((s) => {
+    const n = [...s].length;
+    return n >= 1 && n <= 500;
+  })
+  .refine((s) => ![...s].some(refusedChar));
+const VERSION = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+const QUERIES: ReadonlyMap<string, z.ZodType> = new Map<string, z.ZodType>([
+  ["GET platform/analytics", PERIOD_QUERY],
+  ["GET platform/guardrails/periods", PERIOD_QUERY],
+  ["GET platform/analytics/changes/{id}/series", PERIOD_QUERY],
+  [
+    "GET platform/analytics/hospitals/{id}/series",
+    z.strictObject({
+      measure: z.enum(["questions_per_clinician", "needs_review_share"]),
+      period: PERIOD,
+    }),
+  ],
+]);
+const BODIES: ReadonlyMap<string, z.ZodType> = new Map<string, z.ZodType>([
+  [
+    "PUT platform/analytics/changes/{id}/follow-up",
+    z.strictObject({ note: NOTE.nullable().optional(), version: VERSION }),
+  ],
+  [
+    "DELETE platform/analytics/changes/{id}/follow-up",
+    z.strictObject({ version: VERSION }),
+  ],
+]);
+
+/** The query string as one value per key; a repeated key is refused. */
+function queryOf(url: string): Record<string, string> | null {
+  const out: Record<string, string> = {};
+  for (const [k, v] of new URL(url).searchParams) {
+    if (Object.hasOwn(out, k)) return null;
+    out[k] = v;
+  }
+  return out;
+}
+
+/** Whether the body is JSON matching the schema. */
+function bodyMatches(body: string, schema: z.ZodType): boolean {
+  try {
+    return schema.safeParse(JSON.parse(body)).success;
+  } catch {
+    return false;
+  }
+}
+
 const PATTERNS = SHAPES.map(([method, shape]) => ({
   method,
   shape,
@@ -286,6 +354,16 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   const body = method === "GET" ? undefined : await req.text();
   if (body && Buffer.byteLength(body) > MAX_BODY)
     return json(413, { code: "too_large" });
+  // 8. The analytics query strings and bodies, strictly.
+  const querySchema = QUERIES.get(shape);
+  if (querySchema) {
+    const q = queryOf(req.url);
+    if (!q || !querySchema.safeParse(q).success)
+      return json(422, { code: "validation_failed" });
+  }
+  const bodySchema = BODIES.get(shape);
+  if (bodySchema && !bodyMatches(body ?? "", bodySchema))
+    return json(422, { code: "validation_failed" });
 
   const file = FILES.get(shape) ?? null;
   const key = req.headers.get("idempotency-key");

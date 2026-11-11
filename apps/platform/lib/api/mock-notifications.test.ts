@@ -5,13 +5,13 @@ import { isChange } from "./notifications-contract";
 import { TEAM_EMAILS } from "./fixtures";
 import { createMockPlatform } from "./mock";
 
-const START = Date.parse("2026-10-22T09:30:00.000Z");
+const START = Date.parse("2026-11-11T09:30:00.000Z");
 let n = 0;
 const KEY = () => ({ idempotencyKey: `kn-${++n}` });
 
 function setup(
   over: {
-    analytics?: "normal" | "guard" | "unavailable";
+    analytics?: "normal" | "unavailable" | "not_yet";
     notifications?: "normal" | "unavailable";
   } = {},
   email: string | null = TEAM_EMAILS.ada,
@@ -37,20 +37,20 @@ async function failure(p: Promise<unknown>): Promise<[number, string]> {
 }
 
 const changesOf = (a: AnalyticsOut) => {
-  if ("unavailable" in a.changes) throw new Error("changes unavailable");
-  return a.changes.items;
+  if ("unavailable" in a.what_changed) throw new Error("changes unavailable");
+  return a.what_changed.items;
 };
 
 describe("mock notifications", () => {
-  it("one per analytics change, newest first, Northgate's serious change newest", async () => {
+  it("one per analytics change, newest first", async () => {
     const { m } = setup();
     const { items, unseen } = await m.listNotifications();
-    const changes = changesOf(await m.getAnalytics("30d"));
+    const changes = changesOf(await m.getAnalytics("month"));
     expect(items).toHaveLength(changes.length);
     expect(unseen).toBe(changes.length);
     expect(items[0]).toMatchObject({
-      change_id: "chg_ngh_critical_ack",
-      serious: true,
+      change_id: "chg_ngh_needs_review",
+      serious: false,
       direction: "worse",
       hospital: { id: "h_northgate", name: "Northgate General Hospital" },
       seen: false,
@@ -77,13 +77,10 @@ describe("mock notifications", () => {
     );
   });
 
-  it("follows the current changes ('guard' has no serious one)", async () => {
-    const { m } = setup({ analytics: "guard" });
+  it("follows the current changes (none before the first evaluation)", async () => {
+    const { m } = setup({ analytics: "not_yet" });
     const { items } = await m.listNotifications();
-    expect(items.filter(isChange).some((i) => i.serious)).toBe(false);
-    expect(items.filter(isChange).map((i) => i.change_id)).not.toContain(
-      "chg_ngh_critical_ack",
-    );
+    expect(items.filter(isChange)).toEqual([]);
   });
 
   it("seen is per person (Ada marks seen, Tunde still sees new)", async () => {

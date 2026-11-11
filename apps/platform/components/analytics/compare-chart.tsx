@@ -1,7 +1,7 @@
 "use client";
 import { ChartColumn, Table2 } from "lucide-react";
 import { useId, useState } from "react";
-import type { MeasureId } from "@/lib/api/analytics-contract";
+import type { MeasureId, Period } from "@/lib/api/analytics-contract";
 import type { Person } from "@/lib/api/contract";
 import {
   isHidden,
@@ -9,12 +9,12 @@ import {
   MEASURE_KIND,
   valueText,
 } from "@/lib/analytics/measures";
-import type { SeriesPoint } from "@/lib/analytics/read";
+import { periodShort } from "@/lib/analytics/periods";
+import { NOT_ENOUGH_TO_COMPARE, type SeriesPoint } from "@/lib/analytics/read";
 import { Button } from "@mhai/ui/button";
-import { dayMonthLabel } from "@/lib/format";
 
 /**
- * One measure for one hospital over the period, as columns, with the
+ * One measure for one hospital over successive periods, one column each, with the
  * median of the other hospitals as a dashed mark on each column: rates
  * and medians only, never totals across hospitals of different sizes.
  * A hidden value or median reads "Fewer than 5" and draws nothing, and
@@ -24,12 +24,15 @@ import { dayMonthLabel } from "@/lib/format";
 export function ComparePanel({
   hospital,
   measure,
+  period,
   points: raw,
   size,
 }: {
   /** Null for a change across all hospitals (no median to compare with). */
   hospital: Person | null;
   measure: MeasureId;
+  /** The kind of period each point is: labels are its dates. */
+  period: Period;
   points: SeriesPoint[];
   /** "214 staff · 1,180 questions this period"; null when not known. */
   size: string | null;
@@ -44,7 +47,7 @@ export function ComparePanel({
     const m = p.median;
     return {
       key: `${p.start}-${i}`,
-      label: dayMonthLabel(p.start),
+      label: periodShort(period, p.start),
       value: isHidden(p.value, kind) ? null : p.value.value,
       text: valueText(p.value, kind),
       median: m === null || isHidden(m, kind) ? null : m.value,
@@ -52,6 +55,10 @@ export function ComparePanel({
     };
   });
   const hasMedian = points.some((p) => p.medianText !== null);
+  // Periods that list it (a new hospital has none before it started).
+  const listed = raw.filter(
+    (p) => p.value.suppressed || p.value.value !== null,
+  ).length;
   const top = Math.max(
     Number.EPSILON,
     ...points.map((p) => p.value ?? 0),
@@ -89,6 +96,9 @@ export function ComparePanel({
       <p id={summaryId} className="mb-3 text-[13px] text-ink-2">
         {summary}
       </p>
+      {points.length > 0 && listed < 2 && (
+        <p className="mb-3 text-[13px] text-ink-2">{NOT_ENOUGH_TO_COMPARE}</p>
+      )}
       {points.length === 0 ? (
         <p className="text-[13px] text-ink-3">No data yet</p>
       ) : asTable ? (
@@ -97,7 +107,7 @@ export function ComparePanel({
           <thead>
             <tr className="border-b border-line text-ink-3">
               <th scope="col" className="py-1 text-left font-semibold">
-                Period starting
+                Period
               </th>
               <th scope="col" className="py-1 text-right font-semibold">
                 {name}

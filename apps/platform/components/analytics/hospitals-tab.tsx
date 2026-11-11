@@ -7,7 +7,6 @@ import type { Person } from "@/lib/api/contract";
 import type { RankedChange } from "@/lib/analytics/changes";
 import {
   COMPARE_MEASURES,
-  countText,
   isHidden,
   measureLabel,
   valueText,
@@ -44,16 +43,11 @@ export function defaultMeasure(
 
 type Row = {
   hospital: Person;
-  staff: number;
+  staff: Guarded;
   /** Null: that area could not be loaded. */
   cells: Record<ColKey, Guarded | null | undefined>;
 };
-type ColKey =
-  | "questions"
-  | "per_clinician"
-  | "critical_median"
-  | "critical_within"
-  | "needs_review";
+type ColKey = "questions" | "per_clinician" | "needs_review";
 
 type Col =
   | { key: "hospital"; label: string }
@@ -64,17 +58,15 @@ const COLS: Col[] = [
   { key: "staff", label: "Staff" },
   { key: "questions", label: "Questions", kind: "count" },
   { key: "per_clinician", label: "Questions per clinician", kind: "rate" },
-  { key: "critical_median", label: "Critical median", kind: "minutes" },
-  { key: "critical_within", label: "Critical within target", kind: "share" },
   { key: "needs_review", label: "Needs review", kind: "share" },
 ];
 
 /** What a column sorts by; hidden and missing values sort last. */
 function sortValue(r: Row, c: Col): number | string | null {
   if (c.key === "hospital") return r.hospital.name.toLowerCase();
-  if (c.key === "staff") return r.staff;
-  const g = r.cells[c.key];
-  if (!g || isHidden(g, c.kind) || g.value === null) return null;
+  const g = c.key === "staff" ? r.staff : r.cells[c.key];
+  const kind = c.key === "staff" ? "count" : c.kind;
+  if (!g || isHidden(g, kind) || g.value === null) return null;
   return g.value;
 }
 
@@ -113,13 +105,12 @@ export function HospitalsTab({
         // An ok hospitals area means there is a state.
         const all = state!;
         const by = <R extends { hospital: Person }>(
-          a: { status: "ok"; rows: R[] } | { status: "failed" },
+          a: { status: "ok"; rows: R[] } | { status: "failed" | "not_yet" },
           id: string,
         ) =>
           a.status === "ok" ? a.rows.find((r) => r.hospital.id === id) : null;
         const rows: Row[] = h.rows.map(({ hospital, size }) => {
           const u = by(all.use, hospital.id);
-          const a = by(all.alerts, hospital.id);
           const q = by(all.quality, hospital.id);
           return {
             hospital,
@@ -127,9 +118,6 @@ export function HospitalsTab({
             cells: {
               questions: u === null ? null : u?.questions,
               per_clinician: u === null ? null : u?.questions_per_clinician,
-              critical_median:
-                a === null ? null : a?.critical_median_ack_minutes,
-              critical_within: a === null ? null : a?.critical_within_target,
               needs_review: q === null ? null : q?.needs_review_share,
             },
           };
@@ -220,7 +208,7 @@ export function HospitalsTab({
                       </button>
                     </th>
                     <td className="px-1.5 text-right font-mono">
-                      {countText(r.staff)}
+                      {valueText(r.staff, "count")}
                     </td>
                     {COLS.slice(2).map((c) => {
                       const k = c as Extract<Col, { kind: MeasureKind }>;
@@ -270,8 +258,11 @@ export function HospitalDetail({
   const titleId = useId();
   const series = useHospitalSeries(hospital.id, measure, period);
   const chart = useMemo(
-    () => (series.data === undefined ? null : readSeries(series.data, measure)),
-    [series.data, measure],
+    () =>
+      series.data === undefined
+        ? null
+        : readSeries(series.data, measure, period),
+    [series.data, measure, period],
   );
   const size =
     hospitals.status === "ok"
@@ -322,6 +313,7 @@ export function HospitalDetail({
         <ComparePanel
           hospital={hospital}
           measure={measure}
+          period={period}
           points={chart.points}
           size={size ? sizeLine(size) : null}
         />

@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import {
-  MEASURES,
-  type AlertsRow,
-  type AnalyticsOut,
-  type Guarded,
-  type Period,
+import type {
+  AnalyticsOut,
+  ChangesOut,
+  Guarded,
+  Period,
 } from "../api/analytics-contract";
 import {
   buildAnalytics,
@@ -12,31 +11,27 @@ import {
   seedChanges,
   type AnalyticsMode,
 } from "../api/analytics-fixtures";
-import { noPrevious } from "./changes";
-import { measureText, valueText } from "./measures";
+import { valueText } from "./measures";
 import {
   AREAS,
-  NOTHING_UNUSUAL,
-  NOT_ENOUGH_TO_COMPARE,
   failedText,
   readAnalytics,
   readSeries,
   type AnalyticsState,
 } from "./read";
 
-const NOW = Date.parse("2026-10-22T09:30:00.000Z");
-const sample = (mode: AnalyticsMode = "normal", period: Period = "30d") =>
+// 11 Nov 2026: the latest finished week is 1–7 Nov, month October,
+// quarter Jul–Sep; What changed compares 1–7 Nov with October.
+const NOW = Date.parse("2026-11-11T09:30:00.000Z");
+const sample = (mode: AnalyticsMode = "normal", period: Period = "month") =>
   buildAnalytics(period, NOW, mode, seedChanges(NOW, mode));
 
-type Ok<T> = Exclude<T, { unavailable: true }>;
-function ok<T>(v: T): Ok<T> {
-  if (v && typeof v === "object" && "unavailable" in v)
-    throw new Error("area unavailable");
-  return v as Ok<T>;
-}
+type Ok<T> = Exclude<T, { unavailable: true } | { not_yet: true } | null>;
+const ok = <T>(v: T) => v as Ok<T>;
 function okState<K extends keyof AnalyticsState>(s: AnalyticsState, k: K) {
   const a = s[k];
-  if (a.status !== "ok") throw new Error(`${k} failed`);
+  if (typeof a !== "object" || a === null || a.status !== "ok")
+    throw new Error(`${k} not ok`);
   return a as Extract<AnalyticsState[K], { status: "ok" }>;
 }
 const row = <R extends { hospital: { id: string } }>(rows: R[], id: string) => {
@@ -49,595 +44,337 @@ const statuses = (s: AnalyticsState) =>
 const ALL_OK = {
   changes: "ok",
   use: "ok",
-  alerts: "ok",
+  alerts: "off",
   quality: "ok",
   hospitals: "ok",
 };
-const HIDDEN = { value: null, suppressed: true };
-const v = (value: number | null) => ({ value, suppressed: false });
+const ALL_FAILED = {
+  changes: "failed",
+  use: "failed",
+  alerts: "failed",
+  quality: "failed",
+  hospitals: "failed",
+};
+const v = (value: number | null): Guarded => ({ value, suppressed: false });
 
 /** A copy of the sample with one change made to it. */
-function edit(f: (a: AnalyticsOut) => void, mode: AnalyticsMode = "normal") {
-  const a = structuredClone(sample(mode));
+function edit(
+  f: (a: AnalyticsOut & Record<string, unknown>) => void,
+  mode: AnalyticsMode = "normal",
+  period: Period = "month",
+) {
+  const a = structuredClone(sample(mode, period)) as AnalyticsOut &
+    Record<string, unknown>;
   f(a);
   return a;
 }
-const useRows = (a: AnalyticsOut) => ok(a.use).rows;
-const alertRows = (a: AnalyticsOut) => ok(a.alerts).rows;
+const useBlock = (a: AnalyticsOut) => ok(a.use);
 const qualityRows = (a: AnalyticsOut) => ok(a.quality).rows;
-const items = (a: AnalyticsOut) => ok(a.changes).items;
+const changes = (a: AnalyticsOut) => a.what_changed as ChangesOut;
 
 describe("readAnalytics: the sample data", () => {
-  it("every period of the demo reads", () => {
-    for (const p of ["7d", "30d", "90d"] as const)
-      expect(statuses(readAnalytics(sample("normal", p)))).toEqual(ALL_OK);
+  it("every period of the demo reads; alerts are not switched on", () => {
+    for (const p of ["week", "month", "quarter"] as const) {
+      const s = readAnalytics(sample("normal", p), p);
+      expect(statuses(s)).toEqual(ALL_OK);
+      expect(s.period).toBe(p);
+    }
+    const s = readAnalytics(sample(), "month");
+    expect(s.from).toBe("2026-10-01T00:00:00.000Z");
   });
 
-  it("0 shows, 1–4 hidden, never through a rate or median", () => {
-    const s = readAnalytics(sample());
-    const use = okState(s, "use");
-    // Hilltop: zeros show as 0; nothing to divide by.
+  it("trend points are successive periods of the kind, each one period", () => {
+    const week = okState(readAnalytics(sample("normal", "week")), "use");
+    expect(week.trend).toHaveLength(12);
+    // Month-aligned weeks: 22–31 Oct is ten days.
+    expect(week.trend.map((p) => p.start.slice(0, 10)).slice(-4)).toEqual([
+      "2026-10-08",
+      "2026-10-15",
+      "2026-10-22",
+      "2026-11-01",
+    ]);
+    const quarter = okState(readAnalytics(sample("normal", "quarter")), "use");
+    expect(quarter.trend).toHaveLength(8);
+    expect(quarter.trend.at(-1)!.start).toBe("2026-07-01T00:00:00.000Z");
+  });
+
+  it("0 shows, 1–4 hidden, never through a rate", () => {
+    const use = okState(readAnalytics(sample("normal", "week")), "use");
     const hilltop = row(use.rows, "h_hilltop");
     expect(valueText(hilltop.questions, "count")).toBe("0");
-    expect(valueText(hilltop.active_clinicians, "count")).toBe("0");
     expect(valueText(hilltop.questions_per_clinician, "rate")).toBe(
       "No data yet",
     );
-    // Lakeside: its 1–4 counts are hidden and so is the rate over them.
     const lakeside = row(use.rows, "h_lakeside");
     expect(valueText(lakeside.questions, "count")).toBe("Fewer than 5");
-    expect(valueText(lakeside.active_clinicians, "count")).toBe("Fewer than 5");
     expect(valueText(lakeside.questions_per_clinician, "rate")).toBe(
       "Fewer than 5",
     );
-    const alerts = okState(s, "alerts");
-    const la = row(alerts.rows, "h_lakeside");
-    expect(la.by_severity.critical.suppressed).toBe(true);
-    expect(valueText(la.critical_median_ack_minutes, "minutes")).toBe(
-      "Fewer than 5",
-    );
-    expect(valueText(row(alerts.rows, "h_hilltop").total, "count")).toBe("0");
-
     // The server sends a rate over Lakeside's hidden counts: refused.
     const rate = readAnalytics(
-      edit((a) => {
-        row(useRows(a), "h_lakeside").questions_per_clinician = v(1.8);
-      }),
+      edit(
+        (a) => {
+          row(useBlock(a).rows, "h_lakeside").questions_per_clinician = v(1.8);
+        },
+        "normal",
+        "week",
+      ),
     );
     expect(rate.use.status).toBe("failed");
-    // A median over its hidden Critical alerts: refused.
-    const median = readAnalytics(
-      edit((a) => {
-        row(alertRows(a), "h_lakeside").critical_median_ack_minutes = v(20);
-      }),
-    );
-    expect(median.alerts.status).toBe("failed");
-    // The all-hospitals median follows the same rule.
-    const med = readAnalytics(
-      edit((a) => {
-        const m = ok(a.use).median;
-        m.questions = HIDDEN;
-        m.questions_per_clinician = v(2.5);
-      }),
-    );
-    expect(med.use.status).toBe("failed");
+    expect(rate.quality.status).toBe("ok");
   });
 
-  it("a hidden value never carries its number past the reader", () => {
+  it("a new hospital is listed only from its month", () => {
+    const rows = (p: Period) =>
+      okState(readAnalytics(sample("normal", p)), "hospitals").rows.map(
+        (r) => r.hospital.id,
+      );
+    expect(rows("month")).toContain("h_hilltop");
+    expect(rows("quarter")).not.toContain("h_hilltop");
+  });
+});
+
+describe("readAnalytics: not yet, unavailable, alerts", () => {
+  it("before the first period: not yet, with when figures start (F19)", () => {
+    const s = readAnalytics(sample("not_yet"), "month");
+    expect(s.from).toBeNull();
+    for (const k of ["use", "quality", "hospitals"] as const)
+      expect(s[k]).toEqual({
+        status: "not_yet",
+        period: "month",
+        first_from: "2026-12-01T00:00:00.000Z",
+      });
+    // What changed isn't evaluated yet: Couldn't load, never "Nothing unusual".
+    expect(s.changes.status).toBe("failed");
+    expect(s.alerts.status).toBe("off");
+  });
+
+  it("not yet reads only before the first period, and data only after it", () => {
+    const early = readAnalytics(
+      edit((a) => {
+        (a as Record<string, unknown>).use = {
+          not_yet: true,
+          first_from: "2026-12-01T00:00:00.000Z",
+        };
+      }),
+    );
+    expect(early.use.status).toBe("failed");
+    const late = readAnalytics(
+      edit((a) => {
+        a.use = structuredClone(sample().use);
+      }, "not_yet"),
+    );
+    expect(late.use.status).toBe("failed");
+    // first_from must start a period of the kind.
+    const odd = readAnalytics(
+      edit((a) => {
+        a.use = { not_yet: true, first_from: "2026-12-02T00:00:00.000Z" };
+      }, "not_yet"),
+    );
+    expect(odd.use.status).toBe("failed");
+  });
+
+  it("every area unavailable: each says Couldn't load; alerts stay off", () => {
+    const s = readAnalytics(sample("unavailable"), "month");
+    expect(statuses(s)).toEqual({ ...ALL_FAILED, alerts: "off" });
+    expect(failedText("changes")).toBe("Couldn't load what changed");
+  });
+
+  it("alerts sent as anything but null fail closed, and What changed with them", () => {
     const s = readAnalytics(
       edit((a) => {
-        row(useRows(a), "h_lakeside").questions = {
+        (a as Record<string, unknown>).alerts = { rows: [] };
+      }),
+    );
+    expect(s.alerts.status).toBe("failed");
+    expect(s.changes.status).toBe("failed");
+    expect(s.use.status).toBe("ok");
+  });
+});
+
+describe("readAnalytics: strict", () => {
+  it("an unknown key at the top fails every area", () => {
+    expect(statuses(readAnalytics(edit((a) => void (a.extra = 1))))).toEqual(
+      ALL_FAILED,
+    );
+  });
+
+  it("changes must stay unavailable: What changed is what_changed (F21)", () => {
+    const s = readAnalytics(
+      edit((a) => {
+        (a as Record<string, unknown>).changes = a.what_changed;
+      }),
+    );
+    expect(statuses(s)).toEqual(ALL_FAILED);
+  });
+
+  it("a period other than the one asked for, or from/to not one period, fails every area", () => {
+    expect(statuses(readAnalytics(sample("normal", "week"), "month"))).toEqual(
+      ALL_FAILED,
+    );
+    expect(
+      statuses(
+        readAnalytics(edit((a) => void (a.from = "2026-10-02T00:00:00.000Z"))),
+      ),
+    ).toEqual(ALL_FAILED);
+    // A rolling window: 30 days back from a day that isn't a month's end.
+    expect(
+      statuses(
+        readAnalytics(edit((a) => void (a.to = "2026-10-31T00:00:00.000Z"))),
+      ),
+    ).toEqual(ALL_FAILED);
+    expect(
+      statuses(readAnalytics(edit((a) => void (a.period = "30d" as Period)))),
+    ).toEqual(ALL_FAILED);
+  });
+
+  it("an unknown key in a row, a median or a value fails that area only", () => {
+    const rowKey = readAnalytics(
+      edit((a) => {
+        Object.assign(row(useBlock(a).rows, "h_havana"), { patient: "x" });
+      }),
+    );
+    expect(rowKey.use.status).toBe("failed");
+    expect(rowKey.quality.status).toBe("ok");
+    const valueKey = readAnalytics(
+      edit((a) => {
+        Object.assign(row(qualityRows(a), "h_havana").answers, { raw: 3 });
+      }),
+    );
+    expect(valueKey.quality.status).toBe("failed");
+    expect(valueKey.use.status).toBe("ok");
+  });
+
+  it("an unsuppressed 3, or a hidden value with its number, fails the area", () => {
+    const three = readAnalytics(
+      edit((a) => {
+        row(qualityRows(a), "h_havana").reviews = v(3);
+      }),
+    );
+    expect(three.quality.status).toBe("failed");
+    const carried = readAnalytics(
+      edit((a) => {
+        row(useBlock(a).rows, "h_lakeside").questions = {
           value: 3,
           suppressed: true,
         };
       }),
     );
-    expect(row(okState(s, "use").rows, "h_lakeside").questions).toEqual(HIDDEN);
+    expect(carried.use.status).toBe("failed");
+    const staff = readAnalytics(
+      edit((a) => {
+        ok(a.hospitals).rows[0]!.size.staff = v(2);
+      }),
+    );
+    expect(staff.hospitals.status).toBe("failed");
   });
-});
 
-describe("readAnalytics: fails closed", () => {
-  it("an unsuppressed 3 fails the area closed", () => {
+  it("a trend point that isn't the start of a period of the kind fails the area", () => {
     const s = readAnalytics(
       edit((a) => {
-        row(useRows(a), "h_lakeside").questions = v(3);
+        useBlock(a).trend[0]!.start = "2026-01-05T00:00:00.000Z";
       }),
     );
     expect(s.use.status).toBe("failed");
-    expect(s.alerts.status).toBe("ok");
-
-    // In a median, in the Hospitals sizes, in a trend and in a change too.
-    expect(
-      readAnalytics(edit((a) => void (ok(a.alerts).median.unhandled = v(2))))
-        .alerts.status,
-    ).toBe("failed");
-    expect(
-      readAnalytics(
-        edit((a) => {
-          ok(a.hospitals).rows[0]!.size.questions = v(4);
-        }),
-      ).hospitals.status,
-    ).toBe("failed");
-    expect(
-      readAnalytics(edit((a) => void (ok(a.use).trend[0]!.value = v(1)))).use
-        .status,
-    ).toBe("failed");
-    expect(
-      readAnalytics(
-        edit((a) => {
-          const c = items(a).find((c) => c.id === "chg_rch_questions")!;
-          c.current = v(3);
-        }),
-      ).changes.status,
-    ).toBe("failed");
-  });
-
-  it("a share over a hidden count fails closed", () => {
-    const s = readAnalytics(
-      edit((a) => {
-        const r = row(qualityRows(a), "h_lakeside");
-        r.answers = HIDDEN;
-        r.needs_review_share = v(0.2);
-      }),
-    );
-    expect(s.quality.status).toBe("failed");
-    const w = readAnalytics(
-      edit((a) => {
-        row(alertRows(a), "h_lakeside").critical_within_target = v(0.7);
-      }),
-    );
-    expect(w.alerts.status).toBe("failed");
-    // A hidden side whose summary still gives the number is refused.
-    const c = readAnalytics(
-      edit((a) => {
-        items(a)[0]!.previous = HIDDEN;
-      }),
-    );
-    expect(c.changes.status).toBe("failed");
-  });
-
-  it("a share whose numerator works out to 1–4 fails closed", () => {
-    // 50 answers × 6% needing review = 3.
-    const nr = readAnalytics(
-      edit((a) => {
-        const r = row(qualityRows(a), "h_havana");
-        r.answers = v(50);
-        r.needs_review_share = v(0.06);
-      }),
-    );
-    expect(nr.quality.status).toBe("failed");
-    // 50 answers × 94% leaves 3 not needing review.
-    const rest = readAnalytics(
-      edit((a) => {
-        const r = row(qualityRows(a), "h_havana");
-        r.answers = v(50);
-        r.needs_review_share = v(0.94);
-      }),
-    );
-    expect(rest.quality.status).toBe("failed");
-    // 20 Critical × 90% within target leaves 2 outside it.
-    const within = (share: number) =>
-      readAnalytics(
-        edit((a) => {
-          const r = row(alertRows(a), "h_havana");
-          const sev = r.by_severity;
-          sev.critical = v(20);
-          r.total = v(20 + sev.urgent.value! + sev.info.value!);
-          r.critical_within_target = v(share);
-        }),
-      ).alerts.status;
-    expect(within(0.9)).toBe("failed");
-    expect(within(0.1)).toBe("failed");
-    expect(within(0.5)).toBe("ok");
-  });
-
-  it("agreement is hidden over hidden reviews or 1–4 disagreements", () => {
-    const hiddenReviews = readAnalytics(
-      edit((a) => {
-        const r = row(qualityRows(a), "h_havana");
-        r.reviews = HIDDEN;
-        r.median_review_hours = HIDDEN;
-      }),
-    );
-    expect(hiddenReviews.quality.status).toBe("failed");
-    const hours = readAnalytics(
-      edit((a) => {
-        const r = row(qualityRows(a), "h_havana");
-        r.reviews = HIDDEN;
-        r.agreement_rate = HIDDEN;
-      }),
-    );
-    expect(hours.quality.status).toBe("failed");
-    // 50 reviews × (1 − 96%) = 2 disagreements.
-    const two = readAnalytics(
-      edit((a) => {
-        const r = row(qualityRows(a), "h_havana");
-        r.reviews = v(50);
-        r.agreement_rate = v(0.96);
-      }),
-    );
-    expect(two.quality.status).toBe("failed");
-    // Every hidden together reads, as the server sends it.
-    const all = readAnalytics(
-      edit((a) => {
-        const r = row(qualityRows(a), "h_havana");
-        r.reviews = HIDDEN;
-        r.agreement_rate = HIDDEN;
-        r.median_review_hours = HIDDEN;
-      }),
-    );
-    expect(all.quality.status).toBe("ok");
-  });
-
-  it("a median that isn't a whole number reads; one under 5 doesn't", () => {
-    const half = readAnalytics(
-      edit((a) => void (ok(a.use).median.questions = v(125.5))),
-    );
-    expect(half.use.status).toBe("ok");
-    expect(
-      readAnalytics(edit((a) => void (ok(a.use).median.questions = v(2.5)))).use
-        .status,
-    ).toBe("failed");
-    expect(
-      readAnalytics(edit((a) => void (ok(a.alerts).median.total = v(4.5))))
-        .alerts.status,
-    ).toBe("failed");
-    // A row's count is still a whole number.
-    expect(
-      readAnalytics(
-        edit((a) => void (row(useRows(a), "h_havana").questions = v(125.5))),
-      ).use.status,
-    ).toBe("failed");
-  });
-
-  it("trends: a hidden point reads, an unhidden 1–4 fails", () => {
-    const s = readAnalytics(
-      edit((a) => {
-        ok(a.use).trend[0]!.value = HIDDEN;
-        ok(a.alerts).trend[1]!.value = HIDDEN;
-        ok(a.quality).trend[2]!.value = HIDDEN;
-      }),
-    );
-    expect(statuses(s)).toEqual(ALL_OK);
-    expect(okState(s, "use").trend[0]!.value).toEqual(HIDDEN);
-    expect(
-      readAnalytics(edit((a) => void (ok(a.alerts).trend[3]!.value = v(3))))
-        .alerts.status,
-    ).toBe("failed");
-    expect(
-      readAnalytics(edit((a) => void (ok(a.quality).trend[0]!.value = v(1.5))))
-        .quality.status,
-    ).toBe("failed");
-  });
-
-  it("a severity set with one hidden member hides the set", () => {
-    // One hidden severity beside a shown total: the total gives it away.
-    const one = readAnalytics(
-      edit((a) => {
-        row(alertRows(a), "h_havana").by_severity.urgent = HIDDEN;
-      }),
-    );
-    expect(one.alerts.status).toBe("failed");
-    // Two hidden members whose sum the total gives as under 5.
-    const pair = readAnalytics(
-      edit((a) => {
-        const r: AlertsRow = row(alertRows(a), "h_havana");
-        r.total = v(3 + (r.by_severity.info.value ?? 0) + 0);
-        r.by_severity.critical = HIDDEN;
-        r.by_severity.urgent = HIDDEN;
-      }),
-    );
-    expect(pair.alerts.status).toBe("failed");
-    // The confidence mix follows the same rule.
-    const mix = readAnalytics(
-      edit((a) => {
-        row(qualityRows(a), "h_havana").confidence.low = HIDDEN;
-      }),
-    );
-    expect(mix.quality.status).toBe("failed");
-    // Every member hidden, as the server does it: shown as hidden.
-    const s = readAnalytics(sample());
-    const la = row(okState(s, "alerts").rows, "h_lakeside");
-    expect(Object.values(la.by_severity).every((g) => g.suppressed)).toBe(true);
-  });
-
-  it("the shape is wrong", () => {
-    const bad: ((a: AnalyticsOut) => void)[] = [
-      (a) => void ((ok(a.use) as { rows: unknown }).rows = "x"),
-      (a) =>
-        void (row(useRows(a), "h_havana").questions = { value: 7 } as never),
-      (a) => void (row(useRows(a), "h_havana").questions = v(-6)),
-      (a) => void (row(useRows(a), "h_havana").questions = v(6.5)),
-      (a) => void ((ok(a.use) as { updated_at: unknown }).updated_at = "soon"),
-      (a) => void (row(useRows(a), "h_havana").hospital.id = "h havana"),
-      (a) => void useRows(a).push(structuredClone(useRows(a)[0]!)),
-    ];
-    for (const f of bad)
-      expect(readAnalytics(edit(f)).use.status).toBe("failed");
-    const share = readAnalytics(
-      edit(
-        (a) => void (row(qualityRows(a), "h_havana").agreement_rate = v(1.4)),
-      ),
-    );
-    expect(share.quality.status).toBe("failed");
-    const dup = readAnalytics(
-      edit((a) => void items(a).push(structuredClone(items(a)[0]!))),
-    );
-    expect(dup.changes.status).toBe("failed");
-    const dir = readAnalytics(
-      edit(
-        (a) => void ((items(a)[0] as { direction: string }).direction = "up"),
-      ),
-    );
-    expect(dir.changes.status).toBe("failed");
-    // Not an object at all.
-    expect(statuses(readAnalytics(null as never))).toEqual({
-      changes: "failed",
-      use: "failed",
-      alerts: "failed",
-      quality: "failed",
-      hospitals: "failed",
-    });
-  });
-
-  it("each area fails alone", () => {
-    const cases: [keyof AnalyticsState, (a: AnalyticsOut) => void][] = [
-      ["use", (a) => void (row(useRows(a), "h_havana").questions = v(2))],
-      ["quality", (a) => void (row(qualityRows(a), "h_havana").answers = v(1))],
-      ["hospitals", (a) => void (ok(a.hospitals).rows[1]!.size.staff = -1)],
-      ["changes", (a) => void (items(a)[2]!.id = "")],
-    ];
-    for (const [area, f] of cases) {
-      const s = readAnalytics(edit(f));
-      expect(statuses(s)).toEqual({ ...ALL_OK, [area]: "failed" });
-    }
-    // An unavailable area leaves the others alone too.
-    const s = readAnalytics(
-      edit((a) => void (a.quality = { unavailable: true })),
-    );
-    expect(statuses(s)).toEqual({ ...ALL_OK, quality: "failed" });
-  });
-
-  it("every area unavailable gives every area failed", () => {
-    const s = readAnalytics(sample("unavailable"));
-    expect(statuses(s)).toEqual({
-      changes: "failed",
-      use: "failed",
-      alerts: "failed",
-      quality: "failed",
-      hospitals: "failed",
-    });
-    expect(AREAS.map(failedText)).toEqual([
-      "Couldn't load what changed",
-      "Couldn't load use",
-      "Couldn't load alert safety",
-      "Couldn't load answer quality",
-      "Couldn't load hospitals",
-    ]);
-  });
-});
-
-describe("readAnalytics: the Critical guard", () => {
-  it("the Critical guard: overdue with no serious change fails changes", () => {
-    // The demo's guard mode: Northgate's serious change is gone, its
-    // overdue Critical alerts (hidden as fewer than 5) stay.
-    const guard = sample("guard");
-    expect(
-      row(alertRows(guard), "h_northgate").critical_overdue.suppressed,
-    ).toBe(true);
-    const s = readAnalytics(guard);
-    expect(statuses(s)).toEqual({ ...ALL_OK, changes: "failed" });
-
-    // Overdue shown above 0 with no serious change: the same.
-    const shown = readAnalytics(
-      edit((a) => {
-        a.changes = { ...ok(a.changes), items: [] };
-        row(alertRows(a), "h_havana").critical_overdue = v(6);
-      }),
-    );
-    expect(shown.changes.status).toBe("failed");
-    // A serious change for another hospital doesn't cover it.
-    const other = readAnalytics(
-      edit((a) => {
-        row(alertRows(a), "h_havana").critical_overdue = v(7);
-      }),
-    );
-    expect(other.changes.status).toBe("failed");
-    // A non-serious change for the same hospital doesn't either.
-    const notSerious = readAnalytics(
-      edit((a) => {
-        for (const c of items(a)) c.serious = false;
-      }),
-    );
-    expect(notSerious.changes.status).toBe("failed");
-    // With the serious change there, it reads.
-    expect(readAnalytics(sample()).changes.status).toBe("ok");
-  });
-
-  it("an empty list with nothing overdue reads as nothing unusual", () => {
-    const s = readAnalytics(
-      edit((a) => {
-        a.changes = { ...ok(a.changes), items: [] };
-        for (const r of alertRows(a)) r.critical_overdue = v(0);
-      }),
-    );
-    expect(okState(s, "changes").items).toEqual([]);
-    expect(NOTHING_UNUSUAL).toBe("Nothing unusual this period");
-  });
-
-  it("alerts unavailable fails changes too", () => {
-    const s = readAnalytics(
-      edit((a) => void (a.alerts = { unavailable: true })),
-    );
-    expect(statuses(s)).toEqual({
-      ...ALL_OK,
-      alerts: "failed",
-      changes: "failed",
-    });
-    // Alerts that fail their own checks can't be trusted for the guard either.
-    const bad = readAnalytics(
-      edit((a) => void (row(alertRows(a), "h_havana").unhandled = v(2))),
-    );
-    expect(bad.changes.status).toBe("failed");
   });
 });
 
 describe("readAnalytics: what changed", () => {
-  it("ranks the demo list: serious first, followed up last", () => {
-    const s = readAnalytics(sample());
-    const ids = okState(s, "changes").items.map((c) => c.id);
-    expect(ids[0]).toBe("chg_ngh_critical_ack");
-    expect(ids.at(-1)).toBe("chg_rch_questions");
-    expect(ids).toHaveLength(6);
+  it("reads the demo list, followed-up rows last, in the server's order", () => {
+    const c = okState(readAnalytics(sample()), "changes");
+    expect(c.items.map((x) => x.id)).toEqual([
+      "chg_ngh_needs_review",
+      "chg_ngh_questions",
+      "chg_hav_needs_review",
+      "chg_all_questions",
+      "chg_hav_agreement",
+      "chg_rch_questions",
+    ]);
+    expect(c.items.at(-1)!.followedUp).toBe(true);
+    expect(c.window).toEqual({
+      from: "2026-10-01T00:00:00.000Z",
+      to: "2026-11-08T00:00:00.000Z",
+    });
   });
 
-  it("no previous period gives 'Not enough data to compare yet'", () => {
-    const s = readAnalytics(sample());
-    const list = okState(s, "changes").items;
-    const hilltop = list.find((c) => c.id === "chg_hch_clinicians")!;
-    expect(hilltop.comparable).toBe(false);
-    expect(noPrevious(hilltop)).toBe(true);
-    expect(NOT_ENOUGH_TO_COMPARE).toBe("Not enough data to compare yet");
-    // Every other change compares.
-    expect(
-      list
-        .filter((c) => c.id !== "chg_hch_clinicians")
-        .every((c) => c.comparable),
-    ).toBe(true);
-    // It reads without a crash and isn't refused.
-    expect(s.changes.status).toBe("ok");
-  });
-
-  it("keeps follow-ups with their change", () => {
-    const s = readAnalytics(sample());
-    const c = okState(s, "changes").items.find(
-      (c) => c.id === "chg_rch_questions",
-    )!;
-    expect(c.followedUp).toBe(true);
-    expect(c.follow_up?.by.name).toBe("Tunde Okafor");
-  });
-
-  it("a hidden side shows 'Fewer than 5' and the list still reads", () => {
-    const hidePrevious = (summary: string) =>
-      readAnalytics(
-        edit((a) => {
-          const c = items(a).find((c) => c.id === "chg_rch_questions")!;
-          c.previous = HIDDEN;
-          c.summary = summary;
-        }),
+  it("is the same for every period", () => {
+    const ids = (p: Period) =>
+      okState(readAnalytics(sample("normal", p)), "changes").items.map(
+        (x) => x.id,
       );
-    const s = hidePrevious(
-      "Riverside Children's Hospital: questions up from fewer than 5 to 83 a week",
-    );
-    const c = okState(s, "changes").items.find(
-      (c) => c.id === "chg_rch_questions",
-    )!;
-    expect(measureText(c.measure, c.previous)).toBe("Fewer than 5");
-    expect(c.comparable).toBe(true);
-    expect(
-      hidePrevious("Riverside: questions up (Fewer Than 5 → 83)").changes
-        .status,
-    ).toBe("ok");
-    // A summary that could give the hidden side away is refused.
-    expect(
-      hidePrevious("Riverside: questions up (3 → 83)").changes.status,
-    ).toBe("failed");
-    expect(
-      hidePrevious("Riverside: questions up from fewer than 5, up 2000%")
-        .changes.status,
-    ).toBe("failed");
-    // Both sides hidden: no number at all beyond "fewer than 5".
-    const both = (summary: string) =>
-      readAnalytics(
-        edit((a) => {
-          const c = items(a).find((c) => c.id === "chg_rch_questions")!;
-          c.previous = HIDDEN;
-          c.current = HIDDEN;
-          c.summary = summary;
-        }),
-      ).changes.status;
-    expect(both("Riverside: questions fell, both weeks fewer than 5")).toBe(
-      "ok",
-    );
-    expect(both("Riverside: questions fell to fewer than 5 from 4")).toBe(
-      "failed",
-    );
+    expect(ids("week")).toEqual(ids("quarter"));
   });
 
-  it("a summary carries only the shown side's number", () => {
-    const withSides = (summary: string, previous: Guarded, current: Guarded) =>
-      readAnalytics(
-        edit((a) => {
-          const c = items(a).find((c) => c.id === "chg_rch_questions")!;
-          c.previous = previous;
-          c.current = current;
-          c.summary = summary;
-        }),
-      ).changes.status;
-    const up = (summary: string) => withSides(summary, HIDDEN, v(83));
-    // A delta, or any number other than the shown side's, gives it away.
-    expect(
-      up("Riverside: questions up from fewer than 5 to 83, up by 79"),
-    ).toBe("failed");
-    expect(up("Riverside: questions up (fewer than 5; +79)")).toBe("failed");
-    expect(up("Riverside: questions up from fewer than 5 to 84")).toBe(
-      "failed",
-    );
-    // The shown side's number, as the app writes it, is fine.
-    expect(up("Riverside: questions up from fewer than 5 to 83")).toBe("ok");
-    expect(
-      withSides("Questions fell from 83 to fewer than 5", v(83), HIDDEN),
-    ).toBe("ok");
-    expect(
-      withSides("Questions rose from fewer than 5 to 1,180", HIDDEN, v(1180)),
-    ).toBe("ok");
-    expect(
-      withSides("Questions rose from fewer than 5 to 1180", HIDDEN, v(1180)),
-    ).toBe("ok");
-    // "fewer than 50" is not the phrase.
-    expect(up("Riverside: questions up from fewer than 50 to 83")).toBe(
-      "failed",
-    );
-    expect(
-      withSides(
-        "Riverside: questions fell, fewer than 50 both weeks",
-        HIDDEN,
-        HIDDEN,
-      ),
-    ).toBe("failed");
+  it("an empty list reads (Nothing unusual this period)", () => {
+    const s = readAnalytics(edit((a) => void (changes(a).items = [])));
+    expect(okState(s, "changes").items).toEqual([]);
   });
 
-  it("a change's measure belongs to its area", () => {
+  it("a change on a hidden side fails the list (T7)", () => {
     const s = readAnalytics(
       edit((a) => {
-        const c = items(a).find((c) => c.id === "chg_rch_questions")!;
-        c.area = "alerts";
+        changes(a).items[0]!.previous = { value: null, suppressed: true };
       }),
     );
     expect(s.changes.status).toBe("failed");
+    expect(s.use.status).toBe("ok");
   });
 
-  it("a malformed follow-up fails the list", () => {
-    const s = readAnalytics(
+  it("a measure core doesn't compare, or the wrong direction for it, fails", () => {
+    const clinicians = readAnalytics(
       edit((a) => {
-        const c = items(a).find((c) => c.id === "chg_rch_questions")!;
-        (c.follow_up as { at: unknown }).at = 5;
+        changes(a).items[1]!.measure = "active_clinicians";
       }),
     );
-    expect(s.changes.status).toBe("failed");
+    expect(clinicians.changes.status).toBe("failed");
+    const way = readAnalytics(
+      edit((a) => {
+        changes(a).items[1]!.direction = "worse";
+      }),
+    );
+    expect(way.changes.status).toBe("failed");
+    const area = readAnalytics(
+      edit((a) => {
+        changes(a).items[1]!.area = "quality";
+      }),
+    );
+    expect(area.changes.status).toBe("failed");
+  });
+
+  it("a window that isn't a month against a later week fails", () => {
+    for (const w of [
+      { from: "2026-10-08T00:00:00.000Z", to: "2026-11-08T00:00:00.000Z" },
+      { from: "2026-10-01T00:00:00.000Z", to: "2026-11-07T00:00:00.000Z" },
+      { from: "2026-11-01T00:00:00.000Z", to: "2026-11-08T00:00:00.000Z" },
+    ]) {
+      const s = readAnalytics(edit((a) => void (changes(a).window = w)));
+      expect(s.changes.status).toBe("failed");
+    }
+  });
+
+  it("an unknown key in a change or its follow-up fails the list", () => {
+    const key = readAnalytics(
+      edit((a) => {
+        Object.assign(changes(a).items[0]!, { note: "x" });
+      }),
+    );
+    expect(key.changes.status).toBe("failed");
+    const fu = readAnalytics(
+      edit((a) => {
+        const f = changes(a).items.at(-1)!.follow_up!;
+        delete (f as Partial<typeof f>).by_you;
+      }),
+    );
+    expect(fu.changes.status).toBe("failed");
   });
 });
 
 describe("readSeries", () => {
-  const H = { id: "h_lakeside", name: "Lakeside Community Clinic" };
+  const H = { id: "h_havana", name: "Havana Hospital" };
   const pt = (value: Guarded, median: number | null = 10) => ({
     start: "2026-10-01T00:00:00.000Z",
     value,
     median,
-  });
-  const shown = (value: number | null): Guarded => ({
-    value,
-    suppressed: false,
   });
   const reply = (measure: string, points: unknown) => ({
     measure,
@@ -645,111 +382,126 @@ describe("readSeries", () => {
     points,
   });
 
-  it("reads a good reply, keeping what it says", () => {
+  it("reads every series the mock sends, for every kind", () => {
+    for (const p of ["week", "month", "quarter"] as const) {
+      for (const m of [
+        "questions_per_clinician",
+        "needs_review_share",
+      ] as const)
+        for (const h of ["h_havana", "h_lakeside", "h_hilltop"])
+          expect(readSeries(buildSeries(h, m, p, NOW), m, p).status).toBe("ok");
+      for (const c of seedChanges(NOW, "normal"))
+        expect(
+          readSeries(
+            buildSeries(c.hospital?.id ?? null, c.measure, p, NOW, c.id),
+            c.measure,
+            p,
+            c.id,
+          ).status,
+        ).toBe("ok");
+    }
+  });
+
+  it("a change across all hospitals has no hospital and no median (F14)", () => {
     const s = readSeries(
-      reply("questions", [pt(shown(12), 20), pt(shown(0), null)]),
+      buildSeries(null, "questions", "month", NOW, "chg_all_questions"),
       "questions",
+      "month",
+      "chg_all_questions",
     );
-    expect(s).toEqual({
-      status: "ok",
-      measure: "questions",
-      hospital: H,
-      points: [
-        { start: pt(shown(0)).start, value: shown(12), median: shown(20) },
-        { start: pt(shown(0)).start, value: shown(0), median: null },
-      ],
-    });
+    if (s.status !== "ok") throw new Error("failed");
+    expect(s.hospital).toBeNull();
+    expect(s.points.every((p) => p.median === null)).toBe(true);
+    expect(s.points).toHaveLength(12);
+  });
+
+  it("a new hospital's periods before it started read as nothing to show", () => {
+    const s = readSeries(
+      buildSeries("h_hilltop", "questions_per_clinician", "month", NOW),
+      "questions_per_clinician",
+      "month",
+    );
+    if (s.status !== "ok") throw new Error("failed");
+    expect(s.points.filter((p) => p.value.value !== null)).toHaveLength(0);
+    expect(s.points.at(-1)!.value).toEqual(v(null));
   });
 
   it("hides a count median between 0 and 5, but not 0 or 5", () => {
     const s = readSeries(
-      reply("alerts_total", [
-        pt(shown(9), 3),
-        pt(shown(9), 4.5),
-        pt(shown(9), 0.5),
-        pt(shown(9), 0),
-        pt(shown(9), 5),
-      ]),
-      "alerts_total",
+      {
+        change_id: "c1",
+        ...reply("questions", [
+          pt(v(9), 3),
+          pt(v(9), 0.5),
+          pt(v(9), 0),
+          pt(v(9), 5),
+        ]),
+      },
+      "questions",
+      "month",
+      "c1",
     );
     if (s.status !== "ok") throw new Error("failed");
     expect(s.points.map((p) => p.median)).toEqual([
       { value: null, suppressed: true },
       { value: null, suppressed: true },
-      { value: null, suppressed: true },
-      shown(0),
-      shown(5),
+      v(0),
+      v(5),
     ]);
   });
 
-  it("keeps a small median of a rate or share", () => {
-    const s = readSeries(
-      reply("questions_per_clinician", [pt(shown(2.5), 3)]),
-      "questions_per_clinician",
+  it("fails closed on what the contract doesn't allow", () => {
+    const failed = { status: "failed" };
+    const good = reply("needs_review_share", [pt(v(0.2))]);
+    expect(readSeries(good, "needs_review_share", "month").status).toBe("ok");
+    // Another measure, another period kind, a point mid-period.
+    expect(readSeries(good, "questions_per_clinician", "month")).toEqual(
+      failed,
     );
-    if (s.status !== "ok") throw new Error("failed");
-    expect(s.points[0]!.median).toEqual(shown(3));
-  });
-
-  it("fails on an unhidden count of 1-4", () => {
-    for (const n of [1, 3, 4])
-      expect(
-        readSeries(reply("questions", [pt(shown(n))]), "questions"),
-      ).toEqual({ status: "failed" });
-  });
-
-  it("fails on a count that is not a whole number or is missing", () => {
-    for (const v of [shown(12.5), shown(null), shown(-6)])
-      expect(readSeries(reply("questions", [pt(v)]), "questions").status).toBe(
-        "failed",
-      );
-  });
-
-  it("drops the number of a hidden value", () => {
-    const s = readSeries(
-      reply("questions", [pt({ value: 3, suppressed: true })]),
-      "questions",
-    );
-    if (s.status !== "ok") throw new Error("failed");
-    expect(s.points[0]!.value).toEqual({ value: null, suppressed: true });
-  });
-
-  it("fails when the measure is not the one asked for", () => {
-    // A count of 3 read as a rate would show.
     expect(
-      readSeries(reply("questions_per_clinician", [pt(shown(3))]), "questions")
-        .status,
-    ).toBe("failed");
+      readSeries(
+        reply("needs_review_share", [
+          { ...pt(v(0.2)), start: "2026-10-08T00:00:00.000Z" },
+        ]),
+        "needs_review_share",
+        "month",
+      ),
+    ).toEqual(failed);
+    // An unhidden 1–4, an extra key.
     expect(
-      readSeries(reply("questions", [pt(shown(3))]), "questions_per_clinician")
-        .status,
-    ).toBe("failed");
-  });
-
-  it("fails on a malformed reply", () => {
-    const bad: unknown[] = [
-      null,
-      "nope",
-      { measure: "questions", hospital: H },
-      reply("questions", null),
-      reply("questions", {}),
-      { measure: "questions", hospital: { id: "a b", name: "X" }, points: [] },
-      reply("questions", [null]),
-      reply("questions", [{ ...pt(shown(9)), start: "yesterday" }]),
-      reply("questions", [{ ...pt(shown(9)), value: 9 }]),
-      reply("questions", [pt(shown(9), -1)]),
-      reply("questions", [pt(shown(9), Number.NaN)]),
-      reply("questions", [{ ...pt(shown(9)), median: "10" }]),
-      reply("questions", [{ start: pt(shown(9)).start, value: shown(9) }]),
-    ];
-    for (const b of bad)
-      expect(readSeries(b, "questions")).toEqual({ status: "failed" });
-  });
-
-  it("reads every series the mock sends", () => {
-    for (const id of [null, "h_lakeside", "h_havana", "h_hilltop"])
-      for (const m of MEASURES)
-        for (const p of ["7d", "30d", "90d"] as const)
-          expect(readSeries(buildSeries(id, m, p, NOW), m).status).toBe("ok");
+      readSeries(
+        { change_id: "c1", ...reply("questions", [pt(v(3))]) },
+        "questions",
+        "month",
+        "c1",
+      ),
+    ).toEqual(failed);
+    expect(
+      readSeries({ ...good, extra: 1 }, "needs_review_share", "month"),
+    ).toEqual(failed);
+    // A change's series: its own id; a hospital's: none, and a hospital.
+    expect(
+      readSeries(
+        { change_id: "c2", ...good },
+        "needs_review_share",
+        "month",
+        "c1",
+      ),
+    ).toEqual(failed);
+    expect(
+      readSeries({ change_id: "c1", ...good }, "needs_review_share", "month"),
+    ).toEqual(failed);
+    expect(
+      readSeries({ ...good, hospital: null }, "needs_review_share", "month"),
+    ).toEqual(failed);
+    // All hospitals has no median.
+    expect(
+      readSeries(
+        { change_id: "c1", ...good, hospital: null },
+        "needs_review_share",
+        "month",
+        "c1",
+      ),
+    ).toEqual(failed);
   });
 });

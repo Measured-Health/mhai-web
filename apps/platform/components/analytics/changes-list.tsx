@@ -1,7 +1,7 @@
 "use client";
 import type { RefObject } from "react";
 import {
-  changeLine,
+  changeTitle,
   followUpLine,
   TOP,
   type RankedChange,
@@ -38,7 +38,7 @@ export function ChangesList({
     <>
       <ul aria-label="Changes" className="flex flex-col gap-1.5">
         {shown.map((c) => {
-          const line = changeLine(c);
+          const line = changeTitle(c);
           const current = c.id === selectedId;
           return (
             <li key={c.id}>
