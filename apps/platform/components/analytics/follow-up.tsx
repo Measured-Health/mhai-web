@@ -17,6 +17,12 @@ import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 
 export const NOTE_MAX = 500;
 export const NOTE_TOO_LONG = `A note can be ${NOTE_MAX} characters at most.`;
+/** Core's refusals in this screen's words (F7). */
+const FOLLOW_UP_WORDS = {
+  validation_failed:
+    "Check the note: up to 500 characters, with no special characters.",
+  forbidden: "Someone else followed this up. Undo it first to add your own.",
+};
 
 /**
  * Who followed the change up, and (for platform admins) marking it,
@@ -45,7 +51,7 @@ export function FollowUp({
   const busy = mark.isPending || undo.isPending;
 
   const failed = (e: Error) => {
-    const w = platformError(e);
+    const w = platformError(e, FOLLOW_UP_WORDS);
     // Someone else changed it meanwhile: show them the latest.
     if (w.stale || w.gone) {
       reloadAnalytics(qc);
@@ -112,7 +118,8 @@ export function FollowUp({
           onSubmit={(note) => {
             setError(null);
             mark.mutate(
-              { id: c.id, version: c.version, note },
+              // An emptied note is no note: core takes null, not "".
+              { id: c.id, version: c.version, note: note || null },
               {
                 onSuccess: () => {
                   setEditing(false);

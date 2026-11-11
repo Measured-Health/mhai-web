@@ -95,13 +95,13 @@ test("an item opens Usage on that change", async ({ page }) => {
   await expect(bell(page)).toHaveAccessibleName(UNSEEN);
   await bell(page).click();
   await list(page)
-    .getByRole("button", { name: /Critical alerts acknowledged 2× slower/ })
+    .getByRole("button", { name: /Agreement rate better: 72\.00% to 90\.00%/ })
     .click();
   await expect(page).toHaveURL(/\/usage\?change=/);
   await expect(
     page.getByRole("heading", { level: 1, name: "Usage" }),
   ).toBeVisible();
-  const words = /Critical alerts acknowledged 2× slower/;
+  const words = /Havana Hospital · Better: Agreement rate better/;
   if (isMobile(page)) {
     // Phones open the change's detail alone.
     await expect(

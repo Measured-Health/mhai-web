@@ -15,7 +15,7 @@ import type {
 } from "../api/analytics-contract";
 import { queryKeys } from "./keys";
 
-/** Every area for one period (What changed is always the fixed window). */
+/** Every area for the latest period of a kind (What changed is the same for each). */
 export const analyticsKey = (period: Period) =>
   [...queryKeys.analytics, "summary", period] as const;
 
@@ -63,12 +63,12 @@ function savedChange(qc: QueryClient, c: Change) {
   qc.setQueriesData<AnalyticsOut>(
     { queryKey: [...queryKeys.analytics, "summary"] },
     (a) =>
-      a && !("unavailable" in a.changes)
+      a && !("unavailable" in a.what_changed)
         ? {
             ...a,
-            changes: {
-              ...a.changes,
-              items: a.changes.items.map((x) => (x.id === c.id ? c : x)),
+            what_changed: {
+              ...a.what_changed,
+              items: a.what_changed.items.map((x) => (x.id === c.id ? c : x)),
             },
           }
         : a,
@@ -82,7 +82,12 @@ export function reloadAnalytics(qc: QueryClient) {
   void qc.invalidateQueries({ queryKey: [...queryKeys.analytics, "summary"] });
 }
 
-export type FollowUpInput = { id: string; note?: string; version: number };
+export type FollowUpInput = {
+  id: string;
+  /** Absent or null: no note. */
+  note?: string | null;
+  version: number;
+};
 
 /**
  * Marks a change followed up, or edits its note: one Idempotency-Key per

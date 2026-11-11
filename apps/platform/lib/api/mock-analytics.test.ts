@@ -1,24 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
 import type {
-  AlertsRow,
   AnalyticsOut,
   Change,
+  ChangesOut,
   Guarded,
   Period,
   QualityRow,
   UseRow,
 } from "./analytics-contract";
+import { readAnalytics, readSeries } from "../analytics/read";
+import { readGuardrailPeriods } from "../analytics/guardrails";
 import { TEAM_EMAILS } from "./fixtures";
 import { createMockPlatform } from "./mock";
 
-const START = Date.parse("2026-10-22T09:30:00.000Z");
+// The latest finished week is 1–7 Nov, month October, quarter Jul–Sep.
+const START = Date.parse("2026-11-11T09:30:00.000Z");
 let n = 0;
 const KEY = () => ({ idempotencyKey: `ka-${++n}` });
-const PERIODS: Period[] = ["7d", "30d", "90d"];
+const PERIODS: Period[] = ["week", "month", "quarter"];
 
 function setup(
-  analytics?: "normal" | "guard" | "unavailable",
+  analytics?: "normal" | "unavailable" | "not_yet",
   email: string | null = TEAM_EMAILS.ada,
 ) {
   let me = email;
@@ -41,23 +44,24 @@ async function failure(p: Promise<unknown>): Promise<[number, string]> {
   throw new Error("expected a refusal");
 }
 
-type Ok<T> = Exclude<T, { unavailable: true }>;
+type Ok<T> = Exclude<T, { unavailable: true } | { not_yet: true } | null>;
 function ok<T>(v: T): Ok<T> {
-  if (v && typeof v === "object" && "unavailable" in v)
-    throw new Error("area unavailable");
+  if (v && typeof v === "object" && ("unavailable" in v || "not_yet" in v))
+    throw new Error("area not there");
   return v as Ok<T>;
 }
-const items = (a: AnalyticsOut) => ok(a.changes).items;
+const items = (a: AnalyticsOut) => (a.what_changed as ChangesOut).items;
 const change = async (
   m: ReturnType<typeof setup>["m"],
   pick: (c: Change) => boolean,
 ) => {
-  const c = items(await m.getAnalytics("30d")).find(pick);
+  const c = items(await m.getAnalytics("month")).find(pick);
   if (!c) throw new Error("no such change");
   return c;
 };
 const byHospital = (id: string | null) => (c: Change) =>
   (c.hospital?.id ?? null) === id;
+const NGH = (c: Change) => c.id === "chg_ngh_needs_review";
 
 /** Every Guarded value anywhere in a reply, with where it sits. */
 function guardedIn(v: unknown, at = "$"): [string, Guarded][] {
@@ -68,34 +72,22 @@ function guardedIn(v: unknown, at = "$"): [string, Guarded][] {
   return Object.entries(o).flatMap(([k, x]) => guardedIn(x, `${at}.${k}`));
 }
 
-const COUNTS_USE = ["questions", "active_clinicians"] as const;
 function countsOf(a: AnalyticsOut): [string, Guarded][] {
   const out: [string, Guarded][] = [];
   const use = ok(a.use);
-  const alerts = ok(a.alerts);
   const quality = ok(a.quality);
-  const rows = <R extends { hospital: { id: string } }>(b: {
-    rows: R[];
-    median: Omit<R, "hospital">;
-  }) => [...b.rows, { hospital: { id: "median" }, ...b.median } as R];
-  for (const r of rows<UseRow>(use))
-    for (const k of COUNTS_USE) out.push([`use.${r.hospital.id}.${k}`, r[k]]);
-  for (const r of rows<AlertsRow>(alerts)) {
-    for (const [k, g] of Object.entries(r.by_severity))
-      out.push([`alerts.${r.hospital.id}.${k}`, g]);
-    out.push([`alerts.${r.hospital.id}.total`, r.total]);
-    out.push([`alerts.${r.hospital.id}.unhandled`, r.unhandled]);
-    out.push([`alerts.${r.hospital.id}.overdue`, r.critical_overdue]);
-  }
-  for (const r of rows<QualityRow>(quality)) {
+  for (const r of use.rows)
+    for (const k of ["questions", "active_clinicians"] as const)
+      out.push([`use.${r.hospital.id}.${k}`, r[k]]);
+  for (const r of quality.rows) {
     out.push([`quality.${r.hospital.id}.answers`, r.answers]);
     out.push([`quality.${r.hospital.id}.reviews`, r.reviews]);
     for (const [k, g] of Object.entries(r.confidence))
       out.push([`quality.${r.hospital.id}.${k}`, g]);
   }
-  for (const area of [use, alerts] as const)
-    area.trend.forEach((p, i) => out.push([`trend.${i}`, p.value]));
+  use.trend.forEach((p, i) => out.push([`trend.${i}`, p.value]));
   for (const r of ok(a.hospitals).rows) {
+    out.push([`size.${r.hospital.id}.staff`, r.size.staff]);
     out.push([`size.${r.hospital.id}.clin`, r.size.active_clinicians]);
     out.push([`size.${r.hospital.id}.q`, r.size.questions]);
   }
@@ -103,126 +95,82 @@ function countsOf(a: AnalyticsOut): [string, Guarded][] {
 }
 
 describe("mock analytics", () => {
-  it("changes are the same for every period and keep their ids", async () => {
+  it("every reply is the latest finished period of its kind (R41a)", async () => {
     const { m } = setup();
-    const lists = await Promise.all(PERIODS.map((p) => m.getAnalytics(p)));
-    const first = ok(lists[0]!.changes);
-    expect(first.items.length).toBeGreaterThan(5);
-    for (const a of lists) expect(ok(a.changes)).toEqual(first);
-    for (const c of first.items) expect(c.id).toMatch(/^[A-Za-z0-9_-]+$/);
-    expect(new Set(first.items.map((c) => c.id)).size).toBe(first.items.length);
-    // The fixed window: the last 7 whole UTC days, whatever the period.
-    expect(first.window).toEqual({
-      from: "2026-10-15T00:00:00.000Z",
-      to: "2026-10-22T00:00:00.000Z",
-    });
-    // The period itself moves the charts and tabs.
-    expect(lists.map((a) => a.period)).toEqual(PERIODS);
-    expect(lists.map((a) => a.from)).toEqual([
-      "2026-10-15T00:00:00.000Z",
-      "2026-09-22T00:00:00.000Z",
-      "2026-07-24T00:00:00.000Z",
+    const got = await Promise.all(PERIODS.map((p) => m.getAnalytics(p)));
+    expect(got.map((a) => [a.period, a.from, a.to])).toEqual([
+      ["week", "2026-11-01T00:00:00.000Z", "2026-11-08T00:00:00.000Z"],
+      ["month", "2026-10-01T00:00:00.000Z", "2026-11-01T00:00:00.000Z"],
+      ["quarter", "2026-07-01T00:00:00.000Z", "2026-10-01T00:00:00.000Z"],
     ]);
-    expect(ok(lists[0]!.use).trend).toHaveLength(7);
-    expect(ok(lists[1]!.use).trend).toHaveLength(30);
-    expect(ok(lists[2]!.use).trend).toHaveLength(13);
-    // A second client sees the same ids.
-    const again = await setup().m.getAnalytics("90d");
-    expect(items(again).map((c) => c.id)).toEqual(first.items.map((c) => c.id));
+    expect(got.map((a) => ok(a.use).trend.length)).toEqual([12, 12, 8]);
+    for (const [i, a] of got.entries()) {
+      expect(a.changes).toEqual({ unavailable: true });
+      expect(a.alerts).toBeNull();
+      // The app reads every area of it.
+      const s = readAnalytics(a, PERIODS[i]);
+      for (const k of ["changes", "use", "quality", "hospitals"] as const)
+        expect(s[k].status, `${a.period} ${k}`).toBe("ok");
+    }
   });
 
-  it("the fixtures cover every rule", async () => {
+  it("What changed is the same for every period and keeps its ids", async () => {
     const { m } = setup();
-    const a = await m.getAnalytics("30d");
-    const list = items(a);
-    const north = list.find(
-      (c) => c.hospital?.id === "h_northgate" && c.serious,
-    )!;
-    expect(north).toMatchObject({
-      area: "alerts",
-      measure: "critical_median_ack_minutes",
-      direction: "worse",
-      previous: { value: 18, suppressed: false },
-      current: { value: 36, suppressed: false },
+    const lists = await Promise.all(PERIODS.map((p) => m.getAnalytics(p)));
+    const first = lists[0]!.what_changed as ChangesOut;
+    expect(first.items.length).toBeGreaterThan(5);
+    for (const a of lists) expect(a.what_changed).toEqual(first);
+    expect(new Set(first.items.map((c) => c.id)).size).toBe(first.items.length);
+    // The latest week against the month that finished before it began.
+    expect(first.window).toEqual({
+      from: "2026-10-01T00:00:00.000Z",
+      to: "2026-11-08T00:00:00.000Z",
     });
-    expect(north.summary).toMatch(/2× slower/);
-    const river = list.find(byHospital("h_riverside"))!;
-    expect(river).toMatchObject({ measure: "questions", direction: "falling" });
-    expect(river.summary).toMatch(/41%/);
+    for (const c of first.items) {
+      // Core's measures, both sides shown, no hospital name in the summary.
+      expect(["questions", "needs_review_share", "agreement_rate"]).toContain(
+        c.measure,
+      );
+      expect(c.previous.suppressed || c.current.suppressed).toBe(false);
+      expect(c.serious).toBe(false);
+      if (c.hospital) expect(c.summary).not.toContain(c.hospital.name);
+    }
+    const river = first.items.find(byHospital("h_riverside"))!;
     expect(river.follow_up).toMatchObject({
       by: { id: "tm_tunde", name: "Tunde Okafor" },
       version: 1,
     });
-    expect(river.follow_up!.note).toBeTruthy();
-    const all = list.find(byHospital(null))!;
-    expect(all).toMatchObject({ area: "alerts", direction: "rising" });
-    expect(all.summary).toMatch(/Low potassium/);
-    // Havana, the clinical demo's hospital, is in every area.
-    for (const area of [a.use, a.alerts, a.quality, a.hospitals])
-      expect(ok(area).rows[0]!.hospital).toEqual({
-        id: "h_havana",
-        name: "Havana Hospital",
-      });
-    // Normal mode: no hospital is overdue without a serious change for it.
-    for (const r of ok(a.alerts).rows) {
-      const g = r.critical_overdue;
-      if (g.suppressed || (g.value ?? 0) > 0)
-        expect(
-          list.some((c) => c.serious && c.hospital?.id === r.hospital.id),
-        ).toBe(true);
-    }
   });
 
-  it("counts 1–4 are suppressed, 0 is not", async () => {
+  it("counts 1–4 are suppressed, 0 is not, in every period", async () => {
     const { m } = setup();
     for (const p of PERIODS) {
       const a = await m.getAnalytics(p);
       for (const [at, g] of countsOf(a)) {
         if (g.value !== null)
           expect(g.value === 0 || g.value >= 5, `${p} ${at}`).toBe(true);
-        if (g.suppressed) expect(g.value, `${p} ${at}`).toBeNull();
       }
       for (const [at, g] of guardedIn(a))
         if (g.suppressed) expect(g.value, `${p} ${at}`).toBeNull();
     }
-    const a = await m.getAnalytics("30d");
-    const use = ok(a.use);
+    const use = ok((await m.getAnalytics("week")).use);
     const row = (id: string) => use.rows.find((r) => r.hospital.id === id)!;
-    // The small hospital: 1–4 are hidden, and so is any rate over them.
-    const small = row("h_lakeside");
-    expect(small.questions).toEqual({ value: null, suppressed: true });
-    expect(small.questions_per_clinician).toEqual({
+    expect(row("h_lakeside").questions).toEqual({
       value: null,
       suppressed: true,
     });
-    // The hospital with zeros shows them.
-    const zero = row("h_hilltop");
-    expect(zero.questions).toEqual({ value: 0, suppressed: false });
-    expect(zero.active_clinicians).toEqual({ value: 0, suppressed: false });
-    expect(zero.questions_per_clinician.suppressed).toBe(false);
+    expect(row("h_lakeside").questions_per_clinician.suppressed).toBe(true);
+    expect(row("h_hilltop").questions).toEqual({ value: 0, suppressed: false });
   });
 
-  it("never sends a rate, median or share over a hidden count", async () => {
-    const { m } = setup("guard");
+  it("never sends a rate or share over a hidden count, nor an all-hospitals total beside a hidden hospital", async () => {
+    const { m } = setup();
     for (const p of PERIODS) {
       const a = await m.getAnalytics(p);
       const use = ok(a.use);
       for (const r of [...use.rows, use.median as UseRow])
         if (r.questions.suppressed || r.active_clinicians.suppressed)
           expect(r.questions_per_clinician.suppressed).toBe(true);
-      const alerts = ok(a.alerts);
-      for (const r of [...alerts.rows, alerts.median as AlertsRow]) {
-        const sev = Object.values(r.by_severity);
-        // A set with a hidden member hides the whole set.
-        if (sev.some((g) => g.suppressed))
-          expect(sev.every((g) => g.suppressed)).toBe(true);
-        if (r.total.suppressed)
-          expect(r.median_ack_minutes.suppressed).toBe(true);
-        if (r.by_severity.critical.suppressed) {
-          expect(r.critical_median_ack_minutes.suppressed).toBe(true);
-          expect(r.critical_within_target.suppressed).toBe(true);
-        }
-      }
       const quality = ok(a.quality);
       for (const r of [...quality.rows, quality.median as QualityRow]) {
         const mix = Object.values(r.confidence);
@@ -231,12 +179,16 @@ describe("mock analytics", () => {
         if (r.answers.suppressed)
           expect(r.needs_review_share.suppressed).toBe(true);
       }
+      // The latest trend point is this period's all-hospitals cell: hidden
+      // when a hospital's own cell is, so all minus the rest gives nothing.
+      if (use.rows.some((r) => r.questions.suppressed))
+        expect(use.trend.at(-1)!.value.suppressed).toBe(true);
     }
   });
 
   it("an auditor can't follow up", async () => {
     const { m, as } = setup();
-    const c = await change(m, byHospital("h_northgate"));
+    const c = await change(m, NGH);
     as(TEAM_EMAILS.amara);
     expect(
       await failure(m.followUp(c.id, { version: c.version }, KEY())),
@@ -251,7 +203,7 @@ describe("mock analytics", () => {
 
   it("by_you is true for the follow-up's author and false for another admin", async () => {
     const { m, as } = setup();
-    const c = await change(m, (x) => x.serious);
+    const c = await change(m, NGH);
     const done = await m.followUp(c.id, { version: c.version }, KEY());
     expect(done.follow_up?.by_you).toBe(true);
     expect((await change(m, (x) => x.id === c.id)).follow_up?.by_you).toBe(
@@ -275,7 +227,7 @@ describe("mock analytics", () => {
 
   it("a stale version is 409 conflict", async () => {
     const { m } = setup();
-    const c = await change(m, (x) => x.serious);
+    const c = await change(m, NGH);
     const done = await m.followUp(c.id, { version: c.version }, KEY());
     expect(done.version).toBe(c.version + 1);
     expect(done.follow_up).toMatchObject({
@@ -310,27 +262,26 @@ describe("mock analytics", () => {
     ).toEqual(once);
   });
 
-  it("a note over 500 characters is 422", async () => {
+  it("a note is 1 to 500 characters, else 422 validation_failed (F7)", async () => {
     const { m } = setup();
-    const c = await change(m, (x) => x.serious);
-    expect(
-      await failure(
-        m.followUp(c.id, { note: "x".repeat(501), version: c.version }, KEY()),
-      ),
-    ).toEqual([422, "invalid"]);
+    const c = await change(m, NGH);
+    for (const note of ["x".repeat(501), ""])
+      expect(
+        await failure(m.followUp(c.id, { note, version: c.version }, KEY())),
+      ).toEqual([422, "validation_failed"]);
     const fine = await m.followUp(
       c.id,
-      { note: ` ${"x".repeat(500)} `, version: c.version },
+      { note: "x".repeat(500), version: c.version },
       KEY(),
     );
     expect(fine.follow_up?.note).toBe("x".repeat(500));
-    // A blank note is no note.
-    const blank = await m.followUp(
+    // Null is no note: the author clears it.
+    const cleared = await m.followUp(
       c.id,
-      { note: "  ", version: fine.version },
+      { note: null, version: fine.version },
       KEY(),
     );
-    expect(blank.follow_up?.note).toBeNull();
+    expect(cleared.follow_up?.note).toBeNull();
   });
 
   it("only the author edits a note; any platform admin can undo", async () => {
@@ -384,7 +335,7 @@ describe("mock analytics", () => {
     const { m } = setup();
     const events = async () => (await m.listActivity({})).events;
     const before = (await events()).length;
-    const c = await change(m, (x) => x.serious);
+    const c = await change(m, NGH);
     const a = await m.followUp(c.id, { version: c.version }, KEY());
     const b = await m.followUp(
       c.id,
@@ -411,16 +362,16 @@ describe("mock analytics", () => {
     expect(north.events[0]!.action).toBe("change_follow_up_undone");
   });
 
-  it("Eastbrook has no admins; Hilltop has no previous period", async () => {
+  it("Eastbrook has no admins; Hilltop, new, has no change", async () => {
     const { m } = setup();
     const h = await m.getHospital("h_eastbrook");
     expect(h.status).toBe("setup_incomplete");
     expect(h.admins).toEqual([]);
     expect(h.first_admin?.status).toBe("expired");
-    // A hospital new this month (active, R4): nothing earlier to compare.
-    const hill = await change(m, byHospital("h_hilltop"));
-    expect(hill.previous).toEqual({ value: null, suppressed: false });
-    expect(hill.current.suppressed).toBe(false);
+    // A hospital new this month has no previous month: no change (F17).
+    expect(
+      items(await m.getAnalytics("month")).some(byHospital("h_hilltop")),
+    ).toBe(false);
     // Active hospitals list their active admins.
     const havana = await m.getHospital("h_havana");
     expect(havana).toMatchObject({
@@ -465,119 +416,123 @@ describe("mock analytics", () => {
     expect(hilltop.first_admin?.status).toBe("accepted");
   });
 
-  it("the series follow the change and the hospital, with the others' median", async () => {
+  it("the series are successive periods, with the others' median", async () => {
     const { m } = setup();
-    const north = await change(m, (x) => x.serious);
+    const north = await change(m, NGH);
     for (const [p, len] of [
-      ["7d", 7],
-      ["30d", 30],
-      ["90d", 13],
+      ["week", 12],
+      ["month", 12],
+      ["quarter", 8],
     ] as const) {
       const s = await m.getChangeSeries(north.id, p);
-      expect(s.measure).toBe("critical_median_ack_minutes");
-      expect(s.hospital).toEqual({
-        id: "h_northgate",
-        name: "Northgate General Hospital",
-      });
+      expect(s.change_id).toBe(north.id);
+      expect(s.measure).toBe("needs_review_share");
+      expect(s.hospital?.id).toBe("h_northgate");
       expect(s.points).toHaveLength(len);
+      expect(readSeries(s, s.measure, p, north.id).status).toBe("ok");
     }
+    const all = await m.getChangeSeries("chg_all_questions", "month");
+    expect(all.hospital).toBeNull();
+    expect(all.points.every((pt) => pt.median === null)).toBe(true);
     const h = await m.getHospitalSeries(
       "h_riverside",
       "questions_per_clinician",
-      "30d",
+      "month",
     );
-    expect(h.hospital.id).toBe("h_riverside");
+    expect(h.change_id).toBeUndefined();
     expect(h.points.every((pt) => typeof pt.median === "number")).toBe(true);
-    const small = await m.getHospitalSeries("h_lakeside", "questions", "7d");
-    for (const pt of small.points)
-      if (pt.value.value !== null) expect(pt.value.value).toBe(0);
-    // A count median between 0 and 5 (4.5 too) is sent hidden.
-    for (const id of ["h_lakeside", "h_hilltop", "h_havana", "h_riverside"])
-      for (const measure of [
-        "questions",
-        "active_clinicians",
-        "alerts_total",
-        "unhandled_alerts",
-      ] as const)
-        for (const pt of (await m.getHospitalSeries(id, measure, "30d")).points)
-          if (pt.median !== null)
-            expect(pt.median === 0 || pt.median >= 5).toBe(true);
-    expect(await failure(m.getChangeSeries("chg_nope", "30d"))).toEqual([
+    expect(await failure(m.getChangeSeries("chg_nope", "month"))).toEqual([
       404,
       "not_found",
     ]);
     expect(
-      await failure(m.getHospitalSeries("h_nope", "questions", "30d")),
-    ).toEqual([404, "not_found"]);
-    expect(
       await failure(
-        m.getHospitalSeries("h_havana", "nope" as "questions", "30d"),
+        m.getHospitalSeries("h_nope", "questions_per_clinician", "month"),
       ),
-    ).toEqual([422, "invalid"]);
-    expect(await failure(m.getAnalytics("365d" as Period))).toEqual([
+    ).toEqual([404, "not_found"]);
+    // The Critical measures wait for alerts (F10); rolling windows are gone.
+    for (const measure of ["critical_within_target", "questions"] as const)
+      expect(
+        await failure(m.getHospitalSeries("h_havana", measure, "month")),
+      ).toEqual([422, "validation_failed"]);
+    expect(await failure(m.getAnalytics("30d" as Period))).toEqual([
       422,
-      "invalid",
+      "validation_failed",
     ]);
-  });
-
-  it("the 'guard' option drops Northgate's serious change and keeps its overdue", async () => {
-    const overdue = (a: AnalyticsOut) =>
-      ok(a.alerts).rows.find((r) => r.hospital.id === "h_northgate")!
-        .critical_overdue;
-    const guard = await setup("guard").m.getAnalytics("30d");
-    expect(items(guard).some((c) => c.serious)).toBe(false);
-    expect(overdue(guard)).toEqual({ value: null, suppressed: true });
-    // Normal: the same overdue, covered by Northgate's serious change.
-    const normal = await setup().m.getAnalytics("30d");
-    expect(overdue(normal)).toEqual({ value: null, suppressed: true });
-    expect(
-      items(normal).some((c) => c.serious && c.hospital?.id === "h_northgate"),
-    ).toBe(true);
   });
 
   it("analytics cover active hospitals only", async () => {
     const { m } = setup();
-    // The three hospitals only Analysis has (Plan 12) have no usage sample.
-    const active = (await m.listHospitals({ status: "active" })).hospitals
-      .map((h) => h.id)
-      .filter((id) => !["h_ridgeway", "h_marlow", "h_fairhaven"].includes(id));
-    expect(active).toEqual([
+    const active = [
       "h_havana",
       "h_northgate",
       "h_riverside",
       "h_lakeside",
       "h_hilltop",
-    ]);
-    for (const mode of ["normal", "guard"] as const)
-      for (const p of PERIODS) {
-        const a = await setup(mode).m.getAnalytics(p);
-        for (const area of [a.use, a.alerts, a.quality, a.hospitals])
-          expect(ok(area).rows.map((r) => r.hospital.id)).toEqual(active);
-        for (const c of items(a))
-          if (c.hospital) expect(active).toContain(c.hospital.id);
-      }
-    for (const id of [
-      "h_eastbrook",
-      "h_westfield",
-      "h_harbour",
-      "h_southpoint",
-    ])
+    ];
+    const a = await m.getAnalytics("month");
+    for (const area of [a.use, a.quality, a.hospitals])
+      expect(ok(area).rows.map((r) => r.hospital.id)).toEqual(active);
+    for (const c of items(a))
+      if (c.hospital) expect(active).toContain(c.hospital.id);
+    for (const id of ["h_eastbrook", "h_westfield"])
       expect(
-        await failure(m.getHospitalSeries(id, "questions", "30d")),
+        await failure(
+          m.getHospitalSeries(id, "questions_per_clinician", "month"),
+        ),
       ).toEqual([404, "not_found"]);
   });
 
-  it("the 'unavailable' option makes every area unavailable", async () => {
-    const { m } = setup("unavailable");
-    const a = await m.getAnalytics("30d");
-    expect(a.period).toBe("30d");
-    for (const area of [a.changes, a.use, a.alerts, a.quality, a.hospitals])
+  it("'unavailable' makes every area unavailable; alerts stay null", async () => {
+    const a = await setup("unavailable").m.getAnalytics("month");
+    expect(a.period).toBe("month");
+    for (const area of [
+      a.changes,
+      a.use,
+      a.quality,
+      a.hospitals,
+      a.what_changed,
+    ])
       expect(area).toEqual({ unavailable: true });
+    expect(a.alerts).toBeNull();
+  });
+
+  it("'not_yet': no period published, each area says when (F19)", async () => {
+    const { m } = setup("not_yet");
+    const a = await m.getAnalytics("quarter");
+    expect([a.from, a.to]).toEqual([null, null]);
+    for (const area of [a.use, a.quality, a.hospitals])
+      expect(area).toEqual({
+        not_yet: true,
+        first_from: "2027-01-01T00:00:00.000Z",
+      });
+    expect(a.what_changed).toEqual({ unavailable: true });
+    expect(
+      await failure(
+        m.getHospitalSeries("h_havana", "questions_per_clinician", "month"),
+      ),
+    ).toEqual([404, "not_found"]);
+    expect(await failure(m.getGuardrailPeriods("month"))).toEqual([
+      503,
+      "not_ready",
+    ]);
+  });
+
+  it("guardrail statistics: the latest period, read strictly (F20)", async () => {
+    const { m } = setup();
+    for (const p of PERIODS) {
+      const g = await m.getGuardrailPeriods(p);
+      expect(readGuardrailPeriods(g, p)).toEqual(g);
+      expect(g.hospitals.length).toBeGreaterThan(0);
+      for (const [at, v] of guardedIn(g))
+        if (v.value !== null && !at.endsWith("_share"))
+          expect(v.value === 0 || v.value >= 5, `${p} ${at}`).toBe(true);
+    }
   });
 
   it("reads need someone signed in", async () => {
     const { m } = setup(undefined, null);
-    expect(await failure(m.getAnalytics("30d"))).toEqual([
+    expect(await failure(m.getAnalytics("month"))).toEqual([
       401,
       "session_expired",
     ]);

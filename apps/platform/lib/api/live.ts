@@ -19,6 +19,7 @@ import type {
 } from "./clearances-contract";
 import type { HoldsClient } from "./holds-contract";
 import { readModelPolicy } from "./model-policy-contract";
+import { readGuardrailPeriods } from "../analytics/guardrails";
 import type { SettingsClient } from "./settings-contract";
 
 const { apiRequest, apiBlob } = createApiRequest({
@@ -326,6 +327,11 @@ export function createLivePlatformClient({
       ok(`/analytics/changes/${id(c)}/follow-up`, "PUT", b, o),
     undoFollowUp: (c, b, o) =>
       ok(`/analytics/changes/${id(c)}/follow-up`, "DELETE", b, o),
+    // Guardrail statistics on calendar periods (F20), read strictly.
+    getGuardrailPeriods: (period) =>
+      ok(`/guardrails/periods${query({ period })}`).then((r) =>
+        readGuardrailPeriods(r, period),
+      ),
     // The bell's poll is background: it must not count as activity (the
     // proxy then leaves the server's idle clock alone).
     listNotifications: () =>

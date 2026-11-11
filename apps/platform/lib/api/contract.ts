@@ -4,6 +4,7 @@
 import { ApiError } from "@mhai/api-client/errors";
 import type {
   AnalyticsOut,
+  GuardrailPeriodsOut,
   Change,
   MeasureId,
   Period,
@@ -342,7 +343,7 @@ export interface PlatformClient
   listActivity(
     q: ActivityQuery,
   ): Promise<{ events: ActivityEvent[]; next_cursor: string | null }>;
-  /** Every area for the period; What changed is always the fixed window. */
+  /** Every area for the latest finished period of the kind. */
   getAnalytics(period: Period): Promise<AnalyticsOut>;
   getChangeSeries(changeId: string, period: Period): Promise<SeriesOut>;
   getHospitalSeries(
@@ -353,7 +354,7 @@ export interface PlatformClient
   /** Marks a change followed up, or edits the note (its author only). */
   followUp(
     changeId: string,
-    body: { note?: string; version: number },
+    body: { note?: string | null; version: number },
     opts: WriteOpts,
   ): Promise<Change>;
   undoFollowUp(
@@ -361,6 +362,8 @@ export interface PlatformClient
     body: { version: number },
     opts: WriteOpts,
   ): Promise<Change>;
+  /** Guardrail statistics for the latest finished period (503 `not_ready` before the first). */
+  getGuardrailPeriods(period: Period): Promise<GuardrailPeriodsOut>;
   /** The signed-in person's notifications, newest first, at most 20. */
   listNotifications(): Promise<NotificationsOut>;
   /**

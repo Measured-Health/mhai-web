@@ -97,9 +97,9 @@ describe("the analytics bell", () => {
     const items = within(list()).getAllByRole("button");
     expect(items).toHaveLength(6);
     expect(items[0]).toHaveAccessibleName(
-      /Northgate General Hospital: Critical alerts acknowledged 2× slower/,
+      /^Worse: Answers needing review worse: 12\.00% to 31\.00%/,
     );
-    expect(items[1]).toHaveAccessibleName(/Low potassium alerts rising/);
+    expect(items[1]).toHaveAccessibleName(/^Rising: Questions up: 301 to 483/);
     expect(
       within(dialog).getAllByText(/^Northgate General Hospital · \d/),
     ).not.toHaveLength(0);
@@ -210,9 +210,9 @@ describe("the analytics bell", () => {
     renderWithAuth(<NotificationBell />);
     await userEvent.click(await bell("Notifications, 6 new"));
     await userEvent.click(
-      within(list()).getByRole("button", { name: /answers reviewed faster/ }),
+      within(list()).getByRole("button", { name: /Agreement rate better/ }),
     );
-    expect(env.push).toHaveBeenCalledWith("/usage?change=chg_hav_review_time");
+    expect(env.push).toHaveBeenCalledWith("/usage?change=chg_hav_agreement");
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", { name: "Notifications" }),
@@ -464,7 +464,7 @@ describe("the bell's integrity item", () => {
     expect(base.items[0]).not.toHaveProperty("kind");
     expect(notificationOk(base.items[0])).toBe(true);
     expect(within(list()).getAllByRole("button")[0]).toHaveAccessibleName(
-      /Critical alerts acknowledged/,
+      /Answers needing review worse/,
     );
   });
 

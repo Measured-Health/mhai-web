@@ -27,7 +27,7 @@ import { getDemoStepUp, requireStepUp, type DemoStepUp } from "./step-up";
 import { keepsRecords } from "./holds-contract";
 import { holdsMock, keptHolds, settleHolds } from "./mock-holds";
 import {
-  MEASURES,
+  SERIES_MEASURES,
   PERIODS,
   type Change,
   type FollowUp,
@@ -35,6 +35,7 @@ import {
 } from "./analytics-contract";
 import {
   buildAnalytics,
+  buildGuardrails,
   buildSeries,
   changeFlaggedAt,
   isAnalyticsHospital,
@@ -421,7 +422,8 @@ export function createMockPlatform({
       if (c?.follow_up) c.follow_up.by_you = c.follow_up.by.id === m.id;
     };
     mine(v as { follow_up?: FollowUp | null } | null);
-    const ch = (v as { changes?: { items?: unknown } } | null)?.changes;
+    const ch = (v as { what_changed?: { items?: unknown } } | null)
+      ?.what_changed;
     if (Array.isArray(ch?.items)) ch.items.forEach(mine);
     return v;
   }
@@ -497,18 +499,22 @@ export function createMockPlatform({
     is_you: t.id === m.id,
   });
 
+  /** Core's one validation code for analytics (F7). */
+  const unvalidated = (): never => fail(422, "validation_failed");
   const period = (p: unknown): Period =>
-    PERIODS.includes(p as Period) ? (p as Period) : invalid();
+    PERIODS.includes(p as Period) ? (p as Period) : unvalidated();
   const theChange = (id: string): Change =>
     changes.find((c) => c.id === id) ?? fail(404, "not_found");
   /** Every follow-up write sends the version it saw; else 409. */
   const sameVersion = (c: Change, body: unknown) => {
     const v = (body as { version?: unknown } | null)?.version;
-    if (typeof v !== "number") invalid();
+    if (typeof v !== "number") unvalidated();
     if (v !== c.version) fail(409, "conflict");
   };
   const noSeries = () => {
     if (analytics === "unavailable") fail(503, "unavailable");
+    // Before the first period, no hospital is in a published one.
+    if (analytics === "not_yet") fail(404, "not_found");
   };
 
   /** One per current change, newest first, as `m` has seen them. */
@@ -988,13 +994,13 @@ export function createMockPlatform({
         const per = period(p);
         noSeries();
         const c = theChange(id);
-        return buildSeries(c.hospital?.id ?? null, c.measure, per, now());
+        return buildSeries(c.hospital?.id ?? null, c.measure, per, now(), c.id);
       }),
 
     getHospitalSeries: (id, measure, p) =>
       read(() => {
         const per = period(p);
-        if (!MEASURES.includes(measure)) invalid();
+        if (!SERIES_MEASURES.includes(measure)) unvalidated();
         noSeries();
         if (!isAnalyticsHospital(id)) fail(404, "not_found");
         return buildSeries(id, measure, per, now());
@@ -1004,21 +1010,22 @@ export function createMockPlatform({
       write(opts, (m) => {
         const c = theChange(id);
         const raw = (body as { note?: unknown } | null)?.note;
+        // Null or absent: no note. Otherwise 1 to 500 characters (F7).
         const note =
           raw === undefined || raw === null
-            ? undefined
-            : typeof raw !== "string"
-              ? invalid()
-              : raw.trim() === ""
-                ? null
-                : text(raw, NOTE_MAX);
+            ? null
+            : typeof raw !== "string" ||
+                raw.length === 0 ||
+                [...raw].length > NOTE_MAX
+              ? unvalidated()
+              : raw;
         sameVersion(c, body);
         const f = c.follow_up;
         const target = { hospital: c.hospital, target: c.summary };
         if (f) {
           // Only its author edits a follow-up.
           if (f.by.id !== m.id) fail(403, "forbidden");
-          f.note = note === undefined ? f.note : note;
+          f.note = note;
           f.version++;
           log(person(m), "change_note_edited", { ...target, detail: f.note });
         } else {
@@ -1027,13 +1034,10 @@ export function createMockPlatform({
             // Set per caller on the way out (see forYou).
             by_you: false,
             at: iso(now()),
-            note: note ?? null,
+            note,
             version: 1,
           };
-          log(person(m), "change_followed_up", {
-            ...target,
-            detail: note ?? null,
-          });
+          log(person(m), "change_followed_up", { ...target, detail: note });
         }
         c.version++;
         return copy(c);
@@ -1051,6 +1055,13 @@ export function createMockPlatform({
           target: c.summary,
         });
         return copy(c);
+      }),
+
+    getGuardrailPeriods: (p) =>
+      read(() => {
+        const per = period(p);
+        if (analytics !== "normal") fail(503, "not_ready");
+        return buildGuardrails(per, now());
       }),
 
     listNotifications: () =>

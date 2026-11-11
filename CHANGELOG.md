@@ -26,6 +26,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Platform analytics on core's calendar periods** (Plan 7c, core openapi
+  1.15.0; ruling R41a). Usage picks Last week, Last month or Last quarter
+  and shows the period's dates; weeks are month-aligned and named by their
+  date range; trends and charts are successive periods, never a total
+  across them. What changed is read from `what_changed` (the latest week
+  against the month before it, per day), with follow-ups. Areas say "First
+  figures after …" before the first period, Alert safety says it isn't
+  switched on, and the CSV names each row's period. The proxy checks the
+  analytics query strings and follow-up bodies strictly, and adds
+  `GET /platform/guardrails/periods`.
+
 - **Cloud models: the per-hospital switch and the notices** (Plan 14, core
   openapi 1.10.0). The platform app's hospital page has an **AI model**
   section: who drafts the hospital's answers (MHAI's own model, or

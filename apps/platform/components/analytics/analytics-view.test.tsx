@@ -51,7 +51,8 @@ afterEach(() => {
   vi.mocked(downloadCsv).mockClear();
 });
 
-const NGH_ACK = /Critical alerts acknowledged 2× slower/;
+const NGH_ACK =
+  /^Northgate General Hospital · Worse: Answers needing review worse/;
 const region = (name: string | RegExp) => screen.getByRole("region", { name });
 const changes = () =>
   within(region("What changed")).getByRole("list", { name: "Changes" });
@@ -64,7 +65,7 @@ async function open(user = ADA) {
 }
 
 describe("the Usage page", () => {
-  it("opens on What changed with the most serious first and selected", async () => {
+  it("opens on What changed with the first change selected, and the period's dates", async () => {
     await open();
     expect(
       screen.getByRole("heading", { level: 1, name: "Usage" }),
@@ -81,7 +82,37 @@ describe("the Usage page", () => {
     expect(
       await screen.findByRole("heading", { level: 2, name: NGH_ACK }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Period" })).toHaveValue("30d");
+    const period = screen.getByRole("combobox", { name: "Period" });
+    expect(period).toHaveValue("month");
+    expect(
+      within(period)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["Last week", "Last month", "Last quarter"]);
+    // What changed names the two periods it compares.
+    expect(
+      within(region("What changed")).getByText(
+        /^Week \d{1,2}–\d{1,2} [A-Z][a-z]{2} \d{4} against Month 1–\d{2} [A-Z][a-z]{2} \d{4}, per day$/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/change only when a period ends/),
+    ).toBeInTheDocument();
+  });
+
+  it("before the first period each area says when figures start (F19)", async () => {
+    install("not_yet");
+    renderWithAuth(<AnalyticsView />);
+    expect(
+      await screen.findByText(
+        /^First figures after 1–\d{2} [A-Z][a-z]{2} \d{4}$/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(region("What changed")).getByText("Couldn't load what changed."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Nothing unusual this period")).toBeNull();
+    expect(screen.queryByText(/^0$/)).toBeNull();
   });
 
   it("Show all reveals the rest", async () => {
@@ -100,7 +131,7 @@ describe("the Usage page", () => {
     const d = detail();
     expect(
       await within(d).findByRole("region", {
-        name: "Critical median time to acknowledge: Northgate General Hospital",
+        name: "Answers needing review: Northgate General Hospital",
       }),
     ).toBeInTheDocument();
     expect(
@@ -157,7 +188,7 @@ describe("the Usage page", () => {
     ).toBeInTheDocument();
     expect(within(d).getByText("Rang the ward.")).toBeInTheDocument();
     expect(send).toHaveBeenCalledWith(
-      "chg_ngh_critical_ack",
+      "chg_ngh_needs_review",
       { note: "Rang the ward.", version: 1 },
       { idempotencyKey: expect.any(String) },
     );
@@ -200,7 +231,7 @@ describe("the Usage page", () => {
     // Tunde follows it up first, from another browser.
     who = TUNDE;
     await api.followUp(
-      "chg_ngh_critical_ack",
+      "chg_ngh_needs_review",
       { version: 1 },
       { idempotencyKey: "tunde-1" },
     );
@@ -228,7 +259,7 @@ describe("the Usage page", () => {
     await userEvent.click(screen.getByRole("button", { name: "Show all (6)" }));
     await userEvent.click(rows()[5]!);
     const d = screen.getByRole("region", {
-      name: /Riverside Children's Hospital: questions down/,
+      name: /Riverside Children's Hospital · Falling: Questions down/,
     });
     expect(
       within(d).getByText(/^Followed up by Tunde Okafor · /),
@@ -247,24 +278,6 @@ describe("the Usage page", () => {
     expect(
       within(detail()).queryByRole("button", { name: "Mark followed up" }),
     ).toBeNull();
-  });
-
-  it("the guard fixture shows Couldn't load what changed, never Nothing unusual", async () => {
-    install("guard");
-    renderWithAuth(<AnalyticsView />);
-    const area = region("What changed");
-    expect(
-      await within(area).findByText("Couldn't load what changed."),
-    ).toBeInTheDocument();
-    expect(
-      within(area).getByRole("button", { name: "Try again" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Nothing unusual this period")).toBeNull();
-    expect(screen.queryByRole("list", { name: "Changes" })).toBeNull();
-    // No detail either: the only area heading is What changed.
-    expect(
-      screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent),
-    ).toEqual(["What changed"]);
   });
 
   it("every area unavailable still renders the header and each Couldn't load", async () => {
@@ -290,23 +303,24 @@ describe("the Usage page", () => {
     await open();
     await userEvent.selectOptions(
       screen.getByRole("combobox", { name: "Period" }),
-      "Last 90 days",
+      "Last quarter",
     );
     const csvButton = screen.getByRole("button", { name: "Download CSV" });
     await waitFor(() => expect(csvButton).toBeEnabled());
     await userEvent.click(csvButton);
     expect(downloadCsv).toHaveBeenCalledOnce();
     const [name, csv] = vi.mocked(downloadCsv).mock.calls[0]!;
-    expect(name).toMatch(/^analytics-last-90-days-\d{4}-\d{2}-\d{2}\.csv$/);
-    expect(csv).toContain("Last 90 days");
+    expect(name).toMatch(/^analytics-last-quarter-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(csv).toContain("Last quarter");
+    expect(csv).toMatch(/Quarter 1 [A-Z][a-z]{2}–\d{2} [A-Z][a-z]{2} \d{4}/);
     expect(csv).toContain("What changed");
-    expect(csv).not.toContain("Last 30 days");
+    expect(csv).not.toContain("Last month");
   });
 
   it("offline disables follow-up and CSV with the reason", async () => {
     // Ada followed Havana up earlier, with a note she could edit online.
     await api.followUp(
-      "chg_hav_review_time",
+      "chg_hav_agreement",
       { note: "Asked what changed.", version: 1 },
       { idempotencyKey: "ada-hav" },
     );
@@ -323,11 +337,11 @@ describe("the Usage page", () => {
     expect(within(d).getByLabelText("Note (optional)")).toBeDisabled();
     await userEvent.click(
       screen.getByRole("button", {
-        name: /Havana Hospital: answers reviewed faster/,
+        name: /Havana Hospital · Better: Agreement rate better/,
       }),
     );
     const hav = screen.getByRole("region", {
-      name: /Havana Hospital: answers reviewed faster/,
+      name: /Havana Hospital · Better: Agreement rate better/,
     });
     for (const name of ["Undo", "Edit note"]) {
       const b = within(hav).getByRole("button", { name });
@@ -368,7 +382,7 @@ describe("the Usage page", () => {
   });
 
   it("a chart of another measure than the change's fails closed", async () => {
-    const s = await api.getChangeSeries("chg_ngh_critical_ack", "30d");
+    const s = await api.getChangeSeries("chg_ngh_needs_review", "month");
     vi.spyOn(api, "getChangeSeries").mockResolvedValue({
       ...s,
       measure: "questions_per_clinician",
@@ -381,13 +395,13 @@ describe("the Usage page", () => {
   });
 
   it("a hospital with no active admin has one Open hospital link", async () => {
+    const real = api.getHospital.bind(api);
+    vi.spyOn(api, "getHospital").mockImplementation(async (id) => ({
+      ...(await real(id)),
+      admins: [],
+    }));
     await open();
-    await userEvent.click(
-      screen.getByRole("button", { name: /Hilltop Cottage Hospital/ }),
-    );
-    const d = screen.getByRole("region", {
-      name: /no clinicians active yet/,
-    });
+    const d = detail();
     expect(
       await within(d).findByText("No active hospital admin"),
     ).toBeInTheDocument();
@@ -427,13 +441,13 @@ describe("the Usage page", () => {
 
 describe("opening Usage on a change", () => {
   it("?change= selects that change", async () => {
-    nav.search = "change=chg_hav_review_time";
+    nav.search = "change=chg_hav_agreement";
     await open();
     await waitFor(() =>
       expect(
         screen.getByRole("heading", {
           level: 2,
-          name: /answers reviewed faster/,
+          name: /Agreement rate better/,
         }),
       ).toBeInTheDocument(),
     );

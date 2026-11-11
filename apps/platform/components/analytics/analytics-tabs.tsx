@@ -106,7 +106,11 @@ export function AnalyticsTabs({
         className="focus-visible:outline-2 focus-visible:outline-mint-deep"
       >
         {tab === "use" ? (
-          <UseTab state={state?.use ?? null} {...common} />
+          <UseTab
+            state={state?.use ?? null}
+            period={state?.period ?? "month"}
+            {...common}
+          />
         ) : tab === "alerts" ? (
           <AlertsTab state={state?.alerts ?? null} {...common} />
         ) : tab === "quality" ? (

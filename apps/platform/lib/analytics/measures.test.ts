@@ -34,11 +34,9 @@ describe("measure labels", () => {
     expect(measureLabel("median_review_hours")).toBe("Median review time");
   });
 
-  it("the Hospitals tab compares four measures, in order", () => {
+  it("the Hospitals tab compares the two series measures until alerts exist (F10)", () => {
     expect(COMPARE_MEASURES).toEqual([
       "questions_per_clinician",
-      "critical_median_ack_minutes",
-      "critical_within_target",
       "needs_review_share",
     ]);
   });

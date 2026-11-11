@@ -10,6 +10,8 @@ import type { PlatformClient } from "@/lib/api/contract";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp } from "@/lib/api/step-up";
 import { valueText } from "@/lib/analytics/measures";
+import { ALERTS_OFF } from "./alerts-tab";
+import { QUALITY_HELP } from "./quality-tab";
 import { ADA, renderWithAuth } from "@/tests/render";
 import { AnalyticsView } from "./analytics-view";
 
@@ -35,10 +37,9 @@ afterEach(() => {
 
 const UPDATED = /^Updated \d{2}:\d{2}$/;
 const tab = (name: string) => screen.getByRole("tab", { name });
-async function open(changes = true) {
+async function open() {
   renderWithAuth(<AnalyticsView />, { user: ADA });
-  // Without the alerts area the Critical guard fails What changed closed.
-  if (changes) await screen.findByRole("list", { name: "Changes" });
+  await screen.findByRole("list", { name: "Changes" });
   await screen.findByRole("list", {
     name: "Questions per active clinician, by hospital",
   });
@@ -75,9 +76,8 @@ describe("the analytics tabs", () => {
 
   it("each tab shows its per-hospital numbers and the median", async () => {
     await open();
-    const a = await api.getAnalytics("30d");
-    if ("unavailable" in a.use || "unavailable" in a.alerts) throw new Error();
-    if ("unavailable" in a.quality) throw new Error();
+    const a = await api.getAnalytics("month");
+    if (!("rows" in a.use) || !("rows" in a.quality)) throw new Error();
 
     // Use
     const nth = a.use.rows.find((r) => r.hospital.id === "h_northgate")!;
@@ -97,27 +97,9 @@ describe("the analytics tabs", () => {
       screen.getByRole("region", { name: "Questions across all hospitals" }),
     ).toBeInTheDocument();
 
-    // Alert safety
+    // Alert safety: not switched on (F4).
     await go("Alert safety");
-    const ar = a.alerts.rows.find((r) => r.hospital.id === "h_northgate")!;
-    const n = card("Northgate General Hospital");
-    expect(pair(n, "Critical median time to acknowledge")).toBe(
-      valueText(ar.critical_median_ack_minutes, "minutes"),
-    );
-    expect(pair(n, "Median time to acknowledge")).toBe(
-      valueText(ar.median_ack_minutes, "minutes"),
-    );
-    expect(pair(n, "Critical within target")).toBe(
-      valueText(ar.critical_within_target, "share"),
-    );
-    expect(pair(n, "Unhandled")).toBe(valueText(ar.unhandled, "count"));
-    expect(pair(n, "Urgent")).toBe(valueText(ar.by_severity.urgent, "count"));
-    expect(pair(card("Median of all hospitals"), "Unhandled")).toBe(
-      valueText(a.alerts.median.unhandled, "count"),
-    );
-    expect(
-      within(screen.getByRole("tabpanel")).getByText(UPDATED),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("tabpanel")).toHaveTextContent(ALERTS_OFF);
 
     // Answer quality
     await go("Answer quality");
@@ -141,22 +123,11 @@ describe("the analytics tabs", () => {
     expect(pair(card("Median of all hospitals"), "Median review time")).toBe(
       valueText(a.quality.median.median_review_hours, "hours"),
     );
+    // What the figures mean (F11).
+    expect(screen.getByText(QUALITY_HELP)).toBeInTheDocument();
     expect(
       within(screen.getByRole("tabpanel")).getByText(UPDATED),
     ).toBeInTheDocument();
-  });
-
-  it("Alert safety shows each hospital's target", async () => {
-    await open();
-    const a = await api.getAnalytics("30d");
-    if ("unavailable" in a.alerts) throw new Error();
-    await go("Alert safety");
-    for (const r of a.alerts.rows)
-      expect(
-        card(r.hospital.name).getByText(
-          `Target ${r.critical_target_minutes} min`,
-        ),
-      ).toBeInTheDocument();
   });
 
   it("hidden values read Fewer than 5 with no bar", async () => {
@@ -175,19 +146,13 @@ describe("the analytics tabs", () => {
       .find((li) => li.textContent?.includes("Hilltop"))!;
     expect(hill.textContent).toContain("0 questions");
     expect(hill.textContent).not.toContain("Fewer than 5");
-    // Alert safety, too.
-    await go("Alert safety");
-    expect(pair(card("Lakeside Community Clinic"), "Unhandled")).toBe(
-      "Fewer than 5",
-    );
-    expect(pair(card("Hilltop Cottage Hospital"), "Unhandled")).toBe("0");
   });
 
   it("a hidden trend point is marked and draws no column value", async () => {
     const real = api.getAnalytics.bind(api);
     vi.spyOn(api, "getAnalytics").mockImplementation(async (p) => {
       const a = structuredClone(await real(p)) as AnalyticsOut;
-      if (!("unavailable" in a.use))
+      if ("trend" in a.use)
         a.use.trend[1] = {
           ...a.use.trend[1]!,
           value: { value: null, suppressed: true },
@@ -225,11 +190,13 @@ describe("the analytics tabs", () => {
     const real = api.getAnalytics.bind(api);
     vi.spyOn(api, "getAnalytics").mockImplementation(async (p) => ({
       ...(await real(p)),
-      alerts: { unavailable: true },
+      quality: { unavailable: true },
     }));
-    await open(false);
-    await go("Alert safety");
-    expect(screen.getByText("Couldn't load alert safety.")).toBeInTheDocument();
+    await open();
+    await go("Answer quality");
+    expect(
+      screen.getByText("Couldn't load answer quality."),
+    ).toBeInTheDocument();
     expect(
       within(screen.getByRole("tabpanel")).getByRole("button", {
         name: "Try again",
@@ -240,11 +207,10 @@ describe("the analytics tabs", () => {
     ).toBeNull();
     expect(screen.queryByText("0")).toBeNull();
     // The others still work.
-    await go("Answer quality");
+    await go("Hospitals");
     expect(
       within(screen.getByRole("tabpanel")).getByText(UPDATED),
     ).toBeInTheDocument();
-    expect(card("Median of all hospitals")).toBeTruthy();
     await go("Use");
     expect(screen.getByText(/^Median of all hospitals:/)).toBeInTheDocument();
   });
@@ -267,8 +233,6 @@ describe("the analytics tabs", () => {
       "Staff",
       "Questions",
       "Questions per clinician",
-      "Critical median",
-      "Critical within target",
       "Needs review",
     ]);
     const staff = within(table).getByRole("columnheader", { name: /^Staff/ });
@@ -326,23 +290,29 @@ describe("the analytics tabs", () => {
       screen.getByRole("button", { name: "Northgate General Hospital" }),
     );
     const select = screen.getByRole("combobox", { name: "Measure" });
-    expect(select).toHaveValue("critical_median_ack_minutes");
-    expect(
-      await screen.findByRole("region", {
-        name: "Critical median time to acknowledge: Northgate General Hospital",
-      }),
-    ).toBeInTheDocument();
-    await userEvent.selectOptions(select, "Answers needing review");
     expect(select).toHaveValue("needs_review_share");
+    // Only the two series measures until alerts exist (F10).
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["Questions per active clinician", "Answers needing review"]);
     expect(
       await screen.findByRole("region", {
         name: "Answers needing review: Northgate General Hospital",
       }),
     ).toBeInTheDocument();
+    await userEvent.selectOptions(select, "Questions per active clinician");
+    expect(select).toHaveValue("questions_per_clinician");
+    expect(
+      await screen.findByRole("region", {
+        name: "Questions per active clinician: Northgate General Hospital",
+      }),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(
         screen.queryByRole("region", {
-          name: /^Critical median time to acknowledge: /,
+          name: /^Answers needing review: /,
         }),
       ).toBeNull(),
     );
@@ -371,22 +341,20 @@ describe("the analytics tabs", () => {
     const real = api.getAnalytics.bind(api);
     vi.spyOn(api, "getAnalytics").mockImplementation(async (p) => ({
       ...(await real(p)),
-      alerts: { unavailable: true },
+      quality: { unavailable: true },
     }));
-    await open(false);
+    await open();
     await go("Hospitals");
     const row = within(screen.getByRole("table"))
       .getAllByRole("row")
       .find((r) => within(r).queryByText("Northgate General Hospital"))!;
     const cells = within(row).getAllByRole("cell");
-    // Staff, Questions, Per clinician, Critical median, Critical within, Needs review
+    // Staff, Questions, Per clinician, Needs review
     expect(cells.map((c) => c.textContent)).toEqual([
       "214",
       expect.stringMatching(/^[\d,]+$|^Fewer than 5$/),
       expect.stringMatching(/^[\d.]+$/),
       "Couldn't load",
-      "Couldn't load",
-      expect.stringMatching(/^\d+%$/),
     ]);
   });
 

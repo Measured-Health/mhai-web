@@ -1,11 +1,15 @@
 // The platform demo's sample analytics: counts only, made up, and guarded
-// by the small-group rule exactly as the backend does it (spec §5), so the
-// demo never sends a value the app must refuse. Every hospital and person
-// is invented. No patient data, nothing per person.
+// by the small-group rule as the backend does it (backend spec §5–§7), so
+// the demo never sends a value the app must refuse. Figures exist only per
+// finished calendar period (R41a): month-aligned weeks, months, quarters.
+// Every hospital and person is invented. No patient data, nothing per
+// person.
+import { finishedPeriods, periodEnd, periodOf } from "../analytics/periods";
 import type {
-  AlertsRow,
   AnalyticsOut,
   Change,
+  GuardrailPeriodsOut,
+  GuardrailRates,
   Guarded,
   MeasureId,
   Period,
@@ -16,19 +20,22 @@ import type {
 import type { Person } from "./contract";
 
 /**
- * "normal": the demo. "guard": Northgate's serious change is gone while its
- * unhandled Critical alerts past target (hidden as fewer than 5) stay, which
- * the app must refuse to show as "Nothing unusual". "unavailable": every
- * area fails. Only active hospitals appear.
+ * "normal": the demo. "unavailable": every area fails. "not_yet": before
+ * the first published period of every kind (F19). Only active hospitals
+ * appear.
  */
-export type AnalyticsMode = "normal" | "guard" | "unavailable";
+export type AnalyticsMode = "normal" | "unavailable" | "not_yet";
 
 const DAY = 86_400_000;
 const MIN = 60_000;
-const DAYS: Record<Period, number> = { "7d": 7, "30d": 30, "90d": 90 };
-/** What changed always compares the last 7 days with the 4 weeks before. */
-const WINDOW_DAYS = 7;
-const CRITICAL_TARGET_MINUTES = 15;
+/** Periods in a trend or series: 12 weeks, 12 months, 8 quarters. */
+const SERIES_LENGTH: Record<Period, number> = {
+  week: 12,
+  month: 12,
+  quarter: 8,
+};
+/** How long after a period ends its snapshot is stored. */
+const COMPUTED_AFTER = 20 * MIN;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 const person = (id: string, name: string): Person => ({ id, name });
@@ -38,58 +45,42 @@ const RIVERSIDE = person("h_riverside", "Riverside Children's Hospital");
 const LAKESIDE = person("h_lakeside", "Lakeside Community Clinic");
 const HILLTOP = person("h_hilltop", "Hilltop Cottage Hospital");
 const TUNDE = person("tm_tunde", "Tunde Okafor");
-/** The series of a change across all hospitals. */
-const ALL_HOSPITALS = person("all", "All hospitals");
 
 /** A hospital's level per day. Shares are from 0 to 1. */
 type Daily = {
   questions: number;
-  critical: number;
-  urgent: number;
-  info: number;
-  /** Alerts raised that day that are still unhandled. */
-  unhandled: number;
-  ack_minutes: number;
-  critical_ack_minutes: number;
-  critical_within: number;
+  /** Escalated: the low-confidence share, which needs review. */
   needs_review: number;
   high: number;
-  medium: number;
   /** The share of answers a reviewer looked at. */
   reviewed: number;
   agreement: number;
   review_hours: number;
+  degraded: number;
 };
 type Profile = {
   hospital: Person;
   staff: number;
-  /** Active clinicians over 1, 7, 30 and 90 days. */
-  clinicians: [number, number, number, number];
-  /** Before the last 7 days. */
+  /** Active clinicians in a week, a month and a quarter. */
+  clinicians: Record<Period, number>;
+  /** Before the latest finished week. */
   previous: Daily;
-  /** The last 7 days, where they differ. */
+  /** From the latest finished week on, where they differ. */
   current: Partial<Daily>;
-  /** Unhandled Critical alerts past target, now. */
-  overdue: number;
+  /** Listed from the start of the latest finished month (a new hospital). */
+  isNew?: boolean;
   /** Seed for the day-to-day wobble. */
   seed: number;
 };
 
 const NONE: Daily = {
   questions: 0,
-  critical: 0,
-  urgent: 0,
-  info: 0,
-  unhandled: 0,
-  ack_minutes: 0,
-  critical_ack_minutes: 0,
-  critical_within: 0,
   needs_review: 0,
   high: 0,
-  medium: 0,
   reviewed: 0,
   agreement: 0,
   review_hours: 0,
+  degraded: 0,
 };
 
 /** In list order. Havana is healthy; each other one proves a rule. */
@@ -97,137 +88,163 @@ const PROFILES: Profile[] = [
   {
     hospital: HAVANA,
     staff: 186,
-    clinicians: [24, 52, 61, 66],
+    clinicians: { week: 52, month: 61, quarter: 66 },
     previous: {
       questions: 34,
-      critical: 6,
-      urgent: 9,
-      info: 15,
-      unhandled: 0,
-      ack_minutes: 11,
-      critical_ack_minutes: 6,
-      critical_within: 0.95,
-      needs_review: 0.08,
-      high: 0.7,
-      medium: 0.22,
+      needs_review: 0.26,
+      high: 0.56,
       reviewed: 0.2,
-      agreement: 0.9,
+      agreement: 0.72,
       review_hours: 30,
+      degraded: 0.02,
     },
-    // Reviews got faster; Low potassium alerts rose here too.
-    current: { review_hours: 14, urgent: 11 },
-    overdue: 0,
+    // Fewer answers need review, and reviewers agree more.
+    current: { needs_review: 0.08, high: 0.7, agreement: 0.9 },
     seed: 1,
   },
   {
     hospital: NORTHGATE,
     staff: 214,
-    clinicians: [30, 64, 78, 84],
+    clinicians: { week: 64, month: 78, quarter: 84 },
     previous: {
-      questions: 55,
-      critical: 6.5,
-      urgent: 9,
-      info: 16,
-      unhandled: 0.9,
-      ack_minutes: 14,
-      critical_ack_minutes: 18,
-      critical_within: 0.9,
+      questions: 43,
       needs_review: 0.12,
       high: 0.62,
-      medium: 0.26,
       reviewed: 0.15,
       agreement: 0.86,
       review_hours: 20,
+      degraded: 0.03,
     },
-    // Critical acknowledged 2× slower; more answers need review.
-    current: {
-      critical_ack_minutes: 36,
-      critical_within: 0.55,
-      needs_review: 0.21,
-      urgent: 11,
-    },
-    // 3 past target (hidden as fewer than 5): the serious change covers it.
-    overdue: 3,
+    // More questions, and more answers need review.
+    current: { questions: 69, needs_review: 0.31, high: 0.45 },
     seed: 2,
   },
   {
     hospital: RIVERSIDE,
     staff: 96,
-    clinicians: [12, 31, 38, 41],
+    clinicians: { week: 31, month: 38, quarter: 41 },
     previous: {
       questions: 20,
-      critical: 2,
-      urgent: 4,
-      info: 7,
-      unhandled: 0.2,
-      ack_minutes: 12,
-      critical_ack_minutes: 8,
-      critical_within: 0.93,
       needs_review: 0.1,
       high: 0.66,
-      medium: 0.24,
       reviewed: 0.1,
       agreement: 0.88,
       review_hours: 26,
+      degraded: 0.02,
     },
-    // Questions down 41% (140 → 83 a week).
-    current: { questions: 83 / 7, urgent: 5 },
-    overdue: 0,
+    // Questions down (140 → 83 a week).
+    current: { questions: 83 / 7 },
     seed: 3,
   },
   {
-    // A small hospital: its counts are 1–4, so they are hidden.
+    // A small hospital: its weekly counts are 1–4, so they are hidden.
     hospital: LAKESIDE,
     staff: 23,
-    clinicians: [1, 1, 2, 3],
+    clinicians: { week: 1, month: 2, quarter: 3 },
     previous: {
-      questions: 0.12,
-      critical: 0.01,
-      urgent: 0.03,
-      info: 0.05,
-      unhandled: 0.02,
-      ack_minutes: 30,
-      critical_ack_minutes: 20,
-      critical_within: 0.7,
+      questions: 0.3,
       needs_review: 0.2,
       high: 0.5,
-      medium: 0.3,
       reviewed: 0.2,
       agreement: 0.8,
       review_hours: 40,
+      degraded: 0,
     },
     current: {},
-    overdue: 0,
     seed: 7,
   },
   {
-    // Active since 9 days ago, nobody asking yet: zeros, which show as 0,
-    // and no previous period.
+    // New this month, nobody asking yet: zeros, which show as 0, and no
+    // previous month to compare with.
     hospital: HILLTOP,
     staff: 12,
-    clinicians: [0, 0, 0, 0],
+    clinicians: { week: 0, month: 0, quarter: 0 },
     previous: NONE,
     current: {},
-    overdue: 0,
+    isNew: true,
     seed: 8,
   },
 ];
 
-/** The changes in the fixed window; ids are stable. */
+/** The latest finished week, and the month that finished before it began. */
+function changeWindow(now: number) {
+  const week = finishedPeriods("week", now, 1)[0]!;
+  const month = periodOf("month", periodOf("month", week.from) - 1);
+  return { week, month };
+}
+
+/**
+ * What changed: the latest week against the month before it, per day,
+ * from shown values only. Ids stay while a change lasts. The summary is
+ * core's: the two values and no hospital name.
+ */
 export function seedChanges(now: number, mode: AnalyticsMode): Change[] {
-  const g = (value: number | null): Guarded => ({ value, suppressed: false });
-  const all: Change[] = [
+  if (mode === "not_yet") return [];
+  const g = (value: number): Guarded => ({ value, suppressed: false });
+  const { week } = changeWindow(now);
+  return [
     {
-      id: "chg_ngh_critical_ack",
+      id: "chg_ngh_needs_review",
       hospital: NORTHGATE,
-      area: "alerts",
-      measure: "critical_median_ack_minutes",
+      area: "quality",
+      measure: "needs_review_share",
       direction: "worse",
-      serious: true,
-      previous: g(18),
-      current: g(36),
-      summary:
-        "Northgate General Hospital: Critical alerts acknowledged 2× slower (18 → 36 min)",
+      serious: false,
+      previous: g(0.12),
+      current: g(0.31),
+      summary: "Answers needing review worse: 12.00% to 31.00%",
+      follow_up: null,
+      version: 1,
+    },
+    {
+      id: "chg_ngh_questions",
+      hospital: NORTHGATE,
+      area: "use",
+      measure: "questions",
+      direction: "rising",
+      serious: false,
+      previous: g(301),
+      current: g(483),
+      summary: "Questions up: 301 to 483 a week",
+      follow_up: null,
+      version: 1,
+    },
+    {
+      id: "chg_hav_needs_review",
+      hospital: HAVANA,
+      area: "quality",
+      measure: "needs_review_share",
+      direction: "better",
+      serious: false,
+      previous: g(0.26),
+      current: g(0.08),
+      summary: "Answers needing review better: 26.00% to 8.00%",
+      follow_up: null,
+      version: 1,
+    },
+    {
+      id: "chg_all_questions",
+      hospital: null,
+      area: "use",
+      measure: "questions",
+      direction: "rising",
+      serious: false,
+      previous: g(680.4),
+      current: g(1031),
+      summary: "Questions up: 680.4 to 1031 a week",
+      follow_up: null,
+      version: 1,
+    },
+    {
+      id: "chg_hav_agreement",
+      hospital: HAVANA,
+      area: "quality",
+      measure: "agreement_rate",
+      direction: "better",
+      serious: false,
+      previous: g(0.72),
+      current: g(0.9),
+      summary: "Agreement rate better: 72.00% to 90.00%",
       follow_up: null,
       version: 1,
     },
@@ -240,109 +257,47 @@ export function seedChanges(now: number, mode: AnalyticsMode): Change[] {
       serious: false,
       previous: g(140),
       current: g(83),
-      summary:
-        "Riverside Children's Hospital: questions down 41% (140 → 83 a week)",
+      summary: "Questions down: 140 to 83 a week",
       follow_up: {
         by: TUNDE,
         by_you: false,
-        at: iso(now - DAY),
+        // After the week was evaluated.
+        at: iso(week.to + DAY),
         note: "Called Musa Danjuma: two wards changed their rota. Checking again next week.",
         version: 1,
       },
       version: 2,
     },
-    {
-      id: "chg_all_low_potassium",
-      hospital: null,
-      area: "alerts",
-      measure: "alerts_total",
-      direction: "rising",
-      serious: false,
-      previous: g(48),
-      current: g(83),
-      summary: "All hospitals: Low potassium alerts rising (48 → 83 a week)",
-      follow_up: null,
-      version: 1,
-    },
-    {
-      id: "chg_ngh_needs_review",
-      hospital: NORTHGATE,
-      area: "quality",
-      measure: "needs_review_share",
-      direction: "worse",
-      serious: false,
-      previous: g(0.12),
-      current: g(0.21),
-      summary:
-        "Northgate General Hospital: more answers need review (12% → 21%)",
-      follow_up: null,
-      version: 1,
-    },
-    {
-      id: "chg_hav_review_time",
-      hospital: HAVANA,
-      area: "quality",
-      measure: "median_review_hours",
-      direction: "better",
-      serious: false,
-      previous: g(30),
-      current: g(14),
-      summary: "Havana Hospital: answers reviewed faster (30 → 14 hours)",
-      follow_up: null,
-      version: 1,
-    },
-    {
-      id: "chg_hch_clinicians",
-      hospital: HILLTOP,
-      area: "use",
-      measure: "active_clinicians",
-      direction: "worse",
-      serious: false,
-      // A new hospital: nothing earlier to compare with.
-      previous: g(null),
-      current: g(0),
-      summary:
-        "Hilltop Cottage Hospital: no clinicians active yet, 9 days after it started",
-      follow_up: null,
-      version: 1,
-    },
   ];
-  return mode === "guard" ? all.filter((c) => !c.serious) : all;
 }
 
-/**
- * When each change was first flagged, in minutes before now: Northgate's
- * serious change is the newest. Riverside's came before Tunde's follow-up.
- */
-const FLAGGED_MIN_AGO: Record<string, number> = {
-  chg_ngh_critical_ack: 25,
-  chg_all_low_potassium: 5 * 60,
-  chg_ngh_needs_review: 20 * 60,
-  chg_rch_questions: 2 * 24 * 60,
-  chg_hav_review_time: 3 * 24 * 60,
-  chg_hch_clinicians: 4 * 24 * 60,
+/** When each change was first flagged, in minutes after its week ended. */
+const FLAGGED_AFTER_MIN: Record<string, number> = {
+  chg_ngh_needs_review: 40,
+  chg_ngh_questions: 40,
+  chg_hav_needs_review: 40,
+  chg_all_questions: 40,
+  chg_hav_agreement: 40,
+  // An older change, flagged again each week since.
+  chg_rch_questions: -7 * 24 * 60 + 40,
 };
-/** When a change was first flagged (a change not listed: a week ago). */
-export const changeFlaggedAt = (id: string, now: number): string =>
-  iso(now - (FLAGGED_MIN_AGO[id] ?? WINDOW_DAYS * 24 * 60) * MIN);
+/** When a change was first flagged. */
+export function changeFlaggedAt(id: string, now: number): string {
+  const { week } = changeWindow(now);
+  return iso(week.to + (FLAGGED_AFTER_MIN[id] ?? 40) * MIN);
+}
 
 // ---- The small-group rule -------------------------------------------------
 
 const HIDDEN: Guarded = { value: null, suppressed: true };
-/**
- * Shares to 4 places, so the numbers they're over can be worked out
- * exactly enough for the app's own check (the reader refuses a share whose
- * numerator, or its complement, comes to 1–4).
- */
+const NOTHING: Guarded = { value: null, suppressed: false };
+/** Shares to 4 places, as core sends them. */
 const SHARE_DP = 4;
 const small = (n: number) => n >= 1 && n <= 4;
 /** A count: 1–4 is hidden, 0 shows. */
 const count = (n: number): Guarded =>
   small(n) ? HIDDEN : { value: n, suppressed: false };
-/**
- * A rate over counts (its numerator and denominator): hidden when any of
- * them is; nothing to show over 0.
- */
+/** A rate over counts: hidden when any of them is; nothing to show over 0. */
 function over(
   value: number,
   deps: Guarded[],
@@ -350,7 +305,7 @@ function over(
   dp = 0,
 ): Guarded {
   if (deps.some((d) => d.suppressed)) return HIDDEN;
-  if (denominator === 0) return { value: null, suppressed: false };
+  if (denominator === 0) return NOTHING;
   const f = 10 ** dp;
   return { value: Math.round(value * f) / f, suppressed: false };
 }
@@ -365,131 +320,87 @@ function set<K extends string>(
   ) as Record<K, Guarded>;
 }
 
-// ---- Days, buckets and sums -----------------------------------------------
+// ---- Days and sums -----------------------------------------------------------
 
-/** Counts, plus the weights for the averaged levels. */
+/** Base counts over one period, plus the weights for the averaged levels. */
 type Raw = {
   questions: number;
   clinicians: number;
-  critical: number;
-  urgent: number;
-  info: number;
-  unhandled: number;
-  within: number;
-  overdue: number;
-  ack_minutes: number;
-  critical_ack_minutes: number;
   answers: number;
   needs_review: number;
   high: number;
   medium: number;
   low: number;
+  degraded: number;
   reviews: number;
   agreed: number;
   review_hours: number;
 };
 
-/** Day `k` is k whole days before `to` (0 is the last full day). */
-function day(p: Profile, k: number) {
-  const L: Daily =
-    k < WINDOW_DAYS ? { ...p.previous, ...p.current } : p.previous;
-  const w = 1 + 0.12 * Math.sin(k * 1.3 + p.seed);
-  const v = 1 + 0.05 * Math.sin(k * 0.7 + p.seed * 2);
-  const questions = L.questions * w;
-  const critical = L.critical * w;
-  const answers = questions * 0.97;
-  const reviews = answers * L.reviewed;
-  return {
-    questions,
-    critical,
-    urgent: L.urgent * w,
-    info: L.info * w,
-    unhandled: L.unhandled * w,
-    within: critical * Math.min(1, L.critical_within * v),
-    ack_minutes: L.ack_minutes * v,
-    critical_ack_minutes: L.critical_ack_minutes * v,
-    answers,
-    needs_review: answers * L.needs_review,
-    high: answers * L.high,
-    medium: answers * L.medium,
-    reviews,
-    agreed: reviews * L.agreement,
-    review_hours: L.review_hours * v,
-  };
-}
+/** The start of today, UTC: day `k` starts (k + 1) days before it. */
+const today = (now: number) => Math.floor(now / DAY) * DAY;
 
-/** The sums over days `[k0, k1)`, rounded like the backend would. */
-function sum(
+function sumPeriod(
   p: Profile,
-  k0: number,
-  k1: number,
-  clinicians: number,
-  overdue = 0,
+  kind: Period,
+  span: { from: number; to: number },
+  now: number,
 ): Raw {
+  const T = today(now);
+  const currentFrom = finishedPeriods("week", now, 1)[0]!.from;
   const s = {
     questions: 0,
-    critical: 0,
-    urgent: 0,
-    info: 0,
-    unhandled: 0,
-    within: 0,
     answers: 0,
     needs_review: 0,
     high: 0,
-    medium: 0,
+    degraded: 0,
     reviews: 0,
     agreed: 0,
-    ack: 0,
-    alerts: 0,
-    critAck: 0,
     hours: 0,
   };
-  for (let k = k0; k < k1; k++) {
-    const d = day(p, k);
-    const alerts = d.critical + d.urgent + d.info;
-    s.questions += d.questions;
-    s.critical += d.critical;
-    s.urgent += d.urgent;
-    s.info += d.info;
-    s.unhandled += d.unhandled;
-    s.within += d.within;
-    s.answers += d.answers;
-    s.needs_review += d.needs_review;
-    s.high += d.high;
-    s.medium += d.medium;
-    s.reviews += d.reviews;
-    s.agreed += d.agreed;
-    s.ack += d.ack_minutes * alerts;
-    s.alerts += alerts;
-    s.critAck += d.critical_ack_minutes * d.critical;
-    s.hours += d.review_hours * d.reviews;
+  for (let t = span.from; t < span.to; t += DAY) {
+    const L: Daily =
+      t >= currentFrom ? { ...p.previous, ...p.current } : p.previous;
+    const k = (T - t) / DAY;
+    const w = 1 + 0.12 * Math.sin(k * 1.3 + p.seed);
+    const v = 1 + 0.05 * Math.sin(k * 0.7 + p.seed * 2);
+    const questions = L.questions * w;
+    const answers = questions * 0.97;
+    const reviews = answers * L.reviewed;
+    s.questions += questions;
+    s.answers += answers;
+    s.needs_review += answers * L.needs_review;
+    s.high += answers * L.high;
+    s.degraded += answers * L.degraded;
+    s.reviews += reviews;
+    s.agreed += reviews * L.agreement;
+    s.hours += L.review_hours * v * reviews;
   }
   const r = Math.round;
-  const critical = r(s.critical);
-  const answers = r(s.answers);
+  const questions = r(s.questions);
+  const answers = Math.min(questions, r(s.answers));
   const high = Math.min(answers, r(s.high));
-  const medium = Math.min(answers - high, r(s.medium));
-  const reviews = r(s.reviews);
+  const low = Math.min(answers - high, r(s.needs_review));
+  const reviews = Math.min(answers, r(s.reviews));
   return {
-    questions: r(s.questions),
-    clinicians,
-    critical,
-    urgent: r(s.urgent),
-    info: r(s.info),
-    unhandled: r(s.unhandled),
-    within: Math.min(critical, r(s.within)),
-    overdue,
-    ack_minutes: s.alerts ? s.ack / s.alerts : 0,
-    critical_ack_minutes: s.critical ? s.critAck / s.critical : 0,
+    questions,
+    clinicians: questions === 0 ? 0 : p.clinicians[kind],
     answers,
-    needs_review: Math.min(answers, r(s.needs_review)),
+    needs_review: low,
     high,
-    medium,
-    low: answers - high - medium,
+    medium: answers - high - low,
+    low,
+    degraded: Math.min(answers, r(s.degraded)),
     reviews,
     agreed: Math.min(reviews, r(s.agreed)),
     review_hours: s.reviews ? s.hours / s.reviews : 0,
   };
+}
+
+/** Whether a period lists the hospital (a new one only from its month). */
+function lists(p: Profile, span: { to: number }, now: number): boolean {
+  if (!p.isNew) return true;
+  return span.to > finishedPeriods("month", now, 1)[0]!.from;
 }
 
 // ---- Rows ------------------------------------------------------------------
@@ -506,39 +417,8 @@ function toUseRow(x: Raw): Body<UseRow> {
       x.questions / (x.clinicians || 1),
       [questions, active_clinicians],
       x.clinicians,
-      1,
+      2,
     ),
-  };
-}
-
-function toAlertsRow(x: Raw): Body<AlertsRow> {
-  const total = x.critical + x.urgent + x.info;
-  const by_severity = set({
-    critical: count(x.critical),
-    urgent: count(x.urgent),
-    info: count(x.info),
-  });
-  const crit = by_severity.critical;
-  const totalG = count(total);
-  return {
-    by_severity,
-    total: totalG,
-    unhandled: count(x.unhandled),
-    median_ack_minutes: over(x.ack_minutes, [totalG], total),
-    critical_median_ack_minutes: over(
-      x.critical_ack_minutes,
-      [crit],
-      x.critical,
-    ),
-    // Hidden when the alerts within or outside the target are 1–4.
-    critical_within_target: over(
-      x.within / (x.critical || 1),
-      [crit, count(x.within), count(x.critical - x.within)],
-      x.critical,
-      SHARE_DP,
-    ),
-    critical_target_minutes: CRITICAL_TARGET_MINUTES,
-    critical_overdue: count(x.overdue),
   };
 }
 
@@ -547,7 +427,6 @@ function toQualityRow(x: Raw): Body<QualityRow> {
   const reviews = count(x.reviews);
   return {
     answers,
-    reviews,
     needs_review_share: over(
       x.needs_review / (x.answers || 1),
       [answers, count(x.needs_review), count(x.answers - x.needs_review)],
@@ -559,6 +438,7 @@ function toQualityRow(x: Raw): Body<QualityRow> {
       medium: count(x.medium),
       low: count(x.low),
     }),
+    reviews,
     // Hidden when the reviews that agreed or disagreed are 1–4.
     agreement_rate: over(
       x.agreed / (x.reviews || 1),
@@ -566,7 +446,11 @@ function toQualityRow(x: Raw): Body<QualityRow> {
       x.reviews,
       SHARE_DP,
     ),
-    median_review_hours: over(x.review_hours, [reviews], x.reviews),
+    // Shown only for 5 or more reviews (core: corrections decided).
+    median_review_hours:
+      x.reviews >= 5
+        ? { value: Math.round(x.review_hours * 10) / 10, suppressed: false }
+        : HIDDEN,
   };
 }
 
@@ -582,205 +466,77 @@ function median(gs: Guarded[]): number | null {
   const m = v.length >> 1;
   return v.length % 2 ? v[m]! : (v[m - 1]! + v[m]!) / 2;
 }
+/** A count median strictly between 0 and 5 is hidden. */
 const medCount = (gs: Guarded[]): Guarded => {
   const m = median(gs);
-  return m === null ? { value: null, suppressed: false } : count(Math.round(m));
+  if (m === null) return NOTHING;
+  return m > 0 && m < 5 ? HIDDEN : { value: m, suppressed: false };
 };
-const medRate = (gs: Guarded[], deps: Guarded[], dp = 0): Guarded => {
+const medRate = (gs: Guarded[], dp: number): Guarded => {
   const m = median(gs);
-  if (deps.some((d) => d.suppressed)) return HIDDEN;
-  if (m === null) return { value: null, suppressed: false };
+  if (m === null) return NOTHING;
   const f = 10 ** dp;
   return { value: Math.round(m * f) / f, suppressed: false };
 };
 
 function toUseMedian(rows: Body<UseRow>[]): Body<UseRow> {
-  const questions = medCount(rows.map((r) => r.questions));
-  const active_clinicians = medCount(rows.map((r) => r.active_clinicians));
   return {
-    questions,
-    active_clinicians,
+    questions: medCount(rows.map((r) => r.questions)),
+    active_clinicians: medCount(rows.map((r) => r.active_clinicians)),
     questions_per_clinician: medRate(
       rows.map((r) => r.questions_per_clinician),
-      [questions, active_clinicians],
+      2,
+    ),
+  };
+}
+function toQualityMedian(rows: Body<QualityRow>[]): Body<QualityRow> {
+  return {
+    answers: medCount(rows.map((r) => r.answers)),
+    needs_review_share: medRate(
+      rows.map((r) => r.needs_review_share),
+      SHARE_DP,
+    ),
+    confidence: {
+      high: medCount(rows.map((r) => r.confidence.high)),
+      medium: medCount(rows.map((r) => r.confidence.medium)),
+      low: medCount(rows.map((r) => r.confidence.low)),
+    },
+    reviews: medCount(rows.map((r) => r.reviews)),
+    agreement_rate: medRate(
+      rows.map((r) => r.agreement_rate),
+      SHARE_DP,
+    ),
+    median_review_hours: medRate(
+      rows.map((r) => r.median_review_hours),
       1,
     ),
   };
 }
-function toAlertsMedian(rows: Body<AlertsRow>[]): Body<AlertsRow> {
-  const by_severity = set({
-    critical: medCount(rows.map((r) => r.by_severity.critical)),
-    urgent: medCount(rows.map((r) => r.by_severity.urgent)),
-    info: medCount(rows.map((r) => r.by_severity.info)),
-  });
-  const total = medCount(rows.map((r) => r.total));
-  const crit = by_severity.critical;
-  return {
-    by_severity,
-    total,
-    unhandled: medCount(rows.map((r) => r.unhandled)),
-    median_ack_minutes: medRate(
-      rows.map((r) => r.median_ack_minutes),
-      [total],
-    ),
-    critical_median_ack_minutes: medRate(
-      rows.map((r) => r.critical_median_ack_minutes),
-      [crit],
-    ),
-    critical_within_target: medRate(
-      rows.map((r) => r.critical_within_target),
-      [crit],
-      2,
-    ),
-    critical_target_minutes: CRITICAL_TARGET_MINUTES,
-    critical_overdue: medCount(rows.map((r) => r.critical_overdue)),
-  };
-}
-function toQualityMedian(rows: Body<QualityRow>[]): Body<QualityRow> {
-  const answers = medCount(rows.map((r) => r.answers));
-  const reviews = medCount(rows.map((r) => r.reviews));
-  return {
-    answers,
-    reviews,
-    needs_review_share: medRate(
-      rows.map((r) => r.needs_review_share),
-      [answers],
-      2,
-    ),
-    confidence: set({
-      high: medCount(rows.map((r) => r.confidence.high)),
-      medium: medCount(rows.map((r) => r.confidence.medium)),
-      low: medCount(rows.map((r) => r.confidence.low)),
-    }),
-    agreement_rate: medRate(
-      rows.map((r) => r.agreement_rate),
-      [reviews],
-      2,
-    ),
-    median_review_hours: medRate(
-      rows.map((r) => r.median_review_hours),
-      [reviews],
-    ),
-  };
-}
 
-// ---- The replies -------------------------------------------------------------
+// ---- One period across all hospitals ---------------------------------------
 
-/** The last whole UTC day ends at `to`. */
-const endOfDays = (now: number) => Math.floor(now / DAY) * DAY;
-const CLIN: Record<Period, number> = { "7d": 1, "30d": 2, "90d": 3 };
-
-/** Daily buckets for 7 and 30 days, weekly for 90 (the last one shorter). */
-function buckets(period: Period, to: number) {
-  const days = DAYS[period];
-  const size = period === "90d" ? 7 : 1;
-  const out: { start: number; k0: number; k1: number; days: number }[] = [];
-  for (let d = 0; d < days; d += size) {
-    const n = Math.min(size, days - d);
-    // Days before `to`: this bucket covers k in [days - d - n, days - d).
-    out.push({
-      start: to - (days - d) * DAY,
-      k0: days - d - n,
-      k1: days - d,
-      days: n,
-    });
-  }
-  return out;
-}
-
-export function isAnalyticsHospital(id: string): boolean {
-  return PROFILES.some((p) => p.hospital.id === id);
-}
-
-export function buildAnalytics(
-  period: Period,
+/**
+ * The all-hospitals cell of one measure in one period. Hidden when any
+ * listed hospital's own cell is: the sample data's stand-in for core's
+ * bridge check, so the total minus the shown hospitals never gives a
+ * hidden one away.
+ */
+function allCell(
+  measure: MeasureId,
+  kind: Period,
+  span: { from: number; to: number },
   now: number,
-  mode: AnalyticsMode,
-  changes: Change[],
-): AnalyticsOut {
-  const to = endOfDays(now);
-  const days = DAYS[period];
-  const head = { period, from: iso(to - days * DAY), to: iso(to) };
-  if (mode === "unavailable") {
-    const no = { unavailable: true } as const;
-    return {
-      ...head,
-      changes: no,
-      use: no,
-      alerts: no,
-      quality: no,
-      hospitals: no,
-    };
-  }
-  const raws = PROFILES.map((p) =>
-    sum(p, 0, days, p.clinicians[CLIN[period]], p.overdue),
-  );
-  const rows = <R>(make: (x: Raw) => Body<R>) =>
-    raws.map((x, i) => ({ hospital: PROFILES[i]!.hospital, ...make(x) }) as R);
-  const use = rows<UseRow>(toUseRow);
-  const alerts = rows<AlertsRow>(toAlertsRow);
-  const quality = rows<QualityRow>(toQualityRow);
-  const trend = (value: (xs: Raw[]) => Guarded) =>
-    buckets(period, to).map((b) => ({
-      start: iso(b.start),
-      value: value(PROFILES.map((p) => sum(p, b.k0, b.k1, 0))),
-    }));
-  const total = (xs: Raw[], f: (x: Raw) => number) =>
-    xs.reduce((a, x) => a + f(x), 0);
-  const ago = (m: number) => iso(now - m * MIN);
-  return {
-    ...head,
-    changes: {
-      updated_at: ago(6),
-      window: { from: iso(to - WINDOW_DAYS * DAY), to: iso(to) },
-      items: structuredClone(changes),
-    },
-    use: {
-      updated_at: ago(4),
-      rows: use,
-      median: toUseMedian(use),
-      trend: trend((xs) => count(total(xs, (x) => x.questions))),
-    },
-    alerts: {
-      updated_at: ago(2),
-      rows: alerts,
-      median: toAlertsMedian(alerts),
-      trend: trend((xs) =>
-        count(total(xs, (x) => x.critical + x.urgent + x.info)),
-      ),
-    },
-    quality: {
-      updated_at: ago(9),
-      rows: quality,
-      median: toQualityMedian(quality),
-      trend: trend((xs) => {
-        const a = total(xs, (x) => x.answers);
-        const n = total(xs, (x) => x.needs_review);
-        return over(n / (a || 1), [count(a), count(n)], a, 2);
-      }),
-    },
-    hospitals: {
-      updated_at: ago(4),
-      rows: PROFILES.map((p, i) => ({
-        hospital: p.hospital,
-        size: {
-          staff: p.staff,
-          active_clinicians: use[i]!.active_clinicians,
-          questions: use[i]!.questions,
-        },
-      })),
-    },
-  };
+): Guarded {
+  const listed = PROFILES.filter((p) => lists(p, span, now));
+  const xs = listed.map((p) => sumPeriod(p, kind, span, now));
+  if (xs.some((x) => pick(measure, x).suppressed)) return HIDDEN;
+  const all = { ...xs[0]! };
+  for (const k of Object.keys(all) as (keyof Raw)[])
+    all[k] = xs.reduce((a, x) => a + x[k], 0);
+  return pick(measure, all);
 }
 
-const COUNT_MEASURES: readonly MeasureId[] = [
-  "questions",
-  "active_clinicians",
-  "unhandled_alerts",
-  "alerts_total",
-];
-
-/** One measure from a sum, under the same rules as the rows. */
+/** One measure from a period's sums, under the same rules as the rows. */
 function pick(measure: MeasureId, x: Raw): Guarded {
   switch (measure) {
     case "questions_per_clinician":
@@ -789,60 +545,211 @@ function pick(measure: MeasureId, x: Raw): Guarded {
       return toUseRow(x).questions;
     case "active_clinicians":
       return toUseRow(x).active_clinicians;
-    case "critical_median_ack_minutes":
-      return toAlertsRow(x).critical_median_ack_minutes;
-    case "critical_within_target":
-      return toAlertsRow(x).critical_within_target;
-    case "unhandled_alerts":
-      return toAlertsRow(x).unhandled;
-    case "alerts_total":
-      return toAlertsRow(x).total;
     case "needs_review_share":
       return toQualityRow(x).needs_review_share;
     case "agreement_rate":
       return toQualityRow(x).agreement_rate;
     case "median_review_hours":
       return toQualityRow(x).median_review_hours;
+    default:
+      // Alert measures: no patient alerts in the backend yet.
+      return NOTHING;
   }
 }
 
+// ---- The replies -------------------------------------------------------------
+
+export function isAnalyticsHospital(id: string): boolean {
+  return PROFILES.some((p) => p.hospital.id === id);
+}
+
+/** The first period of a kind that will be published (the next one). */
+const firstFrom = (kind: Period, now: number) =>
+  iso(periodEnd(kind, periodOf(kind, now)));
+
+export function buildAnalytics(
+  period: Period,
+  now: number,
+  mode: AnalyticsMode,
+  changes: Change[],
+): AnalyticsOut {
+  const no = { unavailable: true } as const;
+  if (mode === "not_yet") {
+    const ny = { not_yet: true, first_from: firstFrom(period, now) } as const;
+    return {
+      period,
+      from: null,
+      to: null,
+      changes: no,
+      use: ny,
+      alerts: null,
+      quality: ny,
+      hospitals: ny,
+      what_changed: no,
+    };
+  }
+  const spans = finishedPeriods(period, now, SERIES_LENGTH[period]);
+  const latest = spans.at(-1)!;
+  const head = {
+    period,
+    from: iso(latest.from),
+    to: iso(latest.to),
+    changes: no,
+    alerts: null,
+  };
+  if (mode === "unavailable")
+    return {
+      ...head,
+      use: no,
+      quality: no,
+      hospitals: no,
+      what_changed: no,
+    };
+  const listed = PROFILES.filter((p) => lists(p, latest, now));
+  const raws = listed.map((p) => sumPeriod(p, period, latest, now));
+  const rows = <R>(make: (x: Raw) => Body<R>) =>
+    raws.map((x, i) => ({ hospital: listed[i]!.hospital, ...make(x) }) as R);
+  const use = rows<UseRow>(toUseRow);
+  const quality = rows<QualityRow>(toQualityRow);
+  const updated_at = iso(latest.to + COMPUTED_AFTER);
+  const trend = (m: MeasureId) =>
+    spans.map((s) => ({
+      start: iso(s.from),
+      value: allCell(m, period, s, now),
+    }));
+  const { week, month } = changeWindow(now);
+  return {
+    ...head,
+    use: {
+      updated_at,
+      rows: use,
+      median: toUseMedian(use),
+      trend: trend("questions"),
+    },
+    quality: {
+      updated_at,
+      rows: quality,
+      median: toQualityMedian(quality),
+      trend: trend("needs_review_share"),
+    },
+    hospitals: {
+      updated_at,
+      rows: listed.map((p, i) => ({
+        hospital: p.hospital,
+        size: {
+          staff: count(p.staff),
+          active_clinicians: use[i]!.active_clinicians,
+          questions: use[i]!.questions,
+        },
+      })),
+    },
+    what_changed: {
+      updated_at: iso(week.to + 30 * MIN),
+      window: { from: iso(month), to: iso(week.to) },
+      items: structuredClone(changes),
+    },
+  };
+}
+
 /**
- * A measure for one hospital (or all of them, with `hospitalId` null) over
- * the period, with the median of the other hospitals. A median of counts
- * that would be 1–4 is left out.
+ * One measure for one hospital (or all of them, with `hospitalId` null)
+ * over the latest periods of the kind, with the median of the other
+ * hospitals' shown values. A count median strictly between 0 and 5 is
+ * null; a period that doesn't list the hospital is `{null, false}`.
  */
 export function buildSeries(
   hospitalId: string | null,
   measure: MeasureId,
   period: Period,
   now: number,
+  changeId?: string,
 ): SeriesOut {
-  const to = endOfDays(now);
-  const at = (p: Profile, b: ReturnType<typeof buckets>[number]) =>
-    sum(p, b.k0, b.k1, p.clinicians[b.days === 1 ? 0 : 1]);
   const self = PROFILES.find((p) => p.hospital.id === hospitalId) ?? null;
-  const others = PROFILES.filter((p) => p !== self);
-  const points = buckets(period, to).map((b) => {
-    let value: Guarded;
-    let med: number | null = null;
-    if (self) {
-      value = pick(measure, at(self, b));
-      med = median(others.map((p) => pick(measure, at(p, b))));
+  const counts = measure === "questions" || measure === "active_clinicians";
+  const points = finishedPeriods(period, now, SERIES_LENGTH[period]).map(
+    (s) => {
+      const start = iso(s.from);
+      if (!self)
+        return { start, value: allCell(measure, period, s, now), median: null };
+      if (!lists(self, s, now)) return { start, value: NOTHING, median: null };
+      const others = PROFILES.filter((p) => p !== self && lists(p, s, now));
+      let med = median(
+        others.map((p) => pick(measure, sumPeriod(p, period, s, now))),
+      );
       if (med !== null) {
-        med = Math.round(med * 100) / 100;
-        if (COUNT_MEASURES.includes(measure) && med > 0 && med < 5) med = null;
+        med = Math.round(med * 10_000) / 10_000;
+        if (counts && med > 0 && med < 5) med = null;
       }
-    } else {
-      // All hospitals together: one total, no median to compare with.
-      const xs = PROFILES.map((p) => at(p, b));
-      const all: Raw = { ...xs[0]! };
-      for (const k of Object.keys(all) as (keyof Raw)[])
-        all[k] = xs.reduce((a, x) => a + x[k], 0);
-      value = COUNT_MEASURES.includes(measure)
-        ? pick(measure, all)
-        : { value: null, suppressed: false };
-    }
-    return { start: iso(b.start), value, median: med };
+      return {
+        start,
+        value: pick(measure, sumPeriod(self, period, s, now)),
+        median: med,
+      };
+    },
+  );
+  return {
+    ...(changeId ? { change_id: changeId } : {}),
+    measure,
+    hospital: self?.hospital ?? null,
+    points,
+  };
+}
+
+function rates(x: Raw): GuardrailRates {
+  const answers = count(x.answers);
+  const parts = set({
+    pass: count(x.high),
+    regenerate: count(x.medium),
+    escalate: count(x.low),
   });
-  return { measure, hospital: self?.hospital ?? ALL_HOSPITALS, points };
+  const share = (n: number, part: Guarded) =>
+    over(
+      n / (x.answers || 1),
+      [answers, part, count(x.answers - n)],
+      x.answers,
+      SHARE_DP,
+    );
+  return {
+    answers,
+    ...parts,
+    degraded:
+      answers.suppressed || small(x.answers - x.degraded)
+        ? HIDDEN
+        : count(x.degraded),
+    pass_share: share(x.high, parts.pass),
+    regenerate_share: share(x.medium, parts.regenerate),
+    escalate_share: share(x.low, parts.escalate),
+  };
+}
+
+/**
+ * Guardrail statistics for the latest finished period (F20). Before the
+ * first one, or with the areas failing, it is 503 `not_ready` (the caller
+ * throws). `all` is hidden cell by cell where a hospital's is.
+ */
+export function buildGuardrails(
+  period: Period,
+  now: number,
+): GuardrailPeriodsOut {
+  const latest = finishedPeriods(period, now, 1)[0]!;
+  const listed = PROFILES.filter((p) => lists(p, latest, now));
+  const raws = listed.map((p) => sumPeriod(p, period, latest, now));
+  const hospitals = raws.map((x, i) => ({
+    hospital: listed[i]!.hospital,
+    ...rates(x),
+  }));
+  const total = { ...raws[0]! };
+  for (const k of Object.keys(total) as (keyof Raw)[])
+    total[k] = raws.reduce((a, x) => a + x[k], 0);
+  const all = rates(total);
+  for (const k of Object.keys(all) as (keyof GuardrailRates)[])
+    if (hospitals.some((h) => h[k].suppressed)) all[k] = HIDDEN;
+  return {
+    period,
+    from: iso(latest.from),
+    to: iso(latest.to),
+    updated_at: iso(latest.to + COMPUTED_AFTER),
+    all,
+    hospitals,
+  };
 }

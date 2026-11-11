@@ -3,8 +3,8 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useId, useMemo, type Ref } from "react";
 import type { HospitalSize, Period } from "@/lib/api/analytics-contract";
-import { changeLine, type RankedChange } from "@/lib/analytics/changes";
-import { countText, valueText } from "@/lib/analytics/measures";
+import { changeTitle, type RankedChange } from "@/lib/analytics/changes";
+import { valueText } from "@/lib/analytics/measures";
 import {
   NOT_ENOUGH_TO_COMPARE,
   readSeries,
@@ -21,7 +21,7 @@ import { FollowUp } from "./follow-up";
 
 /** "214 staff · 1,180 questions this period" (hidden: "Fewer than 5 questions"). */
 export const sizeLine = (s: HospitalSize) =>
-  `${countText(s.staff)} staff · ${valueText(s.questions, "count")} questions this period`;
+  `${valueText(s.staff, "count")} staff · ${valueText(s.questions, "count")} questions this period`;
 
 /**
  * The selected change: its words, the chart against the other hospitals,
@@ -45,12 +45,14 @@ export function ChangeDetail({
   headingRef?: Ref<HTMLHeadingElement>;
 }) {
   const titleId = useId();
-  const line = changeLine(c);
+  const line = changeTitle(c);
   const series = useChangeSeries(c.id, period);
   const chart = useMemo(
     () =>
-      series.data === undefined ? null : readSeries(series.data, c.measure),
-    [series.data, c.measure],
+      series.data === undefined
+        ? null
+        : readSeries(series.data, c.measure, period, c.id),
+    [series.data, c.measure, period, c.id],
   );
   const h = c.hospital;
   const size =
@@ -103,6 +105,7 @@ export function ChangeDetail({
         <ComparePanel
           hospital={h}
           measure={c.measure}
+          period={period}
           points={chart.points}
           size={sizeText}
         />

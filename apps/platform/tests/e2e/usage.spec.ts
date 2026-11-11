@@ -13,7 +13,8 @@ import {
 
 test.afterEach(async ({ page }) => expectNoStorage(page));
 
-const NGH_CRITICAL = /Critical alerts acknowledged 2× slower/;
+const NGH_CRITICAL =
+  /Northgate General Hospital · Worse: Answers needing review worse/;
 const RIVERSIDE_NOTE = /Called Musa Danjuma/;
 
 /** Signs in and opens Usage by clicking (a page load would sign out). */
@@ -35,7 +36,7 @@ const row = (page: Page, text: string | RegExp) =>
 const detail = (page: Page) =>
   page.getByRole("heading", { level: 2, name: NGH_CRITICAL });
 
-test("Usage opens on What changed with Northgate's Critical change selected", async ({
+test("Usage opens on What changed with Northgate's change selected", async ({
   page,
 }) => {
   await openUsage(page, ADA);
@@ -45,7 +46,7 @@ test("Usage opens on What changed with Northgate's Critical change selected", as
   // The sign always has words with it.
   await expect(first).toContainText("⚠");
   // The top 5 show; the followed-up change waits behind Show all.
-  await expect(row(page, /Havana Hospital/)).toBeVisible();
+  await expect(row(page, /Havana Hospital · Better: Agreement/)).toBeVisible();
   await page.getByRole("button", { name: /^Show all \(\d+\)$/ }).click();
   await expect(row(page, /Riverside Children's Hospital/)).toBeVisible();
 
@@ -82,7 +83,7 @@ test("mark followed up with a note as Ada, then sign in as Tunde in the same tab
   // Same tab: sign out and sign in as Tunde; the follow-up is still there.
   await signOut(page);
   await openUsage(page, TUNDE);
-  const followed = row(page, /Critical alerts acknowledged 2× slower/);
+  const followed = row(page, NGH_CRITICAL);
   await expect(followed).toContainText("Followed up by Ada Bakare");
   await followed.click();
   await expect(detail(page)).toBeVisible();
@@ -133,13 +134,13 @@ test("Download CSV saves a file whose hidden values read Fewer than 5", async ({
   await page.getByRole("button", { name: "Download CSV" }).click();
   const file = await download;
   expect(file.suggestedFilename()).toMatch(
-    /^analytics-last-30-days-\d{4}-\d{2}-\d{2}\.csv$/,
+    /^analytics-last-month-\d{4}-\d{2}-\d{2}\.csv$/,
   );
   const csv = readFileSync((await file.path())!, "utf8");
   // Lakeside's line in the Use section: its counts are 1-4, so hidden.
   const lines = csv.split(/\r?\n/);
   const use = lines.findIndex((l) =>
-    l.startsWith("Hospital,Questions,Active clinicians,"),
+    l.startsWith("Period,Hospital,Questions,Active clinicians,"),
   );
   expect(use).toBeGreaterThanOrEqual(0);
   const lakeside = lines
@@ -148,6 +149,8 @@ test("Download CSV saves a file whose hidden values read Fewer than 5", async ({
   expect(lakeside).toBeDefined();
   expect(lakeside).toContain("Fewer than 5");
   expect(lakeside).not.toMatch(/,[1-4](,|$)/);
+  // Every row names its period by its dates (F15).
+  expect(lakeside).toMatch(/^Month 1–\d{2} [A-Z][a-z]{2} \d{4},/);
   // Counts only: no follow-up notes.
   expect(csv).not.toContain("Musa Danjuma");
 });
@@ -199,4 +202,24 @@ test("the Hospitals tab compares Riverside with the rest", async ({ page }) => {
     await expect(riverside).toBeVisible();
     await expect(riverside).toBeFocused();
   }
+});
+
+test("the period picker shows finished calendar periods by their dates", async ({
+  page,
+}) => {
+  await openUsage(page, ADA);
+  const period = page.getByRole("combobox", { name: "Period" });
+  await expect(period).toHaveValue("month");
+  await expect(page.getByText(/^1–\d{2} [A-Z][a-z]{2} \d{4}$/)).toBeVisible();
+  await period.selectOption({ label: "Last week" });
+  // A month-aligned week, named by its date range.
+  await expect(
+    page.getByText(/^(1–7|8–14|15–21|22–(28|29|30|31)) [A-Z][a-z]{2} \d{4}$/),
+  ).toBeVisible();
+  await expect(page.getByText(/change only when a period ends/)).toBeVisible();
+  // Alert safety isn't switched on until patient alerts exist.
+  await page.getByRole("tab", { name: "Alert safety" }).click();
+  await expect(
+    page.getByText(/^Alert safety isn't switched on yet\./),
+  ).toBeVisible();
 });

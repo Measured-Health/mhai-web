@@ -1,7 +1,8 @@
 "use client";
 import type { AnalyticsState } from "@/lib/analytics/read";
 import { countText, isHidden, valueText } from "@/lib/analytics/measures";
-import { dayMonthLabel } from "@/lib/format";
+import type { Period } from "@/lib/api/analytics-contract";
+import { periodShort } from "@/lib/analytics/periods";
 import { BarList } from "@mhai/ui/charts/bar-list";
 import { ColumnChart } from "@mhai/ui/charts/column-chart";
 import type { BarItem, Column } from "@mhai/ui/charts/types";
@@ -14,10 +15,13 @@ import { AreaPanel } from "./area-panel";
  */
 export function UseTab({
   state,
+  period,
   failed,
   onRetry,
 }: {
   state: AnalyticsState["use"] | null;
+  /** The kind of period: each column is one, labelled by its dates. */
+  period: Period;
   failed: boolean;
   onRetry(): void;
 }) {
@@ -41,7 +45,7 @@ export function UseTab({
           const hidden = isHidden(p.value, "count");
           return {
             key: `${p.start}-${i}`,
-            label: dayMonthLabel(p.start),
+            label: periodShort(period, p.start),
             value: hidden ? 0 : (p.value.value ?? 0),
             hidden,
           };
@@ -67,9 +71,9 @@ export function UseTab({
             <ColumnChart
               title="Questions across all hospitals"
               columns={columns}
-              summary={`Questions across all hospitals, by period, ${columns.length} in all.`}
+              summary={`Questions across all hospitals, one column per period, ${columns.length} in all.`}
               valueText={countText}
-              headers={["Period starting", "Questions"]}
+              headers={["Period", "Questions"]}
               markLegend="Marked"
             />
           </div>

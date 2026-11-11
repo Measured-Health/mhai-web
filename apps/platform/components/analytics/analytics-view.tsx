@@ -10,12 +10,14 @@ import {
   type ReactNode,
 } from "react";
 import {
+  DEFAULT_PERIOD,
   PERIODS,
   type MeasureId,
   type Period,
 } from "@/lib/api/analytics-contract";
 import type { Person } from "@/lib/api/contract";
 import { analyticsCsv, analyticsCsvName } from "@/lib/analytics/csv";
+import { PERIOD_PICK, periodRange, windowText } from "@/lib/analytics/periods";
 import {
   NOTHING_UNUSUAL,
   readAnalytics,
@@ -36,12 +38,6 @@ import { AnalyticsTabs } from "./analytics-tabs";
 import { ChangesList } from "./changes-list";
 import { defaultMeasure, HospitalDetail } from "./hospitals-tab";
 import { updatedLine } from "./updated-line";
-
-export const PERIOD_LABEL: Record<Period, string> = {
-  "7d": "Last 7 days",
-  "30d": "Last 30 days",
-  "90d": "Last 90 days",
-};
 
 export { updatedLine };
 
@@ -65,11 +61,15 @@ export function AnalyticsView() {
   const { user } = useAuth();
   const canAct = isPlatformAdmin(user);
   const desktop = useIsDesktop();
-  const [period, setPeriod] = useState<Period>("30d");
+  const [period, setPeriod] = useState<Period>(DEFAULT_PERIOD);
   const q = useAnalytics(period);
+  // The last period's reply stays on screen until the new one arrives: it
+  // is read as the kind it says it is, then the kind asked for.
+  const placeholder = q.isPlaceholderData;
   const state = useMemo(
-    () => (q.data ? readAnalytics(q.data) : null),
-    [q.data],
+    () =>
+      q.data ? readAnalytics(q.data, placeholder ? undefined : period) : null,
+    [q.data, placeholder, period],
   );
   const csvNet = useNeedsConnection("csv-offline");
 
@@ -199,7 +199,7 @@ export function AnalyticsView() {
               >
                 {PERIODS.map((p) => (
                   <option key={p} value={p}>
-                    {PERIOD_LABEL[p]}
+                    {PERIOD_PICK[p]}
                   </option>
                 ))}
               </select>
@@ -217,9 +217,16 @@ export function AnalyticsView() {
               <OfflineNote id="csv-offline" />
             </div>
           </div>
+          {state?.from && (
+            <p className="text-[13.5px] font-semibold">
+              {periodRange(state.period, state.from)}
+            </p>
+          )}
           <p className="text-[12.5px] text-ink-3">
-            What changed always compares the last 7 days with the 4 weeks
-            before. The period changes the charts, the tabs and the CSV.
+            Figures are for finished periods and change only when a period ends.
+            The period changes the charts, the tabs and the CSV. What changed
+            compares the latest week with the month before it, per day, whatever
+            the period.
           </p>
 
           <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -315,6 +322,9 @@ function WhatChanged({
           </p>
         )}
       </div>
+      {c?.status === "ok" && (
+        <p className="mb-3 text-[12.5px] text-ink-2">{windowText(c.window)}</p>
+      )}
       {cleared && (
         <p role="status" className="mb-3 text-[13.5px] text-ink-2">
           That change has cleared.
