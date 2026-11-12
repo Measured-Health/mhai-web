@@ -240,8 +240,11 @@ const upstream = (shape: string) =>
 let n = 0;
 const concrete = (shape: string) =>
   shape.split("/").map((p) => (p === "{id}" ? `id_${++n}-X` : p));
-/** A query and body each analytics shape accepts (they're checked strictly). */
+/** A query and body each strictly checked shape accepts. */
 const VALID: Record<string, { query?: string; body?: string }> = {
+  "PUT platform/hospitals/{id}/model-policy": {
+    body: '{"cloud_provider":"gemini","agreement_ref":"DPA-2026-0107","monthly_token_budget":5,"mfa_code":"123456"}',
+  },
   "GET platform/analytics": { query: "?period=month" },
   "GET platform/guardrails/periods": { query: "?period=week" },
   "GET platform/analytics/changes/{id}/series": { query: "?period=quarter" },
@@ -570,6 +573,36 @@ describe("platform API proxy", () => {
     );
     expect(init.method).toBe("PUT");
     expect(headersOf(calls()[0]).get("Idempotency-Key")).toBe("k-policy-1");
+  });
+
+  it("the AI model: the write is checked strictly, and Gemini goes upstream", async () => {
+    await session();
+    const put = (body: string) =>
+      call("PUT", ["platform", "hospitals", "h1", "model-policy"], { body });
+    fetchMock.mockImplementation(async () => Response.json({}));
+    const ok = await put(
+      '{"cloud_provider":"gemini","agreement_ref":"DPA-2026-0107","monthly_token_budget":5,"mfa_code":"123456"}',
+    );
+    expect(ok.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const off = await put(
+      '{"cloud_provider":null,"agreement_ref":null,"monthly_token_budget":5,"backup_code":"abcd-efgh"}',
+    );
+    expect(off.status).toBe(200);
+    fetchMock.mockClear();
+    for (const bad of [
+      '{"cloud_provider":"mistral","agreement_ref":"DPA-2026-0107","monthly_token_budget":5,"mfa_code":"1"}',
+      '{"cloud_provider":"gemini","agreement_ref":"Dr Obi","monthly_token_budget":5,"mfa_code":"1"}',
+      '{"cloud_provider":"gemini","agreement_ref":"DPA-2026-0107","monthly_token_budget":1.5,"mfa_code":"1"}',
+      '{"cloud_provider":"gemini","agreement_ref":"DPA-2026-0107","monthly_token_budget":5,"provider_code":"gemini"}',
+      '{"agreement_ref":null,"monthly_token_budget":5}',
+      "not json",
+    ]) {
+      const res = await put(bad);
+      expect(res.status).toBe(422);
+      expect(await res.json()).toEqual({ code: "validation_failed" });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("the AI model: an auditor reads it, but a PUT never goes upstream", async () => {

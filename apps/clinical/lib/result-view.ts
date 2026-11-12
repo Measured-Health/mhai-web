@@ -44,26 +44,40 @@ const PROVIDER_NAME: Record<string, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
   xai: "xAI",
+  gemini: "Google Gemini",
 };
+/** A provider code's shape: a short lower-case word (core 1.16.0). */
+const PROVIDER_CODE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 export const LOCAL_DRAFT = "Drafted by MHAI's own model";
 export const MASKED_NOTICE =
   "Identifying patient details were masked where detected before the question was sent.";
 
+/** A provider's name: the company's when known, else the code as it is. */
+function providerName(v: unknown, asIs: boolean): string | null {
+  if (typeof v !== "string") return null;
+  if (Object.hasOwn(PROVIDER_NAME, v)) return PROVIDER_NAME[v]!;
+  return asIs && PROVIDER_CODE.test(v) ? v : null;
+}
+
 /**
  * Read defensively: "local" only when the reply says local; any cloud
- * route says cloud, naming the provider when it is one this app knows.
+ * route says cloud, naming the provider from `provider_code` (core 1.16.0;
+ * the only field that names Google Gemini, shown as it is when this app
+ * doesn't know it), else from `provider` when it is one this app knows.
  * Anything else shows nothing (show only what the API returns).
  */
 export function generatedByView(g: unknown): ResultView["generatedBy"] {
   if (typeof g !== "object" || g === null) return null;
-  const { route, provider } = g as { route?: unknown; provider?: unknown };
-  if (route === "local" && provider === null)
+  const { route, provider, provider_code } = g as {
+    route?: unknown;
+    provider?: unknown;
+    provider_code?: unknown;
+  };
+  if (route === "local" && provider === null && provider_code == null)
     return { label: LOCAL_DRAFT, notice: null };
   if (route !== "cloud") return null;
   const name =
-    typeof provider === "string" && Object.hasOwn(PROVIDER_NAME, provider)
-      ? PROVIDER_NAME[provider]
-      : null;
+    providerName(provider_code, true) ?? providerName(provider, false);
   return {
     label: name
       ? `Drafted by ${name} (cloud AI)`

@@ -330,6 +330,42 @@ describe("who drafted the answer (generated_by, core 1.10.0)", () => {
     );
   });
 
+  it("names Google Gemini from provider_code, where provider is null (core 1.16.0)", () => {
+    expect(
+      view({ route: "cloud", provider: null, provider_code: "gemini" }),
+    ).toEqual({
+      label: "Drafted by Google Gemini (cloud AI)",
+      notice: MASKED_NOTICE,
+    });
+    // provider_code is the source of truth when both are sent.
+    expect(
+      view({
+        route: "cloud",
+        provider: "anthropic",
+        provider_code: "anthropic",
+      })?.label,
+    ).toBe("Drafted by Anthropic (cloud AI)");
+  });
+
+  it("a provider code added later is shown as it is; one of the wrong shape isn't", () => {
+    expect(
+      view({ route: "cloud", provider: null, provider_code: "mistral" })?.label,
+    ).toBe("Drafted by mistral (cloud AI)");
+    for (const provider_code of ["<b>x</b>", "", "Gemini Pro", 7])
+      expect(
+        view({ route: "cloud", provider: null, provider_code })?.label,
+      ).toBe("Drafted by a cloud AI model");
+  });
+
+  it("a cloud answer with provider_code is never shown as local", () => {
+    expect(
+      view({ route: "local", provider: null, provider_code: "gemini" }),
+    ).toBeNull();
+    expect(
+      view({ route: "local", provider: null, provider_code: null }),
+    ).toEqual({ label: LOCAL_DRAFT, notice: null });
+  });
+
   it("says local only when the reply says local, with no notice", () => {
     expect(view({ route: "local", provider: null })).toEqual({
       label: LOCAL_DRAFT,

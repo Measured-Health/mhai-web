@@ -3,6 +3,7 @@ import {
   monthLabel,
   parseBudget,
   policyLabel,
+  providerName,
   targetLabel,
   tokens,
 } from "./labels";
@@ -12,12 +13,20 @@ describe("the AI model's words", () => {
     expect(policyLabel("anthropic")).toBe("Anthropic (cloud)");
     expect(policyLabel("openai")).toBe("OpenAI (cloud)");
     expect(policyLabel("xai")).toBe("xAI (cloud)");
+    expect(policyLabel("gemini")).toBe("Google Gemini (cloud)");
     expect(policyLabel(null)).toBe("MHAI's own model");
+  });
+
+  it("a provider code it doesn't know is shown as it is, and is never off", () => {
+    expect(policyLabel("mistral")).toBe("mistral (cloud)");
+    expect(providerName("mistral")).toBe("mistral");
+    expect(providerName("gemini")).toBe("Google Gemini");
   });
 
   it("an Activity target it doesn't know has no words", () => {
     expect(targetLabel("none")).toBe("MHAI's own model");
     expect(targetLabel("xai")).toBe("xAI (cloud)");
+    expect(targetLabel("gemini")).toBe("Google Gemini (cloud)");
     expect(targetLabel("Kemi")).toBeNull();
     expect(targetLabel(null)).toBeNull();
   });

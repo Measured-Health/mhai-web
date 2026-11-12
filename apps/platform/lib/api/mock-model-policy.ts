@@ -1,5 +1,5 @@
 // The demo's AI model policies (Plan 14), built on the mock core. Memory
-// only. It refuses what core refuses (openapi 1.10.0), in core's order: the
+// only. It refuses what core refuses (openapi 1.16.0), in core's order: the
 // body (422), the provider (409), the hospital (404), the rate (429), then
 // the code. Sample data only: no key or secret exists anywhere in it.
 import { ApiError } from "@mhai/api-client/errors";
@@ -30,6 +30,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const monthOf = (ms: number) => iso(ms).slice(0, 7);
 
 type PolicyRecord = {
+  /** The provider's code; null when off. */
   cloud_provider: CloudProvider | null;
   agreement_ref: string | null;
   monthly_token_budget: number;
@@ -39,8 +40,8 @@ type PolicyRecord = {
 export type ModelPolicyMockOptions = {
   /**
    * The providers this deployment has enabled (core's
-   * `CORE_CLOUD_PROVIDERS`): any other is 409. The demo enables Anthropic
-   * only, as the design's demo does.
+   * `CORE_CLOUD_PROVIDERS`): any other is 409. The demo enables Anthropic,
+   * as the design's demo does, and Google Gemini, which Lakeside is on.
    */
   cloudProviders?: readonly CloudProvider[];
 };
@@ -66,10 +67,22 @@ function seed(now: number) {
         updated_at: iso(now - 9 * D),
       },
     ],
+    // On Google Gemini (core 1.16.0): its reply's `cloud_provider` is null,
+    // and only `provider_code` says gemini.
+    [
+      "h_lakeside",
+      {
+        cloud_provider: "gemini",
+        agreement_ref: "DPA-2026-0107",
+        monthly_token_budget: 500_000,
+        updated_at: iso(now - 2 * D),
+      },
+    ],
   ]);
   const usage = new Map<string, { used: number; reserved: number }>([
     ["h_havana", { used: 1_240_000, reserved: 12_000 }],
     ["h_riverside", { used: 870_000, reserved: 0 }],
+    ["h_lakeside", { used: 95_000, reserved: 0 }],
   ]);
   return { policies, usage };
 }
@@ -104,7 +117,7 @@ function readBody(body: unknown): PolicyRecord {
 
 export function modelPolicyMock(
   core: MockCore,
-  { cloudProviders = ["anthropic"] }: ModelPolicyMockOptions = {},
+  { cloudProviders = ["anthropic", "gemini"] }: ModelPolicyMockOptions = {},
 ): ModelPolicyClient {
   const { now, log } = core;
   const { policies, usage } = seed(now());
@@ -114,9 +127,12 @@ export function modelPolicyMock(
   const shown = (id: string): ModelPolicy => {
     const p = policies.get(id);
     const u = usage.get(id) ?? { used: 0, reserved: 0 };
+    const code = p?.cloud_provider ?? null;
     return {
       hospital_id: id,
-      cloud_provider: p?.cloud_provider ?? null,
+      // As core 1.16.0 answers: the reply's enum can't name Gemini.
+      cloud_provider: code === "gemini" ? null : code,
+      provider_code: code,
       agreement_ref: p?.agreement_ref ?? null,
       monthly_token_budget: p?.monthly_token_budget ?? BUDGET_DEFAULT,
       updated_at: p?.updated_at ?? null,

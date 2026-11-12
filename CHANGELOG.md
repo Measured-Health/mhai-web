@@ -26,6 +26,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Google Gemini as a cloud model provider** (core openapi 1.16.0,
+  mhai-multiagent #137). The platform app's AI model section reads
+  `provider_code`, names "Google Gemini" and offers it in the provider
+  picker; a policy whose `cloud_provider` is null but whose `provider_code`
+  is set is never shown as off (an unknown code is shown as it is). The
+  clinical result says "Drafted by Google Gemini (cloud AI)" from
+  `generated_by.provider_code`. The policy reader and the BFF's model-policy
+  write are strict schemas. The demo puts Lakeside Community Clinic on
+  Gemini and enables it alongside Anthropic.
 - **Platform analytics on core's calendar periods** (Plan 7c, core openapi
   1.15.0; ruling R41a). Usage picks Last week, Last month or Last quarter
   and shows the period's dates; weeks are month-aligned and named by their

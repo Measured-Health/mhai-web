@@ -20,10 +20,10 @@ import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
 import { platformError } from "@/lib/errors";
 import {
   LOCAL_LABEL,
-  PROVIDER_LABEL,
   monthLabel,
   parseBudget,
   policyLabel,
+  providerName,
   tokens,
 } from "@/lib/model-policy/labels";
 import { useModelPolicy, useSetModelPolicy } from "@/lib/queries/model-policy";
@@ -51,10 +51,13 @@ export const SAMPLE_ONLY =
 export const LIMIT_REACHED =
   "When the limit is used up, new questions get no cloud draft and go to clinician review until next month.";
 
-type Choice = CloudProvider | "none";
+/** A provider code, or `OFF`, which no code can be (`PROVIDER_CODE`). */
+type Choice = string;
+const OFF = "-off";
 type Field = "provider" | "ref" | "budget";
 type Draft = {
-  cloud_provider: CloudProvider | null;
+  /** A provider code: one of `CLOUD_PROVIDERS`, or the policy's own. */
+  cloud_provider: string | null;
   agreement_ref: string | null;
   monthly_token_budget: number;
 };
@@ -133,8 +136,10 @@ function ReadView({ policy: p }: { policy: ModelPolicy }) {
   return (
     <div className="flex flex-col gap-3">
       <dl className="grid gap-x-6 gap-y-3 text-[13.5px] sm:grid-cols-[160px_1fr]">
-        <Row term="Drafts answers">{policyLabel(p.cloud_provider)}</Row>
-        {p.cloud_provider && (
+        {/* `provider_code`, never `cloud_provider`: that is null for Gemini
+            (core 1.16.0), which is on, not off. */}
+        <Row term="Drafts answers">{policyLabel(p.provider_code)}</Row>
+        {p.provider_code !== null && (
           <Row term="Agreement reference">
             <span className="font-mono">{p.agreement_ref}</span>
           </Row>
@@ -171,7 +176,7 @@ function ReadView({ policy: p }: { policy: ModelPolicy }) {
           <p>{LIMIT_REACHED}</p>
         </Banner>
       )}
-      {p.cloud_provider && (
+      {p.provider_code !== null && (
         <p className="text-[13px] text-ink-2">
           {MASKED_NOTE} {SAMPLE_ONLY}
         </p>
@@ -197,7 +202,7 @@ function EditForm({
   const toast = useToast();
   const net = useNeedsConnection(`${id}-offline`);
   const save = useStepUpCall(useSetModelPolicy(hospital.id));
-  const [choice, setChoice] = useState<Choice>(policy.cloud_provider ?? "none");
+  const [choice, setChoice] = useState<Choice>(policy.provider_code ?? OFF);
   const [ref, setRef] = useState(policy.agreement_ref ?? "");
   const [budget, setBudget] = useState(tokens(policy.monthly_token_budget));
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
@@ -215,7 +220,7 @@ function EditForm({
     el?.focus();
   }, [focusReq, id]);
 
-  const provider = choice === "none" ? null : choice;
+  const provider = choice === OFF ? null : choice;
 
   /** The draft as core takes it, or null with the fields marked. */
   const check = (): Draft | null => {
@@ -248,7 +253,7 @@ function EditForm({
     const d = check();
     if (!d) return;
     if (
-      d.cloud_provider === policy.cloud_provider &&
+      d.cloud_provider === policy.provider_code &&
       d.agreement_ref === policy.agreement_ref &&
       d.monthly_token_budget === policy.monthly_token_budget
     )
@@ -264,7 +269,12 @@ function EditForm({
   const confirm = (input: StepUpInput) => {
     if (!asking) return;
     save.run(
-      { ...asking, ...codeOf(input) },
+      {
+        ...asking,
+        // One of the picker's providers, or the policy's own code unchanged.
+        cloud_provider: asking.cloud_provider as CloudProvider | null,
+        ...codeOf(input),
+      },
       {
         onSuccess: () => {
           close();
@@ -307,17 +317,19 @@ function EditForm({
       .filter(Boolean)
       .join(" ") || undefined;
 
+  // The policy's own provider is always offered, even one added after this
+  // app (shown as its code), so the form never opens on "off" for it.
+  const own = policy.provider_code;
+  const codes: string[] = [...CLOUD_PROVIDERS];
+  if (own !== null && !codes.includes(own)) codes.push(own);
   const options: { value: Choice; label: string }[] = [
-    { value: "none", label: `${LOCAL_LABEL} (nothing leaves our servers)` },
-    ...CLOUD_PROVIDERS.map((c) => ({
-      value: c,
-      label: `${PROVIDER_LABEL[c]} (cloud)`,
-    })),
+    { value: OFF, label: `${LOCAL_LABEL} (nothing leaves our servers)` },
+    ...codes.map((c) => ({ value: c, label: policyLabel(c) })),
   ];
 
   const summary = asking
     ? asking.cloud_provider
-      ? `Answers for ${hospital.name} will be drafted by ${PROVIDER_LABEL[asking.cloud_provider]}, a cloud provider, under ${asking.agreement_ref}, up to ${tokens(asking.monthly_token_budget)} tokens a month.`
+      ? `Answers for ${hospital.name} will be drafted by ${providerName(asking.cloud_provider)}, a cloud provider, under ${asking.agreement_ref}, up to ${tokens(asking.monthly_token_budget)} tokens a month.`
       : `Answers for ${hospital.name} will be drafted by ${LOCAL_LABEL}. Nothing leaves our servers. It applies from the next question.`
     : "";
 

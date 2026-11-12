@@ -47,7 +47,11 @@ export interface Citation {
 /** Contract v1.2.0: provisional; typed, never shown (plan R12). */
 export type TrustBand = "low" | "mid" | "high";
 
-/** Core 1.10.0 (additive): the cloud providers a hospital may opt in to. */
+/**
+ * Core 1.10.0 (additive): the cloud providers `generated_by.provider` can
+ * name. That enum can't grow in /api/v1 (ADR 0012), so Google Gemini, added
+ * in 1.16.0, is only in `provider_code`.
+ */
 export type CloudProvider = "anthropic" | "openai" | "xai";
 /**
  * Where the answer was drafted (core 1.10.0, additive): `local`, or `cloud`
@@ -56,7 +60,13 @@ export type CloudProvider = "anthropic" | "openai" | "xai";
  */
 export interface GeneratedBy {
   route: "local" | "cloud";
+  /** null on a local answer, and on a cloud one from Gemini: read `provider_code`. */
   provider: CloudProvider | null;
+  /**
+   * Core 1.16.0: the provider as a code ("anthropic", "gemini", "openai",
+   * "xai", or one added later, shown as it is); null on a local answer.
+   */
+  provider_code: string | null;
 }
 
 export interface ClinicalResultOut {

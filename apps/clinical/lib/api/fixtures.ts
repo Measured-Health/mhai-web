@@ -78,7 +78,11 @@ export const FIXTURES: Record<
     retrieval_ms: 2100,
     generation_ms: 9700,
     // Core 1.10.0: the demo's normal answer was drafted in the cloud.
-    generated_by: { route: "cloud", provider: "anthropic" },
+    generated_by: {
+      route: "cloud",
+      provider: "anthropic",
+      provider_code: "anthropic",
+    },
   },
   caution: {
     query_id: "",
@@ -115,7 +119,7 @@ export const FIXTURES: Record<
     guardrail_details: gd(0.66, 3),
     retrieval_ms: 2400,
     generation_ms: 10100,
-    generated_by: { route: "local", provider: null },
+    generated_by: { route: "local", provider: null, provider_code: null },
   },
   review: {
     query_id: "",

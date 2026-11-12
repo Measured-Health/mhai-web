@@ -103,3 +103,42 @@ test("an auditor sees Havana's AI model and its use, and can't change it", async
   ).toBeVisible();
   await expect(r.getByRole("button", { name: "Change" })).toHaveCount(0);
 });
+
+test("Lakeside is on Google Gemini: never shown as off, and the form opens on it", async ({
+  page,
+}) => {
+  await signIn(page, ADA);
+  await openHospital(page, "Lakeside Community Clinic");
+  const r = model(page);
+  await expect(
+    r.getByText("Google Gemini (cloud)", { exact: true }),
+  ).toBeVisible();
+  await expect(r.getByText("DPA-2026-0107")).toBeVisible();
+  await expect(r.getByText("MHAI's own model", { exact: true })).toHaveCount(0);
+  await r.getByRole("button", { name: "Change" }).click();
+  await expect(r.getByLabel("Google Gemini (cloud)")).toBeChecked();
+  await expect(r.getByLabel(/^MHAI's own model/)).not.toBeChecked();
+  await r.getByRole("button", { name: "Cancel" }).click();
+});
+
+test("Ada switches Northgate to Google Gemini", async ({ page }) => {
+  await signIn(page, ADA);
+  await openHospital(page, "Northgate General Hospital");
+  const r = model(page);
+  await r.getByRole("button", { name: "Change" }).click();
+  await r.getByLabel("Google Gemini (cloud)").check();
+  await r.getByLabel("Agreement reference").fill("DPA-2026-0107");
+  await r.getByRole("button", { name: "Save" }).click();
+  const d = await confirmWithCode(page);
+  await expect(d).toBeHidden();
+  await expect(toast(page, "AI model saved")).toBeVisible();
+  await expect(
+    r.getByText("Google Gemini (cloud)", { exact: true }),
+  ).toBeVisible();
+  await expect(r.getByText("MHAI's own model", { exact: true })).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("region", { name: "Recent actions" })
+      .getByText(/set the AI model to Google Gemini \(cloud\)/),
+  ).toBeVisible();
+});
