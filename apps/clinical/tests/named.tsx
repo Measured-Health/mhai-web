@@ -16,8 +16,7 @@ import { TEST_USER } from "./auth-wrapper";
 
 /** A year of sample data, in which "Sex: Female" is a shown, drillable count. */
 export const NAMED_FILTERS: AnalysisFilters = {
-  from: "2025-10-22",
-  to: "2026-10-21",
+  period: { level: "quarter", start: "2026-04-01" },
   condition: null,
   age_band: null,
   sex: null,

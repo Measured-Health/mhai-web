@@ -6,21 +6,22 @@ import {
   useState,
   type ComponentType,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
-import type { AnalysisFilters, ViewId } from "@/lib/api/analysis-contract";
+import type {
+  AnalysisFilters,
+  PeriodRef,
+  ViewId,
+} from "@/lib/api/analysis-contract";
 import {
   frameState,
   useAnalysisView,
   useFilterOptions,
 } from "@/lib/analysis-queries";
 import { analysisCsv, csvFilename } from "@/lib/analysis/csv";
-import {
-  DEFAULT_PERIOD,
-  customRangeProblem,
-  defaultFilters,
-  rangeFor,
-  type PeriodId,
-} from "@/lib/analysis/filters";
+import { defaultPeriod, pruneFilters } from "@/lib/analysis/filters";
+import { problemOf } from "@/lib/analysis/states";
+import { Skeleton } from "@mhai/ui/skeleton";
 import { VIEWS, VIEW_TITLE } from "@/lib/analysis/labels";
 import { useAuth } from "@/lib/auth/auth-context";
 import { Button } from "@mhai/ui/button";
@@ -34,10 +35,14 @@ import { AffectedView } from "./affected-view";
 import { CoOccurringView } from "./co-occurring-view";
 import { FindingsView } from "./findings-view";
 import { QualityView } from "./quality-view";
-import { AnalysisFiltersBar, type OptionsState } from "./analysis-filters";
+import {
+  AnalysisFiltersBar,
+  FILTERS_FAILED,
+  type OptionsState,
+} from "./analysis-filters";
 import { ClearanceLine } from "./clearance-line";
 import { PrevalenceView } from "./prevalence-view";
-import { UpdatedAt } from "./view-frame";
+import { ProblemNotice, UpdatedAt } from "./view-frame";
 
 /** Each view reads its own data with the filters, and fails on its own. */
 export type ViewProps = { filters: AnalysisFilters };
@@ -51,13 +56,6 @@ const VIEW_BODY: Record<ViewId, ComponentType<ViewProps>> = {
   quality: QualityView,
 };
 const SHOWN = VIEWS;
-
-/** The browser's calendar day, "YYYY-MM-DD". */
-function localDay(ms = Date.now()): string {
-  const d = new Date(ms);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 const tabId = (base: string, v: ViewId) => `${base}-tab-${v}`;
 
@@ -149,21 +147,40 @@ function ViewPicker({
   );
 }
 
+/** Everything but the period: what the person has chosen. */
+type Chosen = Omit<AnalysisFilters, "period">;
+const NONE: Chosen = {
+  condition: null,
+  age_band: null,
+  sex: null,
+  location: null,
+  setting: null,
+  specialty: null,
+  source: null,
+};
+const chosenOf = (f: AnalysisFilters): Chosen => ({
+  condition: f.condition,
+  age_band: f.age_band,
+  sex: f.sex,
+  location: f.location,
+  setting: f.setting,
+  specialty: f.specialty,
+  source: f.source,
+});
+
+export const NO_PERIOD_YET =
+  "Nothing to show yet: no finished period has been prepared.";
+
 /**
- * Analysis on sample data: the filters, the view picker and one view at a
- * time. The filters and the chosen view live here, in React state only:
- * never in the URL, the title or storage (spec §6).
+ * Analysis, on core's live routes (or the sample data in the demo): the
+ * period and filters, the view picker and one view at a time. One finished
+ * period at a time, chosen from the ones core lists; the filters and the
+ * chosen view live here, in React state only: never in the URL, the title
+ * or storage (spec §6).
  */
-export function AnalysisView({ today: todayProp }: { today?: string } = {}) {
-  const [today] = useState(() => todayProp ?? localDay());
-  const [filters, setFilters] = useState<AnalysisFilters>(() =>
-    defaultFilters(today),
-  );
-  const [period, setPeriod] = useState<PeriodId>(DEFAULT_PERIOD);
-  const [draft, setDraft] = useState(() => ({
-    from: filters.from,
-    to: filters.to,
-  }));
+export function AnalysisView() {
+  const [picked, setPicked] = useState<PeriodRef | null>(null);
+  const [chosen, setChosen] = useState<Chosen>(NONE);
   const [view, setView] = useState<ViewId>("prevalence");
   const { user } = useAuth();
   const online = useOnline();
@@ -172,122 +189,178 @@ export function AnalysisView({ today: todayProp }: { today?: string } = {}) {
   const panelId = useId();
   const hospital = user?.hospital ?? "Your hospital";
 
-  const optionsQ = useFilterOptions();
-  const options: OptionsState = optionsQ.data
-    ? optionsQ.data
-    : optionsQ.isError
+  // The answerable periods, and the latest finished month's lists.
+  const periodsQ = useFilterOptions(null);
+  const listed = periodsQ.data?.status === "ok" ? periodsQ.data.data : null;
+  const period = picked ?? (listed ? defaultPeriod(listed.periods) : null);
+  // The first reply already holds the latest month's lists.
+  const fromFirst =
+    listed !== null &&
+    period !== null &&
+    period.level === "month" &&
+    listed.periods.month.at(-1) === period.start &&
+    listed.updated_at !== null;
+  const listsQ = useFilterOptions(period, period !== null && !fromFirst);
+  const lists = fromFirst
+    ? listed
+    : listsQ.data?.status === "ok"
+      ? listsQ.data.data
+      : null;
+  const options: OptionsState = lists
+    ? { status: "ok", data: lists }
+    : listsQ.isError || listsQ.data?.status === "failed"
       ? { status: "failed" }
       : { status: "loading" };
+  // Only what the period lists is ever asked for; with no condition, ward or
+  // clinic, specialty or source chosen, nothing needs the lists.
+  const needsLists =
+    chosen.condition !== null ||
+    chosen.location !== null ||
+    chosen.specialty !== null ||
+    chosen.source !== null;
+  const filters = !period
+    ? null
+    : lists
+      ? pruneFilters({ period, ...chosen }, lists)
+      : needsLists
+        ? null
+        : { period, ...chosen };
+  const shownFilters = period ? { period, ...chosen } : null;
+
   // Shared with the active view's own query (same key): the file is the view on screen.
   const viewQ = useAnalysisView(view, filters);
   const shown = viewQ.data?.status === "ok" ? viewQ.data.data : null;
   const csvWhyId = useId();
   // Say why the file can't be made yet, not a silent disabled button.
+  const csvState = frameState(viewQ).status;
   const csvWhy = shown
     ? null
-    : frameState(viewQ).status === "failed"
+    : csvState === "failed" || csvState === "problem"
       ? "Nothing to download until the view loads."
       : "Loading…";
 
-  function onPeriod(p: PeriodId) {
-    setPeriod(p);
-    if (p === "custom") {
-      setDraft({ from: filters.from, to: filters.to });
-      return;
-    }
-    setFilters((f) => ({ ...f, ...rangeFor(p, today) }));
-  }
-
-  function onDraft(d: { from: string; to: string }) {
-    setDraft(d);
-    if (customRangeProblem(d.from, d.to) === null)
-      setFilters((f) => ({ ...f, from: d.from, to: d.to }));
-  }
-
   function download() {
-    if (!shown) return;
+    if (!shown || !filters) return;
     downloadCsv(
       csvFilename(view, filters),
-      analysisCsv(view, shown, {
-        hospital,
-        filters,
-        options: options.status === "ok" ? options.data : null,
-      }),
+      analysisCsv(view, shown, { hospital, filters, options: lists }),
     );
   }
 
   const Body = VIEW_BODY[view];
-
-  return (
+  const top = (
+    <TopBar title="Analysis" sub={hospital} leading={<MenuButton />} />
+  );
+  const heading = (
+    <div className="min-w-0">
+      <p className="text-[11px] font-semibold uppercase tracking-[.1em] text-mint">
+        {hospital}
+      </p>
+      <h2 className="font-display text-[40px] font-black leading-none">
+        Analysis
+      </h2>
+      {shown && <UpdatedAt iso={shown.updated_at} className="mt-1.5" />}
+    </div>
+  );
+  const page = (children: ReactNode) => (
     <>
-      <TopBar title="Analysis" sub={hospital} leading={<MenuButton />} />
+      {top}
       <div className="flex-1 overflow-auto px-4 pb-10 pt-7 md:px-[26px]">
         <div className="mx-auto flex max-w-[1040px] flex-col gap-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[.1em] text-mint">
-                {hospital}
-              </p>
-              <h2 className="font-display text-[40px] font-black leading-none">
-                Analysis
-              </h2>
-              {shown && <UpdatedAt iso={shown.updated_at} className="mt-1.5" />}
-            </div>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Button
-                variant="ghost"
-                disabled={!shown}
-                aria-describedby={csvWhy ? csvWhyId : undefined}
-                onClick={download}
-              >
-                <Download aria-hidden className="size-4" />
-                Download CSV
-              </Button>
-              {csvWhy && (
-                <span id={csvWhyId} className="text-[12px] text-ink-3">
-                  {csvWhy}
-                </span>
-              )}
-            </div>
-          </div>
-          <p className="text-[12.5px] text-ink-3">
-            Counts only; groups of fewer than 5 are hidden.
-          </p>
-          <AnalysisFiltersBar
-            filters={filters}
-            period={period}
-            draft={draft}
-            options={options}
-            online={online}
-            onPeriod={onPeriod}
-            onDraft={onDraft}
-            onChange={(patch) => setFilters((f) => ({ ...f, ...patch }))}
-            onClear={() =>
-              setFilters((f) => ({
-                ...defaultFilters(today),
-                from: f.from,
-                to: f.to,
-              }))
-            }
-            onRetryOptions={() => void optionsQ.refetch()}
-          />
-          {/* Above the drill-down area: the person's named access (Plan 11c). */}
-          <ClearanceLine />
-          <ViewPicker
-            view={view}
-            onView={setView}
-            panelId={panelId}
-            base={base}
-          />
-          <div
-            id={panelId}
-            role={desktop ? "tabpanel" : undefined}
-            aria-labelledby={desktop ? tabId(base, view) : undefined}
-          >
-            <Body key={view} filters={filters} />
-          </div>
+          {children}
         </div>
       </div>
     </>
+  );
+
+  // Before there is a period: switched off, not ready, failed, or nothing yet.
+  if (!listed || !period || !shownFilters) {
+    const problem = periodsQ.isError ? problemOf(periodsQ.error) : null;
+    return page(
+      <>
+        {heading}
+        {problem && problem.kind !== "failed" ? (
+          <ProblemNotice
+            problem={problem}
+            onRetry={() => void periodsQ.refetch()}
+          />
+        ) : problem || periodsQ.data?.status === "failed" ? (
+          <div
+            role="alert"
+            className="card-v3 flex flex-wrap items-center gap-3 p-5 text-[14px]"
+          >
+            <span className="flex-1">{FILTERS_FAILED}</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="sm:min-h-11"
+              onClick={() => void periodsQ.refetch()}
+            >
+              Try again
+            </Button>
+          </div>
+        ) : listed ? (
+          <p role="status" className="card-v3 p-5 text-[14px] text-ink-2">
+            {NO_PERIOD_YET}
+          </p>
+        ) : (
+          <Skeleton className="h-72 rounded-2xl" />
+        )}
+      </>,
+    );
+  }
+
+  return page(
+    <>
+      <div className="flex flex-wrap items-end gap-3">
+        {heading}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Button
+            variant="ghost"
+            disabled={!shown}
+            aria-describedby={csvWhy ? csvWhyId : undefined}
+            onClick={download}
+          >
+            <Download aria-hidden className="size-4" />
+            Download CSV
+          </Button>
+          {csvWhy && (
+            <span id={csvWhyId} className="text-[12px] text-ink-3">
+              {csvWhy}
+            </span>
+          )}
+        </div>
+      </div>
+      <p className="text-[12.5px] text-ink-3">
+        Counts only; groups of fewer than 5 are hidden.
+      </p>
+      <AnalysisFiltersBar
+        filters={filters ?? shownFilters}
+        periods={listed.periods}
+        options={options}
+        online={online}
+        onPeriod={setPicked}
+        // From what is on screen, so a filter the period didn't list is dropped.
+        onChange={(patch) =>
+          setChosen(chosenOf({ ...(filters ?? shownFilters), ...patch }))
+        }
+        onClear={() => setChosen(NONE)}
+        onRetryOptions={() => void listsQ.refetch()}
+      />
+      {/* Above the drill-down area: the person's named access (Plan 11c). */}
+      <ClearanceLine />
+      <ViewPicker view={view} onView={setView} panelId={panelId} base={base} />
+      <div
+        id={panelId}
+        role={desktop ? "tabpanel" : undefined}
+        aria-labelledby={desktop ? tabId(base, view) : undefined}
+      >
+        {filters ? (
+          <Body key={view} filters={filters} />
+        ) : (
+          <Skeleton className="h-72 rounded-2xl" />
+        )}
+      </div>
+    </>,
   );
 }

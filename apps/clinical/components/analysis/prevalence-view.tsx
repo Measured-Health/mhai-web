@@ -8,6 +8,7 @@ import { frameState, useAnalysisView } from "@/lib/analysis-queries";
 import { shows } from "@/lib/analysis/guards";
 import { conditionName, conditionText, countText } from "@/lib/analysis/labels";
 import { noteOf } from "@/lib/analysis/note";
+import { periodLabel } from "@/lib/analysis/periods";
 import { viewSummary } from "@/lib/analysis/summary";
 import type { BarItem, Column } from "@mhai/ui/charts/types";
 import { BarList } from "@mhai/ui/charts/bar-list";
@@ -142,6 +143,27 @@ export function PrevalenceTables({
             },
           }))}
         />
+        {d.history.length > 0 && (
+          // Each earlier period on its own row, never added up (R41a).
+          <DataTable
+            caption="Earlier periods"
+            columns={[
+              { key: "period", label: "Period" },
+              { key: "cases", label: "Cases", numeric: true },
+              { key: "new", label: "New in that period", numeric: true },
+              { key: "patients", label: "Patients", numeric: true },
+            ]}
+            rows={d.history.map((h) => ({
+              key: h.start,
+              cells: {
+                period: periodLabel({ level: d.period.level, start: h.start }),
+                cases: h.cases,
+                new: h.new,
+                patients: h.patients,
+              },
+            }))}
+          />
+        )}
       </div>
     </DrillScope>
   );

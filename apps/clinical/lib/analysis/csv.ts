@@ -13,6 +13,7 @@ import type {
 } from "../api/analysis-contract";
 import { RESULT_LABEL } from "../labels";
 import { orderView } from "./order";
+import { periodLabel, periodSpan } from "./periods";
 import {
   SEVERITY,
   dismissReasonLabel,
@@ -20,6 +21,7 @@ import {
 } from "../notifications/alert-view";
 import {
   AGE_LABEL,
+  ageText,
   SETTING_LABEL,
   SEX_LABEL,
   NOT_STANDARDISED,
@@ -69,7 +71,7 @@ function filterRows(f: AnalysisFilters, o: FilterOptionsOut | null): Row[] {
     out.push(["Ward or clinic", l ? locationText(l) : f.location]);
   }
   if (f.setting !== null) out.push(["Location type", SETTING_LABEL[f.setting]]);
-  if (f.specialty !== null) out.push(["Specialty", f.specialty]);
+  if (f.specialty !== null) out.push(["Specialty", specialtyText(f.specialty)]);
   if (f.source !== null) {
     const s = o?.sources.find((x) => x.id === f.source);
     out.push(["Source", s ? s.label : f.source]);
@@ -111,6 +113,17 @@ const TABLES: { [V in ViewId]: (d: ViewOut[V]) => Row[] } = {
       ],
       d.series.map((p) => [p.start, num(p.cases), num(p.new)]),
     ),
+    // Each earlier period as its own row, never added up (R41a).
+    ...table(
+      "Earlier periods",
+      ["Period", "Cases", "New in that period", "Patients"],
+      d.history.map((h) => [
+        periodLabel({ level: d.period.level, start: h.start }),
+        num(h.cases),
+        num(h.new),
+        num(h.patients),
+      ]),
+    ),
   ],
 
   affected: (d) => [
@@ -119,7 +132,7 @@ const TABLES: { [V in ViewId]: (d: ViewOut[V]) => Row[] } = {
     ...table(
       "By age band",
       ["Age band", "Patients"],
-      d.by_age.map((r) => [AGE_LABEL[r.band], num(r.patients)]),
+      d.by_age.map((r) => [ageText(r.band), num(r.patients)]),
     ),
     ...table(
       "By sex",
@@ -241,7 +254,7 @@ export function analysisCsv<V extends ViewId>(
 ): string {
   const rows: Row[] = [
     ["Hospital", ctx.hospital],
-    ["Period", `${ctx.filters.from} to ${ctx.filters.to}`],
+    ["Period", periodLabel(ctx.filters.period)],
     ...filterRows(ctx.filters, ctx.options),
     ["Note", NOTE],
     [],
@@ -251,6 +264,8 @@ export function analysisCsv<V extends ViewId>(
   return toCsv(["Analysis", VIEW_TITLE[view]], rows.slice(0, CSV_MAX_ROWS));
 }
 
-/** "mhai-analysis-prevalence-2026-07-24-to-2026-10-22.csv". */
-export const csvFilename = (view: ViewId, f: AnalysisFilters) =>
-  `mhai-analysis-${view}-${f.from}-to-${f.to}.csv`;
+/** "mhai-analysis-prevalence-2026-09-01-to-2026-09-30.csv": one period's first and last days. */
+export function csvFilename(view: ViewId, f: AnalysisFilters): string {
+  const { from, to } = periodSpan(f.period);
+  return `mhai-analysis-${view}-${from}-to-${to}.csv`;
+}

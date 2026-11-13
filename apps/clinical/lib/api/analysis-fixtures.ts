@@ -1,5 +1,6 @@
-// The synthetic cohort behind the Analysis sample data: about 600 made-up
-// patients at the demo hospital over 12 months, built from a fixed seed (a
+// The synthetic cohort behind the Analysis sample data: 2,400 made-up
+// patients at the demo hospital over 12 months (enough that one finished
+// month or quarter, the only periods Analysis shows, has realistic numbers), built from a fixed seed (a
 // small PRNG, no dependency) so the same seed gives the same cohort every
 // time. Nothing here is real. Patients are a pseudonymous pid; each also has
 // an invented name and record number (MRN), which only the named list (Plan
@@ -17,11 +18,14 @@ import type {
   ConditionRef,
   FilterOptionsOut,
   LocationRef,
+  PeriodLevel,
   Setting,
   Sex,
 } from "./analysis-contract";
+import { periodsWithin } from "../analysis/periods";
 
 export const COHORT_SEED = 20261022;
+export const COHORT_SIZE = 2400;
 export const COHORT_START = "2025-10-22";
 export const COHORT_END = "2026-10-21";
 export const UPDATED_AT = "2026-10-22T06:00:00.000Z";
@@ -58,8 +62,17 @@ export const SOURCES = [
   { id: "main_record", label: "Main record" },
   { id: "results_system", label: "Results system" },
 ];
+/** The demo's frozen periods: every week, month and quarter wholly inside the cohort. */
+const starts = (level: PeriodLevel) =>
+  periodsWithin(level, COHORT_START, COHORT_END).map((p) => p.start);
+
 export const FILTER_OPTIONS: FilterOptionsOut = {
   updated_at: UPDATED_AT,
+  periods: {
+    week: starts("week"),
+    month: starts("month"),
+    quarter: starts("quarter"),
+  },
   conditions: CONDITIONS,
   locations: LOCATIONS,
   specialties: SPECIALTIES,
@@ -191,12 +204,77 @@ const FAMILY = [
   "Olowo",
   "Nwachukwu",
 ] as const;
+/** More invented names, for the patients after the first 600. */
+const GIVEN_MORE = [
+  "Oluchi",
+  "Chinedu",
+  "Temitope",
+  "Ebere",
+  "Rahila",
+  "Kunle",
+  "Rukayat",
+  "Segun",
+  "Ugochi",
+  "Babajide",
+  "Hadiza",
+  "Ifeanyi",
+  "Jumoke",
+  "Kabiru",
+  "Lami",
+  "Nonso",
+  "Oyinda",
+  "Rasheed",
+  "Simisola",
+  "Tochukwu",
+  "Wale",
+  "Yetunde",
+  "Zubairu",
+  "Bisola",
+] as const;
+const FAMILY_MORE = [
+  "Olatunji",
+  "Bassey",
+  "Dangana",
+  "Ekwueme",
+  "Ugwu",
+  "Gwarzo",
+  "Idowu",
+  "Jibrin",
+  "Kalu",
+  "Lemu",
+  "Madaki",
+  "Nwankwo",
+  "Onwuka",
+  "Popoola",
+  "Quadri",
+  "Rimi",
+  "Sanusi",
+  "Tijani",
+  "Udoh",
+  "Waziri",
+  "Yaro",
+  "Zakari",
+  "Akpan",
+  "Opara",
+  "Bulus",
+] as const;
+const ALL_GIVEN = [...GIVEN, ...GIVEN_MORE];
+const ALL_FAMILY = [...FAMILY, ...FAMILY_MORE];
+/** Every pair the first 600 don't use: 48 × 50 − 600 = 1,800, in a fixed order. */
+const MORE_PAIRS = ALL_GIVEN.flatMap((g, gi) =>
+  ALL_FAMILY.flatMap((f, fi) =>
+    gi < GIVEN.length && fi < FAMILY.length ? [] : [`${g} ${f}`],
+  ),
+);
 /**
- * The i-th patient's name: 24 given and 25 family names pair up uniquely for
- * every i under 600. No PRNG draw, so the rest of the cohort is unchanged.
+ * The i-th patient's name, unique up to 2,400: the first 600 pair the 24
+ * given and 25 family names; the rest take the pairs that use a further
+ * name. No PRNG draw, so the rest of the cohort is unchanged.
  */
 const nameOf = (i: number) =>
-  `${GIVEN[i % GIVEN.length]} ${FAMILY[i % FAMILY.length]}`;
+  i < 600
+    ? `${GIVEN[i % GIVEN.length]} ${FAMILY[i % FAMILY.length]}`
+    : MORE_PAIRS[(i - 600) % MORE_PAIRS.length];
 /** A unique six-digit record number: 7919 shares no factor with 900000. */
 const mrnOf = (i: number) => `HH-${100000 + ((i * 7919 + 4233) % 900000)}`;
 
@@ -254,7 +332,7 @@ export function buildCohort(): CohortPatient[] {
   const used = new Set<string>();
   const out: CohortPatient[] = [];
 
-  for (let i = 0; i < 600; i++) {
+  for (let i = 0; i < COHORT_SIZE; i++) {
     let pid = "";
     do {
       pid = `P-${Array.from({ length: 5 }, () => PID_CHARS[r.int(36)]).join("")}`;

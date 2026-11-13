@@ -147,14 +147,26 @@ async function expectAllHidden(page: Page, title: string) {
   );
 }
 
+/** Two filters (the most allowed) that leave fewer than 5 patients in the latest month. */
 const TINY = async (page: Page) =>
   withFilters(page, async () => {
-    await page.getByLabel("Age band").selectOption({ label: "80 and over" });
-    await page.getByLabel("Sex").selectOption({ label: "Female" });
     await page
       .getByLabel("Ward or clinic")
       .selectOption({ label: "Ward 4 (Medical)" });
+    await page.getByLabel("Sex").selectOption({ label: "Other" });
+    // A third filter can't be added.
+    await expect(page.getByLabel("Age band")).toBeDisabled();
   });
+
+/** Chooses a period: its type, then one of the finished ones listed. */
+async function choosePeriod(page: Page, type: string, period: string) {
+  await withFilters(page, async () => {
+    await page.getByLabel("Period type").selectOption({ label: type });
+    await page
+      .getByLabel("Period", { exact: true })
+      .selectOption({ label: period });
+  });
+}
 
 test("the analyst signs in and opens Analysis from the sidebar", async ({
   page,
@@ -392,7 +404,7 @@ test("phone: filters in a sheet, the view select, the patient list as a sheet", 
   await expect(page.getByLabel("Sex")).toHaveCount(0);
   await filters.click();
   const sheet = page.getByRole("dialog", { name: "Filters" });
-  await expect(sheet.getByLabel("Period")).toBeVisible();
+  await expect(sheet.getByLabel("Period", { exact: true })).toBeVisible();
   await sheet.getByLabel("Sex").selectOption({ label: "Female" });
   await sheet.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("button", { name: "Filters (1)" })).toBeVisible();
@@ -438,4 +450,84 @@ test("phone: filters in a sheet, the view select, the patient list as a sheet", 
     () => document.documentElement.scrollWidth - window.innerWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("only finished weeks, months and quarters: one period at a time", async ({
+  page,
+}) => {
+  await asAnalyst(page);
+  await withFilters(page, async () => {
+    const type = page.getByLabel("Period type");
+    await expect(type.locator("option")).toHaveText([
+      "Week",
+      "Month",
+      "Quarter",
+    ]);
+    // The latest finished month by default, newest first; no custom range.
+    const period = page.getByLabel("Period", { exact: true });
+    await expect(period).toHaveValue("2026-09-01");
+    await expect(period.locator("option").first()).toHaveText("September 2026");
+    await expect(page.locator('input[type="date"]')).toHaveCount(0);
+    await expect(page.getByText("Custom")).toHaveCount(0);
+  });
+
+  await choosePeriod(page, "Quarter", "Apr–Jun 2026");
+  const view = page.getByRole("region", { name: "Prevalence and trends" });
+  await expect(view).toContainText(/cases across/);
+  await toTable(page);
+  // A quarter is drawn month by month, and earlier quarters each on their own row.
+  await expect(numbers(page, "Cases over time")).toContainText("Apr 2026");
+  await expect(numbers(page, "Earlier periods")).toContainText("Jan–Mar 2026");
+
+  await choosePeriod(page, "Week", "15–21 Oct 2026");
+  await expect(view).toContainText(/cases across|patients match/);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download CSV" }).click();
+  expect((await download).suggestedFilename()).toBe(
+    "mhai-analysis-prevalence-2026-10-15-to-2026-10-21.csv",
+  );
+});
+
+test("a period still being prepared says so, and Try again shows it", async ({
+  page,
+}) => {
+  await asAnalyst(page);
+  // The sample's oldest quarter is still being worked out the first time.
+  await choosePeriod(page, "Quarter", "Jan–Mar 2026");
+  const view = page.getByRole("region", { name: "Prevalence and trends" });
+  await expect(
+    view.getByText(
+      "These numbers are still being prepared. Try again shortly.",
+    ),
+  ).toBeVisible();
+  await expect(view).not.toContainText("Couldn't load");
+  await view.getByRole("button", { name: "Try again" }).click();
+  await expect(view).toContainText(/cases across/);
+  await expect(view).not.toContainText("still being prepared");
+});
+
+test("with Analysis switched off for the hospital, the page says so and shows nothing else", async ({
+  page,
+}) => {
+  // The demo's stand-in for core's 404 while the hospital's switch is off.
+  await page.addInitScript(() => {
+    (window as { mhaiDemoAnalysisOff?: boolean }).mhaiDemoAnalysisOff = true;
+  });
+  await signIn(page, DEMO_EMAILS.analyst);
+  await expect(page).toHaveURL(/\/$/);
+  if (isMobile(page))
+    await page.getByRole("button", { name: "Open menu" }).click();
+  await analysisLink(page).click();
+  await expect(page).toHaveURL(/\/analysis$/);
+  await expect(
+    page.getByText("Analysis is not switched on for this hospital."),
+  ).toBeVisible();
+  await expect(page.getByLabel("Period type")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Filters/ })).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Prevalence and trends" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Download CSV" })).toHaveCount(
+    0,
+  );
 });

@@ -569,7 +569,7 @@ describe("NamedView", () => {
     const view = open(GRACE);
     await showNames();
     const listNamed = vi.spyOn(holder.client, "listNamedPatients");
-    view.rerender(panel({ ...NAMED_FILTERS, from: "2025-11-01" }));
+    view.rerender(panel({ ...NAMED_FILTERS, sex: "female" }));
     await ended("Showing names again starts a new recorded view.");
     // Nothing named was asked for with the new filters.
     expect(listNamed).not.toHaveBeenCalled();

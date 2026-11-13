@@ -5,7 +5,7 @@ import type { GuardedOut } from "../api/admin-contract";
 import type { ViewId, ViewOut } from "../api/analysis-contract";
 import { FEWER_THAN_5 } from "@mhai/ui/small-groups";
 import {
-  AGE_LABEL,
+  ageText,
   NO_PATIENTS,
   conditionName,
   countText,
@@ -40,7 +40,7 @@ const SUMMARY: { [V in ViewId]: (d: ViewOut[V]) => string } = {
       : top(d.by_age, (r) => r.patients);
     const largest =
       age && age.patients.value! > 0
-        ? `; the largest age group is ${AGE_LABEL[age.band]} (${countText(age.patients)})`
+        ? `; the largest age group is ${ageText(age.band)} (${countText(age.patients)})`
         : "";
     return `${cap(n(d.patients))} patients${largest}.`;
   },

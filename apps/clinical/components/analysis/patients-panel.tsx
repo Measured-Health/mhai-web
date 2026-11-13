@@ -457,9 +457,40 @@ export const SEE_COLUMN: TableColumn = {
   action: true,
 };
 
-/** See patients for a drillable count, or nothing (an empty cell or note). */
+/**
+ * A shown count of 5 or more with no drill key yet: core sends every drill
+ * as null until its patient-list route exists.
+ */
+export const drillSoon = (d: Drillable) =>
+  d.drill === null && shows(d) && d.value! >= SMALL_GROUP_MIN;
+
+export const DRILL_SOON = "coming soon";
+
+/** See patients, switched off until patient lists come: says so, opens nothing. */
+function SeePatientsSoon({ label }: { label: string }) {
+  return (
+    <button
+      type="button"
+      disabled
+      aria-label={`See patients · ${label} · ${DRILL_SOON}`}
+      className="mt-0.5 inline-flex min-h-11 cursor-not-allowed items-center gap-1 rounded-lg px-1 text-[12.5px] font-semibold text-ink-3"
+    >
+      See patients ({DRILL_SOON})
+    </button>
+  );
+}
+
+/**
+ * See patients for a drillable count; a switched-off button saying "coming
+ * soon" for a count of 5 or more with no drill key yet; else nothing (an
+ * empty cell or note).
+ */
 export const seePatients = (d: Drillable, label: string): ReactNode =>
-  drillable(d) ? <SeePatients d={d} label={label} /> : null;
+  drillable(d) ? (
+    <SeePatients d={d} label={label} />
+  ) : drillSoon(d) ? (
+    <SeePatientsSoon label={label} />
+  ) : null;
 
 /**
  * See patients for one row, inside a `DrillScope`. Nothing for a hidden or

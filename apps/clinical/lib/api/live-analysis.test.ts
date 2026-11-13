@@ -16,8 +16,7 @@ beforeEach(() => {
 });
 
 const empty: AnalysisFilters = {
-  from: "2026-01-01",
-  to: "2026-03-31",
+  period: { level: "quarter", start: "2026-01-01" },
   condition: null,
   age_band: null,
   sex: null,
@@ -28,8 +27,9 @@ const empty: AnalysisFilters = {
 };
 
 describe("live analysis client", () => {
-  it("reads the three paths, dropping nulls from the query", async () => {
+  it("reads the three paths, one period each, dropping nulls from the query", async () => {
     await client().getFilterOptions();
+    await client().getFilterOptions({ level: "month", start: "2026-09-01" });
     await client().getView("prevalence", empty);
     await client().getView("co-occurring", {
       ...empty,
@@ -47,9 +47,10 @@ describe("live analysis client", () => {
     });
     expect(urls()).toEqual([
       "/api/v1/analysis/filters",
-      "/api/v1/analysis/prevalence?from=2026-01-01&to=2026-03-31",
-      "/api/v1/analysis/co-occurring?from=2026-01-01&to=2026-03-31&condition=e11&age_band=80%2B&sex=female&location=ward4&setting=admitted&specialty=General+medicine",
-      "/api/v1/analysis/patients?drill=cond-e11&level=deidentified&from=2026-01-01&to=2026-03-31&source=main_record",
+      "/api/v1/analysis/filters?period=month&start=2026-09-01",
+      "/api/v1/analysis/prevalence?period=quarter&start=2026-01-01",
+      "/api/v1/analysis/co-occurring?period=quarter&start=2026-01-01&condition=e11&age_band=80%2B&sex=female&location=ward4&setting=admitted&specialty=General+medicine",
+      "/api/v1/analysis/patients?drill=cond-e11&level=deidentified&period=quarter&start=2026-01-01&source=main_record",
     ]);
     expect((fetchImpl.mock.calls[0] as [string, RequestInit])[1]).toMatchObject(
       { method: "GET", credentials: "same-origin" },

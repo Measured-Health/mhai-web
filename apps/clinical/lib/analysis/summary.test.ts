@@ -21,10 +21,12 @@ const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
 });
 const meta = (patients: GuardedOut): Meta => ({
   updated_at: "2026-10-22T06:00:00.000Z",
-  from: "2026-07-24",
-  to: "2026-10-22",
-  bucket: "week",
+  from: "2026-07-01",
+  to: "2026-09-30",
+  bucket: "month",
   patients,
+  period: { level: "quarter", start: "2026-07-01" },
+  history: [],
 });
 const E11 = { id: "e11", name: "Type 2 diabetes", icd10: "E11" };
 const I10 = { id: "i10", name: "Hypertension", icd10: "I10" };

@@ -1201,15 +1201,125 @@ describe("analysis routes", () => {
     ];
     for (const rest of shapes) {
       const res = await GET(
-        get(`${URL}/${rest[0]}?from=2026-01`),
+        get(`${URL}/${rest[0]}?period=month&start=2026-09-01`),
         ctx("analysis", ...rest),
       );
       expect(res.status).toBe(200);
     }
     expect(fetchMock).toHaveBeenCalledTimes(7);
     expect((fetchMock.mock.calls[1] as [string])[0]).toBe(
-      "http://api.test/api/v1/analysis/prevalence?from=2026-01",
+      "http://api.test/api/v1/analysis/prevalence?period=month&start=2026-09-01",
     );
+  });
+
+  it("forwards one finished period and up to two filters (core 1.17.0)", async () => {
+    await as(["hospital_admin"]);
+    fetchMock.mockImplementation(async () => Response.json({}));
+    for (const q of [
+      "",
+      "?period=week&start=2026-10-22",
+      "?period=quarter&start=2026-07-01",
+    ])
+      expect(
+        (await GET(get(`${URL}/filters${q}`), ctx("analysis", "filters")))
+          .status,
+      ).toBe(200);
+    for (const q of [
+      "?period=week&start=2026-10-15",
+      "?period=month&start=2026-09-01&condition=e11&sex=female",
+      "?period=quarter&start=2026-07-01&location=ward4&specialty=general_medicine",
+      "?period=month&start=2026-09-01&age_band=80%2B&setting=admitted",
+    ])
+      expect(
+        (await GET(get(`${URL}/affected${q}`), ctx("analysis", "affected")))
+          .status,
+      ).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+  });
+
+  it.each([
+    // Not one finished calendar period: never a range (R41a).
+    ["affected", "", "invalid_range"],
+    ["affected", "?from=2026-09-01&to=2026-09-30", "invalid_range"],
+    ["affected", "?period=month&start=2026-09-02", "invalid_range"],
+    ["affected", "?period=week&start=2026-10-02", "invalid_range"],
+    ["affected", "?period=quarter&start=2026-08-01", "invalid_range"],
+    ["affected", "?period=month", "invalid_range"],
+    ["filters", "?period=month", "invalid_range"],
+    ["filters", "?start=2026-09-01", "invalid_range"],
+    ["filters", "?period=month&start=2026-09-15", "invalid_range"],
+    // Unknown keys, repeats and bad values.
+    ["affected", "?period=year&start=2026-01-01", "validation_failed"],
+    [
+      "filters",
+      "?period=month&start=2026-09-01&condition=e11",
+      "validation_failed",
+    ],
+    ["affected", "?period=month&start=2026-09-01&ward=4", "validation_failed"],
+    [
+      "affected",
+      "?period=month&start=2026-09-01&sex=female&sex=male",
+      "validation_failed",
+    ],
+    [
+      "affected",
+      "?period=month&start=2026-09-01&condition=e%2F11",
+      "validation_failed",
+    ],
+    [
+      "affected",
+      "?period=month&start=2026-09-01&specialty=General+medicine",
+      "validation_failed",
+    ],
+    // At most two filters, and never a ward or clinic with a location type.
+    [
+      "affected",
+      "?period=month&start=2026-09-01&sex=female&age_band=80%2B&condition=e11",
+      "too_many_filters",
+    ],
+    [
+      "affected",
+      "?period=month&start=2026-09-01&location=ward4&setting=admitted",
+      "validation_failed",
+    ],
+  ])("GET analysis/%s%s is 422 %s, before upstream", async (view, q, code) => {
+    await as(["hospital_admin"]);
+    const res = await GET(get(`${URL}/${view}${q}`), ctx("analysis", view));
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ code });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [404, "not_found"],
+    [503, "not_ready"],
+    [429, "rate_limited"],
+    [422, "too_many_filters"],
+    [422, "invalid_range"],
+  ])("core's %i %s comes back as its code only", async (status, code) => {
+    await as(["hospital_admin"]);
+    fetchMock.mockImplementation(async () =>
+      Response.json(
+        { code, detail: "Fixed text", request_id: "r1" },
+        { status },
+      ),
+    );
+    const res = await GET(
+      get(`${URL}/prevalence?period=month&start=2026-09-01`),
+      ctx("analysis", "prevalence"),
+    );
+    expect(res.status).toBe(status);
+    expect(await res.json()).toEqual({ code });
+  });
+
+  it("a view's reply is never cached", async () => {
+    await as(["hospital_admin"]);
+    fetchMock.mockImplementation(async () => Response.json({}));
+    const res = await GET(
+      get(`${URL}/prevalence?period=month&start=2026-09-01`),
+      ctx("analysis", "prevalence"),
+    );
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it("POST, `analysis/x` and `analysis/patients/1` are 404", async () => {

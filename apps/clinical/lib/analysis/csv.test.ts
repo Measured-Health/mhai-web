@@ -11,7 +11,7 @@ import type {
 import { FILTER_OPTIONS } from "../api/analysis-fixtures";
 import { createMockAnalysis } from "../api/mock-analysis";
 import { analysisCsv, csvFilename } from "./csv";
-import { defaultFilters } from "./filters";
+import { emptyFilters } from "./filters";
 
 const S = (value: number): GuardedOut => ({ value, suppressed: false });
 const H: GuardedOut = { value: null, suppressed: true };
@@ -19,7 +19,10 @@ const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
   ...g,
   drill,
 });
-const F: AnalysisFilters = defaultFilters("2026-10-22");
+const F: AnalysisFilters = emptyFilters({
+  level: "quarter",
+  start: "2026-07-01",
+});
 const ctx = (filters: AnalysisFilters = F) => ({
   hospital: "Demo General Hospital",
   filters,
@@ -35,10 +38,12 @@ const VIEWS: ViewId[] = [
 ];
 const meta = (patients: GuardedOut) => ({
   updated_at: "2026-10-22T06:00:00.000Z",
-  from: F.from,
-  to: F.to,
-  bucket: "week" as const,
+  from: "2026-07-01",
+  to: "2026-09-30",
+  bucket: "month" as const,
   patients,
+  period: { level: "quarter" as const, start: "2026-07-01" },
+  history: [],
 });
 
 const prevalence: PrevalenceOut = {
@@ -90,7 +95,7 @@ describe("analysisCsv", () => {
     const l = lines(analysisCsv("prevalence", prevalence, ctx()));
     expect(l[0]).toBe("Analysis,Prevalence and trends");
     expect(l).toContain("Hospital,Demo General Hospital");
-    expect(l).toContain("Period,2026-07-24 to 2026-10-22");
+    expect(l).toContain("Period,Jul–Sep 2026");
   });
 
   it("filters are listed by label", () => {
@@ -209,13 +214,35 @@ describe("analysisCsv", () => {
   });
 });
 
+describe("earlier periods", () => {
+  it("lists each earlier period on its own row, hidden ones in words, never a total", () => {
+    const withHistory: PrevalenceOut = {
+      ...prevalence,
+      history: [
+        { start: "2026-01-01", cases: H, new: H, patients: H },
+        { start: "2026-04-01", cases: S(40), new: S(10), patients: S(60) },
+      ],
+    };
+    const l = lines(analysisCsv("prevalence", withHistory, ctx()));
+    const at = l.indexOf("Earlier periods");
+    expect(at).toBeGreaterThan(-1);
+    expect(l[at + 1]).toBe("Period,Cases,New in that period,Patients");
+    expect(l[at + 2]).toBe(
+      "Jan–Mar 2026,Fewer than 5,Fewer than 5,Fewer than 5",
+    );
+    expect(l[at + 3]).toBe("Apr–Jun 2026,40,10,60");
+    expect(l[at + 4]).toBe("");
+    expect(l.slice(at).join("\n")).not.toMatch(/total|all periods/i);
+  });
+});
+
 describe("csvFilename", () => {
   it("names the view and the period", () => {
     expect(csvFilename("prevalence", F)).toBe(
-      "mhai-analysis-prevalence-2026-07-24-to-2026-10-22.csv",
+      "mhai-analysis-prevalence-2026-07-01-to-2026-09-30.csv",
     );
     expect(csvFilename("co-occurring", F)).toBe(
-      "mhai-analysis-co-occurring-2026-07-24-to-2026-10-22.csv",
+      "mhai-analysis-co-occurring-2026-07-01-to-2026-09-30.csv",
     );
   });
 });
