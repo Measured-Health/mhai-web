@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
 import { TEAM_EMAILS } from "./fixtures";
 import { createMockPlatform } from "./mock";
-import type { ModelPolicyIn } from "./model-policy-contract";
+import type { CloudProvider, ModelPolicyIn } from "./model-policy-contract";
 import { MOCK_CODE, createStepUp } from "./step-up";
 
 const START = Date.parse("2026-11-07T09:30:00.000Z");
@@ -10,9 +10,7 @@ let n = 0;
 const KEY = () => ({ idempotencyKey: `policy-${++n}` });
 const CODE = { mfa_code: MOCK_CODE };
 
-function setup(
-  over: { cloudProviders?: ("anthropic" | "openai" | "xai")[] } = {},
-) {
+function setup(over: { cloudProviders?: CloudProvider[] } = {}) {
   let t = START;
   let me: string | null = TEAM_EMAILS.ada;
   const m = createMockPlatform({
@@ -58,6 +56,7 @@ describe("mock AI model policy", () => {
     expect(p).toEqual({
       hospital_id: "h_havana",
       cloud_provider: "anthropic",
+      provider_code: "anthropic",
       agreement_ref: "DEMO-SYNTHETIC",
       monthly_token_budget: 2_000_000,
       updated_at: "2026-11-03T09:30:00.000Z",
@@ -65,10 +64,40 @@ describe("mock AI model policy", () => {
     });
   });
 
+  it("Lakeside is on Google Gemini: cloud_provider null, provider_code gemini, as core 1.16.0 answers", async () => {
+    const p = await setup().m.getModelPolicy("h_lakeside");
+    expect(p).toEqual({
+      hospital_id: "h_lakeside",
+      cloud_provider: null,
+      provider_code: "gemini",
+      agreement_ref: "DPA-2026-0107",
+      monthly_token_budget: 500_000,
+      updated_at: "2026-11-05T09:30:00.000Z",
+      usage: { month: "2026-11", used: 95_000, reserved: 0 },
+    });
+  });
+
+  it("a platform admin switches a hospital to Gemini, and Activity names it", async () => {
+    const s = setup();
+    const on = await s.m.setModelPolicy(
+      "h_northgate",
+      { ...ON, cloud_provider: "gemini" },
+      KEY(),
+    );
+    expect(on).toMatchObject({ cloud_provider: null, provider_code: "gemini" });
+    const events = (await s.m.listActivity({ hospital: "h_northgate" })).events;
+    expect(
+      events
+        .filter((e) => e.action === "model_policy_changed")
+        .map((e) => [e.target, e.detail]),
+    ).toEqual([["gemini", "none"]]);
+  });
+
   it("a hospital with no policy is off, with the default limit and no use", async () => {
     const p = await setup().m.getModelPolicy("h_northgate");
     expect(p).toMatchObject({
       cloud_provider: null,
+      provider_code: null,
       agreement_ref: null,
       monthly_token_budget: 2_000_000,
       updated_at: null,
@@ -93,12 +122,17 @@ describe("mock AI model policy", () => {
     const on = await s.m.setModelPolicy("h_northgate", ON, KEY());
     expect(on).toMatchObject({
       cloud_provider: "anthropic",
+      provider_code: "anthropic",
       agreement_ref: "AGR-2026-0042",
       monthly_token_budget: 500_000,
       updated_at: "2026-11-07T09:30:00.000Z",
     });
     const off = await s.m.setModelPolicy("h_northgate", OFF, KEY());
-    expect(off).toMatchObject({ cloud_provider: null, agreement_ref: null });
+    expect(off).toMatchObject({
+      cloud_provider: null,
+      provider_code: null,
+      agreement_ref: null,
+    });
     const events = (await s.m.listActivity({ hospital: "h_northgate" })).events;
     expect(
       events
@@ -235,6 +269,7 @@ describe("mock AI model policy", () => {
       "cloud_provider",
       "hospital_id",
       "monthly_token_budget",
+      "provider_code",
       "updated_at",
       "usage",
     ]);

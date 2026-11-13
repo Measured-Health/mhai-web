@@ -216,7 +216,7 @@ export type ActivityAction =
   | "analysis_switched"
   | "patient_views_switched"
   // The AI model (Plan 14): `target` is the new provider ("anthropic",
-  // "openai", "xai" or "none"), `detail` the one before.
+  // "openai", "xai", "gemini" or "none"), `detail` the one before.
   | "model_policy_changed";
 export type ActivityEvent = {
   id: string;

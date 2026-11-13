@@ -212,6 +212,17 @@ describe("ResultCard, contract v1.2.0", () => {
     ).toBeVisible();
   });
 
+  it("a Gemini draft names Google Gemini from provider_code, with the masking notice", () => {
+    renderFor({
+      ...FIXTURES.high,
+      generated_by: { route: "cloud", provider: null, provider_code: "gemini" },
+    });
+    expect(
+      screen.getByText("Drafted by Google Gemini (cloud AI)"),
+    ).toBeVisible();
+    expect(screen.getByText(/were masked/)).toBeVisible();
+  });
+
   it("a local draft says so, with no masking notice", () => {
     renderFor(FIXTURES.caution);
     expect(screen.getByText("Drafted by MHAI's own model")).toBeVisible();

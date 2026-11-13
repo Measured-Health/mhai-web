@@ -10,15 +10,27 @@ export const PROVIDER_LABEL: Record<CloudProvider, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
   xai: "xAI",
+  gemini: "Google Gemini",
 };
 export const LOCAL_LABEL = "MHAI's own model";
 
 const isProvider = (v: unknown): v is CloudProvider =>
   CLOUD_PROVIDERS.includes(v as CloudProvider);
 
-/** "Anthropic (cloud)" or "MHAI's own model". */
-export function policyLabel(p: CloudProvider | null): string {
-  return p === null ? LOCAL_LABEL : `${PROVIDER_LABEL[p]} (cloud)`;
+/**
+ * A provider code in words: the company's name when this app knows it, else
+ * the code as core sent it (core 1.16.0: more codes may come).
+ */
+export function providerName(code: string): string {
+  return isProvider(code) ? PROVIDER_LABEL[code] : code;
+}
+
+/**
+ * "Anthropic (cloud)", or "MHAI's own model" only when there is no provider
+ * code: a code this app doesn't know is still a cloud provider, never off.
+ */
+export function policyLabel(code: string | null): string {
+  return code === null ? LOCAL_LABEL : `${providerName(code)} (cloud)`;
 }
 
 /**

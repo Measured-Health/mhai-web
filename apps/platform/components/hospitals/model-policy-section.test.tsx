@@ -92,6 +92,70 @@ describe("a hospital's AI model", () => {
     expect(term(r, "Last changed")).toHaveTextContent("Never");
   });
 
+  it("never shows Gemini as off: cloud_provider is null, provider_code says gemini", async () => {
+    const policy = await api.getModelPolicy("h_lakeside");
+    expect(policy).toMatchObject({
+      cloud_provider: null,
+      provider_code: "gemini",
+    });
+    const r = await show("h_lakeside");
+    expect(await within(r).findByText("Google Gemini (cloud)")).toBeVisible();
+    expect(within(r).queryByText("MHAI's own model")).toBeNull();
+    expect(term(r, "Agreement reference")).toHaveTextContent("DPA-2026-0107");
+    expect(
+      within(r).getByText(new RegExp(MASKED_NOTE.slice(0, 30))),
+    ).toBeVisible();
+    // The form opens on Gemini, never on off.
+    await change(r);
+    expect(within(r).getByLabelText("Google Gemini (cloud)")).toBeChecked();
+    expect(within(r).getByLabelText(/^MHAI's own model/)).not.toBeChecked();
+    expect(within(r).getByLabelText("Agreement reference")).toHaveValue(
+      "DPA-2026-0107",
+    );
+  });
+
+  it("a provider code added later is shown as it is, never as off, and offered as it is", async () => {
+    vi.spyOn(api, "getModelPolicy").mockResolvedValue({
+      ...(await api.getModelPolicy("h_lakeside")),
+      cloud_provider: null,
+      provider_code: "mistral",
+    });
+    const spy = vi.spyOn(api, "setModelPolicy");
+    const r = await show("h_lakeside");
+    expect(await within(r).findByText("mistral (cloud)")).toBeVisible();
+    expect(within(r).queryByText("MHAI's own model")).toBeNull();
+    await change(r);
+    expect(within(r).getByLabelText("mistral (cloud)")).toBeChecked();
+    // Unchanged: nothing is sent.
+    await saveForm(r);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("switches Northgate to Google Gemini from the picker", async () => {
+    const spy = vi.spyOn(api, "setModelPolicy");
+    const r = await show("h_northgate");
+    await change(r);
+    await userEvent.click(within(r).getByLabelText("Google Gemini (cloud)"));
+    await userEvent.type(
+      within(r).getByLabelText("Agreement reference"),
+      "DPA-2026-0107",
+    );
+    await saveForm(r);
+    const d = await dialog();
+    expect(d).toHaveTextContent(
+      "Answers for Northgate General Hospital will be drafted by Google Gemini, a cloud provider, under DPA-2026-0107",
+    );
+    await typeCode(d);
+    await userEvent.click(within(d).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(spy.mock.calls[0]![1]).toMatchObject({
+      cloud_provider: "gemini",
+      agreement_ref: "DPA-2026-0107",
+    });
+    expect(await within(r).findByText("Google Gemini (cloud)")).toBeVisible();
+  });
+
   it("an auditor sees it and no Change", async () => {
     who = AMARA.email;
     const r = await show("h_havana", AMARA);

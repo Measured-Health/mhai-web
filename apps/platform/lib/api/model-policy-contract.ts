@@ -1,17 +1,36 @@
-// A hospital's cloud model policy (Plan 14; core openapi 1.10.0,
+// A hospital's cloud model policy (Plan 14; core openapi 1.16.0,
 // `ModelPolicy`): who drafts its answers, the agreement checked for it, its
 // monthly token limit and this month's usage. Platform admins change it with
 // step-up; auditors read it. No key or secret is ever part of it.
+import { z } from "zod";
 import { ApiError } from "@mhai/api-client/errors";
 import type { StepUp, WriteOpts } from "./contract";
 
-export type CloudProvider = "anthropic" | "openai" | "xai";
-/** In the order the design prefers them (decision 1). */
+/**
+ * The providers a hospital may opt in to (core 1.16.0, `setHospitalModelPolicy`'s
+ * `cloud_provider`), in the order the design prefers them (decision 1).
+ * Google Gemini came in 1.16.0.
+ */
+export type CloudProvider = "anthropic" | "openai" | "xai" | "gemini";
 export const CLOUD_PROVIDERS: readonly CloudProvider[] = [
   "anthropic",
   "openai",
   "xai",
+  "gemini",
 ];
+/**
+ * The providers the reply's `cloud_provider` can name. That enum can't grow
+ * in /api/v1 (ADR 0012), so it is null for Gemini too: `provider_code` is
+ * the source of truth.
+ */
+export type ReplyCloudProvider = Exclude<CloudProvider, "gemini">;
+const REPLY_CLOUD_PROVIDERS = ["anthropic", "openai", "xai"] as const;
+/**
+ * A provider code as core sends it. More codes may come without a new API
+ * version, and an unknown one is shown as it is, so only its shape is
+ * checked: a short lower-case word.
+ */
+export const PROVIDER_CODE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 
 /**
  * The reference of the recorded agreement check: `AGR-YYYY-NNNN`,
@@ -27,8 +46,17 @@ export const BUDGET_WARN = 0.8;
 
 export type ModelPolicy = {
   hospital_id: string;
-  /** null: off, the hospital's answers are drafted by MHAI's own model. */
-  cloud_provider: CloudProvider | null;
+  /**
+   * The provider when the reply's enum names it; null when off, and for
+   * Gemini. Never read for the screen: `provider_code` is.
+   */
+  cloud_provider: ReplyCloudProvider | null;
+  /**
+   * The provider, as a code (core 1.16.0): "anthropic", "gemini", "openai",
+   * "xai" or one added later. null: off, the hospital's answers are drafted
+   * by MHAI's own model.
+   */
+  provider_code: string | null;
   agreement_ref: string | null;
   monthly_token_budget: number;
   /** null when no policy was ever set. */
@@ -59,69 +87,49 @@ export interface ModelPolicyClient {
   ): Promise<ModelPolicy>;
 }
 
-const KEYS = [
-  "hospital_id",
-  "cloud_provider",
-  "agreement_ref",
-  "monthly_token_budget",
-  "updated_at",
-  "usage",
-];
-const USAGE_KEYS = ["month", "used", "reserved"];
 const MONTH = /^[0-9]{4}-(0[1-9]|1[0-2])$/;
+const COUNT = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 
-const isObject = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-const exactly = (o: Record<string, unknown>, keys: string[]) =>
-  Object.keys(o).length === keys.length &&
-  keys.every((k) => Object.hasOwn(o, k));
-const count = (v: unknown) =>
-  typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+/** `ModelPolicy` as core 1.16.0 sends it: these keys and no others. */
+const MODEL_POLICY = z
+  .strictObject({
+    hospital_id: z.string(),
+    cloud_provider: z.enum(REPLY_CLOUD_PROVIDERS).nullable(),
+    provider_code: z.string().regex(PROVIDER_CODE).nullable(),
+    agreement_ref: z.string().regex(AGREEMENT_REF).nullable(),
+    monthly_token_budget: COUNT.min(1).max(BUDGET_MAX),
+    updated_at: z
+      .string()
+      .refine((s) => !Number.isNaN(Date.parse(s)))
+      .nullable(),
+    usage: z.strictObject({
+      month: z.string().regex(MONTH),
+      used: COUNT,
+      reserved: COUNT,
+    }),
+  })
+  // The two provider fields agree: `cloud_provider` names the code when its
+  // enum can, and is null otherwise (off, Gemini, a later provider).
+  .refine(({ cloud_provider: p, provider_code: c }) =>
+    c !== null && (REPLY_CLOUD_PROVIDERS as readonly string[]).includes(c)
+      ? p === c
+      : p === null,
+  )
+  // A provider needs its reference.
+  .refine((v) => v.provider_code === null || v.agreement_ref !== null);
 
 /**
  * Reads a policy reply, failing closed: anything the contract doesn't allow
- * (an unknown provider, a bad reference, a provider with no reference, a
- * count that isn't a whole number, an extra key, another hospital's id) is
- * 502 `bad_gateway`, so
- * the screen says it couldn't load rather than show a guess.
+ * (a provider code of the wrong shape, provider fields that disagree, a bad
+ * reference, a provider with no reference, a count that isn't a whole
+ * number, an extra or missing key, another hospital's id) is 502
+ * `bad_gateway`, so the screen says it couldn't load rather than show a
+ * guess. A provider code this app doesn't know is read, and shown as it is.
  */
 export function readModelPolicy(v: unknown, hospitalId: string): ModelPolicy {
-  const bad = (): never => {
-    throw new ApiError(502, "bad_gateway");
-  };
-  if (!isObject(v) || !exactly(v, KEYS)) return bad();
-  const p = v.cloud_provider;
-  if (p !== null && !CLOUD_PROVIDERS.includes(p as CloudProvider)) bad();
-  const ref = v.agreement_ref;
-  if (ref !== null && !(typeof ref === "string" && AGREEMENT_REF.test(ref)))
-    bad();
-  if (p !== null && ref === null) bad();
-  const budget = v.monthly_token_budget;
-  if (
-    !count(budget) ||
-    (budget as number) < 1 ||
-    (budget as number) > BUDGET_MAX
-  )
-    bad();
+  const r = MODEL_POLICY.safeParse(v);
   // Only the hospital asked about: never another hospital's policy.
-  if (v.hospital_id !== hospitalId) bad();
-  const at = v.updated_at;
-  if (at !== null && !(typeof at === "string" && !Number.isNaN(Date.parse(at))))
-    bad();
-  const u = v.usage;
-  if (!isObject(u) || !exactly(u, USAGE_KEYS)) return bad();
-  if (typeof u.month !== "string" || !MONTH.test(u.month)) bad();
-  if (!count(u.used) || !count(u.reserved)) bad();
-  return {
-    hospital_id: v.hospital_id as string,
-    cloud_provider: p as CloudProvider | null,
-    agreement_ref: ref as string | null,
-    monthly_token_budget: budget as number,
-    updated_at: at as string | null,
-    usage: {
-      month: u.month as string,
-      used: u.used as number,
-      reserved: u.reserved as number,
-    },
-  };
+  if (!r.success || r.data.hospital_id !== hospitalId)
+    throw new ApiError(502, "bad_gateway");
+  return r.data;
 }

@@ -221,7 +221,25 @@ const QUERIES: ReadonlyMap<string, z.ZodType> = new Map<string, z.ZodType>([
     }),
   ],
 ]);
+/**
+ * The AI model's write (core 1.16.0, `setHospitalModelPolicy`): the
+ * providers core takes, Google Gemini among them, or null for off; the
+ * agreement reference's shape; a whole-number limit; and the step-up code.
+ * Core still decides (a provider with no reference, one not enabled here).
+ */
+const MODEL_POLICY_IN = z.strictObject({
+  cloud_provider: z.enum(["openai", "anthropic", "xai", "gemini"]).nullable(),
+  agreement_ref: z
+    .string()
+    .regex(/^(DEMO-SYNTHETIC|(AGR|DPA)-[0-9]{4}-[0-9]{2,8})$/)
+    .nullable()
+    .optional(),
+  monthly_token_budget: z.number().int().min(1).max(1_000_000_000),
+  mfa_code: z.string().optional(),
+  backup_code: z.string().optional(),
+});
 const BODIES: ReadonlyMap<string, z.ZodType> = new Map<string, z.ZodType>([
+  ["PUT platform/hospitals/{id}/model-policy", MODEL_POLICY_IN],
   [
     "PUT platform/analytics/changes/{id}/follow-up",
     z.strictObject({ note: NOTE.nullable().optional(), version: VERSION }),
@@ -354,7 +372,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   const body = method === "GET" ? undefined : await req.text();
   if (body && Buffer.byteLength(body) > MAX_BODY)
     return json(413, { code: "too_large" });
-  // 8. The analytics query strings and bodies, strictly.
+  // 8. The analytics query strings, and the bodies above, strictly.
   const querySchema = QUERIES.get(shape);
   if (querySchema) {
     const q = queryOf(req.url);

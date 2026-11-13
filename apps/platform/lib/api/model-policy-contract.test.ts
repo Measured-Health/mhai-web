@@ -5,6 +5,7 @@ import { AGREEMENT_REF, readModelPolicy } from "./model-policy-contract";
 const GOOD = {
   hospital_id: "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b",
   cloud_provider: "anthropic",
+  provider_code: "anthropic",
   agreement_ref: "DEMO-SYNTHETIC",
   monthly_token_budget: 2_000_000,
   updated_at: "2026-11-05T09:00:00Z",
@@ -13,9 +14,18 @@ const GOOD = {
 const OFF = {
   ...GOOD,
   cloud_provider: null,
+  provider_code: null,
   agreement_ref: null,
   updated_at: null,
   usage: { month: "2026-11", used: 0, reserved: 0 },
+};
+
+/** Core 1.16.0: the reply's enum can't name Gemini, so only the code does. */
+const GEMINI = {
+  ...GOOD,
+  cloud_provider: null,
+  provider_code: "gemini",
+  agreement_ref: "DPA-2026-0107",
 };
 
 const ID = GOOD.hospital_id;
@@ -36,8 +46,29 @@ describe("readModelPolicy", () => {
     expect(readModelPolicy(OFF, ID)).toEqual(OFF);
   });
 
+  it("reads Gemini from provider_code, with cloud_provider null", () => {
+    expect(readModelPolicy(GEMINI, ID)).toEqual(GEMINI);
+  });
+
+  it("reads a provider code added later, to be shown as it is", () => {
+    const later = { ...GEMINI, provider_code: "mistral" };
+    expect(readModelPolicy(later, ID)).toEqual(later);
+  });
+
   it.each([
-    ["an unknown provider", { ...GOOD, cloud_provider: "gemini" }],
+    ["an unknown cloud_provider", { ...GOOD, cloud_provider: "mistral" }],
+    ["gemini in cloud_provider", { ...GEMINI, cloud_provider: "gemini" }],
+    ["no provider_code", { ...GOOD, provider_code: undefined }],
+    ["a provider with no code", { ...GOOD, provider_code: null }],
+    ["a code that disagrees", { ...GOOD, provider_code: "openai" }],
+    [
+      "a known code with cloud_provider null",
+      { ...GOOD, cloud_provider: null },
+    ],
+    ["a code of the wrong shape", { ...GEMINI, provider_code: "<b>Gemini" }],
+    ["an empty code", { ...GEMINI, provider_code: "" }],
+    ["a code that isn't text", { ...GEMINI, provider_code: 7 }],
+    ["Gemini with no reference", { ...GEMINI, agreement_ref: null }],
     ["a provider with no reference", { ...GOOD, agreement_ref: null }],
     ["a reference of the wrong shape", { ...GOOD, agreement_ref: "Dr Obi" }],
     ["a lower-case reference", { ...GOOD, agreement_ref: "agr-2026-0042" }],

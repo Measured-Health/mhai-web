@@ -78,6 +78,7 @@ const POLICY = () =>
   Response.json({
     hospital_id: "h_north",
     cloud_provider: "anthropic",
+    provider_code: "anthropic",
     agreement_ref: "DEMO-SYNTHETIC",
     monthly_token_budget: 2_000_000,
     updated_at: "2026-11-05T09:00:00Z",
@@ -1280,6 +1281,7 @@ describe("live platform client", () => {
         Response.json({
           hospital_id: "h_north",
           cloud_provider: "somebody-else",
+          provider_code: "somebody-else",
           agreement_ref: "DEMO-SYNTHETIC",
           monthly_token_budget: 2_000_000,
           updated_at: null,
@@ -1309,6 +1311,7 @@ describe("live platform client", () => {
         Response.json({
           hospital_id: "h_south",
           cloud_provider: null,
+          provider_code: null,
           agreement_ref: null,
           monthly_token_budget: 2_000_000,
           updated_at: null,
@@ -1319,6 +1322,20 @@ describe("live platform client", () => {
         status: 502,
         code: "bad_gateway",
       });
+    });
+
+    it("a Gemini policy (cloud_provider null, provider_code gemini) is read as it is", async () => {
+      const gemini = {
+        hospital_id: "h_north",
+        cloud_provider: null,
+        provider_code: "gemini",
+        agreement_ref: "DPA-2026-0107",
+        monthly_token_budget: 500_000,
+        updated_at: "2026-11-05T09:00:00Z",
+        usage: { month: "2026-11", used: 95_000, reserved: 0 },
+      };
+      reply(() => Response.json(gemini));
+      expect(await client().getModelPolicy("h_north")).toEqual(gemini);
     });
 
     it("a provider the deployment hasn't enabled is a 409 conflict", async () => {
