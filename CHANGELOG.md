@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Analysis reads core's live routes** (core openapi 1.17.0,
+  mhai-multiagent #141): `GET /analysis/filters` and `GET /analysis/{view}`,
+  through the BFF, which checks each query strictly before it goes
+  upstream. The sample data stays in the demo and e2e.
+  - One finished calendar period at a time (R41a): a week (days 1–7, 8–14,
+    15–21 or 22 to the month's end), a month or a quarter, chosen from the
+    ones core lists. No custom ranges, and no totals across periods: the
+    earlier periods core sends are shown one per row.
+  - At most two filters, and never a ward or clinic with a location type;
+    a condition, ward, specialty or source the period doesn't list is
+    dropped.
+  - Every reply is read strictly (zod, these keys and no others), then the
+    small-group checks as before; a reply for another period fails.
+  - Plain words for each refusal: switched off ("Analysis is not switched on
+    for this hospital"), still being prepared (Try again), too many new
+    views, and a period or filters that can't be used.
+  - See patients reads "coming soon" while core sends no drill keys.
+  - The sample cohort is 2,400 patients, so one month has realistic numbers.
+
 - **Sign-in, two-step enrolment, password change and refresh follow core's
   contract** (openapi 1.4.0), in both apps:
   - a new account whose two-step isn't set up (`mfa_enrolled: false`) gets

@@ -17,14 +17,17 @@ import { FILTER_OPTIONS } from "@/lib/api/analysis-fixtures";
 import { createMockAnalysis } from "@/lib/api/mock-analysis";
 import { hideAllWhenFew } from "@/lib/analysis-queries";
 import { analysisCsv } from "@/lib/analysis/csv";
-import { defaultFilters, rangeFor } from "@/lib/analysis/filters";
+import { CAP_REASON, emptyFilters } from "@/lib/analysis/filters";
+import { ApiError } from "@/lib/api/errors";
+import { BUSY_TEXT, NOT_READY_TEXT, OFF_TEXT } from "@/lib/analysis/states";
 import {
-  AGE_LABEL,
+  ageText,
   SEX_LABEL,
   conditionText,
   countText,
   settingText,
 } from "@/lib/analysis/labels";
+import { orderView } from "@/lib/analysis/order";
 import { readView } from "@/lib/analysis/read";
 import { viewSummary } from "@/lib/analysis/summary";
 import { renderAdmin } from "@/tests/admin-render";
@@ -45,9 +48,10 @@ vi.mock("@mhai/ui/csv", async (original) => ({
   downloadCsv: download,
 }));
 import { AnalysisView } from "./analysis-view";
+import { bucketLabel } from "./prevalence-view";
 
-const TODAY = "2026-10-22";
-const F90 = defaultFilters(TODAY);
+/** The page's default: the sample's latest finished month. */
+const F90 = emptyFilters({ level: "month", start: "2026-09-01" });
 const sample = createMockAnalysis({ delayMs: 0 });
 
 /** What the page should show for a view: the mock's reply, read. */
@@ -57,7 +61,8 @@ async function expected<V extends ViewId>(
 ): Promise<ViewOut[V]> {
   const s = readView(v, await sample.getView(v, f));
   if (s.status !== "ok") throw new Error(`the mock's ${v} didn't read`);
-  return hideAllWhenFew<V>(s.data);
+  // As the page orders it.
+  return orderView(v, hideAllWhenFew<V>(s.data));
 }
 
 const S = (value: number): GuardedOut => ({ value, suppressed: false });
@@ -68,10 +73,13 @@ const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
 });
 const meta = (patients: GuardedOut): Meta => ({
   updated_at: "2026-10-22T06:00:00.000Z",
-  from: "2026-07-24",
-  to: "2026-10-22",
+  from: "2026-09-01",
+  to: "2026-09-30",
   bucket: "week",
   patients,
+  // The page's default period: the sample's latest finished month.
+  period: { level: "month", start: "2026-09-01" },
+  history: [],
 });
 const E11 = { id: "e11", name: "Type 2 diabetes", icd10: "E11" };
 const A15 = { id: "a15", name: "Tuberculosis", icd10: "A15" };
@@ -91,9 +99,9 @@ const WITH_HIDDEN_WEEK: PrevalenceOut = {
     },
   ],
   series: [
-    { start: "2026-07-24", cases: S(20), new: S(5) },
-    { start: "2026-07-31", cases: H, new: H },
-    { start: "2026-08-07", cases: S(0), new: S(0) },
+    { start: "2026-09-01", cases: S(20), new: S(5) },
+    { start: "2026-09-08", cases: H, new: H },
+    { start: "2026-09-15", cases: S(0), new: S(0) },
   ],
 };
 
@@ -110,8 +118,8 @@ const FEW: Pick<ViewOut, "prevalence" | "affected"> = {
       { condition: J45, cases: D(H), new: H, existing: S(0) },
     ],
     series: [
-      { start: "2026-07-24", cases: H, new: H },
-      { start: "2026-07-31", cases: S(0), new: S(0) },
+      { start: "2026-09-01", cases: H, new: H },
+      { start: "2026-09-08", cases: S(0), new: S(0) },
     ],
   },
   affected: {
@@ -144,7 +152,12 @@ const FEW: Pick<ViewOut, "prevalence" | "affected"> = {
   } satisfies AffectedOut,
 };
 
-const render = () => renderAdmin(<AnalysisView today={TODAY} />);
+/** The page, once its periods have loaded (its filters and views show). */
+async function render() {
+  const r = renderAdmin(<AnalysisView />);
+  await screen.findByText("Counts only; groups of fewer than 5 are hidden.");
+  return r;
+}
 const loaded = () => screen.findByRole("list", { name: "Cases by condition" });
 const viewRegion = (name: string) => screen.getByRole("region", { name });
 const listItems = (list: HTMLElement) => within(list).getAllByRole("listitem");
@@ -187,9 +200,9 @@ afterEach(() => {
 });
 
 describe("AnalysisView", () => {
-  it("opens on Prevalence and trends for the last 90 days", async () => {
+  it("opens on Prevalence and trends for the latest finished month", async () => {
     const spy = vi.spyOn(holder.client, "getView");
-    render();
+    await render();
     expect(
       screen.getByRole("heading", { name: "Analysis", level: 2 }),
     ).toBeInTheDocument();
@@ -201,14 +214,22 @@ describe("AnalysisView", () => {
       screen.getByRole("tab", { name: "Who is affected" }),
     ).toHaveAttribute("aria-selected", "false");
     const period = screen.getByLabelText("Period");
-    expect(period).toHaveValue("90d");
+    expect(screen.getByLabelText("Period type")).toHaveValue("month");
+    expect(period).toHaveValue("2026-09-01");
     expect(
       within(period).getByRole<HTMLOptionElement>("option", {
-        name: "Last 90 days",
+        name: "September 2026",
       }).selected,
     ).toBe(true);
+    // Finished months only, newest first: no custom range.
+    expect(
+      within(period)
+        .getAllByRole<HTMLOptionElement>("option")
+        .map((o) => o.value)
+        .slice(0, 2),
+    ).toEqual(["2026-09-01", "2026-08-01"]);
+    expect(screen.queryByLabelText("From")).toBeNull();
     await loaded();
-    expect(F90).toMatchObject({ from: "2026-07-24", to: TODAY });
     expect(spy).toHaveBeenCalledWith("prevalence", F90);
     expect(spy.mock.calls.every(([v]) => v === "prevalence")).toBe(true);
     expect(screen.getAllByText(/^Updated /).length).toBeGreaterThan(0);
@@ -216,7 +237,7 @@ describe("AnalysisView", () => {
 
   it("the summary and every bar's number show as text", async () => {
     const d = await expected("prevalence", F90);
-    render();
+    await render();
     const list = await loaded();
     expect(screen.getByText(viewSummary("prevalence", d))).toBeVisible();
     const items = listItems(list);
@@ -253,7 +274,7 @@ describe("AnalysisView", () => {
 
   it("Table shows the same numbers in a table with a caption", async () => {
     const d = await expected("prevalence", F90);
-    render();
+    await render();
     await loaded();
     const chartButton = screen.getByRole("button", { name: "Chart" });
     const tableButton = screen.getByRole("button", { name: "Table" });
@@ -304,14 +325,14 @@ describe("AnalysisView", () => {
 
   it("a hidden week reads Fewer than 5, with no column, beside a real 0", async () => {
     vi.spyOn(holder.client, "getView").mockResolvedValue(WITH_HIDDEN_WEEK);
-    render();
+    await render();
     await loaded();
     const chart = viewRegion("Cases over time");
     const columns = within(chart).getAllByRole("listitem");
     expect(columns.map((c) => c.getAttribute("aria-label"))).toEqual([
-      "Week of 24 Jul: 20 cases",
-      "Week of 31 Jul: Fewer than 5",
-      "Week of 7 Aug: 0 cases",
+      `${bucketLabel("2026-09-01", "week")}: 20 cases`,
+      `${bucketLabel("2026-09-08", "week")}: Fewer than 5`,
+      `${bucketLabel("2026-09-15", "week")}: 0 cases`,
     ]);
     const height = (li: HTMLElement) =>
       li.querySelector<HTMLElement>("span[aria-hidden].block")!.style.height;
@@ -322,10 +343,14 @@ describe("AnalysisView", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Table" }));
     const table = screen.getByRole("table", { name: "Cases over time" });
-    const hidden = within(table).getByRole("row", { name: /Week of 31 Jul/ });
+    const hidden = within(table).getByRole("row", {
+      name: new RegExp(bucketLabel("2026-09-08", "week")),
+    });
     expect(within(hidden).getAllByText("Fewer than 5")).toHaveLength(2);
     expect(hidden.textContent).not.toMatch(/\b0\b/);
-    const zero = within(table).getByRole("row", { name: /Week of 7 Aug/ });
+    const zero = within(table).getByRole("row", {
+      name: new RegExp(bucketLabel("2026-09-15", "week")),
+    });
     expect(
       within(zero)
         .getAllByRole("cell")
@@ -333,10 +358,10 @@ describe("AnalysisView", () => {
     ).toEqual(["0", "0"]);
   });
 
-  it("filtering to Ward 7, 80 and over, female shows Fewer than 5 everywhere, with no bars", async () => {
+  it("filtering to Ward 7, 80 and over shows Fewer than 5 everywhere, with no bars", async () => {
     const real = holder.client;
     const few = (f: AnalysisFilters) =>
-      f.location === "ward7" && f.age_band === "80+" && f.sex === "female";
+      f.location === "ward7" && f.age_band === "80+";
     holder.client = {
       ...real,
       getView: (async (v: ViewId, f: AnalysisFilters) =>
@@ -344,7 +369,7 @@ describe("AnalysisView", () => {
           ? structuredClone(FEW[v])
           : real.getView(v, f)) as AnalysisClient["getView"],
     };
-    render();
+    await render();
     await loaded();
     await waitFor(() =>
       expect(screen.getByLabelText("Age band")).toBeEnabled(),
@@ -354,7 +379,9 @@ describe("AnalysisView", () => {
       "ward7",
     );
     await userEvent.selectOptions(screen.getByLabelText("Age band"), "80+");
-    await userEvent.selectOptions(screen.getByLabelText("Sex"), "female");
+    // Two filters is the most: a third can't be chosen, and says why.
+    expect(screen.getByLabelText("Sex")).toBeDisabled();
+    expect(screen.getAllByText(CAP_REASON).length).toBeGreaterThan(0);
 
     const summary = "Fewer than 5 patients match these filters";
     expect(await screen.findByText(summary)).toBeVisible();
@@ -415,7 +442,7 @@ describe("AnalysisView", () => {
 
   it("searching E11 picks Type 2 diabetes and reloads the views", async () => {
     const spy = vi.spyOn(holder.client, "getView");
-    render();
+    await render();
     await loaded();
     const combo = screen.getByRole("combobox", { name: "Condition" });
     await waitFor(() => expect(combo).toBeEnabled());
@@ -441,7 +468,7 @@ describe("AnalysisView", () => {
   });
 
   it("Source shows with two sources and lists their labels only", async () => {
-    const { unmount } = render();
+    const { unmount } = await render();
     const source = await screen.findByLabelText("Source");
     expect(optionNames(source)).toEqual([
       "All sources",
@@ -459,7 +486,7 @@ describe("AnalysisView", () => {
       ...structuredClone(FILTER_OPTIONS),
       sources: [{ id: "main_record", label: "Main record" }],
     });
-    render();
+    await render();
     await waitFor(() =>
       expect(screen.getByLabelText("Age band")).toBeEnabled(),
     );
@@ -470,7 +497,7 @@ describe("AnalysisView", () => {
   it("Not standardised is listed as a condition", async () => {
     const d = await expected("prevalence", F90);
     expect(d.by_condition.some((r) => r.condition.name === null)).toBe(true);
-    render();
+    await render();
     const list = await loaded();
     expect(within(list).getByText("Not standardised")).toBeInTheDocument();
     const combo = screen.getByRole("combobox", { name: "Condition" });
@@ -488,7 +515,7 @@ describe("AnalysisView", () => {
     const leaky = structuredClone(WITH_HIDDEN_WEEK);
     leaky.series[1]!.cases = S(3);
     const spy = vi.spyOn(holder.client, "getView").mockResolvedValue(leaky);
-    render();
+    await render();
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Couldn't load prevalence and trends");
     const region = viewRegion("Prevalence and trends");
@@ -507,10 +534,18 @@ describe("AnalysisView", () => {
     ).toBeNull();
   });
 
-  it("the filters failing keep the period working", async () => {
-    vi.spyOn(holder.client, "getFilterOptions").mockResolvedValue({} as never);
+  it("a period's lists failing keep the period working", async () => {
+    const real = holder.client.getFilterOptions.bind(holder.client);
+    vi.spyOn(holder.client, "getFilterOptions").mockImplementation(
+      async (period) => (period ? ({} as never) : real()),
+    );
     const spy = vi.spyOn(holder.client, "getView");
-    render();
+    await render();
+    await loaded();
+    await userEvent.selectOptions(
+      screen.getByLabelText("Period"),
+      "2026-08-01",
+    );
     const reason = await screen.findByText("Couldn't load the filters");
     for (const label of [
       "Age band",
@@ -527,18 +562,91 @@ describe("AnalysisView", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
     const period = screen.getByLabelText("Period");
     expect(period).toBeEnabled();
-    await userEvent.selectOptions(period, "30d");
+    // Nothing chosen needs the lists, so the views still load.
     await waitFor(() =>
-      expect(spy).toHaveBeenCalledWith("prevalence", {
-        ...F90,
-        ...rangeFor("30d", TODAY),
-      }),
+      expect(spy).toHaveBeenCalledWith(
+        "prevalence",
+        emptyFilters({ level: "month", start: "2026-08-01" }),
+      ),
     );
     await loaded();
   });
 
+  it("switched off: says so in words, with no filters and no views", async () => {
+    vi.spyOn(holder.client, "getFilterOptions").mockRejectedValue(
+      new ApiError(404, "not_found"),
+    );
+    const spy = vi.spyOn(holder.client, "getView");
+    renderAdmin(<AnalysisView />);
+    expect(await screen.findByText(OFF_TEXT)).toBeVisible();
+    expect(screen.queryByLabelText("Period")).toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("still being prepared: says so, with Try again, then shows the view", async () => {
+    const real = holder.client.getView.bind(holder.client);
+    const spy = vi
+      .spyOn(holder.client, "getView")
+      .mockRejectedValueOnce(new ApiError(503, "not_ready"))
+      .mockImplementation(real);
+    await render();
+    expect(await screen.findByText(NOT_READY_TEXT)).toBeVisible();
+    // Not retried on its own: the person asks again.
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Couldn't load/)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await loaded();
+    expect(screen.queryByText(NOT_READY_TEXT)).toBeNull();
+  });
+
+  it("too many new views: says so in words", async () => {
+    vi.spyOn(holder.client, "getView").mockRejectedValue(
+      new ApiError(429, "rate_limited"),
+    );
+    await render();
+    expect(await screen.findByText(BUSY_TEXT)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+  });
+
+  it("an invalid request says what's wrong, with no Try again", async () => {
+    vi.spyOn(holder.client, "getView").mockRejectedValue(
+      new ApiError(422, "too_many_filters"),
+    );
+    await render();
+    expect(
+      await screen.findByText("Choose up to two filters at a time."),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("with no drill keys yet, See patients is off and says coming soon", async () => {
+    const real = holder.client.getView.bind(holder.client);
+    vi.spyOn(holder.client, "getView").mockImplementation((async (
+      v: ViewId,
+      f: AnalysisFilters,
+    ) => {
+      const out = structuredClone(await real(v, f));
+      // As core sends it until its patient-list route exists.
+      return JSON.parse(
+        JSON.stringify(out).replace(/"drill":"[^"]*"/g, '"drill":null'),
+      );
+    }) as AnalysisClient["getView"]);
+    await render();
+    await loaded();
+    const soon = await screen.findAllByRole("button", {
+      name: /^See patients · .* · coming soon$/,
+    });
+    expect(soon.length).toBeGreaterThan(0);
+    for (const b of soon) expect(b).toBeDisabled();
+    expect(
+      screen.queryAllByRole("button", { name: /^See patients · [^·]*$/ }),
+    ).toHaveLength(0);
+  });
+
   it("Download CSV builds the file for the active view and filters", async () => {
-    render();
+    await render();
     await loaded();
     await userEvent.click(screen.getByRole("tab", { name: "Who is affected" }));
     await waitFor(() => expect(screen.getByLabelText("Sex")).toBeEnabled());
@@ -551,7 +659,7 @@ describe("AnalysisView", () => {
     await userEvent.click(button);
     expect(download).toHaveBeenCalledTimes(1);
     expect(download).toHaveBeenCalledWith(
-      "mhai-analysis-affected-2026-07-24-to-2026-10-22.csv",
+      "mhai-analysis-affected-2026-09-01-to-2026-09-30.csv",
       analysisCsv("affected", d, {
         hospital: "Havana Hospital",
         filters: f,
@@ -581,7 +689,7 @@ describe("AnalysisView", () => {
     };
     // The mock sends the fixed order; the client above sends it backwards.
     const a = await expected("affected", F90);
-    const fixedAges = a.by_age.map((r) => AGE_LABEL[r.band]);
+    const fixedAges = a.by_age.map((r) => ageText(r.band));
     const fixedSexes = a.by_sex.map((r) => SEX_LABEL[r.sex]);
     const fixedSettings = a.by_setting.map((r) => settingText(r.setting));
     expect(fixedAges).toEqual([
@@ -592,14 +700,14 @@ describe("AnalysisView", () => {
       "80 and over",
     ]);
     const served = await holder.client.getView("affected", F90);
-    expect(
-      (served as AffectedOut).by_age.map((r) => AGE_LABEL[r.band]),
-    ).toEqual([...fixedAges].reverse());
+    expect((served as AffectedOut).by_age.map((r) => ageText(r.band))).toEqual(
+      [...fixedAges].reverse(),
+    );
     const ages = fixedAges;
     const sexes = fixedSexes;
     const settings = fixedSettings;
 
-    render();
+    await render();
     await loaded();
     await userEvent.click(screen.getByRole("tab", { name: "Who is affected" }));
     await screen.findByText(viewSummary("affected", a));
@@ -634,7 +742,7 @@ describe("AnalysisView", () => {
 
   it("offline disables the filters with the reason and keeps Download CSV", async () => {
     const d = await expected("prevalence", F90);
-    render();
+    await render();
     await loaded();
     await waitFor(() =>
       expect(screen.getByLabelText("Age band")).toBeEnabled(),
@@ -645,10 +753,16 @@ describe("AnalysisView", () => {
         "You're offline. Reconnect to change the filters.",
       );
       const id = reason.closest("p")!.id;
-      for (const label of ["Period", "Age band", "Sex", "Source"]) {
+      for (const label of [
+        "Period type",
+        "Period",
+        "Age band",
+        "Sex",
+        "Source",
+      ]) {
         const c = screen.getByLabelText(label);
         expect(c).toBeDisabled();
-        expect(c).toHaveAttribute("aria-describedby", id);
+        expect(c.getAttribute("aria-describedby")!.split(" ")).toContain(id);
       }
       expect(
         screen.getByRole("combobox", { name: "Condition" }),
@@ -672,13 +786,16 @@ describe("AnalysisView", () => {
     const logs = (["log", "info", "warn", "error", "debug"] as const).map((k) =>
       vi.spyOn(console, k),
     );
-    render();
+    await render();
     await loaded();
     await waitFor(() =>
       expect(screen.getByLabelText("Age band")).toBeEnabled(),
     );
     await userEvent.selectOptions(screen.getByLabelText("Age band"), "65-79");
-    await userEvent.selectOptions(screen.getByLabelText("Period"), "12m");
+    await userEvent.selectOptions(
+      screen.getByLabelText("Period"),
+      "2026-08-01",
+    );
     await userEvent.click(screen.getByRole("tab", { name: "Who is affected" }));
     await screen.findByRole("list", { name: "Patients by age band" });
     expect(window.location.href).toBe(href);
@@ -687,12 +804,12 @@ describe("AnalysisView", () => {
     // Nor in the logs: no filter value is ever written out.
     for (const spy of logs)
       for (const args of spy.mock.calls)
-        expect(JSON.stringify(args)).not.toMatch(/65-79|2025-10-22|"12m"/);
+        expect(JSON.stringify(args)).not.toMatch(/65-79|2026-08-01/);
   });
 
   it("at phone width the filters open in a sheet and the views are a select", async () => {
     phone();
-    render();
+    await render();
     expect(screen.queryByRole("tablist")).toBeNull();
     const views = screen.getByLabelText("View");
     expect(optionNames(views)).toEqual([

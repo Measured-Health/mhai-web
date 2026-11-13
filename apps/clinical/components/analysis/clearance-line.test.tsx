@@ -52,7 +52,7 @@ const UNTIL = /^Named access until \d{1,2} \w{3} \d{4} · letter on file/;
 describe("ClearanceLine", () => {
   it("the Analysis page shows Named access until … · letter on file for Grace", async () => {
     holder.client = analysisAs(GRACE, screenAdminAs(DEMO_EMAILS.director));
-    renderSignedIn(<AnalysisView today="2026-10-22" />, GRACE, qc);
+    renderSignedIn(<AnalysisView />, GRACE, qc);
     const text = await screen.findByText(UNTIL);
     expect(text.textContent).toMatch(
       /^Named access until \d{1,2} \w{3} \d{4} · letter on file$/,

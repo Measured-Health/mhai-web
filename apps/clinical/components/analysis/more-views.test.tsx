@@ -30,7 +30,6 @@ import { AnalysisView } from "./analysis-view";
 import { pairBars } from "./co-occurring-view";
 import { findingBars } from "./findings-view";
 
-const TODAY = "2026-10-22";
 const S = (value: number): GuardedOut => ({ value, suppressed: false });
 const H: GuardedOut = { value: null, suppressed: true };
 const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
@@ -39,10 +38,13 @@ const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
 });
 const meta = (patients: GuardedOut): Meta => ({
   updated_at: "2026-10-22T06:00:00.000Z",
-  from: "2026-07-24",
-  to: "2026-10-22",
+  from: "2026-09-01",
+  to: "2026-09-30",
   bucket: "week",
   patients,
+  // The page's default period: the sample's latest finished month.
+  period: { level: "month", start: "2026-09-01" },
+  history: [],
 });
 const E11 = { id: "e11", name: "Type 2 diabetes", icd10: "E11" };
 const I10 = { id: "i10", name: "Hypertension", icd10: "I10" };
@@ -133,8 +135,8 @@ function serve(over: Partial<Record<ViewId, unknown>>) {
   };
 }
 const open = async (title: string) => {
-  renderAdmin(<AnalysisView today={TODAY} />);
-  await userEvent.click(screen.getByRole("tab", { name: title }));
+  renderAdmin(<AnalysisView />);
+  await userEvent.click(await screen.findByRole("tab", { name: title }));
 };
 
 beforeEach(() => serve(SAMPLES));

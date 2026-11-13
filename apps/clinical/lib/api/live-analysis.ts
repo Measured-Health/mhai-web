@@ -1,13 +1,16 @@
 import type { AnalysisClient } from "./analysis";
-import type { AnalysisFilters } from "./analysis-contract";
+import type { AnalysisFilters, PeriodRef } from "./analysis-contract";
 import { createLiveClearances } from "./live-clearances";
 import { apiOk, keyHeader } from "./request";
 
-/** Nulls are dropped; `source` goes only when set. */
+/** One period as core 1.17.0 takes it: `period` (its level) and `start`. */
+export function periodParams(r: PeriodRef): URLSearchParams {
+  return new URLSearchParams({ period: r.level, start: r.start });
+}
+
+/** The period, then each filter that is set; nulls are dropped. */
 export function filterParams(f: AnalysisFilters): URLSearchParams {
-  const p = new URLSearchParams();
-  p.set("from", f.from);
-  p.set("to", f.to);
+  const p = periodParams(f.period);
   if (f.condition) p.set("condition", f.condition);
   if (f.age_band) p.set("age_band", f.age_band);
   if (f.sex) p.set("sex", f.sex);
@@ -25,7 +28,12 @@ export function createLiveAnalysisClient({
   const get = <T>(path: string) => apiOk<T>(fetchImpl, path, { method: "GET" });
   const clearances = createLiveClearances({ fetchImpl });
   return {
-    getFilterOptions: () => get("/analysis/filters"),
+    getFilterOptions: (period) =>
+      get(
+        period
+          ? `/analysis/filters?${periodParams(period)}`
+          : "/analysis/filters",
+      ),
     getView: (view, f) =>
       get(`/analysis/${encodeURIComponent(view)}?${filterParams(f)}`),
     listPatients: ({ drill, level, filters }) => {

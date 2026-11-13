@@ -1,5 +1,6 @@
-// The Analysis API, hand-written from Plan 6's assumed contract. To be
-// replaced by types generated from the backend OpenAPI schema. Every number
+// The Analysis API: core openapi 1.17.0 (`getAnalysisFilters`,
+// `getAnalysisView`; checked strictly by `analysis-schema.ts`), plus the
+// patient lists of Plan 6 and 11c, which core adds later. Every number
 // is computed and hidden by the server under the small-group rule (a count of
 // 1 to 4 is `{ value: null, suppressed: true }`), and every set that adds up
 // is hidden as a set so no hidden member can be worked out. Nothing here can
@@ -38,10 +39,15 @@ export type LocationRef = {
   setting: Setting | null;
 };
 
+/** A fixed calendar period's level (R41a): there are no custom ranges. */
+export type PeriodLevel = "week" | "month" | "quarter";
+/** One finished period: its level and first day ("YYYY-MM-DD", a hospital day). */
+export type PeriodRef = { level: PeriodLevel; start: string };
+
 export type AnalysisFilters = {
-  /** "YYYY-MM-DD", the hospital's days. */
-  from: string;
-  to: string;
+  /** Exactly one finished period; sent as `period` and `start`. */
+  period: PeriodRef;
+  /** At most two of the rest are set, and never a location with a setting. */
   condition: string | null;
   age_band: AgeBand | null;
   sex: Sex | null;
@@ -55,7 +61,10 @@ export type AnalysisFilters = {
 export type Drillable = GuardedOut & { drill: string | null };
 
 export type FilterOptionsOut = {
-  updated_at: string;
+  /** null when no month is frozen yet. */
+  updated_at: string | null;
+  /** The answerable frozen periods' first days, per level, oldest first. */
+  periods: Record<PeriodLevel, string[]>;
   conditions: ConditionRef[];
   locations: LocationRef[];
   specialties: string[];
@@ -67,6 +76,19 @@ export type Meta = {
   from: string;
   to: string;
   bucket: "week" | "month";
+  patients: GuardedOut;
+  period: PeriodRef;
+  /**
+   * Up to 7 earlier periods of the same level, oldest first, each copied
+   * from that period's own stored body. Shown one by one, never added up.
+   */
+  history: HistoryPoint[];
+};
+
+export type HistoryPoint = {
+  start: string;
+  cases: GuardedOut;
+  new: GuardedOut;
   patients: GuardedOut;
 };
 
@@ -82,7 +104,7 @@ export type PrevalenceOut = Meta & {
 };
 
 export type AffectedOut = Meta & {
-  by_age: { band: AgeBand; patients: Drillable }[];
+  by_age: { band: AgeBand | null; patients: Drillable }[];
   by_sex: { sex: Sex; patients: Drillable }[];
   by_setting: { setting: Setting | null; patients: Drillable }[];
   by_location: { location: LocationRef | null; patients: Drillable }[];
@@ -90,7 +112,7 @@ export type AffectedOut = Meta & {
 };
 
 export type CoOccurringOut = Meta & {
-  /** Top 20. */
+  /** Top 20. `share_of_a` is a share, 0 to 1. */
   pairs: {
     a: ConditionRef;
     b: ConditionRef;

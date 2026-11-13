@@ -5,6 +5,8 @@ import type {
   AgeBand,
   AnalysisFilters,
   FilterOptionsOut,
+  PeriodLevel,
+  PeriodRef,
   Setting,
   Sex,
 } from "@/lib/api/analysis-contract";
@@ -13,14 +15,20 @@ import {
   SETTING_LABEL,
   SEX_LABEL,
   locationText,
+  specialtyText,
 } from "@/lib/analysis/labels";
 import {
-  PERIODS,
+  CAP_REASON,
+  FILTER_CAP,
+  LOCATION_OR_SETTING,
   activeCount,
-  customRangeProblem,
+  filterBlocked,
+  levelsOf,
+  periodsOf,
   showSource,
-  type PeriodId,
+  type FilterKey,
 } from "@/lib/analysis/filters";
+import { LEVEL_LABEL, periodLabel } from "@/lib/analysis/periods";
 import { Button } from "@mhai/ui/button";
 import { cn } from "@mhai/ui/cn";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
@@ -40,15 +48,17 @@ export type OptionsState =
   | { status: "loading" }
   | { status: "failed" };
 
+export const PERIOD_NOTE =
+  "Finished weeks, months and quarters, one at a time.";
+
 export type FiltersProps = {
   filters: AnalysisFilters;
-  period: PeriodId;
-  /** The custom range as typed, applied only once it's usable. */
-  draft: { from: string; to: string };
+  /** The answerable periods (core's list). */
+  periods: FilterOptionsOut["periods"];
+  /** The chosen period's filter lists. */
   options: OptionsState;
   online: boolean;
-  onPeriod: (p: PeriodId) => void;
-  onDraft: (d: { from: string; to: string }) => void;
+  onPeriod: (p: PeriodRef) => void;
   onChange: (patch: Partial<AnalysisFilters>) => void;
   onClear: () => void;
   onRetryOptions: () => void;
@@ -128,24 +138,23 @@ const entries = <K extends string>(labels: Record<K, string>) =>
 /** The filter controls themselves, laid out inline or in the phone sheet. */
 function FilterFields({
   filters,
-  period,
-  draft,
+  periods,
   options,
   online,
   onPeriod,
-  onDraft,
   onChange,
   onClear,
   onRetryOptions,
   stacked,
 }: FiltersProps & { stacked: boolean }) {
+  const levelId = useId();
   const periodId = useId();
-  const fromId = useId();
-  const toId = useId();
-  const problemId = useId();
+  const periodNoteId = useId();
+  const capId = useId();
+  const bothId = useId();
   const reasonId = useId();
   const o = options.status === "ok" ? options.data : null;
-  // Offline, nothing changes; with no options, only the dates do (spec §states).
+  // Offline, nothing changes; with no lists, only the period does (spec §states).
   const periodOff = !online;
   const restOff = !online || !o;
   const reason = !online
@@ -155,12 +164,33 @@ function FilterFields({
       : options.status === "loading"
         ? "Loading the filters…"
         : null;
-  const restDescribed = reason ? reasonId : undefined;
-  const problem =
-    period === "custom" ? customRangeProblem(draft.from, draft.to) : null;
-  const datesDescribed =
-    [periodOff && reasonId, problem && problemId].filter(Boolean).join(" ") ||
-    undefined;
+  const level = filters.period.level;
+  const levels = levelsOf(periods);
+  const choices = periodsOf(periods, level);
+  const periodDescribed = [periodNoteId, periodOff && reasonId]
+    .filter(Boolean)
+    .join(" ");
+  const full = activeCount(filters) >= FILTER_CAP;
+  const both =
+    !full && (filters.location !== null) !== (filters.setting !== null);
+  /** Off while offline or listless, or when core would refuse it (a third filter, or both places). */
+  const off = (k: FilterKey) => restOff || filterBlocked(filters, k) !== null;
+  const described = (k: FilterKey) => {
+    const why = filterBlocked(filters, k);
+    return (
+      [
+        reason && reasonId,
+        why === CAP_REASON && capId,
+        why === LOCATION_OR_SETTING && bothId,
+      ]
+        .filter(Boolean)
+        .join(" ") || undefined
+    );
+  };
+  function onLevel(l: PeriodLevel) {
+    const latest = periodsOf(periods, l)[0];
+    if (latest) onPeriod(latest);
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -170,57 +200,45 @@ function FilterFields({
           stacked ? "grid-cols-1" : "grid-cols-2 lg:grid-cols-4",
         )}
       >
-        <Field label="Period" htmlFor={periodId}>
+        <Field label="Period type" htmlFor={levelId}>
           <select
-            id={periodId}
-            value={period}
+            id={levelId}
+            value={level}
             disabled={periodOff}
-            aria-describedby={periodOff ? reasonId : undefined}
-            onChange={(e) => onPeriod(e.target.value as PeriodId)}
+            aria-describedby={periodDescribed}
+            onChange={(e) => onLevel(e.target.value as PeriodLevel)}
             className={control}
           >
-            {PERIODS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
+            {levels.map((l) => (
+              <option key={l} value={l}>
+                {LEVEL_LABEL[l]}
               </option>
             ))}
           </select>
         </Field>
-        {period === "custom" && (
-          <>
-            <Field label="From" htmlFor={fromId}>
-              <input
-                id={fromId}
-                type="date"
-                value={draft.from}
-                disabled={periodOff}
-                aria-invalid={problem ? true : undefined}
-                aria-describedby={datesDescribed}
-                onChange={(e) => onDraft({ ...draft, from: e.target.value })}
-                className={control}
-              />
-            </Field>
-            <Field label="To" htmlFor={toId}>
-              <input
-                id={toId}
-                type="date"
-                value={draft.to}
-                disabled={periodOff}
-                aria-invalid={problem ? true : undefined}
-                aria-describedby={datesDescribed}
-                onChange={(e) => onDraft({ ...draft, to: e.target.value })}
-                className={control}
-              />
-            </Field>
-          </>
-        )}
+        <Field label="Period" htmlFor={periodId}>
+          <select
+            id={periodId}
+            value={filters.period.start}
+            disabled={periodOff}
+            aria-describedby={periodDescribed}
+            onChange={(e) => onPeriod({ level, start: e.target.value })}
+            className={control}
+          >
+            {choices.map((p) => (
+              <option key={p.start} value={p.start}>
+                {periodLabel(p)}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="Condition" className={stacked ? "" : "col-span-2"}>
           <ConditionSearch
             conditions={o?.conditions ?? []}
             value={filters.condition}
             onChange={(condition) => onChange({ condition })}
-            disabled={restOff}
-            describedBy={restDescribed}
+            disabled={off("condition")}
+            describedBy={described("condition")}
           />
         </Field>
         <Select<AgeBand>
@@ -229,8 +247,8 @@ function FilterFields({
           all="All ages"
           choices={entries(AGE_LABEL)}
           onChange={(age_band) => onChange({ age_band })}
-          disabled={restOff}
-          describedBy={restDescribed}
+          disabled={off("age_band")}
+          describedBy={described("age_band")}
         />
         <Select<Sex>
           label="Sex"
@@ -238,8 +256,8 @@ function FilterFields({
           all="All"
           choices={entries(SEX_LABEL)}
           onChange={(sex) => onChange({ sex })}
-          disabled={restOff}
-          describedBy={restDescribed}
+          disabled={off("sex")}
+          describedBy={described("sex")}
         />
         <Select<string>
           label="Ward or clinic"
@@ -250,8 +268,8 @@ function FilterFields({
             label: locationText(l),
           }))}
           onChange={(location) => onChange({ location })}
-          disabled={restOff}
-          describedBy={restDescribed}
+          disabled={off("location")}
+          describedBy={described("location")}
         />
         <Select<Setting>
           label="Location type"
@@ -259,17 +277,20 @@ function FilterFields({
           all="All location types"
           choices={entries(SETTING_LABEL)}
           onChange={(setting) => onChange({ setting })}
-          disabled={restOff}
-          describedBy={restDescribed}
+          disabled={off("setting")}
+          describedBy={described("setting")}
         />
         <Select<string>
           label="Specialty"
           value={filters.specialty}
           all="All specialties"
-          choices={(o?.specialties ?? []).map((s) => ({ id: s, label: s }))}
+          choices={(o?.specialties ?? []).map((s) => ({
+            id: s,
+            label: specialtyText(s),
+          }))}
           onChange={(specialty) => onChange({ specialty })}
-          disabled={restOff}
-          describedBy={restDescribed}
+          disabled={off("specialty")}
+          describedBy={described("specialty")}
         />
         {o && showSource(o) && (
           <Select<string>
@@ -278,14 +299,22 @@ function FilterFields({
             all="All sources"
             choices={o.sources.map((s) => ({ id: s.id, label: s.label }))}
             onChange={(source) => onChange({ source })}
-            disabled={restOff}
-            describedBy={restDescribed}
+            disabled={off("source")}
+            describedBy={described("source")}
           />
         )}
       </div>
-      {problem && (
-        <p id={problemId} className="text-[12.5px] text-bad-deep">
-          {problem}
+      <p id={periodNoteId} className="text-[12px] text-ink-3">
+        {PERIOD_NOTE}
+      </p>
+      {full && (
+        <p id={capId} className="text-[12.5px] text-ink-2">
+          {CAP_REASON}
+        </p>
+      )}
+      {both && (
+        <p id={bothId} className="text-[12.5px] text-ink-2">
+          {LOCATION_OR_SETTING}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">

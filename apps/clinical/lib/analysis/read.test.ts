@@ -15,6 +15,7 @@ import type {
   ViewId,
 } from "../api/analysis-contract";
 import { FILTER_OPTIONS } from "../api/analysis-fixtures";
+import type { AnalysisClient } from "../api/analysis";
 import { createMockAnalysis } from "../api/mock-analysis";
 import {
   readClearanceMe,
@@ -32,8 +33,7 @@ const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
 });
 
 const F: AnalysisFilters = {
-  from: "2025-10-22",
-  to: "2026-10-21",
+  period: { level: "quarter", start: "2026-04-01" },
   condition: null,
   age_band: null,
   sex: null,
@@ -49,16 +49,26 @@ const VIEWS: ViewId[] = [
   "findings",
   "quality",
 ];
-const mock = createMockAnalysis({ delayMs: 0 });
+/** The sample, fresh for each call (the sweeps below open many filter sets). */
+const mock = {
+  getView: <V extends ViewId>(v: V, f: AnalysisFilters) =>
+    createMockAnalysis({ delayMs: 0 }).getView(v, f),
+  getFilterOptions: (p?: AnalysisFilters["period"]) =>
+    createMockAnalysis({ delayMs: 0 }).getFilterOptions(p),
+  listPatients: (q: Parameters<AnalysisClient["listPatients"]>[0]) =>
+    createMockAnalysis({ delayMs: 0 }).listPatients(q),
+};
 /** The reader's clock in these tests. */
 const NOW = Date.parse("2026-10-22T09:00:00.000Z");
 
 const meta = (patients: GuardedOut): Meta => ({
   updated_at: "2026-10-22T06:00:00.000Z",
-  from: "2026-07-24",
-  to: "2026-10-22",
-  bucket: "week",
+  from: "2026-07-01",
+  to: "2026-09-30",
+  bucket: "month",
   patients,
+  period: { level: "quarter", start: "2026-07-01" },
+  history: [],
 });
 const E11 = { id: "e11", name: "Type 2 diabetes", icd10: "E11" };
 const I10 = { id: "i10", name: "Hypertension", icd10: "I10" };
@@ -453,34 +463,22 @@ describe("readView", () => {
     ).toBe("failed");
   });
 
-  it("drops keys outside the contract", () => {
-    const v = {
-      ...prevalence(),
-      extra: [{ name: "Jane Doe" }],
-      x: { value: 9, suppressed: false },
-    };
+  it("fails on any key outside the 1.17.0 contract, at any level", () => {
+    const extra = { ...prevalence(), extra: [{ name: "Jane Doe" }] };
+    expect(readView("prevalence", extra).status).toBe("failed");
+    const v = prevalence();
     v.by_condition[0] = {
       ...v.by_condition[0],
       condition: { ...E11, note: "Jane Doe" } as typeof E11,
     };
-    const r = readView("prevalence", v);
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") return;
-    expect(JSON.stringify(r.data)).not.toContain("Jane Doe");
-    expect(r.data).not.toHaveProperty("extra");
-    expect(r.data).not.toHaveProperty("x");
-    expect(r.data).toEqual(prevalence());
+    expect(readView("prevalence", v).status).toBe("failed");
+    expect(readView("prevalence", prevalence()).status).toBe("ok");
   });
 
-  it("total.new with a drill loses the drill", () => {
+  it("total.new with a drill fails: only a Drillable carries one", () => {
     const v = prevalence();
     v.total.new = { value: 30, suppressed: false, drill: "x" } as GuardedOut;
-    const r = readView("prevalence", v);
-    expect(r.status).toBe("ok");
-    if (r.status === "ok") {
-      expect(r.data.total.new).toEqual(S(30));
-      expect(r.data.by_condition[0].cases.drill).toBe("cond-e11");
-    }
+    expect(readView("prevalence", v).status).toBe("failed");
   });
 
   it("each view's output is exactly its input when nothing extra is sent", async () => {
@@ -717,39 +715,39 @@ describe("readView", () => {
       "emergency",
     ];
     let read = 0;
+    // Every pair of two filters (core takes at most two).
+    const pairs = [
+      ...ages.flatMap((age_band) => sexes.map((sex) => ({ age_band, sex }))),
+      ...ages.flatMap((age_band) =>
+        settings.map((setting) => ({ age_band, setting })),
+      ),
+      ...sexes.flatMap((sex) => settings.map((setting) => ({ sex, setting }))),
+    ];
     for (const view of VIEWS)
-      for (const age_band of ages)
-        for (const sex of sexes)
-          for (const setting of settings) {
-            const raw = await mock.getView(view, {
-              ...F,
-              age_band,
-              sex,
-              setting,
-            });
-            expect(
-              readView(view, raw).status,
-              `${view} ${JSON.stringify({ age_band, sex, setting })}`,
-            ).toBe("ok");
-            read++;
-          }
-    expect(read).toBe(5 * 6 * 5 * 4);
+      for (const pair of pairs) {
+        const raw = await mock.getView(view, { ...F, ...pair });
+        expect(
+          readView(view, raw).status,
+          `${view} ${JSON.stringify(pair)}`,
+        ).toBe("ok");
+        read++;
+      }
+    expect(read).toBe(5 * (6 * 5 + 6 * 4 + 5 * 4));
   }, 60_000);
 
-  it("the mock's replies read for conditions, places, sources and short windows", async () => {
-    const windows = [
-      { from: "2026-07-24", to: "2026-10-21" },
-      { from: "2026-09-01", to: "2026-09-30" },
-      { from: "2026-10-01", to: "2026-10-21" },
+  it("the mock's replies read for conditions, places, sources and short periods", async () => {
+    const periods: AnalysisFilters["period"][] = [
+      { level: "quarter", start: "2026-07-01" },
+      { level: "month", start: "2026-09-01" },
+      { level: "week", start: "2026-10-15" },
     ];
     const cases: AnalysisFilters[] = [];
-    for (const w of windows)
-      for (const condition of [
-        null,
-        ...FILTER_OPTIONS.conditions.map((c) => c.id),
-      ])
+    for (const period of periods) {
+      const listed = (await mock.getFilterOptions(period)).conditions;
+      for (const condition of [null, ...listed.map((c) => c.id)])
         for (const source of [null, ...FILTER_OPTIONS.sources.map((s) => s.id)])
-          cases.push({ ...F, ...w, condition, source });
+          cases.push({ ...F, period, condition, source });
+    }
     for (const l of FILTER_OPTIONS.locations)
       cases.push({ ...F, location: l.id });
     for (const specialty of FILTER_OPTIONS.specialties)

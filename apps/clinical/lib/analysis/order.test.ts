@@ -8,7 +8,7 @@ import type {
   PrevalenceOut,
 } from "../api/analysis-contract";
 import { analysisCsv } from "./csv";
-import { defaultFilters } from "./filters";
+import { emptyFilters } from "./filters";
 import { conditionName } from "./labels";
 import { orderRows, orderView } from "./order";
 
@@ -17,10 +17,12 @@ const H: GuardedOut = { value: null, suppressed: true };
 const D = (g: GuardedOut): Drillable => ({ ...g, drill: null });
 const meta = (patients: GuardedOut): Meta => ({
   updated_at: "2026-10-22T06:00:00.000Z",
-  from: "2026-07-24",
-  to: "2026-10-22",
-  bucket: "week",
+  from: "2026-07-01",
+  to: "2026-09-30",
+  bucket: "month",
   patients,
+  period: { level: "quarter", start: "2026-07-01" },
+  history: [],
 });
 const C = (id: string, name: string | null, icd10: string | null = null) =>
   ({ id, name, icd10 }) satisfies ConditionRef;
@@ -179,7 +181,7 @@ describe("orderRows", () => {
     // The CSV writes the same fixed order.
     const csv = analysisCsv("affected", affected, {
       hospital: "Havana Hospital",
-      filters: defaultFilters("2026-10-22"),
+      filters: emptyFilters({ level: "quarter", start: "2026-07-01" }),
       options: null,
     });
     const order = (labels: string[]) =>
@@ -214,7 +216,7 @@ describe("orderRows", () => {
     const d = prevalence([row(A15, H), row(UNMAPPED, H), row(J45, H)]);
     const csv = analysisCsv("prevalence", d, {
       hospital: "Havana Hospital",
-      filters: defaultFilters("2026-10-22"),
+      filters: emptyFilters({ level: "quarter", start: "2026-07-01" }),
       options: null,
     });
     const at = (s: string) => csv.indexOf(`\r\n${s},`);

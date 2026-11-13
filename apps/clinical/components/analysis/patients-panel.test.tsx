@@ -30,7 +30,7 @@ import { createMockAdmin } from "@/lib/api/mock-admin";
 import { createMockAnalysis } from "@/lib/api/mock-analysis";
 import { resetAudit } from "@/lib/api/mock-audit";
 import { describeEvent } from "@/lib/admin/activity";
-import { defaultFilters } from "@/lib/analysis/filters";
+import { emptyFilters } from "@/lib/analysis/filters";
 import { resetClearances } from "@/lib/api/mock-clearances";
 import { DEMO_EMAILS } from "@/lib/auth/mock";
 import type { User } from "@/lib/auth/types";
@@ -60,7 +60,7 @@ import { FindingsView } from "./findings-view";
 import { PatientsPanel } from "./patients-panel";
 import { PrevalenceView } from "./prevalence-view";
 
-const F90 = defaultFilters("2026-10-22");
+const F90 = emptyFilters({ level: "quarter", start: "2026-07-01" });
 
 const S = (value: number): GuardedOut => ({ value, suppressed: false });
 const H: GuardedOut = { value: null, suppressed: true };
@@ -70,10 +70,12 @@ const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
 });
 const meta = (patients: GuardedOut): Meta => ({
   updated_at: "2026-10-22T06:00:00.000Z",
-  from: "2026-07-24",
-  to: "2026-10-22",
-  bucket: "week",
+  from: "2026-07-01",
+  to: "2026-09-30",
+  bucket: "month",
   patients,
+  period: { level: "quarter", start: "2026-07-01" },
+  history: [],
 });
 const E11 = { id: "e11", name: "Type 2 diabetes", icd10: "E11" };
 const A15 = { id: "a15", name: "Tuberculosis", icd10: "A15" };
@@ -419,7 +421,14 @@ describe("PatientsPanel", () => {
     await waitFor(() => expect(patientQueries()).toHaveLength(0));
   });
 
-  it("opening logs an event that Activity shows: opened 37 de-identified patients in Analysis", async () => {
+  it("opening logs an event that Activity shows: opened N de-identified patients in Analysis", async () => {
+    const sample = await createMockAnalysis({ delayMs: 0 }).getView(
+      "affected",
+      F90,
+    );
+    const n = sample.by_location.find((r) => r.location?.id === "ed")!.patients
+      .value!;
+    const rows = Math.min(n, 200);
     renderWith(<AffectedView filters={F90} />);
     const ward = await screen.findByRole("list", {
       name: "Patients by ward or clinic",
@@ -427,14 +436,14 @@ describe("PatientsPanel", () => {
     const ed = within(ward)
       .getAllByRole("listitem")
       .find((li) => li.textContent?.startsWith("Emergency"))!;
-    expect(ed).toHaveTextContent("37");
+    expect(ed).toHaveTextContent(String(n));
     await userEvent.click(
       within(ed).getByRole("button", { name: /^See patients/ }),
     );
     const panel = screen.getByRole("dialog");
     expect(
       await within(panel).findByRole("heading", {
-        name: "37 patients · Ward or clinic: Emergency",
+        name: `${n} patients · Ward or clinic: Emergency`,
       }),
     ).toBeVisible();
     const { events } = await createMockAdmin({ delayMs: 0 }).listActivity({});
@@ -443,10 +452,10 @@ describe("PatientsPanel", () => {
     expect(opened[0]).toMatchObject({
       type: "security",
       flag: null,
-      count: 37,
+      count: rows,
     });
     expect(describeEvent(opened[0]!)).toMatch(
-      /opened 37 de-identified patients in Analysis$/,
+      new RegExp(`opened ${rows} de-identified patients in Analysis$`),
     );
   });
 

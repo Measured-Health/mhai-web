@@ -14,13 +14,17 @@ import type {
   CoOccurringOut,
   ConditionRef,
   Drillable,
+  FilterOptionsOut,
   FindingsOut,
+  HistoryPoint,
   Meta,
   NamedPatientRowOut,
   NamedPatientsIn,
   NamedPatientsOut,
   NamedPurpose,
   PatientRowOut,
+  PeriodLevel,
+  PeriodRef,
   DeidentifiedPatientsOut,
   PrevalenceOut,
   QualityOut,
@@ -34,9 +38,13 @@ import {
   CONDITIONS,
   FILTER_OPTIONS,
   LOCATIONS,
+  SOURCES,
+  SPECIALTIES,
   UPDATED_AT,
   type CohortPatient,
 } from "./analysis-fixtures";
+import { emptyFilters } from "../analysis/filters";
+import { isPeriodRef, periodSpan } from "../analysis/periods";
 import { ApiError } from "./errors";
 import { recordAudit } from "./mock-audit";
 import {
@@ -57,6 +65,17 @@ const PURPOSES: readonly NamedPurpose[] = [
 ];
 const NOTE_MAX = 200;
 export type MockAnalysisMode = "normal" | "unavailable" | { failView: ViewId };
+
+/**
+ * The demo hospital's Analysis switch: on. An end-to-end test can turn it
+ * off by setting `mhaiDemoAnalysisOff` on the window before the app loads
+ * (the demo only; live, core decides).
+ */
+const demoAnalysisSwitch = (): "on" | "off" =>
+  typeof window !== "undefined" &&
+  (window as { mhaiDemoAnalysisOff?: unknown }).mhaiDemoAnalysisOff === true
+    ? "off"
+    : "on";
 
 // --- the small-group rule, the way the server must apply it ---
 
@@ -133,22 +152,44 @@ const condIndex = (id: string) => CONDITIONS.findIndex((c) => c.id === id);
 const findingKey = (name: string | null, flag: string | null) =>
   `${name ? slug(name) : "unmapped"}_${flag ?? "none"}`;
 
-const demo = (p: CohortPatient, f: AnalysisFilters) =>
+/** The filters with their period's first and last days, as the demo counts them. */
+type Win = AnalysisFilters & { from: string; to: string };
+const win = (f: AnalysisFilters): Win => ({ ...f, ...periodSpan(f.period) });
+
+/** The demo's frozen periods (the fixtures'). */
+export const MOCK_PERIODS: Record<PeriodLevel, string[]> =
+  FILTER_OPTIONS.periods;
+const LATEST_MONTH: PeriodRef = {
+  level: "month",
+  start: MOCK_PERIODS.month[MOCK_PERIODS.month.length - 1],
+};
+/**
+ * The demo's one period still being worked out the first time it's asked
+ * for (core's 503 `not_ready`): the oldest quarter.
+ */
+export const COLD_PERIOD: PeriodRef = {
+  level: "quarter",
+  start: MOCK_PERIODS.quarter[0],
+};
+/** New filter sets a person may open per period (core's cold-context cap). */
+export const COLD_CONTEXTS_MAX = 100;
+
+const demo = (p: CohortPatient, f: Win) =>
   (f.age_band === null || p.age_band === f.age_band) &&
   (f.sex === null || p.sex === f.sex) &&
   (f.location === null || p.location === f.location) &&
   (f.setting === null || p.setting === f.setting) &&
   (f.specialty === null || p.specialty === f.specialty) &&
   (f.source === null || p.source === f.source);
-const inRange = (d: string, f: AnalysisFilters) => d >= f.from && d <= f.to;
+const inRange = (d: string, f: Win) => d >= f.from && d <= f.to;
 /** The conditions in scope for a patient: known by the end of the window, and the chosen one. */
-const scoped = (p: CohortPatient, f: AnalysisFilters) =>
+const scoped = (p: CohortPatient, f: Win) =>
   p.conditions.filter(
     (c) => c.onset <= f.to && (f.condition === null || c.id === f.condition),
   );
 
 /** Patients with a visit in the window, who match every filter. */
-function population(f: AnalysisFilters): CohortPatient[] {
+function population(f: Win): CohortPatient[] {
   return COHORT.filter(
     (p) =>
       demo(p, f) &&
@@ -157,26 +198,33 @@ function population(f: AnalysisFilters): CohortPatient[] {
   );
 }
 
-function meta(f: AnalysisFilters, pop: CohortPatient[]): Meta {
-  // Weeks up to 91 days (the "Last 90 days" preset counts both ends).
-  const days = (Date.parse(f.to) - Date.parse(f.from)) / 86_400_000 + 1;
+function meta(f: Win, pop: CohortPatient[]): Meta {
   return {
     updated_at: UPDATED_AT,
     from: f.from,
     to: f.to,
-    bucket: days <= 91 ? "week" : "month",
+    // A quarter by month; a month by its weeks; a week is its own point.
+    bucket: f.period.level === "quarter" ? "month" : "week",
     patients: guard(pop.length),
+    period: { ...f.period },
+    history: [],
   };
 }
 
-function buckets(f: AnalysisFilters, kind: "week" | "month") {
+function buckets(f: Win, kind: "week" | "month") {
   const out: { start: string; end: string }[] = [];
   let cur = Date.parse(f.from);
   const last = Date.parse(f.to);
   while (cur <= last) {
     let end: number;
-    if (kind === "week") end = cur + 6 * 86_400_000;
-    else {
+    if (kind === "week") {
+      // Month-aligned: 1–7, 8–14, 15–21, then 22 to the month's end.
+      const d = new Date(cur);
+      end =
+        d.getUTCDate() === 22
+          ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)
+          : cur + 6 * 86_400_000;
+    } else {
       const d = new Date(cur);
       end = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0);
     }
@@ -190,23 +238,83 @@ function buckets(f: AnalysisFilters, kind: "week" | "month") {
   return out;
 }
 
-/** Real days, from not after to, at most 24 months: as the server must refuse. */
-function checkRange(f: AnalysisFilters) {
-  const real = (d: string) =>
-    /^\d{4}-\d{2}-\d{2}$/.test(d) &&
-    new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
-  if (
-    !real(f.from) ||
-    !real(f.to) ||
-    f.from > f.to ||
-    Date.parse(f.to) - Date.parse(f.from) > 731 * 86_400_000
-  )
+const isListed = (p: PeriodRef) =>
+  isPeriodRef(p) && MOCK_PERIODS[p.level].includes(p.start);
+
+/** The period's lists: conditions with 5 or more patients there, and every "Not standardised" one. */
+function listsFor(period: PeriodRef): Omit<FilterOptionsOut, "periods"> {
+  const pop = population(win(emptyFilters(period)));
+  const n = new Map<string, number>();
+  for (const p of pop)
+    for (const c of scoped(p, win(emptyFilters(period))))
+      n.set(c.id, (n.get(c.id) ?? 0) + 1);
+  return {
+    updated_at: UPDATED_AT,
+    conditions: CONDITIONS.filter(
+      (c) => c.name === null || (n.get(c.id) ?? 0) >= SMALL_GROUP_MIN,
+    ),
+    locations: LOCATIONS,
+    specialties: SPECIALTIES,
+    sources: SOURCES,
+  };
+}
+
+/** As core refuses a request: not one listed period, too many filters, or an id the period doesn't list. */
+function checkRequest(f: AnalysisFilters) {
+  if (!f.period || !isListed(f.period))
     throw new ApiError(422, "invalid_range");
+  const set = (
+    [
+      "condition",
+      "age_band",
+      "sex",
+      "location",
+      "setting",
+      "specialty",
+      "source",
+    ] as const
+  ).filter((k) => f[k] !== null);
+  if (set.length > 2) throw new ApiError(422, "too_many_filters");
+  if (f.location !== null && f.setting !== null)
+    throw new ApiError(422, "validation_failed");
+  if (
+    f.condition !== null &&
+    !listsFor(f.period).conditions.some((c) => c.id === f.condition)
+  )
+    throw new ApiError(422, "validation_failed");
+}
+
+/**
+ * Up to 7 earlier listed periods of the same level, oldest first, each
+ * from its own numbers; a condition that period doesn't list is a point
+ * hidden whole. Never a total across them.
+ */
+function history(f: AnalysisFilters): HistoryPoint[] {
+  const list = MOCK_PERIODS[f.period.level];
+  const i = list.indexOf(f.period.start);
+  return list.slice(Math.max(0, i - 7), Math.max(0, i)).map((start) => {
+    const at: AnalysisFilters = {
+      ...f,
+      period: { level: f.period.level, start },
+    };
+    if (
+      f.condition !== null &&
+      !listsFor(at.period).conditions.some((c) => c.id === f.condition)
+    )
+      return { start, cases: hide(), new: hide(), patients: hide() };
+    const d = prevalence(win(at));
+    return {
+      start,
+      cases: d.total.cases,
+      new: d.total.new,
+      patients: d.patients,
+    };
+  });
 }
 
 // --- the five views ---
 
-function prevalence(f: AnalysisFilters): PrevalenceOut {
+function prevalence(f: Win): PrevalenceOut {
   const pop = population(f);
   const m = meta(f, pop);
   const per = new Map<string, { cases: number; fresh: number }>();
@@ -277,7 +385,7 @@ function groups<K extends string | null>(
   return order ? rows : rows.filter((r) => r.n > 0).sort((a, b) => b.n - a.n);
 }
 
-function affected(f: AnalysisFilters): AffectedOut {
+function affected(f: Win): AffectedOut {
   const pop = population(f);
   const m = meta(f, pop);
   /** A partition of the patients: guarded as one set against the total. */
@@ -337,7 +445,7 @@ function affected(f: AnalysisFilters): AffectedOut {
   };
 }
 
-function pairsOf(pop: CohortPatient[], f: AnalysisFilters) {
+function pairsOf(pop: CohortPatient[], f: Win) {
   const have = pop.map((p) => new Set(scoped(p, f).map((c) => c.id)));
   // "Not standardised" is counted in prevalence, but a pair with an unknown condition says nothing.
   const ids = CONDITIONS.filter((c) => c.id !== "unmapped").map((c) => c.id);
@@ -353,7 +461,7 @@ function pairsOf(pop: CohortPatient[], f: AnalysisFilters) {
     .slice(0, 20);
 }
 
-function coOccurring(f: AnalysisFilters): CoOccurringOut {
+function coOccurring(f: Win): CoOccurringOut {
   const pop = population(f);
   return {
     ...meta(f, pop),
@@ -383,7 +491,7 @@ const REASONS: DismissReason[] = [
   "other",
 ];
 
-function findings(f: AnalysisFilters): FindingsOut {
+function findings(f: Win): FindingsOut {
   const pop = population(f);
   const per = new Map<
     string,
@@ -461,7 +569,7 @@ function findings(f: AnalysisFilters): FindingsOut {
 
 const LEVELS: ConfidenceLevel[] = ["high", "caution", "review", "failed"];
 
-function quality(f: AnalysisFilters): QualityOut {
+function quality(f: Win): QualityOut {
   const pop = population(f);
   const per = new Map<string, CohortPatient["consultations"]>();
   for (const p of pop)
@@ -543,7 +651,7 @@ const condName = (c: ConditionRef): RowName => ({
   last: c.name === null,
 });
 
-const VIEW_FNS: { [V in ViewId]: (f: AnalysisFilters) => ViewOut[V] } = {
+const VIEW_FNS: { [V in ViewId]: (f: Win) => ViewOut[V] } = {
   prevalence: (f) => {
     const d = prevalence(f);
     return {
@@ -632,7 +740,7 @@ const VIEW_FNS: { [V in ViewId]: (f: AnalysisFilters) => ViewOut[V] } = {
 // --- patients behind a shown count ---
 
 /** Every drill the views would show for these filters: only these may be opened. */
-function shownDrills(f: AnalysisFilters): Set<string> {
+function shownDrills(f: Win): Set<string> {
   const v = {
     p: prevalence(f),
     a: affected(f),
@@ -652,10 +760,7 @@ function shownDrills(f: AnalysisFilters): Set<string> {
   return new Set(all.flatMap((d) => (d.drill ? [d.drill] : [])));
 }
 
-function matcher(
-  drill: string,
-  f: AnalysisFilters,
-): (p: CohortPatient) => boolean {
+function matcher(drill: string, f: Win): (p: CohortPatient) => boolean {
   const i = drill.indexOf("-");
   const kind = drill.slice(0, i);
   const val = drill.slice(i + 1);
@@ -689,7 +794,7 @@ function matcher(
   }
 }
 
-function rowOf(p: CohortPatient, f: AnalysisFilters): PatientRowOut {
+function rowOf(p: CohortPatient, f: Win): PatientRowOut {
   return {
     pid: p.pid,
     age_band: p.age_band,
@@ -709,10 +814,11 @@ function rowOf(p: CohortPatient, f: AnalysisFilters): PatientRowOut {
   };
 }
 
-const namedRowOf = (
-  p: CohortPatient,
-  f: AnalysisFilters,
-): NamedPatientRowOut => ({ ...rowOf(p, f), name: p.name, mrn: p.mrn });
+const namedRowOf = (p: CohortPatient, f: Win): NamedPatientRowOut => ({
+  ...rowOf(p, f),
+  name: p.name,
+  mrn: p.mrn,
+});
 
 /** May this person hold a letter's cover: active, a hospital admin or analyst, with two-step. */
 const eligible = (s: StaffOut | undefined): s is StaffOut =>
@@ -779,6 +885,7 @@ const NOT_NAMED = (reason: ClearanceMeOut["reason"]): ClearanceMeOut => ({
 export function createMockAnalysis({
   delayMs = 150,
   analysis = "normal",
+  analysisSwitch,
   now = () => Date.now(),
   actor = "Analyst",
   me: meOpt,
@@ -796,6 +903,11 @@ export function createMockAnalysis({
   staff?: () => Promise<StaffOut[]>;
   /** The effective named-access switch for this hospital. */
   namedAccess?: NamedPosition;
+  /**
+   * The hospital's Analysis switch (core answers 404 while it is off). By
+   * default on, unless a test turned the demo's off before the page loaded.
+   */
+  analysisSwitch?: () => "on" | "off";
 } = {}): AnalysisClient {
   const me =
     meOpt ??
@@ -811,6 +923,29 @@ export function createMockAnalysis({
   const fail = (status: number, code: string): never => {
     throw new ApiError(status, code);
   };
+  const position = analysisSwitch ?? demoAnalysisSwitch;
+  /** Core's gate: off is 404, before anything else is read. */
+  const gate = () => {
+    if (position() === "off") fail(404, "not_found");
+  };
+  /** Periods whose numbers have been worked out (the cold one isn't, at first). */
+  const warm = new Set<string>();
+  /** The filter sets each period has had worked out, for the cold-context cap. */
+  const contexts = new Map<string, Set<string>>();
+  const periodKey = (p: PeriodRef) => `${p.level}:${p.start}`;
+  function coldChecks(f: AnalysisFilters) {
+    const key = periodKey(f.period);
+    if (key === periodKey(COLD_PERIOD) && !warm.has(key)) {
+      warm.add(key);
+      fail(503, "not_ready");
+    }
+    const seen = contexts.get(key) ?? new Set<string>();
+    const set = JSON.stringify({ ...f, period: null });
+    if (!seen.has(set) && seen.size >= COLD_CONTEXTS_MAX)
+      fail(429, "rate_limited");
+    seen.add(set);
+    contexts.set(key, seen);
+  }
 
   /** Who is asking, from the staff list as it is now (never cached). */
   const person = async () => {
@@ -845,31 +980,41 @@ export function createMockAnalysis({
   }
 
   return {
-    async getFilterOptions() {
+    async getFilterOptions(period?: PeriodRef) {
       await wait();
+      gate();
       if (analysis === "unavailable") unavailable();
-      return structuredClone(FILTER_OPTIONS);
+      if (period && !isListed(period)) fail(422, "invalid_range");
+      return structuredClone({
+        ...listsFor(period ?? LATEST_MONTH),
+        periods: MOCK_PERIODS,
+      });
     },
     async getView<V extends ViewId>(
       view: V,
       f: AnalysisFilters,
     ): Promise<ViewOut[V]> {
       await wait();
+      gate();
       if (analysis === "unavailable") unavailable();
       if (typeof analysis === "object" && analysis.failView === view)
         unavailable();
       if (!(view in VIEW_FNS)) throw new ApiError(404, "not_found");
-      checkRange(f);
-      return VIEW_FNS[view](f) as ViewOut[V];
+      checkRequest(f);
+      coldChecks(f);
+      const out = VIEW_FNS[view](win(f)) as ViewOut[V];
+      return { ...out, history: history(f) };
     },
     async listPatients({
       drill,
       level,
-      filters,
+      filters: asked,
     }): Promise<DeidentifiedPatientsOut> {
       await wait();
+      gate();
       if (analysis === "unavailable") unavailable();
-      checkRange(filters);
+      checkRequest(asked);
+      const filters = win(asked);
       // Names are only ever a POST (the purpose stays out of URLs).
       if (level !== "deidentified")
         throw new ApiError(422, "level_not_supported");
@@ -900,7 +1045,8 @@ export function createMockAnalysis({
       if (analysis === "unavailable") unavailable();
       const key = opts?.idempotencyKey;
       if (!key) return fail(422, "invalid");
-      checkRange(q.filters);
+      gate();
+      checkRequest(q.filters);
       const p = await person();
       const t = now();
       // A key is bound to the caller and the request. A replay is the same
@@ -941,9 +1087,10 @@ export function createMockAnalysis({
    */
   async function namedPatients(
     p: StaffOut | undefined,
-    { drill, filters, purpose, note }: NamedPatientsIn,
+    { drill, filters: asked, purpose, note }: NamedPatientsIn,
     record: boolean,
   ): Promise<NamedPatientsOut> {
+    const filters = win(asked);
     if (namedAccess !== "on") return fail(403, "named_access_off");
     if (!eligible(p)) return fail(403, "not_cleared");
     const t = now();

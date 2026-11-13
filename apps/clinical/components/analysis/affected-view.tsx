@@ -7,7 +7,7 @@ import type {
 import { frameState, useAnalysisView } from "@/lib/analysis-queries";
 import { shows } from "@/lib/analysis/guards";
 import {
-  AGE_LABEL,
+  ageText,
   SEX_LABEL,
   countText,
   locationText,
@@ -33,8 +33,8 @@ export function affectedGroups(d: AffectedOut): Group[] {
       title: "By age band",
       column: "Age band",
       rows: d.by_age.map((r) => ({
-        key: r.band,
-        label: AGE_LABEL[r.band],
+        key: r.band ?? "none",
+        label: ageText(r.band),
         patients: r.patients,
       })),
     },

@@ -21,7 +21,12 @@ import { buildCohort, COHORT, FILTER_OPTIONS } from "./analysis-fixtures";
 import { ApiError } from "./errors";
 import { VENDOR_NAMES } from "../../../../scripts/vendor-names.mjs";
 import { PLATFORM_ADMINS } from "./clearances-fixtures";
-import { createMockAnalysis, share } from "./mock-analysis";
+import {
+  COLD_CONTEXTS_MAX,
+  COLD_PERIOD,
+  createMockAnalysis,
+  share,
+} from "./mock-analysis";
 import { auditEvents, resetAudit } from "./mock-audit";
 import {
   createMockClearances,
@@ -30,8 +35,7 @@ import {
 } from "./mock-clearances";
 
 const F: AnalysisFilters = {
-  from: "2025-10-22",
-  to: "2026-10-21",
+  period: { level: "quarter", start: "2026-04-01" },
   condition: null,
   age_band: null,
   sex: null,
@@ -57,8 +61,7 @@ beforeEach(resetAudit);
 describe("sample cohort", () => {
   it("is the same every time", () => {
     expect(buildCohort()).toEqual(buildCohort());
-    expect(COHORT.length).toBeGreaterThan(550);
-    expect(COHORT.length).toBeLessThan(650);
+    expect(COHORT.length).toBe(2400);
     const pids = COHORT.map((p) => p.pid);
     expect(new Set(pids).size).toBe(pids.length);
     for (const p of pids) expect(p).toMatch(/^P-[0-9A-Z]{5}$/);
@@ -105,7 +108,11 @@ describe("sample cohort", () => {
 
 describe("sample analysis", () => {
   it("hides counts of 1 to 4 and shows 0", async () => {
-    const a = await mock().getView("affected", { ...F, condition: "a15" });
+    const a = await mock().getView("affected", {
+      ...F,
+      location: "ward4",
+      sex: "other",
+    });
     expect(a.patients).toEqual({ value: null, suppressed: true });
     const b = await mock().getView("affected", { ...F, age_band: "0-17" });
     const adult = b.by_age.find((x) => x.band === "40-64")!;
@@ -128,14 +135,13 @@ describe("sample analysis", () => {
     const v = await mock().getView("prevalence", F);
     const ns = v.by_condition.find((c) => c.condition.name === null)!;
     expect(ns.condition.icd10).toBeNull();
-    expect(ns.cases.value).toBe(12);
+    expect(ns.cases.value).toBe(19);
     expect(ns.cases.drill).toBe("cond-unmapped");
   });
 
   it("puts a drill only on shown counts of 5 or more", async () => {
-    const m = mock();
     for (const f of [F, { ...F, sex: "female" as Sex }]) {
-      for (const d of allDrillables(await views(m, f))) {
+      for (const d of allDrillables(await views(f))) {
         if (d.drill === null) continue;
         expect(d.suppressed).toBe(false);
         expect(d.value).toBeGreaterThanOrEqual(SMALL_GROUP_MIN);
@@ -183,22 +189,126 @@ describe("sample analysis", () => {
     await expect(m.getFilterOptions()).resolves.toBeDefined();
   });
 
-  it("refuses bad ranges and unknown views", async () => {
+  it("refuses anything but one listed period, as core does", async () => {
     const m = mock();
-    for (const bad of [
-      { from: "2026-02-30" },
-      { from: "2026-10-22", to: "2026-10-21" },
-      { from: "2020-01-01" },
-    ])
+    for (const period of [
+      { level: "month", start: "2026-09-02" },
+      { level: "month", start: "2026-10-01" },
+      { level: "week", start: "2026-10-22" },
+      { level: "quarter", start: "2020-01-01" },
+      { level: "year", start: "2026-01-01" },
+    ] as AnalysisFilters["period"][])
       await expect(
-        m.getView("affected", { ...F, ...bad }),
-      ).rejects.toMatchObject({
-        status: 422,
-        code: "invalid_range",
-      });
+        m.getView("affected", { ...F, period }),
+      ).rejects.toMatchObject({ status: 422, code: "invalid_range" });
+    await expect(
+      m.getFilterOptions({ level: "month", start: "2026-09-02" }),
+    ).rejects.toMatchObject({ status: 422, code: "invalid_range" });
     await expect(m.getView("nope" as ViewId, F)).rejects.toMatchObject({
       status: 404,
     });
+  });
+
+  it("refuses a third filter, a place with a setting, and an unlisted condition", async () => {
+    const m = mock();
+    await expect(
+      m.getView("affected", {
+        ...F,
+        sex: "female",
+        age_band: "80+",
+        setting: "admitted",
+      }),
+    ).rejects.toMatchObject({ status: 422, code: "too_many_filters" });
+    await expect(
+      m.getView("affected", { ...F, location: "ward4", setting: "admitted" }),
+    ).rejects.toMatchObject({ status: 422, code: "validation_failed" });
+    await expect(
+      m.getView("affected", { ...F, condition: "nope" }),
+    ).rejects.toMatchObject({ status: 422, code: "validation_failed" });
+  });
+
+  it("is 404 for everything while the hospital's switch is off", async () => {
+    const m = mock({ analysisSwitch: () => "off" });
+    await expect(m.getFilterOptions()).rejects.toMatchObject({
+      status: 404,
+      code: "not_found",
+    });
+    await expect(m.getView("prevalence", F)).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it("the cold period is not_ready the first time, then reads", async () => {
+    const m = mock();
+    const f = { ...F, period: COLD_PERIOD };
+    await expect(m.getView("prevalence", f)).rejects.toMatchObject({
+      status: 503,
+      code: "not_ready",
+    });
+    await expect(m.getView("prevalence", f)).resolves.toBeDefined();
+  });
+
+  it("past the cap on new filter sets in a period, a new one is 429", async () => {
+    const m = mock();
+    const opened: AnalysisFilters[] = [];
+    const ages: AgeBand[] = ["0-17", "18-39", "40-64", "65-79", "80+"];
+    const sexes: Sex[] = ["female", "male", "other", "not_recorded"];
+    for (const condition of [null, ...(await listed(F.period))])
+      for (const age_band of [null, ...ages])
+        opened.push({ ...F, condition, age_band });
+    for (const sex of sexes)
+      for (const specialty of FILTER_OPTIONS.specialties)
+        opened.push({ ...F, sex, specialty });
+    for (const location of FILTER_OPTIONS.locations)
+      for (const age_band of ages)
+        opened.push({ ...F, location: location.id, age_band });
+    expect(opened.length).toBeGreaterThan(COLD_CONTEXTS_MAX);
+    for (const f of opened.slice(0, COLD_CONTEXTS_MAX))
+      await m.getView("affected", f);
+    // One already opened still reads; a new one doesn't.
+    await expect(m.getView("quality", opened[0]!)).resolves.toBeDefined();
+    await expect(
+      m.getView("affected", opened[COLD_CONTEXTS_MAX]!),
+    ).rejects.toMatchObject({ status: 429, code: "rate_limited" });
+  });
+
+  it("lists the periods, and each period's own conditions", async () => {
+    const o = await mock().getFilterOptions();
+    expect(o.periods.month.at(-1)).toBe("2026-09-01");
+    expect(o.periods.quarter).toEqual([
+      "2026-01-01",
+      "2026-04-01",
+      "2026-07-01",
+    ]);
+    expect(o.periods.week[0]).toBe("2025-10-22");
+    expect(o.periods.week.at(-1)).toBe("2026-10-15");
+    expect(o.conditions.some((c) => c.name === null)).toBe(true);
+    const week = await mock().getFilterOptions({
+      level: "week",
+      start: "2026-10-15",
+    });
+    expect(week.conditions.length).toBeLessThanOrEqual(o.conditions.length);
+  });
+
+  it("sends up to 7 earlier periods, oldest first, each on its own", async () => {
+    const v = await mock().getView("prevalence", {
+      ...F,
+      period: { level: "month", start: "2026-09-01" },
+    });
+    expect(v.history.map((h) => h.start)).toEqual([
+      "2026-02-01",
+      "2026-03-01",
+      "2026-04-01",
+      "2026-05-01",
+      "2026-06-01",
+      "2026-07-01",
+      "2026-08-01",
+    ]);
+    const first = await mock().getView("prevalence", {
+      ...F,
+      period: { level: "month", start: "2025-11-01" },
+    });
+    expect(first.history).toEqual([]);
   });
 
   it("hides a median over a hidden count, even with nothing acknowledged", async () => {
@@ -228,12 +338,21 @@ describe("sample analysis", () => {
 
 // --- secondary suppression: nothing hidden can be worked out ---
 
-async function views(m: ReturnType<typeof mock>, f: AnalysisFilters) {
+/**
+ * Every view for `f`, from a fresh sample (so the sweeps below don't reach
+ * the per-period cap on new filter sets).
+ */
+async function views(f: AnalysisFilters) {
+  const m = mock();
   const out = {} as { [V in ViewId]: ViewOut[V] };
   for (const v of VIEWS)
     (out as Record<string, unknown>)[v] = await m.getView(v, f);
   return out;
 }
+
+/** The conditions a period lists (5 or more patients there, and Not standardised). */
+const listed = async (period: AnalysisFilters["period"]) =>
+  (await mock().getFilterOptions(period)).conditions.map((c) => c.id);
 
 function allDrillables(v: { [V in ViewId]: ViewOut[V] }): Drillable[] {
   return [
@@ -427,7 +546,6 @@ function checkViews(v: { [V in ViewId]: ViewOut[V] }, label: string) {
 
 describe("secondary suppression", () => {
   it("never lets a hidden member be worked out, for any filter combination", async () => {
-    const m = mock();
     const ages: (AgeBand | null)[] = [
       null,
       "0-17",
@@ -450,43 +568,45 @@ describe("secondary suppression", () => {
       "emergency",
     ];
     let hiddenSeen = 0;
-    for (const age_band of ages)
-      for (const sex of sexes)
-        for (const setting of settings) {
-          const f = { ...F, age_band, sex, setting };
-          const v = await views(m, f);
-          checkViews(v, JSON.stringify({ age_band, sex, setting }));
-          hiddenSeen += v.affected.by_location.filter(
-            (r) => r.patients.suppressed,
-          ).length;
-        }
+    // Every pair of two filters (core takes at most two).
+    const pairs = [
+      ...ages.flatMap((age_band) => sexes.map((sex) => ({ age_band, sex }))),
+      ...ages.flatMap((age_band) =>
+        settings.map((setting) => ({ age_band, setting })),
+      ),
+      ...sexes.flatMap((sex) => settings.map((setting) => ({ sex, setting }))),
+    ];
+    for (const pair of pairs) {
+      const f = { ...F, ...pair };
+      const v = await views(f);
+      checkViews(v, JSON.stringify(pair));
+      hiddenSeen += v.affected.by_location.filter(
+        (r) => r.patients.suppressed,
+      ).length;
+    }
     expect(hiddenSeen).toBeGreaterThan(0);
   });
 
-  it("holds for conditions, locations, specialties, sources and shorter windows", async () => {
-    const m = mock();
-    const windows = [
-      { from: "2026-07-01", to: "2026-10-21" },
-      { from: "2026-09-01", to: "2026-09-30" },
+  it("holds for conditions, locations, specialties, sources and shorter periods", async () => {
+    const periods: AnalysisFilters["period"][] = [
+      { level: "quarter", start: "2026-07-01" },
+      { level: "month", start: "2026-09-01" },
+      { level: "week", start: "2026-10-15" },
     ];
-    for (const w of windows)
-      for (const condition of [
-        null,
-        ...FILTER_OPTIONS.conditions.map((c) => c.id),
-      ])
+    for (const period of periods)
+      for (const condition of [null, ...(await listed(period))])
         for (const source of [null, "main_record", "results_system"])
           checkViews(
-            await views(m, { ...F, ...w, condition, source }),
-            `${condition} ${source}`,
+            await views({ ...F, period, condition, source }),
+            `${period.start} ${condition} ${source}`,
           );
     for (const loc of FILTER_OPTIONS.locations)
-      checkViews(await views(m, { ...F, location: loc.id }), loc.id);
+      checkViews(await views({ ...F, location: loc.id }), loc.id);
     for (const specialty of FILTER_OPTIONS.specialties)
-      checkViews(await views(m, { ...F, specialty }), specialty);
+      checkViews(await views({ ...F, specialty }), specialty);
   });
 
   it("holds across condition, location and specialty crossed with age and sex", async () => {
-    const m = mock();
     const ages: (AgeBand | null)[] = [
       null,
       "0-17",
@@ -502,23 +622,28 @@ describe("secondary suppression", () => {
       "other",
       "not_recorded",
     ];
-    const conds = [null, ...FILTER_OPTIONS.conditions.map((c) => c.id)];
+    const conds = [null, ...(await listed(F.period))];
     const locs = [null, ...FILTER_OPTIONS.locations.map((l) => l.id)];
-    for (const condition of conds)
-      for (const location of locs)
-        for (const age_band of ages)
-          for (const sex of sexes)
-            checkViews(
-              await views(m, { ...F, condition, location, age_band, sex }),
-              JSON.stringify({ condition, location, age_band, sex }),
-            );
-    for (const specialty of FILTER_OPTIONS.specialties)
+    const specs = [null, ...FILTER_OPTIONS.specialties];
+    // Each of condition, location and specialty with an age band or a sex
+    // (two filters, the most core takes).
+    const firsts = [
+      ...conds.map((condition) => ({ condition })),
+      ...locs.map((location) => ({ location })),
+      ...specs.map((specialty) => ({ specialty })),
+    ];
+    for (const first of firsts) {
       for (const age_band of ages)
-        for (const sex of sexes)
-          checkViews(
-            await views(m, { ...F, specialty, age_band, sex }),
-            JSON.stringify({ specialty, age_band, sex }),
-          );
+        checkViews(
+          await views({ ...F, ...first, age_band }),
+          JSON.stringify({ ...first, age_band }),
+        );
+      for (const sex of sexes)
+        checkViews(
+          await views({ ...F, ...first, sex }),
+          JSON.stringify({ ...first, sex }),
+        );
+    }
   }, 60_000);
 
   it("never reads a share's numerator or complement as 1 to 4", () => {
@@ -534,11 +659,10 @@ describe("secondary suppression", () => {
   });
 
   it("hides the other half of a pair when one new/existing count is hidden", async () => {
-    // A window so short that most rows have a few of each.
+    // A period so short that most rows have a few of each.
     const v = await mock().getView("prevalence", {
       ...F,
-      from: "2026-10-01",
-      to: "2026-10-21",
+      period: { level: "week", start: "2026-10-15" },
     });
     checkSet("short", [v.total.new, v.total.existing], v.total.cases);
   });
@@ -572,53 +696,60 @@ describe("row order", () => {
   }
 
   it("sends hidden rows after the shown ones, by name, for every list", async () => {
-    const m = mock();
     let seen = 0;
     const ages: (AgeBand | null)[] = [null, "0-17", "65-79", "80+"];
     const sexes: (Sex | null)[] = [null, "female", "other", "not_recorded"];
-    for (const age_band of ages)
-      for (const sex of sexes)
-        for (const location of [null, "ward4", "ward7"]) {
-          const f = { ...F, age_band, sex, location };
-          const v = await views(m, f);
-          const at = JSON.stringify({ age_band, sex, location });
-          seen += hiddenByName(
-            v.prevalence.by_condition,
-            (r) => r.cases,
-            (r) => r.condition.name,
-            `prevalence ${at}`,
-          );
-          seen += hiddenByName(
-            v.affected.by_location,
-            (r) => r.patients,
-            (r) => r.location?.label ?? null,
-            `locations ${at}`,
-          );
-          seen += hiddenByName(
-            v.affected.by_specialty,
-            (r) => r.patients,
-            (r) => r.specialty,
-            `specialties ${at}`,
-          );
-          seen += hiddenByName(
-            v["co-occurring"].pairs,
-            (r) => r.patients,
-            (r) => `${r.a.name} + ${r.b.name}`,
-            `pairs ${at}`,
-          );
-          seen += hiddenByName(
-            v.findings.findings,
-            (r) => r.patients,
-            (r) => r.name,
-            `findings ${at}`,
-          );
-          seen += hiddenByName(
-            v.quality.by_condition,
-            (r) => r.consultations,
-            (r) => r.condition.name,
-            `quality ${at}`,
-          );
-        }
+    // Every pair of two (core takes at most two filters).
+    const sets = [
+      ...ages.flatMap((age_band) => sexes.map((sex) => ({ age_band, sex }))),
+      ...ages.flatMap((age_band) =>
+        [null, "ward4", "ward7"].map((location) => ({ age_band, location })),
+      ),
+      ...sexes.flatMap((sex) =>
+        [null, "ward4", "ward7"].map((location) => ({ sex, location })),
+      ),
+    ];
+    for (const set of sets) {
+      const f = { ...F, ...set };
+      const v = await views(f);
+      const at = JSON.stringify(set);
+      seen += hiddenByName(
+        v.prevalence.by_condition,
+        (r) => r.cases,
+        (r) => r.condition.name,
+        `prevalence ${at}`,
+      );
+      seen += hiddenByName(
+        v.affected.by_location,
+        (r) => r.patients,
+        (r) => r.location?.label ?? null,
+        `locations ${at}`,
+      );
+      seen += hiddenByName(
+        v.affected.by_specialty,
+        (r) => r.patients,
+        (r) => r.specialty,
+        `specialties ${at}`,
+      );
+      seen += hiddenByName(
+        v["co-occurring"].pairs,
+        (r) => r.patients,
+        (r) => `${r.a.name} + ${r.b.name}`,
+        `pairs ${at}`,
+      );
+      seen += hiddenByName(
+        v.findings.findings,
+        (r) => r.patients,
+        (r) => r.name,
+        `findings ${at}`,
+      );
+      seen += hiddenByName(
+        v.quality.by_condition,
+        (r) => r.consultations,
+        (r) => r.condition.name,
+        `quality ${at}`,
+      );
+    }
     expect(seen).toBeGreaterThan(20);
   });
 });

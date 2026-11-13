@@ -1,4 +1,6 @@
-// Reading the Analysis replies (spec §4, §5). Each view is read on its own
+// Reading the Analysis replies (spec §4, §5; core openapi 1.17.0). Each
+// reply's shape is checked first, strictly (`analysis-schema.ts`: these
+// keys and no others), then its values. Each view is read on its own
 // and fails closed ("Couldn't load {view}") on a wrong shape or on any
 // value the server should have hidden: a shown 1–4, a non-whole count, a
 // share or median over a hidden count, a share that gives away 1–4 or its
@@ -19,12 +21,15 @@ import type {
   FilterOptionsOut,
   LocationRef,
   DeidentifiedPatientsOut,
+  HistoryPoint,
   Meta,
   NamedPatientRowOut,
   NamedPatientsOut,
   PatientLevel,
   PatientRowOut,
   PatientsOut,
+  PeriodLevel,
+  PeriodRef,
   Setting,
   Sex,
   ViewId,
@@ -39,6 +44,8 @@ import {
   setGivesAway,
   shows,
 } from "./guards";
+import { filtersShapeOk, viewShapeOk } from "../api/analysis-schema";
+import { isPeriodStart, periodSpan, prevPeriod, samePeriod } from "./periods";
 
 export type ViewState<T> = { status: "ok"; data: T } | { status: "failed" };
 
@@ -138,6 +145,47 @@ const conditionKey = (c: unknown) => (c as Obj).id;
 
 // ---- The views -------------------------------------------------------------------
 
+/**
+ * One finished period: `from` and `to` are exactly its span, and a quarter
+ * is drawn by month, anything shorter by week.
+ */
+function periodOk(v: Obj): boolean {
+  const p = v.period as Obj;
+  if (!isObj(p) || !isStr(p.start)) return false;
+  const level = p.level as PeriodLevel;
+  if (!isPeriodStart(level, p.start)) return false;
+  const span = periodSpan({ level, start: p.start });
+  return (
+    span.from === v.from &&
+    span.to === v.to &&
+    v.bucket === (level === "quarter" ? "month" : "week")
+  );
+}
+
+/**
+ * Earlier periods of the same level, oldest first, each before the one
+ * asked for, with each point's new cases a part of its cases.
+ */
+function historyOk(v: Obj): boolean {
+  const p = v.period as PeriodRef;
+  const pts = v.history;
+  if (!isArr(pts) || pts.length > 7) return false;
+  let next = p;
+  // Newest last, so walk back from the period asked for.
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const h = pts[i] as Obj;
+    if (!isObj(h) || !isStr(h.start)) return false;
+    let prev = prevPeriod(next);
+    // A gap is allowed (a period not answerable); never a repeat or a later one.
+    while (prev.start > h.start) prev = prevPeriod(prev);
+    if (prev.start !== h.start) return false;
+    if (!count(h.cases) || !count(h.new) || !count(h.patients)) return false;
+    if (!partOk(h.cases as G, h.new as G)) return false;
+    next = prev;
+  }
+  return true;
+}
+
 function metaOk(v: Obj): boolean {
   return (
     isTime(v.updated_at) &&
@@ -145,7 +193,9 @@ function metaOk(v: Obj): boolean {
     isDay(v.to) &&
     v.from <= v.to &&
     (v.bucket === "week" || v.bucket === "month") &&
-    count(v.patients)
+    count(v.patients) &&
+    periodOk(v) &&
+    historyOk(v)
   );
 }
 
@@ -228,7 +278,7 @@ function affectedOk(v: Obj): boolean {
     partitionOk(
       v.by_age,
       p,
-      (r) => oneOf(AGE_BANDS, r.band),
+      (r) => r.band === null || oneOf(AGE_BANDS, r.band),
       (r) => r.band,
     ) &&
     partitionOk(
@@ -383,13 +433,19 @@ const VIEW_OK: Record<ViewId, (v: Obj) => boolean> = {
   quality: qualityOk,
 };
 
-/** One view's reply, read on its own; see the file comment. */
+/**
+ * One view's reply, read on its own; see the file comment. Given `asked`,
+ * a reply for any other period fails too.
+ */
 export function readView<V extends ViewId>(
   view: V,
   raw: unknown,
+  asked?: PeriodRef,
 ): ViewState<ViewOut[V]> {
   const ok = Object.hasOwn(VIEW_OK, view) ? VIEW_OK[view] : null;
-  if (!ok || !isObj(raw) || !metaOk(raw) || !ok(raw)) return FAILED;
+  if (!ok || !viewShapeOk(view, raw) || !isObj(raw)) return FAILED;
+  if (!metaOk(raw) || !ok(raw)) return FAILED;
+  if (asked && !samePeriod(asked, raw.period as PeriodRef)) return FAILED;
   return { status: "ok", data: BUILD[view](raw) as ViewOut[V] };
 }
 
@@ -428,6 +484,16 @@ const meta = (v: Obj): Meta => ({
   to: v.to as string,
   bucket: v.bucket as Meta["bucket"],
   patients: g(v.patients),
+  period: {
+    level: (v.period as PeriodRef).level,
+    start: (v.period as PeriodRef).start,
+  },
+  history: list(v.history).map((h): HistoryPoint => ({
+    start: h.start as string,
+    cases: g(h.cases),
+    new: g(h.new),
+    patients: g(h.patients),
+  })),
 });
 
 const BUILD: { [V in ViewId]: (v: Obj) => ViewOut[V] } = {
@@ -452,7 +518,7 @@ const BUILD: { [V in ViewId]: (v: Obj) => ViewOut[V] } = {
   affected: (v) => ({
     ...meta(v),
     by_age: list(v.by_age).map((r) => ({
-      band: r.band as AgeBand,
+      band: r.band as AgeBand | null,
       patients: dr(r.patients),
     })),
     by_sex: list(v.by_sex).map((r) => ({
@@ -539,10 +605,25 @@ const BUILD: { [V in ViewId]: (v: Obj) => ViewOut[V] } = {
 
 // ---- The filter options ----------------------------------------------------------
 
+/** A level's periods: real first days of that level, oldest first, none twice. */
+const periodListOk = (level: PeriodLevel, days: unknown) =>
+  isArr(days) &&
+  days.every(
+    (d, i) =>
+      isStr(d) &&
+      isPeriodStart(level, d) &&
+      (i === 0 || (days[i - 1] as string) < d),
+  );
+
 export function readFilterOptions(raw: unknown): ViewState<FilterOptionsOut> {
-  if (!isObj(raw) || !isTime(raw.updated_at)) return FAILED;
+  if (!filtersShapeOk(raw) || !isObj(raw)) return FAILED;
+  if (raw.updated_at !== null && !isTime(raw.updated_at)) return FAILED;
   const { conditions, locations, specialties, sources } = raw;
+  const periods = raw.periods as Obj;
   if (
+    !periodListOk("week", periods.week) ||
+    !periodListOk("month", periods.month) ||
+    !periodListOk("quarter", periods.quarter) ||
     !rows(conditions, conditionOk, (c) => c.id) ||
     !rows(locations, locationOk, (l) => l.id) ||
     !isArr(specialties) ||
@@ -558,7 +639,12 @@ export function readFilterOptions(raw: unknown): ViewState<FilterOptionsOut> {
   return {
     status: "ok",
     data: {
-      updated_at: raw.updated_at,
+      updated_at: raw.updated_at as string | null,
+      periods: {
+        week: [...(periods.week as string[])],
+        month: [...(periods.month as string[])],
+        quarter: [...(periods.quarter as string[])],
+      },
       conditions: conditions.map((c) => ({
         id: c.id as string,
         name: c.name as string | null,

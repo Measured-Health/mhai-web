@@ -1,80 +1,117 @@
-// The Analysis filters: the periods, the custom range, the condition search
-// and the Source rule. The filters live in React state only (spec §6).
+// The Analysis filters: one finished period, at most two other filters, the
+// condition search and the Source rule. The filters live in React state
+// only (spec §6). Only fixed calendar periods are offered (R41a): finished
+// weeks, months and quarters that core lists as answerable, never a custom
+// range and never several periods at once.
 import type {
   AnalysisFilters,
   ConditionRef,
   FilterOptionsOut,
+  PeriodLevel,
+  PeriodRef,
 } from "../api/analysis-contract";
 import { conditionName } from "./labels";
-import { isDay } from "./read";
 
-export type PeriodId = "30d" | "90d" | "12m" | "custom";
-export type PresetId = Exclude<PeriodId, "custom">;
+/** The answerable periods' first days, per level, oldest first. */
+export type Periods = FilterOptionsOut["periods"];
 
-export const PERIODS: readonly { id: PeriodId; label: string }[] = [
-  { id: "30d", label: "Last 30 days" },
-  { id: "90d", label: "Last 90 days" },
-  { id: "12m", label: "Last 12 months" },
-  { id: "custom", label: "Custom" },
-];
-export const DEFAULT_PERIOD: PresetId = "90d";
-/** The longest custom range, in months. */
-export const RANGE_MAX_MONTHS = 24;
+/** The most filters besides the period (core's `FilterCap`). */
+export const FILTER_CAP = 2;
+export const CAP_REASON =
+  "Up to two filters at a time. Clear one to choose another.";
+export const LOCATION_OR_SETTING =
+  "Choose a ward or clinic, or a location type, not both.";
 
-const DAY_MS = 86_400_000;
-const parse = (d: string) => Date.parse(`${d}T00:00:00Z`);
-const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-const minusDays = (d: string, n: number) => iso(parse(d) - n * DAY_MS);
+const COUNTED = [
+  "condition",
+  "age_band",
+  "sex",
+  "location",
+  "setting",
+  "specialty",
+  "source",
+] as const satisfies readonly (keyof AnalysisFilters)[];
+export type FilterKey = (typeof COUNTED)[number];
 
-/** `d` plus `n` months, the same day or the month's last (29 Feb + 12 months is 28 Feb). */
-function addMonths(d: string, n: number): string {
-  const [y, m, day] = d.split("-").map(Number);
-  const first = new Date(Date.UTC(y, m - 1 + n, 1));
-  const last = new Date(
-    Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0),
-  ).getUTCDate();
-  return iso(
-    Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(day, last)),
-  );
+/** One period, nothing else filtered. */
+export const emptyFilters = (period: PeriodRef): AnalysisFilters => ({
+  period,
+  condition: null,
+  age_band: null,
+  sex: null,
+  location: null,
+  setting: null,
+  specialty: null,
+  source: null,
+});
+
+/** Filters in use, not counting the period: "Filters (2)". */
+export const activeCount = (f: AnalysisFilters) =>
+  COUNTED.filter((k) => f[k] !== null).length;
+
+/**
+ * Why `key` can't be set now, or null. A filter already set can always be
+ * changed or cleared; a third one can't be added, and a ward or clinic
+ * can't go with a location type (core refuses both).
+ */
+export function filterBlocked(
+  f: AnalysisFilters,
+  key: FilterKey,
+): string | null {
+  if (f[key] !== null) return null;
+  if (activeCount(f) >= FILTER_CAP) return CAP_REASON;
+  if (key === "setting" && f.location !== null) return LOCATION_OR_SETTING;
+  if (key === "location" && f.setting !== null) return LOCATION_OR_SETTING;
+  return null;
 }
 
-/** A preset's range: ending `today`, from 30 or 90 days, or 12 months, before. */
-export function rangeFor(
-  preset: PresetId,
-  today: string,
-): { from: string; to: string } {
-  const from =
-    preset === "30d"
-      ? minusDays(today, 30)
-      : preset === "90d"
-        ? minusDays(today, 90)
-        : addMonths(today, -12);
-  return { from, to: today };
-}
-
-/** The last 90 days, nothing else filtered. */
-export function defaultFilters(today: string): AnalysisFilters {
+/**
+ * The filters with any condition, ward or clinic, specialty or source the
+ * period's lists don't have taken out: core refuses an id a period doesn't
+ * list (a condition with fewer than 5 patients there).
+ */
+export function pruneFilters(
+  f: AnalysisFilters,
+  o: FilterOptionsOut,
+): AnalysisFilters {
+  const has = <T>(list: T[], ok: (x: T) => boolean) => list.some(ok);
   return {
-    ...rangeFor(DEFAULT_PERIOD, today),
-    condition: null,
-    age_band: null,
-    sex: null,
-    location: null,
-    setting: null,
-    specialty: null,
-    source: null,
+    ...f,
+    condition:
+      f.condition !== null && has(o.conditions, (c) => c.id === f.condition)
+        ? f.condition
+        : null,
+    location:
+      f.location !== null && has(o.locations, (l) => l.id === f.location)
+        ? f.location
+        : null,
+    specialty:
+      f.specialty !== null && o.specialties.includes(f.specialty)
+        ? f.specialty
+        : null,
+    source:
+      f.source !== null && has(o.sources, (s) => s.id === f.source)
+        ? f.source
+        : null,
   };
 }
 
-/** Why a custom range can't be used, or null. */
-export function customRangeProblem(from: string, to: string): string | null {
-  if (!from || !to) return "Enter both dates";
-  if (!isDay(from) || !isDay(to)) return "Enter real dates";
-  if (from > to) return "The start date must be on or before the end date";
-  if (addMonths(from, RANGE_MAX_MONTHS) < to)
-    return `Choose a range of ${RANGE_MAX_MONTHS} months or less`;
+/** A level's answerable periods, newest first (as the picker lists them). */
+export const periodsOf = (periods: Periods, level: PeriodLevel): PeriodRef[] =>
+  [...periods[level]].reverse().map((start) => ({ level, start }));
+
+/** The latest finished month, else the latest week, else quarter; null when none is ready. */
+export function defaultPeriod(periods: Periods): PeriodRef | null {
+  for (const level of ["month", "week", "quarter"] as const) {
+    const list = periods[level];
+    if (list.length > 0) return { level, start: list[list.length - 1] };
+  }
   return null;
 }
+
+/** The levels that have at least one answerable period. */
+export const levelsOf = (periods: Periods): PeriodLevel[] =>
+  (["week", "month", "quarter"] as const).filter((l) => periods[l].length > 0);
 
 /** The name or the ICD-10 code, any case. An empty search matches all. */
 export function matchCondition(c: ConditionRef, q: string): boolean {
@@ -88,17 +125,3 @@ export function matchCondition(c: ConditionRef, q: string): boolean {
 
 /** The Source filter shows only with more than one source (ADR 0003). */
 export const showSource = (o: FilterOptionsOut) => o.sources.length > 1;
-
-const COUNTED = [
-  "condition",
-  "age_band",
-  "sex",
-  "location",
-  "setting",
-  "specialty",
-  "source",
-] as const satisfies readonly (keyof AnalysisFilters)[];
-
-/** Filters in use, not counting the dates: "Filters (3)". */
-export const activeCount = (f: AnalysisFilters) =>
-  COUNTED.filter((k) => f[k] !== null).length;

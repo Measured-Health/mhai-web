@@ -48,7 +48,8 @@ In short: the screens are built, and most of what's left is wiring them to backe
 
 The frontend uses these on sample data. Each must be built or confirmed in mhai-multiagent, which lists them in its own TODO.md:
 
-- §10 Analysis and clearance letters (hospital side);
+- §10 Analysis: the aggregate views and filters are wired to core 1.17.0 (`GET /analysis/filters`, `GET /analysis/{view}`, mhai-multiagent #141); the patient lists (drill-down, core's PR 5) are still assumed, and show "coming soon" until then;
+- clearance letters (hospital side);
 - §14.10 platform clearances and the switch, including the `today` fields and the revoke refusals;
 - `POST /analysis/patients/named`, and `clearance/me` with `reason`;
 - §14.11 record connections;

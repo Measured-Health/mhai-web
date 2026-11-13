@@ -1,10 +1,11 @@
 "use client";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { READ_RETRY } from "@mhai/api-client/network";
+import { READ_RETRY, retryDelay } from "@mhai/api-client/network";
 import { getAnalysisClient } from "./api/analysis";
 import type {
   AnalysisFilters,
   NamedPatientsIn,
+  PeriodRef,
   ViewId,
   ViewOut,
 } from "./api/analysis-contract";
@@ -19,6 +20,11 @@ import {
   readView,
   type ViewState,
 } from "./analysis/read";
+import {
+  problemOf,
+  shouldRetryAnalysis,
+  type Problem,
+} from "./analysis/states";
 
 /** One patient list behind a shown count (Task 7's panel). */
 export type PatientsQuery = {
@@ -42,8 +48,9 @@ export type NamedQuery = NamedPatientsIn & { idempotencyKey: string };
  */
 export const ANALYSIS_KEYS = {
   all: ["analysis"] as const,
-  filters: ["analysis", "filters"] as const,
-  view: (view: ViewId, f: AnalysisFilters) =>
+  filters: (period: PeriodRef | null) =>
+    ["analysis", "filters", period] as const,
+  view: (view: ViewId, f: AnalysisFilters | null) =>
     ["analysis", "view", view, f] as const,
   patients: (q: PatientsQuery | null) => ["analysis", "patients", q] as const,
   namedAll: ["analysis", "patients", "named"] as const,
@@ -80,48 +87,76 @@ export function hideAllWhenFew<V extends ViewId>(data: ViewOut[V]): ViewOut[V] {
   return data.patients.suppressed ? (hideEvery(data) as ViewOut[V]) : data;
 }
 
-/** The filter options, read and checked. */
-export const useFilterOptions = () =>
+/** Analysis reads: 5xx and network errors retry; `not_ready` and 4xx are shown at once. */
+const ANALYSIS_RETRY = { retry: shouldRetryAnalysis, retryDelay };
+
+/**
+ * The answerable periods and one period's filter lists, read and checked:
+ * the latest finished month's with no period. With `enabled` false, asks
+ * nothing.
+ */
+export const useFilterOptions = (period: PeriodRef | null, enabled = true) =>
   useQuery({
-    queryKey: ANALYSIS_KEYS.filters,
+    queryKey: ANALYSIS_KEYS.filters(period),
     queryFn: async () =>
-      readFilterOptions(await getAnalysisClient().getFilterOptions()),
+      readFilterOptions(
+        await getAnalysisClient().getFilterOptions(period ?? undefined),
+      ),
+    enabled,
     staleTime: 5 * 60_000,
-    ...READ_RETRY,
+    ...ANALYSIS_RETRY,
   });
 
 /**
- * One view for these filters; its data is the reader's `ViewState`, masked
- * when few, with its rows in the fixed order (hidden rows by name).
+ * One view for these filters (null, while the period's lists load, asks
+ * nothing); its data is the reader's `ViewState`, masked when few, with its
+ * rows in the fixed order (hidden rows by name). A reply for any other
+ * period than the one asked fails.
  */
 export function useAnalysisView<V extends ViewId>(
   view: V,
-  filters: AnalysisFilters,
+  filters: AnalysisFilters | null,
 ): UseQueryResult<ViewState<ViewOut[V]>, unknown> {
   return useQuery({
     queryKey: ANALYSIS_KEYS.view(view, filters),
     queryFn: async (): Promise<ViewState<ViewOut[V]>> => {
+      const f = filters!;
       const s = readView(
         view,
-        await getAnalysisClient().getView(view, filters),
+        await getAnalysisClient().getView(view, f),
+        f.period,
       );
       return s.status === "ok"
         ? { status: "ok", data: orderView(view, hideAllWhenFew<V>(s.data)) }
         : s;
     },
-    ...READ_RETRY,
+    enabled: filters !== null,
+    ...ANALYSIS_RETRY,
   });
 }
 
-/** What a view frame shows: the reply, still loading, or waiting to reconnect. */
+/**
+ * What a view frame shows: the reply, still loading, waiting to reconnect,
+ * or a refusal that means something to the person (switched off, still
+ * being prepared, too many new views, a period or filters that can't be
+ * used).
+ */
 export type FrameState<T> =
-  ViewState<T> | { status: "loading" } | { status: "offline" };
+  | ViewState<T>
+  | { status: "loading" }
+  | { status: "offline" }
+  | { status: "problem"; problem: Exclude<Problem, { kind: "failed" }> };
 
 export function frameState<T>(
   q: UseQueryResult<ViewState<T>, unknown>,
 ): FrameState<T> {
   if (q.data) return q.data;
-  if (q.isError) return { status: "failed" };
+  if (q.isError) {
+    const problem = problemOf(q.error);
+    return problem.kind === "failed"
+      ? { status: "failed" }
+      : { status: "problem", problem };
+  }
   if (q.fetchStatus === "paused") return { status: "offline" };
   return { status: "loading" };
 }

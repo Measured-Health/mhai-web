@@ -5,6 +5,7 @@ import type {
   FilterOptionsOut,
   NamedPatientsIn,
   NamedPatientsOut,
+  PeriodRef,
   ViewId,
   ViewOut,
 } from "./analysis-contract";
@@ -15,7 +16,11 @@ import { createMockAnalysis } from "./mock-analysis";
 
 /** The Analysis side's calls. Everything is scoped to one hospital. */
 export interface AnalysisClient {
-  getFilterOptions(): Promise<FilterOptionsOut>;
+  /**
+   * The answerable periods, and one period's filter lists: the latest
+   * finished month's when no period is given (core 1.17.0).
+   */
+  getFilterOptions(period?: PeriodRef): Promise<FilterOptionsOut>;
   getView<V extends ViewId>(view: V, f: AnalysisFilters): Promise<ViewOut[V]>;
   /** The de-identified list, a GET; names are only ever the POST below (Plan 11c). */
   listPatients(q: {

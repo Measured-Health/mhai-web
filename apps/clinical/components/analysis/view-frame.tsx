@@ -1,9 +1,16 @@
 "use client";
-import { ChartColumn, OctagonAlert, Table2, WifiOff } from "lucide-react";
+import {
+  ChartColumn,
+  Hourglass,
+  OctagonAlert,
+  Table2,
+  WifiOff,
+} from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import type { ViewId } from "@/lib/api/analysis-contract";
 import type { FrameState } from "@/lib/analysis-queries";
 import { VIEW_TITLE, failedText } from "@/lib/analysis/labels";
+import { canRetry, problemText, type Problem } from "@/lib/analysis/states";
 import { eventClock } from "@/lib/time";
 import { Button } from "@mhai/ui/button";
 import { cn } from "@mhai/ui/cn";
@@ -75,6 +82,44 @@ function Toggle({
 }
 
 /**
+ * A refusal in plain words: switched off, still being prepared (with Try
+ * again), too many new views (with Try again), or a period or filters that
+ * can't be used. Never a number.
+ */
+export function ProblemNotice({
+  problem,
+  onRetry,
+}: {
+  problem: Exclude<Problem, { kind: "failed" }>;
+  onRetry?: () => void;
+}) {
+  const waiting = problem.kind === "not_ready" || problem.kind === "busy";
+  return (
+    <div
+      role={waiting ? "status" : "alert"}
+      className="card-v3 flex flex-wrap items-center gap-3 p-5 text-[14px]"
+    >
+      {waiting ? (
+        <Hourglass aria-hidden className="size-5 shrink-0 text-ink-3" />
+      ) : (
+        <OctagonAlert aria-hidden className="size-5 shrink-0 text-bad-deep" />
+      )}
+      <span className="flex-1">{problemText(problem)}</span>
+      {onRetry && canRetry(problem) && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="sm:min-h-11"
+          onClick={onRetry}
+        >
+          Try again
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
  * One Analysis view: its title, a one-sentence summary, Chart and Table,
  * and when it was updated. A failed view says only "Couldn't load {view}"
  * with Try again: never a zero, never a stale chart. With no chart and no
@@ -121,7 +166,9 @@ export function ViewFrame({
           </div>
         )}
       </div>
-      {state.status === "failed" ? (
+      {state.status === "problem" ? (
+        <ProblemNotice problem={state.problem} onRetry={onRetry} />
+      ) : state.status === "failed" ? (
         <div
           role="alert"
           className="card-v3 flex flex-wrap items-center gap-3 p-5 text-[14px]"

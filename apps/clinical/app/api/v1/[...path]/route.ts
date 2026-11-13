@@ -1,5 +1,7 @@
+import { z } from "zod";
 import { LETTER_MAX_BYTES } from "@mhai/ui/clearances";
 import { handledFields } from "@/lib/api/alert-handled";
+import { isPeriodStart } from "@/lib/analysis/periods";
 import {
   canOpenNamedAccess,
   canUse,
@@ -270,6 +272,90 @@ const analysisShape = (method: string, [, second, third, ...rest]: string[]) =>
         ? ANALYSIS_VIEWS.has(second ?? "") || second === "named-access"
         : second === "clearance" && third === "me"));
 
+/** The five views core 1.17.0 serves at `GET analysis/{view}`. */
+const CORE_VIEWS = new Set([
+  "prevalence",
+  "affected",
+  "co-occurring",
+  "findings",
+  "quality",
+]);
+const OPAQUE = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
+const ANALYSIS_PERIOD = {
+  period: z.enum(["week", "month", "quarter"]),
+  start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+};
+/** `getAnalysisFilters`: no period (the latest month), or one. */
+const FILTERS_QUERY = z.strictObject({
+  period: ANALYSIS_PERIOD.period.optional(),
+  start: ANALYSIS_PERIOD.start.optional(),
+});
+/** `getAnalysisView`, as the analysis client sends it: one period and its filters. */
+const VIEW_QUERY = z.strictObject({
+  ...ANALYSIS_PERIOD,
+  condition: OPAQUE.optional(),
+  age_band: z.enum(["0-17", "18-39", "40-64", "65-79", "80+"]).optional(),
+  sex: z.enum(["female", "male", "other", "not_recorded"]).optional(),
+  location: OPAQUE.optional(),
+  setting: z.enum(["admitted", "outpatient", "emergency"]).optional(),
+  specialty: z
+    .string()
+    .regex(/^[a-z][a-z_]{1,39}$/)
+    .optional(),
+  source: OPAQUE.optional(),
+});
+const VIEW_FILTERS = [
+  "condition",
+  "age_band",
+  "sex",
+  "location",
+  "setting",
+  "specialty",
+  "source",
+] as const;
+
+/**
+ * The query of an aggregate read (core openapi 1.17.0), checked strictly
+ * before anything goes upstream, with core's own codes: only these keys,
+ * each once (`validation_failed`); exactly one finished calendar period,
+ * named by its level and first day, never a range (`invalid_range`, R41a);
+ * at most two filters (`too_many_filters`), and never a ward or clinic with
+ * a location type (`validation_failed`). Null when the query may go.
+ */
+function analysisQueryProblem(req: Request, path: string[]): string | null {
+  if (req.method !== "GET" || path[0] !== "analysis" || path.length !== 2)
+    return null;
+  const view = path[1]!;
+  if (view !== "filters" && !CORE_VIEWS.has(view)) return null;
+  const query: Record<string, string> = {};
+  for (const [k, v] of new URL(req.url).searchParams) {
+    if (Object.hasOwn(query, k)) return "validation_failed";
+    query[k] = v;
+  }
+  if (view === "filters") {
+    const q = FILTERS_QUERY.safeParse(query);
+    if (!q.success) return "validation_failed";
+    const { period, start } = q.data;
+    if (period === undefined && start === undefined) return null;
+    if (period === undefined || start === undefined) return "invalid_range";
+    return isPeriodStart(period, start) ? null : "invalid_range";
+  }
+  const q = VIEW_QUERY.safeParse(query);
+  if (!q.success)
+    return query.period === undefined ||
+      query.start === undefined ||
+      "from" in query ||
+      "to" in query
+      ? "invalid_range"
+      : "validation_failed";
+  if (!isPeriodStart(q.data.period, q.data.start)) return "invalid_range";
+  const set = VIEW_FILTERS.filter((k) => q.data[k] !== undefined);
+  if (set.length > 2) return "too_many_filters";
+  if (q.data.location !== undefined && q.data.setting !== undefined)
+    return "validation_failed";
+  return null;
+}
+
 const ALERT_ACTIONS = new Set(["acknowledge", "dismiss"]);
 const SENT_TO = new Set(["you", "queue"]);
 
@@ -372,6 +458,9 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   if (!namedGateHolds(path, s.user))
     return json(403, { code: "named_access_off" });
   if (!alertQueryOk(req, path)) return json(400, { code: "invalid" });
+  // An aggregate read's query, checked before anything goes upstream.
+  const queryProblem = analysisQueryProblem(req, path);
+  if (queryProblem) return json(422, { code: queryProblem });
   // A named list records a view: never sent upstream without a valid key.
   const key = req.headers.get("idempotency-key");
   if (

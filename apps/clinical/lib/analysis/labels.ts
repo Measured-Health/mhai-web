@@ -71,7 +71,23 @@ export const SETTING_LABEL: Record<Setting, string> = {
 /** The location type, "Location not recorded" when missing. */
 export const settingText = (s: Setting | null) =>
   s ? SETTING_LABEL[s] : LOCATION_NOT_RECORDED;
-export const specialtyText = (s: string | null) => s ?? SPECIALTY_NOT_RECORDED;
+export const AGE_NOT_RECORDED = "Age not recorded";
+/** The age band, "Age not recorded" when missing. */
+export const ageText = (b: AgeBand | null) =>
+  b ? AGE_LABEL[b] : AGE_NOT_RECORDED;
+
+/** A specialty code as core sends it: "general_medicine". */
+const SPECIALTY_CODE = /^[a-z][a-z_]{1,39}$/;
+/**
+ * A specialty in words: a code reads "General medicine"; anything else is
+ * shown as it is. "Specialty not recorded" when missing.
+ */
+export const specialtyText = (s: string | null) =>
+  s === null
+    ? SPECIALTY_NOT_RECORDED
+    : SPECIALTY_CODE.test(s)
+      ? s[0].toUpperCase() + s.slice(1).replace(/_/g, " ")
+      : s;
 
 /** The condition's name as clinicians know it, or "Not standardised". */
 export const conditionName = (c: ConditionRef) => c.name ?? NOT_STANDARDISED;
