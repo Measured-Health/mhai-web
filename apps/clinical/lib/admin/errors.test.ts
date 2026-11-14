@@ -54,6 +54,27 @@ describe("adminError", () => {
     });
   });
 
+  it("words core's new staff refusals (1.24.0), and 501 as a calm not available yet", () => {
+    expect(adminError(new ApiError(409, "analysis_off")).title).toBe(
+      "Analysis isn't switched on for your hospital",
+    );
+    expect(adminError(new ApiError(409, "analyst_cap")).title).toBe(
+      "Your hospital has all the analysts it can have",
+    );
+    expect(adminError(new ApiError(422, "not_eligible")).body).toMatch(
+      /Clinician role, an active account and two-step/,
+    );
+    expect(adminError(new ApiError(403, "self_change")).body).toMatch(
+      /not give yourself a role/,
+    );
+    expect(adminError(new ApiError(501, "not_implemented"))).toMatchObject({
+      title: "Not available yet",
+      unavailable: true,
+      gone: false,
+      stale: false,
+    });
+  });
+
   it("never shows a backend term", () => {
     const codes = [
       "self_change",
@@ -62,7 +83,10 @@ describe("adminError", () => {
       "not_found",
       "already_decided",
       "not_eligible",
-      "domain_not_allowed",
+      "analysis_off",
+      "analyst_cap",
+      "not_implemented",
+      "validation_failed",
       "rate_limited",
       "forbidden",
       "mfa_required",

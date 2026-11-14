@@ -2,14 +2,12 @@ import type {
   ActivityPageOut,
   ActivityQuery,
   HospitalSettingsOut,
-  InviteIn,
-  InviteOut,
   OversightOut,
   ReviewerOut,
   SettingsPatchIn,
   StaffOut,
   StaffPatchIn,
-  StaffRemoveAuth,
+  StepUpAuth,
   UsageOut,
   UsagePeriod,
 } from "./admin-contract";
@@ -17,45 +15,42 @@ import type { WriteOpts } from "./contract";
 import { createLiveAdminClient } from "./live-admin";
 import { createMockAdmin } from "./mock-admin";
 
-export type StaffAction =
-  | "deactivate"
-  | "reactivate"
-  | "password-reset"
-  | "reset-mfa"
-  | "remind"
-  | "resend-invite";
+/** The account changes core serves (1.24.0); both need a step-up code. */
+export type StaffAction = "deactivate" | "reactivate";
 
-/** The hospital admin side's calls. Everything is scoped to one hospital. */
+/**
+ * The hospital admin side's calls. Everything is scoped to one hospital.
+ * Core answers 501 `not_implemented` for invites, removing a person,
+ * password and two-step resets, the two-step reminder and reviewer
+ * reminders and assignment: the screens say "Not available yet" and never
+ * call them, so they aren't here.
+ */
 export interface AdminClient {
   listStaff(): Promise<StaffOut[]>;
-  inviteStaff(i: InviteIn, opts?: WriteOpts): Promise<InviteOut>;
-  updateStaff(id: string, p: StaffPatchIn, opts?: WriteOpts): Promise<StaffOut>;
+  /** Roles and specialty, with the admin's step-up code. */
+  updateStaff(
+    id: string,
+    p: StaffPatchIn,
+    auth: StepUpAuth,
+    opts?: WriteOpts,
+  ): Promise<StaffOut>;
   staffAction(
     id: string,
     action: StaffAction,
+    auth: StepUpAuth,
     opts?: WriteOpts,
   ): Promise<StaffOut>;
-  /** Needs the admin's two-step code; also cancels an invite. */
-  removeStaff(
-    id: string,
-    auth: StaffRemoveAuth,
-    opts: WriteOpts & { idempotencyKey: string },
-  ): Promise<void>;
   getSettings(): Promise<HospitalSettingsOut>;
+  /** `auth` only when the edit loosens sign-in (`loosensSignIn`). */
   updateSettings(
     p: SettingsPatchIn,
+    auth: StepUpAuth | null,
     opts?: WriteOpts,
   ): Promise<HospitalSettingsOut>;
   getUsage(period: UsagePeriod): Promise<UsageOut>;
   listActivity(q: ActivityQuery): Promise<ActivityPageOut>;
   getOversight(): Promise<OversightOut>;
   listEligibleReviewers(correctionId: string): Promise<ReviewerOut[]>;
-  remindReviewers(correctionId: string, opts?: WriteOpts): Promise<void>;
-  assignReviewer(
-    correctionId: string,
-    staffId: string,
-    opts?: WriteOpts,
-  ): Promise<void>;
 }
 
 let admin: AdminClient | undefined;

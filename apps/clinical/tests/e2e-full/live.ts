@@ -120,7 +120,7 @@ export function recordApi(page: Page): ApiCall[] {
 }
 
 /**
- * Calls core doesn't serve yet (openapi 1.20.0 has no such route), made by
+ * Calls core doesn't serve yet (no such route in the core under test), made by
  * a part of the page that isn't the path under test: printed as GAP, never
  * a failure of the path. Each is listed in docs/live-e2e.md.
  */
@@ -130,10 +130,6 @@ const KNOWN_GAPS: readonly RegExp[] = [
   // The sidebar's Analysis across hospitals status (not in core yet; its
   // timing decides whether the call lands inside a recorded path).
   /^\/api\/v1\/platform\/analysis\/status$/,
-  // The hospital admin's staff list (Alert settings' clinician picker).
-  /^\/api\/v1\/hospital\/staff$/,
-  // The hospital admin's settings, read by the admin pages' frame.
-  /^\/api\/v1\/hospital\/settings$/,
   // Recent actions (a connection's page) and the hospital names it reads.
   /^\/api\/v1\/platform\/activity(\?.*)?$/,
   /^\/api\/v1\/platform\/hospitals$/,

@@ -77,6 +77,7 @@ checked first (`services/emr/scripts/image-check.sh`, mhai-multiagent
 | platform `03-ops`                   | System health and jobs, Usage (analytics)                                                       |
 | platform `04-audit`                 | the audit log and one entry                                                                     |
 | platform `90-reveal`                | the auditor reveal of the analyst's drill-down                                                  |
+| clinical `06-hospital-admin`        | staff and a person's panel, a settings edit with step-up, usage, activity, oversight            |
 | both `00-tour`                      | every page: it renders and no call to the BFF fails                                             |
 
 A call that fails is printed as `API <path>: <status> <method> <url>`: the
@@ -94,10 +95,9 @@ work live:
   reached), notifications (the bell), the sidebar's Analysis across hospitals status, legal holds, settings, team,
   activity, named access, the analytics e-mail setting;
 - hospital admin: staff, hospital settings, activity, usage and review
-  oversight (`/hospital/staff`, `/hospital/settings`, ...). Alert settings
-  works, but its clinician picker reads the staff list;
-- Usage's What changed fails closed while alerts are on (F4, F10 in
-  TODO.md).
+  oversight need core 1.24.0 (mhai-multiagent #163); the screens follow it
+  (`06-hospital-admin`). Invites, removing a person, resets, reminders
+  and reviewer assignment answer 501 and say "Not available yet".
 
 And these have a route in core but no screen yet: patient matches and
 exclusions (`/hospital/patient-matches`, `/hospital/patient-exclusions`),

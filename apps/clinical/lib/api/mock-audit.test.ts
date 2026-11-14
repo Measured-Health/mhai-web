@@ -11,7 +11,7 @@ const event: Omit<ActivityEventOut, "id"> = {
   specialty: null,
   confidence: null,
   device: null,
-  count: 12,
+  count: null,
   flag: null,
 };
 
@@ -21,17 +21,20 @@ describe("sample audit trail", () => {
   it("starts empty and keeps what was recorded, with its own ids", () => {
     expect(auditEvents()).toEqual([]);
     recordAudit(event);
-    recordAudit({ ...event, count: 5 });
+    recordAudit({ ...event, kind: "analysis_named_viewed" });
     const all = auditEvents();
-    expect(all.map((e) => e.count)).toEqual([12, 5]);
+    expect(all.map((e) => e.kind)).toEqual([
+      "analysis_patients_viewed",
+      "analysis_named_viewed",
+    ]);
     expect(new Set(all.map((e) => e.id)).size).toBe(2);
     expect(all[0].id).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 
   it("hands out copies, and resets", () => {
     recordAudit(event);
-    auditEvents()[0].count = 99;
-    expect(auditEvents()[0].count).toBe(12);
+    auditEvents()[0].kind = "changed";
+    expect(auditEvents()[0].kind).toBe("analysis_patients_viewed");
     resetAudit();
     expect(auditEvents()).toEqual([]);
   });

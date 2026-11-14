@@ -53,12 +53,8 @@ describe("describeEvent (R9)", () => {
         "Ran a consultation",
       ],
       [
-        {
-          kind: "signed_in_without_mfa",
-          device: "Chrome on Windows",
-          flag: "policy",
-        },
-        "Signed in without two-step (setup pending) · Chrome on Windows",
+        { kind: "signed_in_without_mfa" },
+        "Signed in without two-step (setup pending)",
       ],
       [
         {
@@ -66,57 +62,16 @@ describe("describeEvent (R9)", () => {
           type: "security",
           actor: null,
           target: who("Dr. Bello"),
-          count: 5,
         },
-        "5 failed sign-ins for Dr. Bello · account locked",
-      ],
-      [
-        { kind: "invite_accepted", type: "account" },
-        "Accepted invite and finished first sign-in",
+        "Too many failed sign-ins for Dr. Bello · account locked",
       ],
       [
         { kind: "deactivated", type: "admin", target: who("Dr. Eze") },
         "Deactivated Dr. Eze",
       ],
       [
-        {
-          kind: "invite_cancelled",
-          type: "admin",
-          target: who("n.ade@havanahospital.org"),
-        },
-        "Cancelled the invite for n.ade@havanahospital.org",
-      ],
-      [
-        {
-          kind: "reviewer_assigned",
-          type: "review",
-          target: who("Dr. Udo"),
-          specialty: "Paediatrics",
-        },
-        "Asked Dr. Udo to review a correction · Paediatrics",
-      ],
-      [
         { kind: "settings_changed", type: "admin" },
         "Changed hospital settings",
-      ],
-      [
-        {
-          kind: "self_role_change",
-          type: "security",
-          actor: who("Grace Nwosu"),
-          target: who("Grace Nwosu"),
-          roles_added: ["clinician"],
-          flag: "alert",
-        },
-        "Gave themselves the Clinician role",
-      ],
-      [
-        {
-          kind: "self_role_change",
-          type: "security",
-          roles_added: ["clinician", "hospital_admin"],
-        },
-        "Gave themselves the Clinician and Hospital admin roles",
       ],
       [
         {
@@ -141,13 +96,8 @@ describe("describeEvent (R9)", () => {
           kind: "analysis_patients_viewed",
           type: "security",
           actor: who("Dr. Kemi Adeyemi"),
-          count: 12,
         },
-        "Dr. Kemi Adeyemi opened 12 de-identified patients in Analysis",
-      ],
-      [
-        { kind: "self_role_change", type: "security", roles_added: [] },
-        "Changed their own roles",
+        "Dr. Kemi Adeyemi opened de-identified patients in Analysis",
       ],
     ];
     for (const [over, text] of cases)
@@ -219,23 +169,12 @@ const KINDS = [
   "correction_approved",
   "correction_rejected",
   "correction_withdrawn",
-  "invite_sent",
-  "invite_cancelled",
-  "invite_accepted",
   "roles_changed",
   "specialty_changed",
-  "reviewer_changed",
   "deactivated",
   "reactivated",
-  "removed",
-  "password_reset_sent",
-  "mfa_reset",
-  "mfa_reminder_sent",
   "settings_changed",
-  "reviewers_reminded",
-  "reviewer_assigned",
   "policy_breach",
-  "self_role_change",
   "analyst_granted",
   "analyst_removed",
   "analysis_patients_viewed",
@@ -323,11 +262,10 @@ describe("the clearance and named-view sentences (Plan 11)", () => {
           kind: "analysis_named_viewed",
           type: "security",
           actor: who("Dr. Kemi Adeyemi"),
-          count: 12,
           flag: "alert",
           purpose: "audit",
         },
-        "Dr. Kemi Adeyemi viewed 12 patients by name in Analysis",
+        "Dr. Kemi Adeyemi viewed patients by name in Analysis",
       ],
     ];
     for (const [over, text] of cases)
@@ -359,8 +297,6 @@ describe("every kind reads as plain words", () => {
           target: who("Dr. Eze"),
           specialty: "Cardiology",
           confidence: "high",
-          device: "Chrome on Windows",
-          count: 3,
         }),
       );
       expect(text.length, kind).toBeGreaterThan(3);
@@ -368,14 +304,6 @@ describe("every kind reads as plain words", () => {
       expect(text, kind).not.toMatch(/_/);
       expect(hits(text), kind).toEqual([]);
     }
-  });
-
-  it("says 'Several' when the failed sign-in count is unknown", () => {
-    expect(
-      describeEvent(
-        makeEvent({ kind: "sign_in_locked", target: who("Dr. Bello") }),
-      ),
-    ).toBe("Several failed sign-ins for Dr. Bello · account locked");
   });
 
   it("keeps every visible label free of forbidden terms", () => {

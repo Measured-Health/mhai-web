@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
 import { DEMO_EMAILS } from "@/lib/auth/mock";
-import { mockAdminAs } from "@/tests/admin";
+import { CODE, mockAdminAs } from "@/tests/admin";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as AdminClient }));
 vi.mock("@/lib/api/admin", () => ({ getAdminClient: () => holder.client }));
@@ -14,9 +14,8 @@ import {
   fetchAllActivity,
   useActivity,
   useHospitalSettings,
-  useInviteStaff,
-  useRemoveStaff,
   useStaff,
+  useStaffAction,
   useUpdateSettings,
   useUpdateStaff,
 } from "./admin-queries";
@@ -34,51 +33,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("admin queries", () => {
   it("lists the staff", async () => {
     const { result } = renderHook(() => useStaff(), { wrapper });
-    await waitFor(() => expect(result.current.data).toHaveLength(14));
-  });
-
-  it("sends one idempotency key per invite, reused on its retry", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0); // shortest retry delay
-    const invite = vi
-      .spyOn(holder.client, "inviteStaff")
-      .mockRejectedValueOnce(new ApiError(503, "error"))
-      .mockResolvedValue({ invited: [], skipped: [] });
-    const { result } = renderHook(() => useInviteStaff(), { wrapper });
-    const i = {
-      emails: ["n.ade@havanahospital.org"],
-      roles: ["clinician" as const],
-      specialty: null,
-    };
-    act(() => result.current.mutate(i));
-    await waitFor(() => expect(result.current.isSuccess).toBe(true), {
-      timeout: 4000,
-    });
-    const keys = invite.mock.calls.map((c) => c[1]?.idempotencyKey);
-    expect(keys).toHaveLength(2);
-    expect(keys[0]).toBeTruthy();
-    expect(keys[1]).toBe(keys[0]);
-    act(() => result.current.mutate(i));
-    await waitFor(() => expect(invite).toHaveBeenCalledTimes(3));
-    expect(invite.mock.calls[2]![1]?.idempotencyKey).not.toBe(keys[0]);
-  });
-
-  it("drops a removed person from the cached list", async () => {
-    const { result } = renderHook(
-      () => ({ staff: useStaff(), remove: useRemoveStaff() }),
-      { wrapper },
-    );
-    await waitFor(() => expect(result.current.staff.data).toHaveLength(14));
-    act(() =>
-      result.current.remove.mutate({
-        id: "s-eze",
-        auth: { mfaCode: "123456" },
-      }),
-    );
-    await waitFor(() =>
-      expect(result.current.staff.data?.some((s) => s.id === "s-eze")).toBe(
-        false,
-      ),
-    );
+    await waitFor(() => expect(result.current.data).toHaveLength(12));
   });
 
   it("a 404 drops the row; a 409 reloads the list (Review Focus 2)", async () => {
@@ -88,7 +43,7 @@ describe("admin queries", () => {
       () => ({ staff: useStaff(), update: useUpdateStaff() }),
       { wrapper },
     );
-    await waitFor(() => expect(result.current.staff.data).toHaveLength(14));
+    await waitFor(() => expect(result.current.staff.data).toHaveLength(12));
     update.mockRejectedValueOnce(new ApiError(404, "not_found"));
     list.mockResolvedValueOnce(
       (await mockAdminAs(DEMO_EMAILS.director).listStaff()).filter(
@@ -99,6 +54,7 @@ describe("admin queries", () => {
       result.current.update.mutate({
         id: "s-bello",
         p: { version: 1, specialty: "Surgery" },
+        auth: CODE,
       }),
     );
     await waitFor(() =>
@@ -112,6 +68,7 @@ describe("admin queries", () => {
       result.current.update.mutate({
         id: "s-okafor",
         p: { version: 0, specialty: "Surgery" },
+        auth: CODE,
       }),
     );
     await waitFor(() => expect(list.mock.calls.length).toBeGreaterThan(before));
@@ -129,7 +86,10 @@ describe("admin queries", () => {
     await waitFor(() => expect(result.current.settings.data).toBeDefined());
     const calls = get.mock.calls.length;
     act(() =>
-      result.current.save.mutate({ version: 0, allow_trust_device: false }),
+      result.current.save.mutate({
+        p: { version: 0, allow_trust_device: false },
+        auth: null,
+      }),
     );
     await waitFor(() => expect(result.current.save.isError).toBe(true));
     await waitFor(() => expect(get.mock.calls.length).toBeGreaterThan(calls));
@@ -155,46 +115,61 @@ describe("admin queries", () => {
     expect(capped.events).toHaveLength(60);
   });
 
-  it("remove sends the code and one key, reused on its retry", async () => {
+  it("a staff action sends the code and one key, reused on its retry", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
-    const rm = vi
-      .spyOn(holder.client, "removeStaff")
-      .mockRejectedValueOnce(new ApiError(503, "error"))
-      .mockResolvedValue(undefined);
-    const { result } = renderHook(() => useRemoveStaff(), { wrapper });
+    const send = vi
+      .spyOn(holder.client, "staffAction")
+      .mockRejectedValueOnce(new ApiError(503, "error"));
+    const { result } = renderHook(() => useStaffAction(), { wrapper });
     act(() =>
-      result.current.mutate({ id: "s-eze", auth: { backupCode: "ABCD-1234" } }),
+      result.current.mutate({
+        id: "s-bello",
+        action: "deactivate",
+        auth: CODE,
+      }),
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true), {
       timeout: 4000,
     });
-    expect(rm.mock.calls[0]![1]).toEqual({ backupCode: "ABCD-1234" });
-    expect(rm.mock.calls[1]![2]?.idempotencyKey).toBe(
-      rm.mock.calls[0]![2]?.idempotencyKey,
+    expect(send.mock.calls[0]!.slice(0, 3)).toEqual([
+      "s-bello",
+      "deactivate",
+      CODE,
+    ]);
+    expect(send.mock.calls[1]![3]?.idempotencyKey).toBe(
+      send.mock.calls[0]![3]?.idempotencyKey,
     );
   });
 
-  it("mutateAsync takes the plain variables and adds a key, like mutate", async () => {
-    const rm = vi.spyOn(holder.client, "removeStaff");
-    const { result } = renderHook(() => useRemoveStaff(), { wrapper });
+  it("a finished staff or settings write leaves no two-step code in the cache", async () => {
+    const a = renderHook(() => useStaffAction(), { wrapper });
     await act(() =>
-      result.current.mutateAsync({ id: "s-eze", auth: { mfaCode: "123456" } }),
+      a.result.current
+        .mutateAsync({ id: "s-bello", action: "deactivate", auth: CODE })
+        .catch(() => {}),
     );
-    expect(rm).toHaveBeenCalledWith(
-      "s-eze",
-      { mfaCode: "123456" },
-      { idempotencyKey: expect.any(String) },
-    );
-  });
-
-  it("a finished removal leaves no two-step code in the cache", async () => {
-    const { result, unmount } = renderHook(() => useRemoveStaff(), {
-      wrapper,
-    });
+    a.unmount();
+    const b = renderHook(() => useUpdateStaff(), { wrapper });
     await act(() =>
-      result.current.mutateAsync({ id: "s-eze", auth: { mfaCode: "123456" } }),
+      b.result.current
+        .mutateAsync({
+          id: "s-okafor",
+          p: { version: 1, specialty: "Surgery" },
+          auth: CODE,
+        })
+        .catch(() => {}),
     );
-    unmount();
+    b.unmount();
+    const c = renderHook(() => useUpdateSettings(), { wrapper });
+    await act(() =>
+      c.result.current
+        .mutateAsync({
+          p: { version: 1, idle_timeout_minutes: 30 },
+          auth: CODE,
+        })
+        .catch(() => {}),
+    );
+    c.unmount();
     await waitFor(() => expect(qc.getMutationCache().getAll()).toEqual([]));
   });
 
@@ -203,24 +178,27 @@ describe("admin queries", () => {
     [403, "mfa_required"],
     [429, "mfa_locked"],
   ])("never retries %s %s and keeps the row", async (status, code) => {
-    const rm = vi
-      .spyOn(holder.client, "removeStaff")
+    const send = vi
+      .spyOn(holder.client, "staffAction")
       .mockRejectedValue(new ApiError(status, code));
     const { result } = renderHook(
-      () => ({ staff: useStaff(), remove: useRemoveStaff() }),
+      () => ({ staff: useStaff(), act: useStaffAction() }),
       { wrapper },
     );
-    await waitFor(() => expect(result.current.staff.data).toHaveLength(14));
+    await waitFor(() => expect(result.current.staff.data).toHaveLength(12));
     act(() =>
-      result.current.remove.mutate({
-        id: "s-eze",
+      result.current.act.mutate({
+        id: "s-bello",
+        action: "deactivate",
         auth: { mfaCode: "000000" },
       }),
     );
-    await waitFor(() => expect(result.current.remove.isError).toBe(true));
-    expect(rm).toHaveBeenCalledTimes(1);
-    expect(result.current.staff.data?.some((s) => s.id === "s-eze")).toBe(true);
-    expect(isMfaRequired(result.current.remove.error)).toBe(
+    await waitFor(() => expect(result.current.act.isError).toBe(true));
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result.current.staff.data?.some((s) => s.id === "s-bello")).toBe(
+      true,
+    );
+    expect(isMfaRequired(result.current.act.error)).toBe(
       code === "mfa_required",
     );
   });

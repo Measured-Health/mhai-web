@@ -6,6 +6,40 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Hospital admin screens follow core's hospital admin routes** (core
+  OpenAPI 1.24.0, mhai-multiagent #163):
+  - Every staff write needs the admin's own two-step code (step-up):
+    saving roles or specialty, deactivating and reactivating. A settings
+    edit that loosens sign-in (two-step for clinicians off, "trust this
+    device" on, a longer idle timeout) asks for the code too; other edits
+    save at once.
+  - An admin can't give themselves a role, Clinician included: the boxes
+    are off on their own row, with the reason. Removing their own
+    Clinician or Analyst role still works; their own hospital admin role
+    stays locked.
+  - Plain words for core's refusals: `self_change`, `last_admin` (an
+    active admin with two-step), `analysis_off`, `analyst_cap`,
+    `not_eligible` and `not_implemented`.
+  - What core doesn't do yet says "Not available yet", calmly, with what
+    to do instead: inviting staff (Measured Health creates accounts),
+    removing a person (deactivate instead), password and two-step resets,
+    the two-step reminder, and reminding or assigning reviewers. The
+    invite dialog and the assign dialog are gone.
+  - Nobody is ever "invited"; reviewing follows the Clinician role and is
+    shown, not edited; "Reviewers must share the specialty" is shown as
+    not available yet.
+  - Usage's patient alerts are core's block: totals by severity, by what
+    happened to them, by who received them and by kind of result, under
+    the small-group rule. The comparisons, chart and top lists core
+    doesn't build are gone, from the screen and the CSV.
+  - Activity shows core's events: no device, count or flag, and no self
+    role change.
+  - Staff, settings, usage and activity replies are read with strict
+    schemas: anything else is a failed read (502), never shown in part.
+  - A live check of these pages (`tests/e2e-full/06-hospital-admin.spec.ts`).
+
 ### Added
 
 - **Analysis drill-down on core's live route** (core openapi 1.19.0,

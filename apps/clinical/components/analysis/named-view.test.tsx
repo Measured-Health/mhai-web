@@ -595,10 +595,11 @@ describe("NamedView", () => {
     await showNames("Audit", undefined, user);
     // What the staff panel's Save sends.
     const kemi = (await admin.listStaff()).find((s) => s.id === "s-kemi")!;
-    await admin.updateStaff("s-kemi", {
-      version: kemi.version,
-      roles: ["clinician"],
-    });
+    await admin.updateStaff(
+      "s-kemi",
+      { version: kemi.version, roles: ["clinician"] },
+      { mfaCode: MOCK_CODE },
+    );
     await act(() => vi.advanceTimersByTimeAsync(30 * SECOND));
     await ended("Your role or account changed.");
   });

@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { ADMIN_NOW as NOW, makeStaff } from "@/tests/admin";
 import {
   LAST_ADMIN,
+  SELF_ADD,
   SIGN_IN_LABEL,
+  STAFF_FILTERS,
   attentionLabel,
   filterStaff,
   guardFor,
-  inviteNote,
   lastActiveLabel,
   policyBroken,
   rolesText,
@@ -19,79 +20,26 @@ const D = 86_400_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 describe("staffState", () => {
-  it("reads status and problems as the four states", () => {
-    expect(staffState(makeStaff(), NOW)).toBe("active");
-    expect(staffState(makeStaff({ issues: ["mfa_not_set_up"] }), NOW)).toBe(
+  it("reads status and problems as the three states (core has no invites)", () => {
+    expect(staffState(makeStaff())).toBe("active");
+    expect(staffState(makeStaff({ issues: ["mfa_not_set_up"] }))).toBe(
       "attention",
     );
     expect(
       staffState(
-        makeStaff({ status: "invited", invite_expires_at: iso(NOW + D) }),
-        NOW,
-      ),
-    ).toBe("invited");
-    expect(
-      staffState(
-        makeStaff({ status: "invited", invite_expires_at: iso(NOW - 1) }),
-        NOW,
-      ),
-    ).toBe("attention");
-    expect(
-      staffState(
-        makeStaff({ status: "invited", issues: ["invite_expired"] }),
-        NOW,
-      ),
-    ).toBe("attention");
-    expect(
-      staffState(
         makeStaff({ status: "deactivated", issues: ["mfa_not_set_up"] }),
-        NOW,
       ),
     ).toBe("deactivated");
   });
 
   it("says what needs attention in words", () => {
-    expect(attentionLabel(makeStaff({ issues: ["mfa_not_set_up"] }), NOW)).toBe(
+    expect(attentionLabel(makeStaff({ issues: ["mfa_not_set_up"] }))).toBe(
       "Two-step not set up",
     );
-    expect(
-      statusText(
-        makeStaff({ status: "invited", issues: ["invite_expired"] }),
-        NOW,
-      ),
-    ).toBe("Invite expired");
-    expect(statusText(makeStaff(), NOW)).toBe("Active");
-    expect(statusText(makeStaff({ status: "deactivated" }), NOW)).toBe(
+    expect(statusText(makeStaff())).toBe("Active");
+    expect(statusText(makeStaff({ status: "deactivated" }))).toBe(
       "Deactivated",
     );
-  });
-
-  it("explains an invite's state", () => {
-    expect(
-      inviteNote(
-        makeStaff({ status: "invited", invite_expires_at: iso(NOW + 5 * D) }),
-        NOW,
-      ),
-    ).toBe("Invite expires in 5 days");
-    expect(
-      inviteNote(
-        makeStaff({
-          status: "invited",
-          invite_expires_at: iso(NOW + 3_600_000),
-        }),
-        NOW,
-      ),
-    ).toBe("Invite expires in 1 day");
-    expect(
-      inviteNote(
-        makeStaff({ status: "invited", invite_expires_at: iso(NOW - D) }),
-        NOW,
-      ),
-    ).toBe("Invite expired. Send a new one.");
-    expect(inviteNote(makeStaff({ status: "invited" }), NOW)).toBe(
-      "Waiting for their first sign-in with their hospital account",
-    );
-    expect(inviteNote(makeStaff(), NOW)).toBeNull();
   });
 });
 
@@ -114,46 +62,37 @@ describe("filters and search", () => {
       issues: ["mfa_not_set_up"],
     }),
     makeStaff({ id: "d", full_name: "Dr. James Eze", status: "deactivated" }),
-    makeStaff({
-      id: "e",
-      full_name: "Dr. Funmi Adeyemi",
-      status: "invited",
-      invite_expires_at: iso(NOW + D),
-    }),
   ];
 
   it("counts each filter", () => {
-    expect(staffCounts(list, NOW)).toEqual({
-      all: 5,
+    expect(staffCounts(list)).toEqual({
+      all: 4,
       active: 2,
-      invited: 1,
       attention: 1,
       deactivated: 1,
     });
+    expect(STAFF_FILTERS.map((f) => f.id)).not.toContain("invited");
   });
 
   it("filters, sorts by name without the title, and ignores accents and case", () => {
-    expect(filterStaff(list, "all", "", NOW).map((s) => s.id)).toEqual([
-      "e",
+    expect(filterStaff(list, "all", "").map((s) => s.id)).toEqual([
       "b",
       "d",
       "c",
       "a",
     ]);
-    expect(filterStaff(list, "active", "", NOW).map((s) => s.id)).toEqual([
+    expect(filterStaff(list, "active", "").map((s) => s.id)).toEqual([
       "b",
       "a",
     ]);
-    expect(filterStaff(list, "all", "zoe abaro", NOW).map((s) => s.id)).toEqual(
-      ["a"],
-    );
-    expect(filterStaff(list, "all", "PAEDI", NOW).map((s) => s.id)).toEqual([
+    expect(filterStaff(list, "all", "zoe abaro").map((s) => s.id)).toEqual([
       "a",
     ]);
-    expect(
-      filterStaff(list, "all", "admin.nwosu", NOW).map((s) => s.id),
-    ).toEqual(["b"]);
-    expect(filterStaff(list, "attention", "zoe", NOW)).toEqual([]);
+    expect(filterStaff(list, "all", "PAEDI").map((s) => s.id)).toEqual(["a"]);
+    expect(filterStaff(list, "all", "admin.nwosu").map((s) => s.id)).toEqual([
+      "b",
+    ]);
+    expect(filterStaff(list, "attention", "zoe")).toEqual([]);
   });
 });
 
@@ -173,10 +112,6 @@ describe("guardFor", () => {
       reason:
         "You can't deactivate your own account. Ask another hospital admin.",
     });
-    expect(guardFor("remove", me, list)).toEqual({
-      ok: false,
-      reason: "You can't remove your own account. Ask another hospital admin.",
-    });
     expect(guardFor("drop_admin", me, list)).toEqual({
       ok: false,
       reason:
@@ -186,17 +121,24 @@ describe("guardFor", () => {
 
   it("keeps the last active admin (Review Focus 4)", () => {
     const solo = [other, clinician];
-    for (const a of ["deactivate", "remove", "drop_admin"] as const)
+    for (const a of ["deactivate", "drop_admin"] as const)
       expect(guardFor(a, other, solo)).toEqual({
         ok: false,
         reason: LAST_ADMIN,
       });
-    // An invited or deactivated admin doesn't count as the one keeping it running.
-    const withInvite = [
+    // As core counts it: an admin without two-step doesn't keep it running.
+    const noTwoStep = [
       other,
-      makeStaff({ id: "i", roles: ["hospital_admin"], status: "invited" }),
+      makeStaff({
+        id: "n",
+        roles: ["hospital_admin"],
+        issues: ["mfa_not_set_up"],
+      }),
     ];
-    expect(guardFor("deactivate", other, withInvite).ok).toBe(false);
+    expect(guardFor("deactivate", other, noTwoStep).ok).toBe(false);
+    expect(guardFor("deactivate", noTwoStep[1]!, noTwoStep)).toEqual({
+      ok: true,
+    });
   });
 
   it("doesn't count a deactivated admin, and lets a non-admin go", () => {
@@ -205,7 +147,7 @@ describe("guardFor", () => {
       roles: ["hospital_admin"],
       status: "deactivated",
     });
-    expect(guardFor("remove", gone, [me, gone])).toEqual({ ok: true });
+    expect(guardFor("deactivate", gone, [me, gone])).toEqual({ ok: true });
     expect(guardFor("drop_admin", clinician, [other, clinician])).toEqual({
       ok: true,
     });
@@ -214,9 +156,13 @@ describe("guardFor", () => {
 
   it("allows the rest", () => {
     expect(guardFor("deactivate", other, [me, other])).toEqual({ ok: true });
-    expect(guardFor("remove", clinician, [me, clinician])).toEqual({
+    expect(guardFor("deactivate", clinician, [me, clinician])).toEqual({
       ok: true,
     });
+  });
+
+  it("explains the self rule in words", () => {
+    expect(SELF_ADD).toMatch(/can't give yourself a role/);
   });
 });
 

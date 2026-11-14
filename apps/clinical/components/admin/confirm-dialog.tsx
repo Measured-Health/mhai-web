@@ -24,6 +24,7 @@ export function ConfirmDialog({
   error,
   offline,
   ready = true,
+  confirmVariant = "danger",
 }: {
   open: boolean;
   title: string;
@@ -37,6 +38,8 @@ export function ConfirmDialog({
   offline: boolean;
   /** False until what the confirmation needs (e.g. a full code) is entered. */
   ready?: boolean;
+  /** A save that isn't destructive confirms with the main button. */
+  confirmVariant?: "danger" | "primary";
 }) {
   const keep = useRef<HTMLButtonElement>(null);
   const can = ready && !busy && !offline;
@@ -71,7 +74,7 @@ export function ConfirmDialog({
           <Button ref={keep} variant="ghost" disabled={busy} onClick={close}>
             {keepLabel}
           </Button>
-          <Button type="submit" variant="danger" disabled={!can}>
+          <Button type="submit" variant={confirmVariant} disabled={!can}>
             {confirmLabel}
           </Button>
         </div>

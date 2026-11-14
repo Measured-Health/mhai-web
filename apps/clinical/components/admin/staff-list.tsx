@@ -92,7 +92,7 @@ export function StaffTable({ rows, now, onOpen }: ListProps) {
                   {s.specialty ?? <Missing label="None" />}
                 </td>
                 <td className="px-4 py-3">
-                  <StaffStatusChip staff={s} now={now} />
+                  <StaffStatusChip staff={s} />
                 </td>
                 <td className="px-4 py-3">
                   {s.sign_in ? (
@@ -145,7 +145,7 @@ export function StaffCards({ rows, now, onOpen }: ListProps) {
           >
             <Who s={s} />
             <span className="flex flex-wrap items-center gap-1.5">
-              <StaffStatusChip staff={s} now={now} />
+              <StaffStatusChip staff={s} />
               <RoleChips roles={s.roles} />
             </span>
             {meta.length > 0 && (

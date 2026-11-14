@@ -5,28 +5,24 @@ import {
   getDemoStepUp,
   type StepUp,
 } from "../auth/mock";
-import { EMAIL_RE } from "../email";
 import type { AdminClient, StaffAction } from "./admin";
-import type {
-  ActivityEventOut,
-  ActivityType,
-  ChangeOut,
-  GuardedOut,
-  HospitalSettingsOut,
-  InviteOut,
-  MeasureOut,
-  OversightItemOut,
-  SignInMethod,
-  StaffIssue,
-  StaffOut,
-  StaffRemoveAuth,
-  StaffRole,
-  StaffStatus,
-  UsageAlertsOut,
-  UsageOut,
-  UsagePeriod,
+import {
+  loosensSignIn,
+  type ActivityEventOut,
+  type ActivityType,
+  type GuardedOut,
+  type HospitalSettingsOut,
+  type OversightItemOut,
+  type SignInMethod,
+  type StaffIssue,
+  type StaffOut,
+  type StaffRole,
+  type StaffStatus,
+  type StepUpAuth,
+  type UsageAlertsOut,
+  type UsageOut,
+  type UsagePeriod,
 } from "./admin-contract";
-import type { AlertLocationOut } from "./alerts-contract";
 import { ApiError } from "./errors";
 import { auditEvents } from "./mock-audit";
 
@@ -35,7 +31,6 @@ export const ACTIVITY_PAGE_SIZE = 50;
 const MIN = 60_000;
 const H = 60 * MIN;
 const D = 24 * H;
-const INVITE_MS = 7 * D;
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const copy = <T>(v: T): T => structuredClone(v);
@@ -53,38 +48,44 @@ type Seed = {
   issues?: StaffIssue[];
   signIn?: SignInMethod | null;
   activeAgo?: number | null;
-  inviteExpiresIn?: number;
-  review?: string[];
 };
+
+/**
+ * Reviewing as core derives it (1.24.0): an active clinician reviews every
+ * specialty; there is no reviewer assignment.
+ */
+const derived = (s: StaffOut): StaffOut => ({
+  ...s,
+  can_review: s.status === "active" && s.roles.includes("clinician"),
+  review_specialties: [],
+});
 
 function person(now: number, p: Seed): StaffOut {
   const status = p.status ?? "active";
-  const review = p.review ?? [];
   const ago = p.activeAgo ?? null;
-  return {
+  return derived({
     id: p.id,
     full_name: p.name,
     display_name: p.display,
     email: p.email,
     roles: p.roles,
     specialty: p.specialty,
-    can_review: review.length > 0,
-    review_specialties: review,
+    can_review: false,
+    review_specialties: [],
     status,
     issues: p.issues ?? [],
-    sign_in:
-      p.signIn !== undefined ? p.signIn : status === "active" ? "sso" : null,
+    sign_in: p.signIn !== undefined ? p.signIn : "sso",
     last_active_at: ago === null ? null : iso(now - ago),
-    joined_at: status === "invited" ? null : iso(now - 200 * D),
-    invited_at: status === "invited" ? iso(now - 2 * D) : null,
-    invite_expires_at:
-      p.inviteExpiresIn === undefined ? null : iso(now + p.inviteExpiresIn),
+    joined_at: iso(now - 200 * D),
+    // Core has no invites.
+    invited_at: null,
+    invite_expires_at: null,
     is_you: false,
     version: 1,
-  };
+  });
 }
 
-/** 14 synthetic people at Havana Hospital. Names are invented. */
+/** 12 synthetic people at Havana Hospital (core has no invites). Names are invented. */
 function seedStaff(now: number): StaffOut[] {
   return [
     {
@@ -95,7 +96,6 @@ function seedStaff(now: number): StaffOut[] {
       roles: ["clinician"],
       specialty: "Internal Medicine",
       activeAgo: 0,
-      review: ["Internal Medicine"],
     },
     {
       id: "s-obi",
@@ -105,7 +105,6 @@ function seedStaff(now: number): StaffOut[] {
       roles: ["clinician", "hospital_admin"],
       specialty: "Emergency medicine",
       activeAgo: 5 * MIN,
-      review: ["Emergency medicine", "Infectious disease"],
     },
     {
       id: "s-nwosu",
@@ -124,7 +123,6 @@ function seedStaff(now: number): StaffOut[] {
       roles: ["clinician"],
       specialty: "Infectious disease",
       activeAgo: 2 * H,
-      review: ["Infectious disease"],
     },
     {
       id: "s-bello",
@@ -135,7 +133,6 @@ function seedStaff(now: number): StaffOut[] {
       specialty: "Internal Medicine",
       signIn: "password_mfa",
       activeAgo: D,
-      review: ["Internal Medicine"],
     },
     {
       id: "s-mensah",
@@ -147,28 +144,6 @@ function seedStaff(now: number): StaffOut[] {
       issues: ["mfa_not_set_up"],
       signIn: "password",
       activeAgo: null,
-      review: ["Cardiology", "Internal Medicine"],
-    },
-    {
-      id: "s-adeyemi",
-      name: "Dr. Funmi Adeyemi",
-      display: "Dr. Adeyemi",
-      email: "f.adeyemi@havanahospital.org",
-      roles: ["clinician"],
-      specialty: "Paediatrics",
-      status: "invited",
-      inviteExpiresIn: 5 * D,
-    },
-    {
-      id: "s-sani",
-      name: "Dr. Halima Sani",
-      display: "Dr. Sani",
-      email: "h.sani@havanahospital.org",
-      roles: ["clinician"],
-      specialty: "Obstetrics",
-      status: "invited",
-      issues: ["invite_expired"],
-      inviteExpiresIn: -D,
     },
     {
       id: "s-eze",
@@ -188,7 +163,6 @@ function seedStaff(now: number): StaffOut[] {
       roles: ["clinician"],
       specialty: "Paediatrics",
       activeAgo: 3 * H,
-      review: ["Paediatrics"],
     },
     {
       id: "s-owusu",
@@ -199,7 +173,6 @@ function seedStaff(now: number): StaffOut[] {
       specialty: "Emergency medicine",
       signIn: "password_mfa",
       activeAgo: 6 * H,
-      review: ["Emergency medicine"],
     },
     {
       id: "s-danjuma",
@@ -209,7 +182,6 @@ function seedStaff(now: number): StaffOut[] {
       roles: ["clinician"],
       specialty: "Internal Medicine",
       activeAgo: 4 * D,
-      review: ["Internal Medicine"],
     },
     {
       id: "s-kemi",
@@ -228,7 +200,6 @@ function seedStaff(now: number): StaffOut[] {
       roles: ["clinician"],
       specialty: "Infectious disease",
       activeAgo: 9 * D,
-      review: ["Infectious disease"],
     },
   ].map((p) => person(now, p as Seed));
 }
@@ -237,12 +208,13 @@ function seedSettings(): HospitalSettingsOut {
   return {
     hospital_name: MOCK_HOSPITAL,
     review_overdue_hours: 4,
-    reviewers_share_specialty: true,
+    // Core has no reviewing by specialty, single sign-on or invites yet.
+    reviewers_share_specialty: false,
     require_mfa_for_clinicians: true,
     idle_timeout_minutes: 15,
     allow_trust_device: true,
-    sso: { status: "connected", domain: "havanahospital.org" },
-    allowed_email_domains: ["havanahospital.org"],
+    sso: { status: "not_set_up", domain: null },
+    allowed_email_domains: [],
     specialties: [
       "Cardiology",
       "Emergency medicine",
@@ -260,7 +232,10 @@ function seedSettings(): HospitalSettingsOut {
   };
 }
 
-const USAGE: Record<UsagePeriod, Omit<UsageOut, "period" | "from" | "to">> = {
+const USAGE: Record<
+  UsagePeriod,
+  Omit<UsageOut, "period" | "from" | "to" | "alerts">
+> = {
   this_month: {
     consultations: 1284,
     active_clinicians: 39,
@@ -321,265 +296,96 @@ function periodRange(
 }
 
 /**
- * The usage alerts sample: switched on, switched off (null), failing, or "edge":
- * the sample with hidden measures (Critical and Urgent, and the Critical
- * median and share computed over them),
- * a measure with nothing to measure yet (the median) and, in a weekly period,
- * a flagged week (with a previous period, so it shows). Never a raw 1 to 4.
+ * The usage alerts sample: switched on, no record source (null), failing, or
+ * "edge": the sample with a hidden set (Critical and Urgent hidden together,
+ * as core's small-group rule hides two so neither can be worked out). Never
+ * a raw 1 to 4.
  */
 export type MockAlertsMode = "on" | "off" | "unavailable" | "edge";
 
 const count = (value: number): GuardedOut => ({ value, suppressed: false });
-const hiddenCount = (): GuardedOut => ({ value: null, suppressed: true });
-const measure = (
-  value: number,
-  change: ChangeOut | null = null,
-): MeasureOut => ({
-  value,
-  suppressed: false,
-  change,
-});
-const up = (amount: number, previous: number): ChangeOut => ({
-  direction: "up",
-  amount,
-  previous,
-});
-const down = (amount: number, previous: number): ChangeOut => ({
-  direction: "down",
-  amount,
-  previous,
-});
-const ward = (name: string): AlertLocationOut => ({
-  kind: "admitted",
-  ward: name,
-  bed: null,
-});
-const CARDIOLOGY: AlertLocationOut = {
-  kind: "outpatient",
-  clinic: "Cardiology clinic",
-};
-const EMERGENCY: AlertLocationOut = { kind: "emergency" };
+const hidden = (): GuardedOut => ({ value: null, suppressed: true });
 
-type SeriesSeed = {
-  bucket: "day" | "week";
-  /** One per bucket from the period's first day. */
-  values: readonly number[];
-  /** Bucket index → about how many times the usual. */
-  unusual?: Readonly<Record<number, number>>;
-};
-type AlertsSeed = Omit<UsageAlertsOut, "series"> & { series: SeriesSeed };
-
-/**
- * Written for 16 Oct 2026 (R12). The server's small-group rule is already
- * applied: hidden groups are null, and where one group in a set is hidden,
- * another is too, so neither can be worked out from the rest.
- */
-const USAGE_ALERTS: Record<UsagePeriod, AlertsSeed> = {
+/** Core's block, already guarded (written for 16 Oct 2026, R12). */
+const USAGE_ALERTS: Record<UsagePeriod, UsageAlertsOut> = {
   this_month: {
-    critical_target_minutes: 15,
-    has_previous: true,
-    total: measure(128, up(35, 95)),
-    by_severity: {
-      critical: measure(17, up(42, 12)),
-      urgent: measure(46, up(21, 38)),
-      info: measure(65, up(44, 45)),
+    total: count(128),
+    by_severity: { critical: count(17), urgent: count(46), info: count(65) },
+    by_category: {
+      blood_chemistry: count(52),
+      blood_count: count(24),
+      kidney_function: count(18),
+      blood_gases_lactate: hidden(),
+      heart_markers: count(9),
+      blood_sugar: count(11),
+      vital_signs: count(10),
+      infection_markers: hidden(),
     },
-    // None was unhandled on the same days last month: no percentage from 0.
-    unhandled: measure(9),
     // One alert can go to both, so these needn't add up to the total.
-    by_route: {
-      queue: measure(97, up(31, 74)),
-      named: measure(58, up(29, 45)),
+    by_route: { queue: count(97), named: count(58) },
+    by_handling: {
+      open: count(9),
+      acknowledged: count(98),
+      dismissed: count(15),
+      withdrawn: count(6),
     },
-    median_ack_minutes: measure(22, up(6, 16)),
-    median_ack_minutes_critical: measure(11, up(3, 8)),
-    critical_within_target: measure(0.71, down(17, 0.88)),
-    acknowledged_share: measure(0.82, down(3, 0.85)),
-    dismissed_share: measure(0.18, up(3, 0.15)),
-    dismiss_reasons: [
-      { reason: "not_relevant", count: count(9) },
-      { reason: "already_known", count: count(7) },
-      { reason: "wrong_patient", count: hiddenCount() },
-      { reason: "other", count: hiddenCount() },
-    ],
-    top_findings: [
-      { name: "Potassium", flag: "low", count: count(31) },
-      { name: "Sodium", flag: "low", count: count(24) },
-      { name: "Platelets", flag: "low", count: count(18) },
-      { name: null, flag: null, count: count(11) },
-      { name: "Haemoglobin", flag: "low", count: hiddenCount() },
-    ],
-    top_locations: [
-      { location: ward("Ward 3"), count: count(34) },
-      { location: EMERGENCY, count: count(29) },
-      { location: ward("Ward 5"), count: count(21) },
-      { location: null, count: count(8) },
-      { location: CARDIOLOGY, count: hiddenCount() },
-    ],
-    series: {
-      bucket: "day",
-      values: [6, 7, 5, 8, 6, 7, 9, 6, 7, 8, 6, 7, 8, 23, 7, 8],
-      unusual: { 13: 3.1 },
-    },
-    rising: [
-      {
-        kind: "finding",
-        name: "Potassium",
-        flag: "low",
-        count: 31,
-        previous: 9,
-      },
-      { kind: "location", location: ward("Ward 3"), count: 34, previous: 12 },
-    ],
-    worsening: { value: 0.71, previous: 0.88 },
   },
   last_month: {
-    critical_target_minutes: 15,
-    has_previous: true,
-    total: measure(182, up(7, 170)),
-    by_severity: {
-      critical: measure(22, down(12, 25)),
-      urgent: measure(70, up(6, 66)),
-      info: measure(90, up(14, 79)),
+    total: count(182),
+    by_severity: { critical: count(22), urgent: count(70), info: count(90) },
+    by_category: {
+      blood_chemistry: count(70),
+      blood_count: count(33),
+      kidney_function: count(25),
+      blood_gases_lactate: count(8),
+      heart_markers: count(12),
+      blood_sugar: count(14),
+      vital_signs: count(13),
+      infection_markers: count(7),
     },
-    unhandled: measure(0),
-    by_route: {
-      queue: measure(139, up(6, 131)),
-      named: measure(76, up(9, 70)),
+    by_route: { queue: count(139), named: count(76) },
+    by_handling: {
+      open: count(0),
+      acknowledged: count(149),
+      dismissed: count(28),
+      withdrawn: count(5),
     },
-    median_ack_minutes: measure(16, down(2, 18)),
-    median_ack_minutes_critical: measure(8, down(1, 9)),
-    critical_within_target: measure(0.88, up(2, 0.86)),
-    acknowledged_share: measure(0.82, up(2, 0.8)),
-    dismissed_share: measure(0.18, down(2, 0.2)),
-    dismiss_reasons: [
-      { reason: "not_relevant", count: count(14) },
-      { reason: "already_known", count: count(11) },
-      // Both are hidden so neither can be worked out.
-      { reason: "wrong_patient", count: hiddenCount() },
-      { reason: "other", count: hiddenCount() },
-    ],
-    top_findings: [
-      { name: "Sodium", flag: "low", count: count(41) },
-      { name: "Platelets", flag: "low", count: count(33) },
-      { name: "Potassium", flag: "low", count: count(14) },
-      { name: null, flag: null, count: count(12) },
-      { name: "Glucose", flag: "high", count: count(9) },
-    ],
-    top_locations: [
-      { location: EMERGENCY, count: count(52) },
-      { location: ward("Ward 5"), count: count(40) },
-      { location: ward("Ward 3"), count: count(22) },
-      { location: null, count: count(10) },
-      { location: CARDIOLOGY, count: hiddenCount() },
-    ],
-    series: {
-      bucket: "day",
-      values: [
-        6, 7, 5, 6, 7, 6, 5, 6, 7, 6, 6, 7, 5, 6, 7, 6, 5, 6, 7, 6, 6, 7, 5, 6,
-        7, 6, 5, 6, 7, 5,
-      ],
-    },
-    rising: [],
-    worsening: null,
   },
   last_90_days: {
-    critical_target_minutes: 15,
-    has_previous: false,
-    total: measure(525),
-    by_severity: {
-      critical: measure(63),
-      urgent: measure(189),
-      info: measure(273),
+    total: count(525),
+    by_severity: { critical: count(63), urgent: count(189), info: count(273) },
+    by_category: {
+      blood_chemistry: count(201),
+      blood_count: count(96),
+      kidney_function: count(71),
+      blood_gases_lactate: count(22),
+      heart_markers: count(35),
+      blood_sugar: count(40),
+      vital_signs: count(38),
+      infection_markers: count(22),
     },
-    unhandled: measure(9),
-    by_route: { queue: measure(402), named: measure(221) },
-    median_ack_minutes: measure(19),
-    median_ack_minutes_critical: measure(10),
-    critical_within_target: measure(0.8),
-    acknowledged_share: measure(0.82),
-    dismissed_share: measure(0.18),
-    dismiss_reasons: [
-      { reason: "not_relevant", count: count(40) },
-      { reason: "already_known", count: count(33) },
-      { reason: "wrong_patient", count: count(6) },
-      { reason: "other", count: count(12) },
-    ],
-    top_findings: [
-      { name: "Sodium", flag: "low", count: count(110) },
-      { name: "Platelets", flag: "low", count: count(86) },
-      { name: "Potassium", flag: "low", count: count(64) },
-      { name: null, flag: null, count: count(41) },
-      { name: "Glucose", flag: "high", count: count(30) },
-    ],
-    top_locations: [
-      { location: EMERGENCY, count: count(150) },
-      { location: ward("Ward 5"), count: count(118) },
-      { location: ward("Ward 3"), count: count(80) },
-      { location: null, count: count(34) },
-      { location: CARDIOLOGY, count: count(21) },
-    ],
-    series: {
-      bucket: "week",
-      values: [38, 41, 36, 40, 39, 42, 37, 44, 40, 43, 41, 45, 39],
+    by_route: { queue: count(402), named: count(221) },
+    by_handling: {
+      open: count(9),
+      acknowledged: count(425),
+      dismissed: count(77),
+      withdrawn: count(14),
     },
-    rising: [],
-    worsening: null,
   },
 };
 
-/** Buckets from the period's first day, never past its end (R12). */
-function seriesFor(
-  seed: SeriesSeed,
-  from: string,
-  to: string,
-): UsageAlertsOut["series"] {
-  const step = seed.bucket === "day" ? D : 7 * D;
-  const first = Date.parse(`${from.slice(0, 10)}T00:00:00.000Z`);
-  const end = Date.parse(to);
-  const points = seed.values.flatMap((total, i) => {
-    const t = first + i * step;
-    return t > end
-      ? []
-      : [
-          {
-            start: iso(t).slice(0, 10),
-            total,
-            usual_multiple: seed.unusual?.[i] ?? null,
-          },
-        ];
-  });
-  return { bucket: seed.bucket, points };
-}
-
-function alertsFor(
-  p: UsagePeriod,
-  range: { from: string; to: string },
-  mode: MockAlertsMode,
-): UsageOut["alerts"] {
+function alertsFor(p: UsagePeriod, mode: MockAlertsMode): UsageOut["alerts"] {
   if (mode === "off") return null;
   if (mode === "unavailable") return { unavailable: true };
-  const { series, ...rest } = copy(USAGE_ALERTS[p]);
+  const a = copy(USAGE_ALERTS[p]);
   if (mode === "edge") {
-    // Two severities hidden together, so neither can be worked out.
-    rest.by_severity.critical = { ...hiddenCount(), change: null };
-    rest.by_severity.urgent = { ...hiddenCount(), change: null };
-    rest.median_ack_minutes_critical = { ...hiddenCount(), change: null };
-    rest.median_ack_minutes = { value: null, suppressed: false, change: null };
-    // A share over the hidden Critical group is hidden too, and so is its
-    // worsening flag ("down from 88%" would be a share of fewer than 5).
-    rest.critical_within_target = { ...hiddenCount(), change: null };
-    rest.worsening = null;
-    // Few were sent to named clinicians: hidden, like any small group.
-    if (rest.by_route) rest.by_route.named = { ...hiddenCount(), change: null };
-    if (series.bucket === "week") {
-      // The weekly period gets a previous one, or its flagged week and What
-      // changed line would never show.
-      rest.has_previous = true;
-      series.unusual = { 11: 2.1 };
-    }
+    // Two severities hidden together, so neither can be worked out; few
+    // were sent to named clinicians: hidden, like any small group.
+    a.by_severity.critical = hidden();
+    a.by_severity.urgent = hidden();
+    a.by_route.named = hidden();
   }
-  return { ...rest, series: seriesFor(series, range.from, range.to) };
+  return a;
 }
 
 type EventSeed = Partial<ActivityEventOut> &
@@ -603,7 +409,7 @@ function event(now: number, n: number, e: EventSeed): ActivityEventOut {
 
 const who = (display_name: string) => ({ display_name });
 
-/** About 130 events over 60 days, newest first. */
+/** About 130 events over 60 days, newest first, as core words them (1.24.0). */
 function seedActivity(now: number): ActivityEventOut[] {
   const named: EventSeed[] = [
     {
@@ -626,30 +432,18 @@ function seedActivity(now: number): ActivityEventOut[] {
       type: "consultation",
       kind: "consultation_run",
       actor: who("Dr. Bello"),
-      specialty: "Internal Medicine",
-      confidence: "caution",
     },
     {
       ago: 31 * MIN,
       type: "sign_in",
       kind: "signed_in_without_mfa",
       actor: who("Dr. Mensah"),
-      device: "Chrome on Windows",
-      flag: "policy",
-    },
-    {
-      ago: 49 * MIN,
-      type: "account",
-      kind: "invite_accepted",
-      actor: who("Dr. Udo"),
     },
     {
       ago: 56 * MIN,
       type: "security",
       kind: "sign_in_locked",
       target: who("Dr. Bello"),
-      count: 5,
-      flag: "alert",
     },
     {
       ago: 71 * MIN,
@@ -663,15 +457,12 @@ function seedActivity(now: number): ActivityEventOut[] {
       type: "sign_in",
       kind: "signed_in",
       actor: who("Dr. Reyes"),
-      device: "Safari on iPhone",
     },
     {
       ago: 3 * H,
       type: "consultation",
       kind: "consultation_run",
       actor: who("Dr. Okafor"),
-      specialty: "Infectious disease",
-      confidence: "high",
     },
     {
       ago: 5 * H,
@@ -685,15 +476,6 @@ function seedActivity(now: number): ActivityEventOut[] {
       type: "consultation",
       kind: "consultation_run",
       actor: who("Dr. Danjuma"),
-      specialty: "Internal Medicine",
-      confidence: "review",
-    },
-    {
-      ago: 2 * D,
-      type: "admin",
-      kind: "invite_sent",
-      actor: who("Dr. Obi"),
-      target: who("Dr. Adeyemi"),
     },
     {
       ago: 3 * D,
@@ -740,7 +522,6 @@ function seedActivity(now: number): ActivityEventOut[] {
     type: "sign_in",
     kind: "signed_in",
     actor: who(people[i % people.length]!),
-    device: i % 2 ? "Chrome on Windows" : "Safari on iPhone",
   }));
   return [...named, ...routine]
     .sort((a, b) => a.ago - b.ago)
@@ -786,9 +567,14 @@ function seedCorrections(now: number): Correction[] {
   ];
 }
 
+/** The demo's cap on analysts per hospital (core's is the hospital's own setting). */
+export const MOCK_ANALYST_CAP = 3;
+
 /**
  * The demo's hospital admin API: one hospital, memory only (a reload resets
- * it), never stored. It enforces the same guards the backend must (R5, R7).
+ * it), never stored. It enforces the guards core does (1.24.0), in core's
+ * order: the refusals that need no code first, then the step-up code, then
+ * the Analyst rules (migration 00030).
  */
 export function createMockAdmin({
   now = () => Date.now(),
@@ -797,6 +583,8 @@ export function createMockAdmin({
   twoStep,
   stepUp,
   alerts: alertsMode = "on",
+  analysis = "on",
+  analystCap = MOCK_ANALYST_CAP,
 }: {
   now?: () => number;
   me?: () => Promise<string | null>;
@@ -812,8 +600,12 @@ export function createMockAdmin({
    * spent at sign-in is spent here too); a fresh set when `me` is given.
    */
   stepUp?: StepUp;
-  /** The usage alerts sample: on (default), switched off, or failing. */
+  /** The usage alerts sample: on (default), no record source, or failing. */
   alerts?: MockAlertsMode;
+  /** Whether Analysis is switched on for the hospital (`analysis_off` when not). */
+  analysis?: "on" | "off";
+  /** How many analysts the hospital may have (`analyst_cap` past it). */
+  analystCap?: number;
 } = {}): AdminClient {
   let staff = seedStaff(now());
   let settings = seedSettings();
@@ -855,13 +647,18 @@ export function createMockAdmin({
     staff.find((s) => s.id === id) ?? fail(404, "not_found");
   const isYou = async (s: StaffOut) =>
     s.email.toLowerCase() === (await youEmail());
+  /** Core counts only active admins with two-step on. */
   const activeAdmins = () =>
     staff.filter(
-      (s) => s.status === "active" && s.roles.includes("hospital_admin"),
+      (s) =>
+        s.status === "active" &&
+        s.roles.includes("hospital_admin") &&
+        !s.issues.includes("mfa_not_set_up"),
     ).length;
   const isLastAdmin = (s: StaffOut) =>
     s.status === "active" &&
     s.roles.includes("hospital_admin") &&
+    !s.issues.includes("mfa_not_set_up") &&
     activeAdmins() <= 1;
   const actorName = async () => {
     const email = await youEmail();
@@ -887,14 +684,15 @@ export function createMockAdmin({
     ];
   };
   const save = (s: StaffOut): StaffOut => {
-    const next = { ...s, version: s.version + 1 };
+    const next = derived({ ...s, version: s.version + 1 });
     staff = staff.map((x) => (x.id === s.id ? next : x));
     return next;
   };
-  /** The two-step gate for removing staff (403 mfa_required / mfa_invalid, 429 mfa_locked). */
-  const checkCode = async (auth: StaffRemoveAuth) => {
+  /** The step-up gate (403 mfa_required / mfa_invalid, 429 mfa_locked). */
+  const checkCode = async (auth: StepUpAuth | null) => {
     if (!(await hasTwoStep(await youEmail()))) fail(403, "mfa_required");
-    const r = await codes().check(await youEmail(), auth);
+    if (!auth) fail(403, "mfa_required");
+    const r = await codes().check(await youEmail(), auth!);
     if (r === "locked") fail(429, "mfa_locked");
     if (r === "invalid") fail(403, "mfa_invalid");
   };
@@ -902,13 +700,7 @@ export function createMockAdmin({
 
   const reviewersFor = (c: Correction) =>
     staff.filter(
-      (s) =>
-        s.status === "active" &&
-        s.roles.includes("clinician") &&
-        s.can_review &&
-        s.id !== c.suggesterId &&
-        (!settings.reviewers_share_specialty ||
-          (c.specialty !== null && s.review_specialties.includes(c.specialty))),
+      (s) => s.status === "active" && s.can_review && s.id !== c.suggesterId,
     );
   const findCorrection = (id: string) =>
     corrections.find((c) => c.id === id) ?? fail(404, "not_found");
@@ -919,183 +711,94 @@ export function createMockAdmin({
       return mark(staff);
     },
 
-    async inviteStaff({ emails, roles, specialty }) {
-      await wait();
-      const out: InviteOut = { invited: [], skipped: [] };
-      const seen = new Set<string>();
-      const domains = settings.allowed_email_domains;
-      for (const raw of emails) {
-        const email = raw.trim().toLowerCase();
-        const skip = (reason: InviteOut["skipped"][number]["reason"]) =>
-          out.skipped.push({
-            email: reason === "invalid_email" ? raw : email,
-            reason,
-          });
-        if (!EMAIL_RE.test(email)) {
-          skip("invalid_email");
-          continue;
-        }
-        if (seen.has(email)) {
-          skip("duplicate");
-          continue;
-        }
-        seen.add(email);
-        if (staff.some((s) => s.email.toLowerCase() === email)) {
-          skip("already_staff");
-          continue;
-        }
-        if (domains.length && !domains.includes(email.split("@")[1]!)) {
-          skip("domain_not_allowed");
-          continue;
-        }
-        const row: StaffOut = {
-          ...person(now(), {
-            id: `s-new-${nextId++}`,
-            name: email,
-            display: email,
-            email,
-            roles: [...roles],
-            specialty,
-            status: "invited",
-          }),
-          invite_expires_at:
-            settings.sso.status === "connected" ? null : iso(now() + INVITE_MS),
-        };
-        staff = [...staff, row];
-        out.invited.push(row);
-        await log("admin", "invite_sent", { target: who(email) });
-      }
-      return { invited: await mark(out.invited), skipped: out.skipped };
-    },
-
-    async updateStaff(id, p) {
+    async updateStaff(id, p, auth) {
       await wait();
       const s = find(id);
-      if (p.version !== s.version) fail(409, "conflict");
       if (p.roles) {
-        if (!p.roles.length) fail(422, "invalid");
+        if (!p.roles.length || new Set(p.roles).size !== p.roles.length)
+          fail(422, "validation_failed");
+        // Analyst needs Clinician.
         if (p.roles.includes("analyst") && !p.roles.includes("clinician"))
-          fail(422, "invalid");
-        const drops = !p.roles.includes("hospital_admin");
-        if (drops && s.roles.includes("hospital_admin")) {
-          if (await isYou(s)) fail(403, "self_change");
-          if (isLastAdmin(s)) fail(409, "last_admin");
-        }
+          fail(422, "not_eligible");
       }
-      const self = !!p.roles && (await isYou(s));
-      const had = s.roles.includes("analyst");
-      const has = !!p.roles?.includes("analyst");
-      const analystChange: "analyst_granted" | "analyst_removed" | null =
-        p.roles && had !== has
-          ? has
-            ? "analyst_granted"
-            : "analyst_removed"
-          : null;
-      const others = p.roles
-        ? [...new Set([...s.roles, ...p.roles])].filter(
-            (r) =>
-              r !== "analyst" && s.roles.includes(r) !== p.roles!.includes(r),
-          )
-        : [];
+      if (p.version !== s.version) fail(409, "conflict");
+      const roles = p.roles ?? s.roles;
+      const added = roles.filter((r) => !s.roles.includes(r));
+      const removed = s.roles.filter((r) => !roles.includes(r));
+      const you = await isYou(s);
+      // No role added to yourself, Clinician included; never drop your own admin role.
+      if (you && (added.length || removed.includes("hospital_admin")))
+        fail(403, "self_change");
+      if (removed.includes("hospital_admin") && isLastAdmin(s))
+        fail(409, "last_admin");
+      const specialty =
+        p.specialty !== undefined && p.specialty !== s.specialty;
+      // An edit that changes nothing answers the person without a code.
+      if (!added.length && !removed.length && !specialty) return reply(s);
+      await checkCode(auth);
+      if (added.includes("analyst")) {
+        if (analysis === "off") fail(409, "analysis_off");
+        if (
+          s.status !== "active" ||
+          s.issues.includes("mfa_not_set_up") ||
+          !roles.includes("clinician")
+        )
+          fail(422, "not_eligible");
+        if (
+          staff.filter((x) => x.roles.includes("analyst")).length >= analystCap
+        )
+          fail(409, "analyst_cap");
+      }
+      // Removing Clinician removes Analyst.
       const next = save({
         ...s,
-        ...(p.roles ? { roles: [...p.roles] } : {}),
+        roles: roles.includes("clinician")
+          ? [...roles]
+          : roles.filter((r) => r !== "analyst"),
         ...(p.specialty !== undefined ? { specialty: p.specialty } : {}),
-        ...(p.can_review !== undefined ? { can_review: p.can_review } : {}),
-        ...(p.review_specialties
-          ? { review_specialties: [...p.review_specialties] }
-          : {}),
       });
       const target = who(s.display_name);
-      // Allowed, but audited and flagged (product decision, 2026-10-17).
-      if (self)
-        await log("security", "self_role_change", {
+      const had = s.roles.includes("analyst");
+      const has = next.roles.includes("analyst");
+      const others = [...added, ...removed].filter((r) => r !== "analyst");
+      if (others.length) await log("admin", "roles_changed", { target });
+      if (had !== has)
+        await log("admin", has ? "analyst_granted" : "analyst_removed", {
           target,
-          flag: "alert",
-          roles_added: (p.roles ?? []).filter((r) => !s.roles.includes(r)),
         });
-      else if (p.roles && !analystChange)
-        await log("admin", "roles_changed", { target });
-      if (p.roles && analystChange)
-        await log("admin", analystChange, { target });
-      if (p.roles && analystChange && others.length && !self)
-        await log("admin", "roles_changed", { target });
-      if (p.specialty !== undefined)
+      if (specialty)
         await log("admin", "specialty_changed", {
           target,
-          specialty: p.specialty,
+          specialty: p.specialty ?? null,
         });
-      if (p.can_review !== undefined || p.review_specialties)
-        await log("admin", "reviewer_changed", { target });
       return reply(next);
     },
 
-    async staffAction(id, action: StaffAction) {
+    async staffAction(id, action: StaffAction, auth) {
       await wait();
       const s = find(id);
       const target = who(s.display_name);
-      const passwordUser = s.status === "active" && s.sign_in !== "sso";
-      switch (action) {
-        case "deactivate": {
-          if (await isYou(s)) fail(403, "self_change");
-          if (s.status !== "active") fail(409, "conflict");
-          if (isLastAdmin(s)) fail(409, "last_admin");
-          await log("admin", "deactivated", { target });
-          return reply(save({ ...s, status: "deactivated" }));
-        }
-        case "reactivate": {
-          if (s.status !== "deactivated") fail(409, "conflict");
-          await log("admin", "reactivated", { target });
-          return reply(save({ ...s, status: "active" }));
-        }
-        case "password-reset": {
-          if (!passwordUser) fail(409, "conflict");
-          await log("admin", "password_reset_sent", { target });
-          return reply(save(s));
-        }
-        case "reset-mfa": {
-          if (!passwordUser) fail(409, "conflict");
-          await log("admin", "mfa_reset", { target });
-          return reply(
-            save({
-              ...s,
-              sign_in: "password",
-              issues: [...new Set<StaffIssue>([...s.issues, "mfa_not_set_up"])],
-            }),
-          );
-        }
-        case "remind": {
-          if (!s.issues.includes("mfa_not_set_up")) fail(409, "conflict");
-          await log("admin", "mfa_reminder_sent", { target });
-          return reply(save(s));
-        }
-        case "resend-invite": {
-          if (s.status !== "invited") fail(409, "conflict");
-          await log("admin", "invite_sent", { target });
-          return reply(
-            save({
-              ...s,
-              issues: s.issues.filter((i) => i !== "invite_expired"),
-              invited_at: iso(now()),
-              invite_expires_at: iso(now() + INVITE_MS),
-            }),
-          );
-        }
-      }
-    },
-
-    async removeStaff(id, auth) {
-      await wait();
-      const s = find(id);
       if (await isYou(s)) fail(403, "self_change");
-      if (isLastAdmin(s)) fail(409, "last_admin");
+      if (action === "deactivate") {
+        if (s.status !== "active") fail(409, "conflict");
+        if (isLastAdmin(s)) fail(409, "last_admin");
+        await checkCode(auth);
+        await log("admin", "deactivated", { target });
+        if (s.roles.includes("analyst"))
+          await log("admin", "analyst_removed", { target });
+        // Analyst ends with the account: reactivating needs a fresh grant.
+        return reply(
+          save({
+            ...s,
+            status: "deactivated",
+            roles: s.roles.filter((r) => r !== "analyst"),
+          }),
+        );
+      }
+      if (s.status !== "deactivated") fail(409, "conflict");
       await checkCode(auth);
-      staff = staff.filter((x) => x.id !== id);
-      await log(
-        "admin",
-        s.status === "invited" ? "invite_cancelled" : "removed",
-        { target: who(s.display_name) },
-      );
+      await log("admin", "reactivated", { target });
+      return reply(save({ ...s, status: "active" }));
     },
 
     async getSettings() {
@@ -1103,9 +806,8 @@ export function createMockAdmin({
       return copy(settings);
     },
 
-    async updateSettings(p) {
+    async updateSettings(p, auth) {
       await wait();
-      if (p.version !== settings.version) fail(409, "conflict");
       if (
         (p.review_overdue_hours !== undefined &&
           !settings.limits.review_overdue_hours.includes(
@@ -1114,10 +816,17 @@ export function createMockAdmin({
         (p.idle_timeout_minutes !== undefined &&
           !settings.limits.idle_timeout_minutes.includes(
             p.idle_timeout_minutes,
-          ))
+          )) ||
+        ("reviewers_share_specialty" in p &&
+          (p as { reviewers_share_specialty?: boolean })
+            .reviewers_share_specialty !== false)
       )
-        fail(422, "invalid");
-      settings = { ...settings, ...p, version: settings.version + 1 };
+        fail(422, "validation_failed");
+      if (p.version !== settings.version) fail(409, "conflict");
+      if (loosensSignIn(settings, p)) await checkCode(auth);
+      const { version: _v, ...changes } = p;
+      void _v;
+      settings = { ...settings, ...changes, version: settings.version + 1 };
       await log("admin", "settings_changed");
       return copy(settings);
     },
@@ -1129,7 +838,7 @@ export function createMockAdmin({
         period,
         ...range,
         ...copy(USAGE[period]),
-        alerts: alertsFor(period, range, alertsMode),
+        alerts: alertsFor(period, alertsMode),
       };
     },
 
@@ -1170,14 +879,15 @@ export function createMockAdmin({
 
     async getOversight() {
       await wait();
+      // Core has no reviewer assignment or reminders.
       const items: OversightItemOut[] = corrections.map((c) => ({
         id: c.id,
         ref: c.ref,
         suggested_by: copy(c.suggested_by),
         specialty: c.specialty,
         submitted_at: c.submitted_at,
-        assigned_to: c.assigned_to ? copy(c.assigned_to) : null,
-        reminded_at: c.reminded_at,
+        assigned_to: null,
+        reminded_at: null,
         eligible_reviewers: reviewersFor(c).length,
       }));
       const reviewers = settings.specialties
@@ -1187,7 +897,7 @@ export function createMockAdmin({
             (s) =>
               s.status === "active" &&
               s.can_review &&
-              s.review_specialties.includes(specialty),
+              s.specialty === specialty,
           ).length,
         }))
         .sort((a, b) => b.reviewers - a.reviewers);
@@ -1208,25 +918,6 @@ export function createMockAdmin({
         display_name: s.display_name,
         specialty: s.specialty,
       }));
-    },
-
-    async remindReviewers(id) {
-      await wait();
-      const c = findCorrection(id);
-      c.reminded_at = iso(now());
-      await log("review", "reviewers_reminded", { specialty: c.specialty });
-    },
-
-    async assignReviewer(id, staffId) {
-      await wait();
-      const c = findCorrection(id);
-      const r = reviewersFor(c).find((s) => s.id === staffId);
-      if (!r) fail(422, "not_eligible");
-      c.assigned_to = who(r!.display_name);
-      await log("review", "reviewer_assigned", {
-        target: who(r!.display_name),
-        specialty: c.specialty,
-      });
     },
   };
 }

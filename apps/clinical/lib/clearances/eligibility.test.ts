@@ -48,7 +48,7 @@ describe("eligibility", () => {
     expect(
       eligibility(
         staff({
-          status: "invited",
+          status: "deactivated",
           roles: ["clinician"],
           issues: ["mfa_not_set_up"],
         }),

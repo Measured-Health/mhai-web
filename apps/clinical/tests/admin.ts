@@ -6,7 +6,12 @@ import type {
   UsagePeriod,
 } from "@/lib/api/admin-contract";
 import { createMockAdmin, type MockAlertsMode } from "@/lib/api/mock-admin";
-import { DEMO_EMAILS } from "@/lib/auth/mock";
+import { DEMO_EMAILS, MOCK_CODE } from "@/lib/auth/mock";
+
+type MockOpts = NonNullable<Parameters<typeof createMockAdmin>[0]>;
+
+/** The demo's step-up code, as the admin client sends it. */
+export const CODE = { mfaCode: MOCK_CODE } as const;
 
 /** The sample hospital's clock in tests: 16 Oct 2026, 10:00 UTC. */
 export const ADMIN_NOW = Date.UTC(2026, 9, 16, 10, 0, 0);
@@ -54,16 +59,22 @@ export function makeEvent(
 }
 
 /** The sample hospital, instant, at ADMIN_NOW, with `email` as "you". */
-export const mockAdminAs = (email: string | null): AdminClient =>
+export const mockAdminAs = (
+  email: string | null,
+  o: MockOpts = {},
+): AdminClient =>
   createMockAdmin({
     now: () => ADMIN_NOW,
     me: async () => email,
     delayMs: 0,
+    ...o,
   });
 
 /** The same on the real clock, for screens (they read `Date.now()`). */
-export const screenAdminAs = (email: string | null): AdminClient =>
-  createMockAdmin({ me: async () => email, delayMs: 0 });
+export const screenAdminAs = (
+  email: string | null,
+  o: MockOpts = {},
+): AdminClient => createMockAdmin({ me: async () => email, delayMs: 0, ...o });
 
 /** The sample hospital at ADMIN_NOW with its alerts on, off or failing. */
 export const mockAdminWith = (

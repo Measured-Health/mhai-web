@@ -9,9 +9,14 @@ import { ENDS_NAMED } from "@/lib/clearances/summary";
 import { dayAfter, sampleClients } from "@/tests/clearances";
 import { DEMO_EMAILS, MOCK_CODE } from "@/lib/auth/mock";
 import { ApiError } from "@/lib/api/errors";
-import { LAST_ADMIN } from "@/lib/admin/staff";
-import { screenAdminAs } from "@/tests/admin";
-import { DIRECTOR, HOSPITAL_ADMIN, renderAdmin } from "@/tests/admin-render";
+import { LAST_ADMIN, SELF_ADD } from "@/lib/admin/staff";
+import { CODE, screenAdminAs } from "@/tests/admin";
+import {
+  DIRECTOR,
+  HOSPITAL_ADMIN,
+  enterCode,
+  renderAdmin,
+} from "@/tests/admin-render";
 
 const holder = vi.hoisted(() => ({
   client: null as unknown as AdminClient,
@@ -35,6 +40,16 @@ beforeEach(() => {
   onClose.mockReset();
 });
 afterEach(() => vi.restoreAllMocks());
+
+/** Save, then the step-up code: every staff write needs it (core 1.24.0). */
+async function saveWithCode(panel: HTMLElement, code = MOCK_CODE) {
+  await userEvent.click(
+    within(panel).getByRole("button", { name: "Save changes" }),
+  );
+  const dialog = await screen.findByRole("dialog", { name: /access\?$/ });
+  await enterCode(dialog, code);
+  return dialog;
+}
 
 const open = async (id: string) => {
   renderAdmin(<StaffPanel staffId={id} onClose={onClose} />);
@@ -75,10 +90,21 @@ describe("StaffPanel", () => {
     await userEvent.click(
       within(panel).getByRole("button", { name: "Save changes" }),
     );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Save Dr. Mensah's access?",
+    });
+    expect(dialog).toHaveTextContent("Specialty: Internal Medicine.");
+    expect(update).not.toHaveBeenCalled();
+    await enterCode(dialog, "000000");
+    expect(
+      await within(dialog).findByText("That code didn't work. Try again."),
+    ).toBeInTheDocument();
+    await enterCode(dialog, MOCK_CODE);
     await waitFor(() =>
-      expect(update).toHaveBeenCalledWith(
+      expect(update).toHaveBeenLastCalledWith(
         "s-mensah",
         { version: 1, specialty: "Internal Medicine" },
+        CODE,
         { idempotencyKey: expect.any(String) },
       ),
     );
@@ -88,8 +114,19 @@ describe("StaffPanel", () => {
     ).toBeDisabled();
   });
 
-  it("needs at least one role, and review rights need a specialty", async () => {
+  it("needs at least one role; reviewing follows the Clinician role, read-only", async () => {
     const panel = await open("s-okafor");
+    expect(
+      await within(panel).findByText("Reviews corrections in every specialty."),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("checkbox", { name: "Can review corrections" }),
+    ).toBeNull();
+    expect(
+      within(panel).getByText(
+        /Choosing who reviews which specialty: not available yet/,
+      ),
+    ).toBeInTheDocument();
     await userEvent.click(
       await within(panel).findByRole("checkbox", { name: "Clinician" }),
     );
@@ -99,17 +136,6 @@ describe("StaffPanel", () => {
     expect(
       within(panel).getByRole("button", { name: "Save changes" }),
     ).toBeDisabled();
-    await userEvent.click(
-      within(panel).getByRole("checkbox", { name: "Clinician" }),
-    );
-    await userEvent.click(
-      within(panel).getByRole("checkbox", { name: "Infectious disease" }),
-    );
-    expect(
-      within(panel).getByText(
-        "Choose at least one specialty they can review in.",
-      ),
-    ).toBeInTheDocument();
   });
 
   it("your own admin role can't be unticked (Review Focus 1)", async () => {
@@ -127,7 +153,7 @@ describe("StaffPanel", () => {
 
   it("the last admin keeps the role (Review Focus 4)", async () => {
     holder.client = screenAdminAs(null);
-    await holder.client.staffAction("s-nwosu", "deactivate");
+    await holder.client.staffAction("s-nwosu", "deactivate", CODE);
     const panel = await open("s-obi");
     const admin = await within(panel).findByRole("checkbox", {
       name: "Hospital admin",
@@ -143,13 +169,12 @@ describe("StaffPanel", () => {
       "Surgery",
     );
     // Another admin changes Dr. Bello first.
-    await holder.client.updateStaff("s-bello", {
-      version: 1,
-      specialty: "Cardiology",
-    });
-    await userEvent.click(
-      within(panel).getByRole("button", { name: "Save changes" }),
+    await holder.client.updateStaff(
+      "s-bello",
+      { version: 1, specialty: "Cardiology" },
+      CODE,
     );
+    await saveWithCode(panel);
     expect(
       await within(panel).findByText("Someone else changed this just now"),
     ).toBeInTheDocument();
@@ -160,20 +185,22 @@ describe("StaffPanel", () => {
     );
   });
 
-  it("says when the person was removed elsewhere (Review Focus 2)", async () => {
+  it("says when the person is no longer on the list (Review Focus 2)", async () => {
     const panel = await open("s-bello");
     await userEvent.selectOptions(
       await within(panel).findByLabelText("Specialty"),
       "Surgery",
     );
-    await holder.client.removeStaff(
-      "s-bello",
-      { mfaCode: MOCK_CODE },
-      { idempotencyKey: "k-remove" },
+    // Gone from this hospital meanwhile: core answers 404.
+    vi.spyOn(holder.client, "updateStaff").mockRejectedValueOnce(
+      new ApiError(404, "not_found"),
     );
-    await userEvent.click(
-      within(panel).getByRole("button", { name: "Save changes" }),
+    vi.spyOn(holder.client, "listStaff").mockResolvedValue(
+      (await screenAdminAs(DEMO_EMAILS.director).listStaff()).filter(
+        (x) => x.id !== "s-bello",
+      ),
     );
+    await saveWithCode(panel);
     expect(
       await within(panel).findByText(
         "This person is no longer on the staff list",
@@ -200,13 +227,10 @@ describe("StaffPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("lets you change your own specialty and review rights", async () => {
+  it("lets you change your own specialty", async () => {
     const panel = await open("s-obi");
     const specialty = await within(panel).findByLabelText("Specialty");
     expect(specialty).toBeEnabled();
-    expect(
-      within(panel).getByRole("checkbox", { name: "Can review corrections" }),
-    ).toBeEnabled();
   });
 
   it("closes with Esc", async () => {
@@ -224,36 +248,40 @@ describe("StaffPanel", () => {
     expect(name.className).not.toMatch(/truncate/);
   });
 
-  it("lets an admin give themselves a role, saying it is recorded (product decision)", async () => {
+  it("never offers an admin a role for themselves, and says why (403 self_change)", async () => {
     holder.client = screenAdminAs(DEMO_EMAILS.hospitalAdmin);
-    const update = vi.spyOn(holder.client, "updateStaff");
-    renderAdmin(
-      <StaffPanel staffId="s-nwosu" onClose={onClose} />,
-      HOSPITAL_ADMIN,
-    );
-    const panel = await screen.findByRole("dialog", { name: "Staff member" });
-    const notice =
-      "This change is recorded in the activity log and flagged for your hospital's admins. It takes effect next time you sign in.";
-    const clinician = await within(panel).findByRole("checkbox", {
-      name: "Clinician",
+    renderAdmin(<StaffPanel staffId="s-nwosu" onClose={onClose} />, {
+      ...HOSPITAL_ADMIN,
+      features: { analysis: true },
     });
-    expect(within(panel).queryByText(notice)).toBeNull();
-    await userEvent.click(clinician);
-    expect(within(panel).getByText(notice)).toBeInTheDocument();
-    const save = within(panel).getByRole("button", { name: "Save changes" });
-    expect(save).toHaveAccessibleDescription(notice);
-    await userEvent.click(save);
+    const panel = await screen.findByRole("dialog", { name: "Staff member" });
+    for (const name of ["Clinician"]) {
+      const box = await within(panel).findByRole("checkbox", { name });
+      expect(box).not.toBeChecked();
+      expect(box).toBeDisabled();
+      expect(box).toHaveAccessibleDescription(SELF_ADD);
+    }
+    expect(within(panel).getByText(SELF_ADD)).toBeInTheDocument();
+    expect(
+      within(panel).queryByText(/flagged for your hospital's admins/),
+    ).toBeNull();
+  });
+
+  it("lets you remove your own Clinician role, with your code", async () => {
+    const update = vi.spyOn(holder.client, "updateStaff");
+    const panel = await open("s-obi");
+    await userEvent.click(
+      await within(panel).findByRole("checkbox", { name: "Clinician" }),
+    );
+    const dialog = await saveWithCode(panel);
+    expect(dialog).toHaveTextContent("It takes effect next time you sign in.");
     expect(await screen.findByText("Changes saved")).toBeInTheDocument();
     expect(update).toHaveBeenCalledWith(
-      "s-nwosu",
-      expect.objectContaining({ roles: ["clinician", "hospital_admin"] }),
+      "s-obi",
+      expect.objectContaining({ roles: ["hospital_admin"] }),
+      CODE,
       expect.anything(),
     );
-    expect(
-      await within(panel).findByText(
-        /Gave themselves the Clinician role · by Grace Nwosu/,
-      ),
-    ).toBeInTheDocument();
   });
 
   const withAnalysis = { ...DIRECTOR, features: { analysis: true } };
@@ -287,13 +315,12 @@ describe("StaffPanel", () => {
     );
     expect(analyst).toBeDisabled();
     expect(analyst).not.toBeChecked();
-    await userEvent.click(
-      within(panel).getByRole("button", { name: "Save changes" }),
-    );
+    await saveWithCode(panel);
     await waitFor(() =>
       expect(update).toHaveBeenCalledWith(
         "s-kemi",
         expect.objectContaining({ roles: ["hospital_admin"] }),
+        CODE,
         expect.anything(),
       ),
     );
@@ -318,13 +345,12 @@ describe("StaffPanel", () => {
     await userEvent.click(
       await within(panel).findByRole("checkbox", { name: "Analyst" }),
     );
-    await userEvent.click(
-      within(panel).getByRole("button", { name: "Save changes" }),
-    );
+    await saveWithCode(panel);
     expect(await screen.findByText("Changes saved")).toBeInTheDocument();
     expect(update).toHaveBeenCalledWith(
       "s-okafor",
       expect.objectContaining({ roles: ["clinician", "analyst"] }),
+      CODE,
       expect.anything(),
     );
     expect(
@@ -337,9 +363,7 @@ describe("StaffPanel", () => {
     await userEvent.click(
       await within(panel).findByRole("checkbox", { name: "Analyst" }),
     );
-    await userEvent.click(
-      within(panel).getByRole("button", { name: "Save changes" }),
-    );
+    await saveWithCode(panel);
     expect(await screen.findByText("Changes saved")).toBeInTheDocument();
     expect(
       await within(panel).findByText(
@@ -348,14 +372,13 @@ describe("StaffPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("no notice for someone else's roles", async () => {
+  it("someone else's roles are all on offer", async () => {
     const panel = await open("s-okafor");
-    await userEvent.click(
-      await within(panel).findByRole("checkbox", { name: "Hospital admin" }),
-    );
-    expect(
-      within(panel).queryByText(/This change is recorded in the activity log/),
-    ).toBeNull();
+    const admin = await within(panel).findByRole("checkbox", {
+      name: "Hospital admin",
+    });
+    expect(admin).toBeEnabled();
+    expect(within(panel).queryByText(SELF_ADD)).toBeNull();
   });
 
   it("offers Try again, not an endless skeleton, when the list can't load", async () => {
@@ -385,34 +408,6 @@ describe("StaffPanel", () => {
       return screen.findByRole("dialog", { name: "Staff member" });
     };
     const today = async () => (await holder.clearances.listClearances()).today;
-    /** Dr. Bello (password sign-in) as an analyst whom cl_act also covers. */
-    async function coverBello() {
-      await holder.client.updateStaff("s-bello", {
-        version: 1,
-        roles: ["clinician", "analyst"],
-      });
-      const list = holder.clearances.listClearances.bind(holder.clearances);
-      vi.spyOn(holder.clearances, "listClearances").mockImplementation(
-        async () => {
-          const d = await list();
-          return {
-            ...d,
-            clearances: d.clearances.map((c) =>
-              c.id === "cl_act"
-                ? {
-                    ...c,
-                    covered: [
-                      ...c.covered,
-                      { id: "s-bello", display_name: "Dr. Bello" },
-                    ],
-                  }
-                : c,
-            ),
-          };
-        },
-      );
-    }
-
     it("the staff panel shows Named access until … for Grace Nwosu and No named access for a clinician", async () => {
       const t = await today();
       const grace = await openNamed("s-nwosu");
@@ -444,9 +439,9 @@ describe("StaffPanel", () => {
         warning.compareDocumentPosition(save) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      await userEvent.click(save);
+      // Only the step-up code is asked: no new confirmation (ruling 8).
+      await saveWithCode(panel);
       expect(await screen.findByText("Changes saved")).toBeInTheDocument();
-      expect(screen.queryByRole("dialog", { name: /\?$/ })).toBeNull();
     });
 
     it("no warning when the person keeps a role a letter can cover", async () => {
@@ -495,18 +490,6 @@ describe("StaffPanel", () => {
       expect(dialog).toHaveTextContent(ENDS_NAMED);
     });
 
-    it("removing someone with named access says it also ends it", async () => {
-      const panel = await openNamed("s-nwosu");
-      await within(panel).findByText(/^Named access until/);
-      const account = within(panel).getByRole("region", { name: "Account" });
-      await userEvent.click(
-        within(account).getByRole("button", { name: "Remove" }),
-      );
-      expect(
-        screen.getByRole("dialog", { name: "Remove this account?" }),
-      ).toHaveTextContent(ENDS_NAMED);
-    });
-
     it("after Deactivate the line reads No named access", async () => {
       const panel = await openNamed("s-nwosu");
       await within(panel).findByText(/^Named access until/);
@@ -516,31 +499,11 @@ describe("StaffPanel", () => {
       const dialog = screen.getByRole("dialog", {
         name: "Deactivate this account?",
       });
-      await userEvent.click(
-        within(dialog).getByRole("button", { name: "Deactivate" }),
-      );
+      await enterCode(dialog, MOCK_CODE);
       expect(
         await within(panel).findByText("No named access"),
       ).toBeInTheDocument();
       expect(within(panel).queryByText(/^Named access until/)).toBeNull();
-    });
-
-    it("after Reset two-step the line reads No named access", async () => {
-      await coverBello();
-      const panel = await openNamed("s-bello");
-      await within(panel).findByText(/^Named access until/);
-      await userEvent.click(
-        within(panel).getByRole("button", { name: "Reset two-step" }),
-      );
-      const dialog = screen.getByRole("dialog", {
-        name: "Reset two-step verification?",
-      });
-      await userEvent.click(
-        within(dialog).getByRole("button", { name: "Reset two-step" }),
-      );
-      expect(
-        await within(panel).findByText("No named access"),
-      ).toBeInTheDocument();
     });
 
     it("after losing both covering roles the line reads No named access", async () => {
@@ -549,36 +512,11 @@ describe("StaffPanel", () => {
       await userEvent.click(
         within(panel).getByRole("checkbox", { name: "Analyst" }),
       );
-      await userEvent.click(
-        within(panel).getByRole("button", { name: "Save changes" }),
-      );
+      await saveWithCode(panel);
       expect(await screen.findByText("Changes saved")).toBeInTheDocument();
       expect(
         await within(panel).findByText("No named access"),
       ).toBeInTheDocument();
-    });
-
-    it("resetting two-step for someone with named access says it also ends it", async () => {
-      await coverBello();
-      const panel = await openNamed("s-bello");
-      await within(panel).findByText(/^Named access until/);
-      await userEvent.click(
-        within(panel).getByRole("button", { name: "Reset two-step" }),
-      );
-      expect(
-        screen.getByRole("dialog", { name: "Reset two-step verification?" }),
-      ).toHaveTextContent(ENDS_NAMED);
-    });
-
-    it("no sentence on the confirms for someone without named access", async () => {
-      const panel = await openNamed("s-bello");
-      await within(panel).findByText("No named access");
-      await userEvent.click(
-        within(panel).getByRole("button", { name: "Reset two-step" }),
-      );
-      expect(
-        screen.getByRole("dialog", { name: "Reset two-step verification?" }),
-      ).not.toHaveTextContent(ENDS_NAMED);
     });
 
     it("with the switch Letters only the staff panel shows no named-access line", async () => {

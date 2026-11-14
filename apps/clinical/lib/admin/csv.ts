@@ -5,39 +5,38 @@ import type {
 } from "../api/admin-contract";
 import { RESULT_LABEL } from "../labels";
 import { FLAG_LABEL, actorName, describeEvent, typeLabel } from "./activity";
-import { DISMISS_REASONS, SEVERITY } from "../notifications/alert-view";
+import { SEVERITY } from "../notifications/alert-view";
 import { CSV_MAX_ROWS, toCsv, type Cell } from "@mhai/ui/csv";
 import { FEWER_THAN_5 } from "@mhai/ui/small-groups";
 import {
+  CATEGORY_LABEL,
+  CATEGORY_ORDER,
+  HANDLING_LABEL,
+  HANDLING_ORDER,
+  ROUTE_LABEL,
+  ROUTE_ORDER,
   SEVERITY_ORDER,
-  TOP_MAX,
-  criticalTargetLabel,
-  findingLabel,
-  placeLabel,
   readAlerts,
   shown,
-  type MeasureKind,
 } from "./alert-usage";
 import { CONFIDENCE_ORDER, PERIODS } from "./report";
 
 /** The one row a failed alerts block leaves, so the file never reads as none. */
 export const ALERTS_CSV_FAILED = "Couldn't load";
 
-/** "Fewer than 5" for a hidden value, empty for nothing measured. */
-function alertCell(g: GuardedOut | undefined, kind: MeasureKind): Cell {
-  const s = shown(g, kind);
+/** "Fewer than 5" for a hidden count, as the screen says it. */
+function alertCell(g: GuardedOut): Cell {
+  const s = shown(g);
   if (s.kind === "hidden") return FEWER_THAN_5;
   if (s.kind === "none") return null;
-  if (kind === "share") return Math.round(s.value * 100);
-  if (kind === "minutes") return Math.round(s.value);
   return s.value;
 }
 
 /**
- * The alert numbers for the Usage export: this period's counts only, the
- * small-group rule, no changes or flags. It reads the validated block from
- * `readAlerts`; a block that failed validation (including one whose hidden
- * values could be worked out from the totals) leaves one "couldn't load" row.
+ * The alert numbers for the Usage export: exactly the screen's rows, in its
+ * words, under the small-group rule. A block that failed `readAlerts`
+ * (including one whose hidden values could be worked out) leaves one
+ * "couldn't load" row.
  */
 export function alertsCsvRows(u: Pick<UsageOut, "alerts">): Cell[][] {
   const s = readAlerts(u);
@@ -45,51 +44,22 @@ export function alertsCsvRows(u: Pick<UsageOut, "alerts">): Cell[][] {
   if (s.state === "failed") return [["Alerts", ALERTS_CSV_FAILED]];
   const a = s.alerts;
   return [
-    ["Alerts: total", alertCell(a.total, "count")],
+    ["Alerts: total", alertCell(a.total)],
     ...SEVERITY_ORDER.map((k): Cell[] => [
       `Alerts: ${SEVERITY[k].label}`,
-      alertCell(a.by_severity[k], "count"),
+      alertCell(a.by_severity[k]),
     ]),
-    ["Alerts: still unhandled", alertCell(a.unhandled, "count")],
-    [
-      "Alerts: median time to acknowledge (minutes)",
-      alertCell(a.median_ack_minutes, "minutes"),
-    ],
-    [
-      "Alerts: median for Critical alerts (minutes)",
-      alertCell(a.median_ack_minutes_critical, "minutes"),
-    ],
-    [
-      `Alerts: ${criticalTargetLabel(a.critical_target_minutes)} (%)`,
-      alertCell(a.critical_within_target, "share"),
-    ],
-    ["Alerts: acknowledged (%)", alertCell(a.acknowledged_share, "share")],
-    ["Alerts: dismissed (%)", alertCell(a.dismissed_share, "share")],
-    ...DISMISS_REASONS.map((r): Cell[] => [
-      `Alerts: dismissed as ${r.label}`,
-      alertCell(
-        a.dismiss_reasons.find((x) => x.reason === r.code)?.count,
-        "count",
-      ),
+    ...HANDLING_ORDER.map((k): Cell[] => [
+      `Alerts: ${HANDLING_LABEL[k]}`,
+      alertCell(a.by_handling[k]),
     ]),
-    ...a.top_findings
-      .slice(0, TOP_MAX)
-      .map((f): Cell[] => [
-        `Alerts: finding ${findingLabel(f)}`,
-        alertCell(f.count, "count"),
-      ]),
-    ...a.top_locations
-      .slice(0, TOP_MAX)
-      .map((l): Cell[] => [
-        `Alerts: location ${placeLabel(l.location)}`,
-        alertCell(l.count, "count"),
-      ]),
-    // readAlerts has checked every bucket and total (F4): no fallback here.
-    ...a.series.points.map((p): Cell[] => [
-      a.series.bucket === "week"
-        ? `Alerts in the week of ${p.start.slice(0, 10)}`
-        : `Alerts on ${p.start.slice(0, 10)}`,
-      p.total,
+    ...ROUTE_ORDER.map((k): Cell[] => [
+      `Alerts: ${ROUTE_LABEL[k]}`,
+      alertCell(a.by_route[k]),
+    ]),
+    ...CATEGORY_ORDER.map((k): Cell[] => [
+      `Alerts: ${CATEGORY_LABEL[k]}`,
+      alertCell(a.by_category[k]),
     ]),
   ];
 }

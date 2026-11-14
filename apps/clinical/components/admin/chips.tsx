@@ -1,6 +1,5 @@
 import {
   CheckCircle2,
-  Clock,
   Flag,
   Hourglass,
   ShieldAlert,
@@ -20,25 +19,18 @@ import { Chip } from "@mhai/ui/chip";
 
 const STATE_ICON = {
   active: CheckCircle2,
-  invited: Clock,
   attention: TriangleAlert,
   deactivated: UserX,
 } as const;
 
 /** Status as a word and an icon (spec §7); the problem itself when there is one. */
-export function StaffStatusChip({
-  staff,
-  now,
-}: {
-  staff: StaffOut;
-  now: number;
-}) {
-  const state = staffState(staff, now);
+export function StaffStatusChip({ staff }: { staff: StaffOut }) {
+  const state = staffState(staff);
   const Icon = STATE_ICON[state];
   return (
     <Chip tone={STAFF_STATE[state].tone}>
       <Icon aria-hidden className="size-3.5" />
-      {statusText(staff, now)}
+      {statusText(staff)}
     </Chip>
   );
 }

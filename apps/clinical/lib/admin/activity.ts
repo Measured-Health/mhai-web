@@ -1,6 +1,5 @@
 import type { ActivityEventOut, ActivityType } from "../api/admin-contract";
 import { RESULT_LABEL } from "../labels";
-import { ROLE_LABEL } from "./staff";
 
 export const ACTIVITY_TYPE_LABEL: Record<ActivityType, string> = {
   sign_in: "Sign-in",
@@ -37,11 +36,11 @@ export function describeEvent(e: ActivityEventOut): string {
   const level = e.confidence ? RESULT_LABEL[e.confidence] : null;
   switch (e.kind) {
     case "signed_in":
-      return join("Signed in", e.device);
+      return "Signed in";
     case "signed_in_without_mfa":
-      return join("Signed in without two-step (setup pending)", e.device);
+      return "Signed in without two-step (setup pending)";
     case "sign_in_locked":
-      return `${e.count ?? "Several"} failed sign-ins for ${t} · account locked`;
+      return `Too many failed sign-ins for ${t} · account locked`;
     case "consultation_run":
       return join("Ran a consultation", e.specialty, level);
     case "result_agreed":
@@ -54,12 +53,6 @@ export function describeEvent(e: ActivityEventOut): string {
       return join("Rejected a correction", e.specialty);
     case "correction_withdrawn":
       return join("Withdrew a correction", e.specialty);
-    case "invite_sent":
-      return `Invited ${t}`;
-    case "invite_cancelled":
-      return `Cancelled the invite for ${t}`;
-    case "invite_accepted":
-      return "Accepted invite and finished first sign-in";
     case "roles_changed":
       return `Changed ${t}'s roles`;
     case "analyst_granted":
@@ -67,9 +60,9 @@ export function describeEvent(e: ActivityEventOut): string {
     case "analyst_removed":
       return `${actorName(e)} removed Analyst access from ${t}`;
     case "analysis_patients_viewed":
-      return `${actorName(e)} opened ${e.count ?? "several"} de-identified patients in Analysis`;
+      return `${actorName(e)} opened de-identified patients in Analysis`;
     case "analysis_named_viewed":
-      return `${actorName(e)} viewed ${e.count ?? "several"} patients by name in Analysis`;
+      return `${actorName(e)} viewed patients by name in Analysis`;
     case "clearance_uploaded":
       return `${actorName(e)} uploaded a clearance letter`;
     case "clearance_refused":
@@ -98,36 +91,14 @@ export function describeEvent(e: ActivityEventOut): string {
       return e.specialty
         ? `Changed ${t}'s specialty to ${e.specialty}`
         : `Changed ${t}'s specialty`;
-    case "reviewer_changed":
-      return `Changed what ${t} can review`;
     case "deactivated":
       return `Deactivated ${t}`;
     case "reactivated":
       return `Reactivated ${t}`;
-    case "removed":
-      return `Removed ${t}`;
-    case "password_reset_sent":
-      return `Sent ${t} a password reset`;
-    case "mfa_reset":
-      return `Reset ${t}'s two-step verification`;
-    case "mfa_reminder_sent":
-      return `Reminded ${t} to set up two-step`;
     case "settings_changed":
       return "Changed hospital settings";
-    case "reviewers_reminded":
-      return join("Reminded reviewers about a correction", e.specialty);
-    case "reviewer_assigned":
-      return join(`Asked ${t} to review a correction`, e.specialty);
     case "policy_breach":
       return "Hospital policy not met";
-    case "self_role_change": {
-      const added = (e.roles_added ?? [])
-        .map((r) => ROLE_LABEL[r])
-        .filter(Boolean);
-      return added.length
-        ? `Gave themselves the ${added.join(" and ")} role${added.length > 1 ? "s" : ""}`
-        : "Changed their own roles";
-    }
     default:
       return `${typeLabel(e)} activity`;
   }

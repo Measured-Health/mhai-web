@@ -11,11 +11,9 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useId } from "react";
-import { staffState } from "@/lib/admin/staff";
 import type { StaffOut } from "@/lib/api/admin-contract";
 import { ANALYSIS_HREF } from "@/lib/analysis-queries";
 import { useStaff } from "@/lib/admin-queries";
-import { useNow } from "@mhai/ui/hooks/use-now";
 import { cn } from "@mhai/ui/cn";
 
 export const ADMIN_LINKS = [
@@ -49,15 +47,11 @@ export const ADMIN_LINKS = [
 /** The Named access page: clearance letters for named drill-down (Plan 11). */
 export const NAMED_ACCESS_HREF = "/admin/named-access";
 
-/**
- * "12 members · 1 invite pending", as the mockup's sidebar shows. An expired
- * invite isn't pending: it needs attention (a new invite).
- */
-function staffLine(list: StaffOut[] | undefined, now: number): string | null {
+/** "12 members". Core has no invites, so none are ever pending. */
+function staffLine(list: StaffOut[] | undefined): string | null {
   if (!list) return null;
   const members = list.filter((s) => s.status !== "deactivated").length;
-  const invites = list.filter((s) => staffState(s, now) === "invited").length;
-  return `${members} members · ${invites} ${invites === 1 ? "invite" : "invites"} pending`;
+  return `${members} ${members === 1 ? "member" : "members"}`;
 }
 
 /** The sidebar's "Hospital admin" group (spec §5.6, R3). */
@@ -77,7 +71,6 @@ export function AdminNav({
   // pages never load the staff list just for a count.
   const adminSide = path === "/admin" || path.startsWith("/admin/");
   const staff = useStaff({ enabled: adminSide });
-  const now = useNow(60_000);
   const heading = useId();
   const lineId = useId();
   const links: readonly {
@@ -125,7 +118,7 @@ export function AdminNav({
           const line =
             href === "/admin/staff"
               ? adminSide
-                ? staffLine(staff.data, now)
+                ? staffLine(staff.data)
                 : null
               : sub;
           const describedBy = line ? `${lineId}-${i}` : undefined;
