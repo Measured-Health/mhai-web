@@ -21,8 +21,10 @@ up, and no real key is used anywhere.
 MHAI_BACKEND_DIR=$HOME/claude-work/mhai-live-be scripts/it/live-full.sh all
 ```
 
-`all` brings the stack up, runs the suite and takes everything down again,
-volumes included; it exits non-zero when any path fails. For a session of
+`all` brings the stack up, runs the smoke subset (every path spec below;
+the page tour too with `LIVE_TOUR=1`) and takes everything down again,
+volumes included; it exits non-zero when any path fails. It takes about 40
+minutes, most of it waiting for the synthetic source's polls. For a session of
 work, `up`, then `test` as often as needed, then `down`. `test` takes
 Playwright arguments (for example `--grep alerts`); `LIVE_APPS=clinical`
 narrows it to one app. Nightly: the same `all` from cron on the build
@@ -41,16 +43,25 @@ server and stay there.
 - the demo hospital (`core hospitals create --demo`), activated, with
   Analysis's synthetic cohort (`core analysis seed-demo`);
 - a clinician, an analyst (granted with `core users roles` once two-step is
-  on: there is no screen for it yet), a hospital admin and a platform
-  admin, each with only a temporary password: the setup spec does every
-  first sign-in in the app (password, two-step, backup codes, terms);
+  on: there is no screen for it yet), a hospital admin, a platform admin
+  and a platform auditor, each with only a temporary password: the setup
+  specs do every first sign-in in the app (password, two-step, backup
+  codes, terms);
 - the synthetic rule set (`0-synthetic`) loaded by the emr service and
   activated for the hospital (there is no screen for that either);
-- the synthetic FHIR server, whose first patient has a critical potassium.
+- the synthetic FHIR server (`emr synth-fhir`). Everything it holds reaches
+  a connection in the first sync's backfill, which is stored historical and
+  never alerts (by design), so with `--late-critical` (mhai-multiagent #159)
+  it serves a new critical potassium for two patients a while after that
+  first sync (`LIVE_LATE_CRITICAL`, default 2m).
 
 The platform spec adds the record connection to the synthetic server in the
-app, tests it and switches it on; the emr service then reads it, the rule
-fires, core raises the alert, and the clinical spec finds it in the inbox.
+app (a private network, the synthetic key file), tests it and switches it
+on; the emr service reads it, the late result fires the synthetic rule set,
+core raises the alerts to the queue, and the clinical spec finds them in
+the inbox, acknowledges one and dismisses the other. The emr image is
+checked first (`services/emr/scripts/image-check.sh`, mhai-multiagent
+#158).
 
 ## The paths
 

@@ -23,6 +23,8 @@ export default defineConfig({
   use: {
     baseURL:
       app === "clinical" ? "http://localhost:8080" : "http://localhost:8081",
+    // A step that can't happen fails in a minute, not at the test's end.
+    actionTimeout: 60_000,
     trace: "retain-on-failure",
     screenshot: "on",
     video: "off",

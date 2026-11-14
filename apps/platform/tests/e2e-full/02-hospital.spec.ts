@@ -5,7 +5,10 @@ import { readState, recordApi, reportApi, signIn } from "./live";
 test("hospitals: the list, the live hospital, its model policy", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  // Expected to fail until core serves GET /platform/hospitals and
+  // /platform/hospitals/{id} (docs/live-e2e.md): when it passes, remove this.
+  test.fail(true, "core 1.20.0 serves no hospitals list or hospital page");
+  test.setTimeout(60_000);
   await signIn(page, "padmin");
   const calls = recordApi(page);
   await expect(

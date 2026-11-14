@@ -36,7 +36,11 @@ test("alerts: unread count, acknowledge, dismiss", async ({ page }) => {
   if (n > 1) {
     const second = page
       .getByRole("article")
-      .filter({ has: page.getByRole("button", { name: "Dismiss" }) })
+      .filter({
+        has: page
+          .getByRole("button", { name: "Dismiss" })
+          .and(page.locator(":enabled")),
+      })
       .first();
     await second.getByRole("button", { name: "Dismiss" }).click();
     const dialog = page.getByRole("dialog", { name: "Dismiss this alert?" });
