@@ -6,6 +6,45 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Analysis drill-down on core's live route** (core openapi 1.19.0,
+  mhai-multiagent #149): See patients opens `GET /analysis/patients`
+  exactly where core sends a drill key (the affected view's age band, sex
+  and location type rows, co-occurring pairs and findings, under condition,
+  age band, sex or setting filters). Everywhere else a shown count of 5 or
+  more has See patients off, with "not available for this breakdown";
+  hidden counts show nothing.
+  - The list shows pids and the row's own fields (age band, or "Age not
+    recorded", sex, location type, conditions and findings; never a
+    source), and says the view is audited.
+  - Plain words for each refusal: 429 "You've opened many patient lists;
+    try again later", 422 `too_small` "This list is no longer available",
+    404 as on the views; only a plain failure offers Try again.
+  - A view that carries a drill key where core never sets one, or one that
+    isn't 43 characters of base64url, fails closed; so does a list whose
+    count isn't the cell it was opened from.
+  - The BFF checks the list's query strictly before anything goes upstream
+    (core's codes: `level_not_supported`, `too_small` for a bad key or a
+    ward, specialty or source filter, `invalid_range`,
+    `validation_failed`, `too_many_filters`), and reads the reply with a
+    strict zod schema (502 `bad_gateway` otherwise).
+  - The demo enforces core's rules: keys bound to the period, filters, view
+    and row; lists only on shown counts of 5 or more; 10 lists a minute,
+    50 a day and 300 different patients a quarter per person (429); pids
+    random per period; no source on a row.
+- **Auditor reveal in the platform app** (`GET /platform/audit/{id}/patients`):
+  on a drill-down entry, an auditor's Reveal patients asks for confirmation,
+  saying the reveal is itself recorded, then shows the pids in component
+  state only. A platform admin sees the count and "Only an auditor can
+  reveal these patients"; the BFF refuses them too, takes only core's
+  decimal entry id with no query, and reads the reply strictly (at most 200
+  pseudonyms). Core still sends drill-down entries bare: their detail's
+  `patients: {count}` is enough to offer the reveal.
+- The audit log maps `analysis_patients_viewed` ("Opened a de-identified
+  patient list"), and `audit_patients_viewed` now reads "Revealed the
+  patients of an entry".
+
 ### Changed
 
 - **Analysis reads core's live routes** (core openapi 1.17.0,
@@ -24,7 +63,6 @@ All notable changes to this project are documented here. The format follows
   - Plain words for each refusal: switched off ("Analysis is not switched on
     for this hospital"), still being prepared (Try again), too many new
     views, and a period or filters that can't be used.
-  - See patients reads "coming soon" while core sends no drill keys.
   - The sample cohort is 2,400 patients, so one month has realistic numbers.
 
 - **Sign-in, two-step enrolment, password change and refresh follow core's

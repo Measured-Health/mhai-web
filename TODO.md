@@ -48,7 +48,7 @@ In short: the screens are built, and most of what's left is wiring them to backe
 
 The frontend uses these on sample data. Each must be built or confirmed in mhai-multiagent, which lists them in its own TODO.md:
 
-- §10 Analysis: the aggregate views and filters are wired to core 1.17.0 (`GET /analysis/filters`, `GET /analysis/{view}`, mhai-multiagent #141); the patient lists (drill-down, core's PR 5) are still assumed, and show "coming soon" until then;
+- §10 Analysis: the aggregate views, filters and the de-identified drill-down are wired to core 1.19.0 (`GET /analysis/filters`, `GET /analysis/{view}`, `GET /analysis/patients`, mhai-multiagent #141 and #149), with the auditor reveal (`GET /platform/audit/{id}/patients`); only the named list below is still assumed;
 - clearance letters (hospital side);
 - §14.10 platform clearances and the switch, including the `today` fields and the revoke refusals;
 - `POST /analysis/patients/named`, and `clearance/me` with `reason`;
@@ -57,6 +57,10 @@ The frontend uses these on sample data. Each must be built or confirmed in mhai-
 - §14.12 platform Analysis across hospitals (the contract for Plan 12a, with the server requirements under "Known limits" below).
 
 ## Known limits
+
+- **The drill-down's audit entries arrive bare (core 1.19.0).** Core sends `analysis.patients_viewed` and `audit.patients_viewed` as the bare entry until their facts and targets are agreed (its TODO, "Analysis: before scale"), so the log reads them as "can't be displayed". The detail still carries `patients: {count}`, and the auditor reveal is offered on it. The app already maps `analysis_patients_viewed` ("Opened a de-identified patient list") and `audit_patients_viewed` ("Revealed the patients of an entry"); agree the facts with core, then drop the bare-entry path. The flagged `analysis.list_limit_reached` and `analysis.patient_cap_reached` have no kind here yet.
+- **The reveal is auditors only, here.** Core also lets platform admins reveal; the BFF and the screen refuse them (separation of duties). Confirm with the product owner, or open it to admins in the BFF's `REVEAL` check.
+- **No lists on prevalence, ward or clinic, or specialty rows, nor under a ward, specialty or source filter** (core 1.19.0, departure 19): See patients is off there with "not available for this breakdown". Lifting that needs core's design (pids per list, or the dimension on the row) and H1.
 
 - **Platform Analysis can still be differenced (Plan 12a).** The page hides cells and fails closed on remainders, but the server must close what a browser cannot. All three need a privacy decision (rounding, noise or query limits) before live use, and go in the sign-off pack:
   - **Filter against breakdown.** A filtered count can be subtracted from a breakdown of the same group (the sample has 18 such cases, e.g. Harbour View, 3 months, sex Other = 3).
