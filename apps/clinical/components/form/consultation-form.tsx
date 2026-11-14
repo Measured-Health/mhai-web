@@ -84,8 +84,9 @@ function Field({
 
 /**
  * "About patient": the patient the question is linked to, as the alert the
- * clinician started from showed them, or as "Find patient by MRN" found them. Only MHAI's id for the patient is sent;
- * the name and MRN stay on this screen, in memory.
+ * clinician started from showed them, or as "Find patient by MRN" found
+ * them. Only MHAI's id for the patient is sent; the name and MRN stay on
+ * this screen, in memory.
  */
 function AboutPatient({
   patient,
@@ -141,7 +142,7 @@ export function ConsultationForm({
   onDirtyChange,
 }: {
   initial?: FormValues;
-  /** The patient the question is about, from an alert; null when none. */
+  /** The linked patient (from an alert or found by MRN); null if none. */
   patient?: PatientLink | null;
   onClearPatient?(): void;
   /** Offers "Find patient by MRN" while no patient is linked. */

@@ -13,10 +13,10 @@ export const isPatientId = (v: unknown): v is string =>
   typeof v === "string" && PATIENT_ID.test(v) && v !== NIL;
 
 export interface PatientLink {
-  /** MHAI's patient id, from the alert. */
+  /** MHAI's patient id, from the alert or the MRN lookup. */
   id: string;
-  /** As the alert showed it. */
+  /** As the alert or the lookup showed it. */
   name: string;
-  /** As the alert showed it; null for a patient with no MRN. */
+  /** As the alert or the lookup showed it; null for a patient with no MRN. */
   mrn: string | null;
 }
