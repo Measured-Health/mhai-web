@@ -15,9 +15,10 @@ import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp } from "@/lib/api/step-up";
 import { utc } from "@/lib/audit/words";
 import { __resetReportedForTests } from "@/lib/queries/audit";
-import { renderWithAuth } from "@/tests/render";
+import { ADA, AMARA, renderWithAuth } from "@/tests/render";
 import { AuditView } from "./audit-view";
 import { EventDetail } from "./event-detail";
+import { AUDITORS_ONLY, REVEAL_AUDITED } from "./patient-ids";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/audit",
@@ -25,12 +26,16 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+let signedIn = ADA;
 function setup(
   over: (m: PlatformClient) => Partial<PlatformClient> = () => ({}),
+  email: string = TEAM_EMAILS.ada,
 ) {
+  // The signed-in person on screen matches the client's.
+  signedIn = email === TEAM_EMAILS.amara ? AMARA : ADA;
   const m = createMockPlatform({
     delayMs: 0,
-    me: () => TEAM_EMAILS.ada,
+    me: () => email,
     stepUp: createStepUp(),
   });
   __setPlatformClientForTests({ ...m, ...over(m) } as PlatformClient);
@@ -56,7 +61,7 @@ const phone = () =>
 /** The seeded event whose action starts with `words`, opened from the list. */
 async function openRow(words: RegExp) {
   const u = userEvent.setup();
-  renderWithAuth(<AuditView />);
+  renderWithAuth(<AuditView />, { user: signedIn });
   const row = (await screen.findAllByRole("button", { name: words }))[0]!;
   await u.click(row);
   return { u, row };
@@ -65,12 +70,24 @@ async function openRow(words: RegExp) {
 /** The list's first "3 patients" row opened, on a given query client. */
 async function openRowWith(qc: QueryClient) {
   const u = userEvent.setup();
-  const r = renderWithAuth(<AuditView />, { queryClient: qc });
+  const r = renderWithAuth(<AuditView />, { queryClient: qc, user: signedIn });
   await u.click((await screen.findAllByRole("button", { name: THREE }))[0]!);
   return { u, unmount: r.unmount };
 }
 
 const dialog = () => screen.findByRole("dialog");
+
+/** Reveal patients, then confirm in the dialog that says the reveal is recorded. */
+async function reveal(u: ReturnType<typeof userEvent.setup>, d: HTMLElement) {
+  await u.click(
+    await within(d).findByRole("button", { name: "Reveal patients" }),
+  );
+  const c = await screen.findByRole("dialog", {
+    name: "Reveal these patients?",
+  });
+  expect(within(c).getByText(REVEAL_AUDITED)).toBeVisible();
+  await u.click(within(c).getByRole("button", { name: "Reveal patients" }));
+}
 
 describe("the event detail", () => {
   it("opening a row shows every field, the position and the fingerprint", async () => {
@@ -129,20 +146,14 @@ describe("the event detail", () => {
       expect(within(d).queryByText(t)).toBeNull();
   });
 
-  it("pseudonyms are not shown until Show patient ids, which adds an audit_patients_viewed entry", async () => {
-    const spy = vi.fn();
-    const m = setup((c) => ({
-      getAuditPatients: (id) => {
-        spy(id);
-        return c.getAuditPatients(id);
-      },
-    }));
+  it("pseudonyms are not shown until Reveal patients is confirmed, which adds an audit_patients_viewed entry", async () => {
+    const { m, spy } = patientSpy();
     const { u } = await openRow(/Opened a named patient list · 3 patients/);
     const d = await dialog();
     expect(await within(d).findByText("Patients: 3")).toBeInTheDocument();
     expect(within(d).queryByText(/^P-[0-9A-F]{6}$/)).toBeNull();
     expect(spy).not.toHaveBeenCalled();
-    await u.click(within(d).getByRole("button", { name: "Show patient ids" }));
+    await reveal(u, d);
     const ids = await within(d).findAllByText(/^P-[0-9A-F]{6}$/);
     expect(ids).toHaveLength(3);
     expect(ids[0]).toBeVisible();
@@ -154,8 +165,8 @@ describe("the event detail", () => {
     );
   });
 
-  it("a pseudonym search reads 'a patient id', with the id only behind Show patient ids", async () => {
-    const m = setup();
+  it("a pseudonym search reads 'a patient id', with the id only behind Reveal patients", async () => {
+    const m = setup(undefined, TEAM_EMAILS.amara);
     const named = (await m.listAudit({ type: ["named_access"] })).events.find(
       (e) => e.kind === "drilldown_named",
     )!;
@@ -166,7 +177,7 @@ describe("the event detail", () => {
     expect(await within(d).findByText("a patient id")).toBeVisible();
     expect(within(d).getByText("Patients: 1")).toBeVisible();
     expect(screen.queryByText(p!)).toBeNull();
-    await u.click(within(d).getByRole("button", { name: "Show patient ids" }));
+    await reveal(u, d);
     expect(await within(d).findByText(p!)).toBeVisible();
     expect(within(d).getByText("Shown to you and recorded.")).toBeVisible();
   });
@@ -299,14 +310,18 @@ const viewed = async (m: PlatformClient) =>
     (e) => e.kind === "audit_patients_viewed",
   ).length;
 
+/** The reveal is an auditor's: these run as Amara. */
 function patientSpy() {
   const spy = vi.fn();
-  const m = setup((c) => ({
-    getAuditPatients: (id) => {
-      spy(id);
-      return c.getAuditPatients(id);
-    },
-  }));
+  const m = setup(
+    (c) => ({
+      getAuditPatients: (id) => {
+        spy(id);
+        return c.getAuditPatients(id);
+      },
+    }),
+    TEAM_EMAILS.amara,
+  );
   return { m, spy };
 }
 const THREE = /Opened a named patient list · 3 patients/;
@@ -328,9 +343,7 @@ describe("patient ids are recorded once and never kept", () => {
     const qc = qcOf();
     const { u } = await openRowWith(qc);
     const d = await dialog();
-    await u.click(
-      await within(d).findByRole("button", { name: "Show patient ids" }),
-    );
+    await reveal(u, d);
     await within(d).findAllByText(IDS);
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     act(() => void window.dispatchEvent(new Event("offline")));
@@ -347,22 +360,20 @@ describe("patient ids are recorded once and never kept", () => {
     noIdsCached(qc);
   });
 
-  it("Hide forgets them; Show again is a second request", async () => {
+  it("Hide forgets them; Reveal again is a second request", async () => {
     const { m, spy } = patientSpy();
     const qc = qcOf();
     const { u } = await openRowWith(qc);
     const d = await dialog();
-    await u.click(
-      await within(d).findByRole("button", { name: "Show patient ids" }),
-    );
+    await reveal(u, d);
     await within(d).findAllByText(IDS);
     await u.click(within(d).getByRole("button", { name: "Hide patient ids" }));
     expect(within(d).queryByText(IDS)).toBeNull();
     expect(
-      within(d).getByRole("button", { name: "Show patient ids" }),
+      within(d).getByRole("button", { name: "Reveal patients" }),
     ).toBeVisible();
     noIdsCached(qc);
-    await u.click(within(d).getByRole("button", { name: "Show patient ids" }));
+    await reveal(u, d);
     await within(d).findAllByText(IDS);
     expect(spy).toHaveBeenCalledTimes(2);
     expect(await viewed(m)).toBe(2);
@@ -372,9 +383,7 @@ describe("patient ids are recorded once and never kept", () => {
     const { spy } = patientSpy();
     const { u, row } = await openRow(THREE);
     let d = await dialog();
-    await u.click(
-      await within(d).findByRole("button", { name: "Show patient ids" }),
-    );
+    await reveal(u, d);
     await within(d).findAllByText(IDS);
     await u.keyboard("{Escape}");
     await u.click(row);
@@ -382,7 +391,7 @@ describe("patient ids are recorded once and never kept", () => {
     expect(await within(d).findByText("Patients: 3")).toBeVisible();
     expect(within(d).queryByText(IDS)).toBeNull();
     expect(
-      within(d).getByRole("button", { name: "Show patient ids" }),
+      within(d).getByRole("button", { name: "Reveal patients" }),
     ).toBeVisible();
     expect(spy).toHaveBeenCalledTimes(1);
   });
@@ -392,9 +401,7 @@ describe("patient ids are recorded once and never kept", () => {
     const qc = qcOf();
     const first = await openRowWith(qc);
     const d = await dialog();
-    await first.u.click(
-      await within(d).findByRole("button", { name: "Show patient ids" }),
-    );
+    await reveal(first.u, d);
     await within(d).findAllByText(IDS);
     first.unmount();
     noIdsCached(qc);
@@ -413,50 +420,152 @@ describe("patient ids are recorded once and never kept", () => {
       <StrictMode>
         <AuditView />
       </StrictMode>,
+      { user: signedIn },
     );
     await u.click((await screen.findAllByRole("button", { name: THREE }))[0]!);
     const d = await dialog();
-    await u.click(
-      await within(d).findByRole("button", { name: "Show patient ids" }),
-    );
+    await reveal(u, d);
     await within(d).findAllByText(IDS);
     await flush();
     expect(spy).toHaveBeenCalledTimes(1);
     expect(await viewed(m)).toBe(1);
   });
 
-  it("a failed request offers Try again, which is a second, deliberate request", async () => {
+  it("a failed request offers Reveal patients again, which is a second, deliberate request", async () => {
     const spy = vi.fn();
-    setup((c) => ({
-      getAuditPatients: (id) => {
-        spy(id);
-        return spy.mock.calls.length === 1
-          ? Promise.reject(new Error("x"))
-          : c.getAuditPatients(id);
-      },
-    }));
+    setup(
+      (c) => ({
+        getAuditPatients: (id) => {
+          spy(id);
+          return spy.mock.calls.length === 1
+            ? Promise.reject(new Error("x"))
+            : c.getAuditPatients(id);
+        },
+      }),
+      TEAM_EMAILS.amara,
+    );
     const { u } = await openRow(THREE);
     const d = await dialog();
-    await u.click(
-      await within(d).findByRole("button", { name: "Show patient ids" }),
-    );
-    await u.click(await within(d).findByRole("button", { name: "Try again" }));
+    await reveal(u, d);
+    expect(
+      await within(d).findByText("Couldn't load the patient ids."),
+    ).toBeVisible();
+    await reveal(u, d);
     await within(d).findAllByText(IDS);
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
-  it("Show patient ids is off while offline, with the reason", async () => {
+  it("Reveal patients is off while offline, with the reason", async () => {
     const { spy } = patientSpy();
     await openRow(THREE);
     const d = await dialog();
     const b = await within(d).findByRole("button", {
-      name: "Show patient ids",
+      name: "Reveal patients",
     });
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     act(() => void window.dispatchEvent(new Event("offline")));
     expect(b).toBeDisabled();
     expect(b).toHaveAccessibleDescription(OFFLINE_NOTE);
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("a platform admin sees the count and that only an auditor can reveal, and nothing is asked", async () => {
+    const spy = vi.fn();
+    setup((c) => ({
+      getAuditPatients: (id) => {
+        spy(id);
+        return c.getAuditPatients(id);
+      },
+    }));
+    await openRow(THREE);
+    const d = await dialog();
+    expect(await within(d).findByText("Patients: 3")).toBeVisible();
+    expect(within(d).getByText(AUDITORS_ONLY)).toBeVisible();
+    expect(
+      within(d).queryByRole("button", { name: "Reveal patients" }),
+    ).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("cancelling the confirmation asks for nothing and records nothing", async () => {
+    const { m, spy } = patientSpy();
+    const { u } = await openRow(THREE);
+    const d = await dialog();
+    await u.click(
+      await within(d).findByRole("button", { name: "Reveal patients" }),
+    );
+    const c = await screen.findByRole("dialog", {
+      name: "Reveal these patients?",
+    });
+    await u.click(within(c).getByRole("button", { name: "Cancel" }));
+    expect(within(d).queryByText(IDS)).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+    expect(await viewed(m)).toBe(0);
+  });
+
+  it("a drill-down entry core sends bare still offers the recorded reveal, and nothing else of it", async () => {
+    const { spy } = patientSpy();
+    let id = "";
+    const m = setup(
+      (c) => ({
+        getAuditPatients: (x) => {
+          spy(x);
+          return c.getAuditPatients(x);
+        },
+        getAuditEvent: async (x) => {
+          const e = await c.getAuditEvent(x);
+          id = e.id;
+          // Core 1.19.0's bare entry, with its list's rows.
+          return {
+            id: e.id,
+            seq: e.seq,
+            hash: e.hash,
+            at: e.at,
+            type: "security",
+            kind: "unknown",
+            patients: { count: 3 },
+            letter: null,
+          } as unknown as AuditDetail;
+        },
+      }),
+      TEAM_EMAILS.amara,
+    );
+    const { u } = await openRow(THREE);
+    const d = await dialog();
+    expect(await within(d).findByText(/can't be displayed/)).toBeVisible();
+    expect(within(d).getByText("Patients: 3")).toBeVisible();
+    await reveal(u, d);
+    expect(await within(d).findAllByText(IDS)).toHaveLength(3);
+    expect(spy).toHaveBeenCalledWith(id);
+    expect(await viewed(m)).toBe(1);
+  });
+
+  it("a bare entry with a patients value outside 1 to 200 offers nothing", async () => {
+    setup(
+      (c) => ({
+        getAuditEvent: async (x) => {
+          const e = await c.getAuditEvent(x);
+          return {
+            id: e.id,
+            seq: e.seq,
+            hash: e.hash,
+            at: e.at,
+            type: "security",
+            kind: "unknown",
+            patients: { count: 201 },
+            letter: null,
+          } as unknown as AuditDetail;
+        },
+      }),
+      TEAM_EMAILS.amara,
+    );
+    await openRow(THREE);
+    const d = await dialog();
+    expect(await within(d).findByText(/can't be displayed/)).toBeVisible();
+    expect(within(d).queryByText(/^Patients:/)).toBeNull();
+    expect(
+      within(d).queryByRole("button", { name: "Reveal patients" }),
+    ).toBeNull();
   });
 
   it("nothing is stored or put in the URL, and no id is logged", async () => {
@@ -468,9 +577,7 @@ describe("patient ids are recorded once and never kept", () => {
     patientSpy();
     const { u } = await openRow(THREE);
     const d = await dialog();
-    await u.click(
-      await within(d).findByRole("button", { name: "Show patient ids" }),
-    );
+    await reveal(u, d);
     await within(d).findAllByText(IDS);
     await u.click(within(d).getByRole("button", { name: "Hide patient ids" }));
     expect(localStorage).toHaveLength(0);

@@ -12,12 +12,14 @@ import type {
   ViewOut,
 } from "../api/analysis-contract";
 import { viewSummary } from "./summary";
+import { drillKey } from "@/tests/drill";
 
 const S = (value: number): GuardedOut => ({ value, suppressed: false });
 const H: GuardedOut = { value: null, suppressed: true };
+/** A count with the drill key of row `drill` (a readable token), or none. */
 const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
   ...g,
-  drill,
+  drill: drill === null ? null : drillKey(drill),
 });
 const meta = (patients: GuardedOut): Meta => ({
   updated_at: "2026-10-22T06:00:00.000Z",

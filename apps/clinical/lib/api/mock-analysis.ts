@@ -109,9 +109,18 @@ export function guardSet(values: number[], total: number): GuardedOut[] {
   );
 }
 
-const drillable = (g: GuardedOut, drill: string): Drillable => ({
+/**
+ * A count and, while the views are worked out, its row's token (`age-…`,
+ * `pair-…`, `finding-…`), or null where core never lists (prevalence,
+ * location, specialty). `withDrillKeys` turns the token into a drill key
+ * bound to the context, or drops it, before anything leaves the mock.
+ */
+const drillable = (g: GuardedOut, drill: string | null): Drillable => ({
   ...g,
-  drill: !g.suppressed && (g.value ?? 0) >= SMALL_GROUP_MIN ? drill : null,
+  drill:
+    drill !== null && !g.suppressed && (g.value ?? 0) >= SMALL_GROUP_MIN
+      ? drill
+      : null,
 });
 
 /** A share of `den` that must not give away its numerator or its complement. */
@@ -341,7 +350,8 @@ function prevalence(f: Win): PrevalenceOut {
       const [n, e] = guardSet([r.fresh, r.cases - r.fresh], r.cases);
       return {
         condition: condRef(id),
-        cases: drillable(guard(r.cases), `cond-${id}`),
+        // Prevalence counts cases, not patients: never a list.
+        cases: drillable(guard(r.cases), null),
         new: n,
         existing: e,
       };
@@ -392,7 +402,7 @@ function affected(f: Win): AffectedOut {
   function part<K extends string | null>(
     key: (p: CohortPatient) => K,
     order: readonly K[] | null,
-    token: (k: K) => string,
+    token: (k: K) => string | null,
   ) {
     const rows = groups(pop, key, order);
     const g = guardSet(
@@ -429,10 +439,11 @@ function affected(f: Win): AffectedOut {
       ),
       (s) => `setting-${s ?? "none"}`,
     ).map((r) => ({ setting: r.k, patients: r.patients })),
+    // Never a list on location or specialty (core 1.19.0).
     by_location: part<string | null>(
       (p) => p.location,
       null,
-      (l) => `loc-${l ?? "none"}`,
+      () => null,
     ).map((r) => ({
       location: r.k === null ? null : LOCATIONS.find((l) => l.id === r.k)!,
       patients: r.patients,
@@ -440,7 +451,7 @@ function affected(f: Win): AffectedOut {
     by_specialty: part<string | null>(
       (p) => p.specialty,
       null,
-      (s) => `spec-${s ? slug(s) : "none"}`,
+      () => null,
     ).map((r) => ({ specialty: r.k, patients: r.patients })),
   };
 }
@@ -739,26 +750,152 @@ const VIEW_FNS: { [V in ViewId]: (f: Win) => ViewOut[V] } = {
 
 // --- patients behind a shown count ---
 
-/** Every drill the views would show for these filters: only these may be opened. */
-function shownDrills(f: Win): Set<string> {
-  const v = {
-    p: prevalence(f),
-    a: affected(f),
-    c: coOccurring(f),
-    f: findings(f),
-  };
-  const all: Drillable[] = [
-    ...v.p.by_condition.map((r) => r.cases),
-    ...v.a.by_age.map((r) => r.patients),
-    ...v.a.by_sex.map((r) => r.patients),
-    ...v.a.by_setting.map((r) => r.patients),
-    ...v.a.by_location.map((r) => r.patients),
-    ...v.a.by_specialty.map((r) => r.patients),
-    ...v.c.pairs.map((r) => r.patients),
-    ...v.f.findings.map((r) => r.patients),
-  ];
-  return new Set(all.flatMap((d) => (d.drill ? [d.drill] : [])));
+// --- drill keys, as core derives them (1.19.0) ---
+
+/** The demo's one hospital: a key is bound to it like core's. */
+const DEMO_HOSPITAL = "demo-hospital";
+const B64URL =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+/** `n` bytes from `text` (FNV-1a lanes, mixed): stable, synthetic, not secret. */
+function bytesOf(text: string, n: number): number[] {
+  const out: number[] = [];
+  for (let lane = 0; out.length < n; lane++) {
+    let h = (0x811c9dc5 ^ Math.imul(lane + 1, 0x9e3779b1)) >>> 0;
+    for (let i = 0; i < text.length; i++)
+      h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+    h = (h ^ (h >>> 16)) >>> 0;
+    out.push(h >>> 24, (h >>> 16) & 255, (h >>> 8) & 255, h & 255);
+  }
+  return out.slice(0, n);
 }
+
+/** 32 bytes as 43 characters of base64url, no padding: a key's shape. */
+function base64url(bytes: number[]): string {
+  let bits = 0;
+  let acc = 0;
+  let out = "";
+  for (const b of bytes) {
+    acc = (acc << 8) | b;
+    bits += 8;
+    while (bits >= 6) {
+      bits -= 6;
+      out += B64URL[(acc >>> bits) & 63];
+    }
+    acc &= (1 << bits) - 1;
+  }
+  if (bits > 0) out += B64URL[(acc << (6 - bits)) & 63];
+  return out;
+}
+
+/** A pseudonym anywhere in a key: core drops such a key (the cell has no drill). */
+const PID_IN = /(^|[^A-Za-z0-9])P-[A-Z0-9]{4,12}([^A-Za-z0-9]|$)/;
+
+/** The context a key is bound to: the hospital, the period and every filter. */
+const contextOf = (f: AnalysisFilters) =>
+  JSON.stringify([
+    DEMO_HOSPITAL,
+    f.period.level,
+    f.period.start,
+    f.condition,
+    f.age_band,
+    f.sex,
+    f.location,
+    f.setting,
+    f.specialty,
+    f.source,
+  ]);
+
+/** Lists only under the filters a row shows: never location, specialty or source. */
+const drillContextOk = (f: AnalysisFilters) =>
+  f.location === null && f.specialty === null && f.source === null;
+
+/** The key of one row (`token`) of `view`, in this context; null when core would drop it. */
+function drillKey(
+  f: AnalysisFilters,
+  view: ViewId,
+  token: string,
+): string | null {
+  const key = base64url(
+    bytesOf(`analysis/drill/v1|${contextOf(f)}|${view}|${token}`, 32),
+  );
+  return PID_IN.test(key) ? null : key;
+}
+
+/** A row's key as the mock derives it: for tests, which open lists directly. */
+export const mockDrillKey = (
+  f: AnalysisFilters,
+  view: ViewId,
+  token: string,
+): string | null => drillKey(f, view, token);
+
+/** Each drillable count's token turned into its key; null outside a list's context. */
+function withDrillKeys<V extends ViewId>(
+  view: V,
+  out: ViewOut[V],
+  f: AnalysisFilters,
+): ViewOut[V] {
+  const ok = drillContextOk(f);
+  const walk = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(walk);
+    if (typeof v !== "object" || v === null) return v;
+    const o = v as Record<string, unknown>;
+    if ("drill" in o && "suppressed" in o)
+      return {
+        ...o,
+        drill:
+          ok && typeof o.drill === "string" ? drillKey(f, view, o.drill) : null,
+      };
+    return Object.fromEntries(Object.entries(o).map(([k, x]) => [k, walk(x)]));
+  };
+  return walk(out) as ViewOut[V];
+}
+
+/**
+ * Every list the views would offer for these filters, by key: its row's
+ * token and the shown count. Only these may be opened; a key of any other
+ * period, filter set or row isn't here (core's 422 `too_small`).
+ */
+function shownDrills(f: Win): Map<string, { token: string; cell: number }> {
+  const out = new Map<string, { token: string; cell: number }>();
+  if (!drillContextOk(f)) return out;
+  const a = affected(f);
+  const add = (view: ViewId, d: Drillable) => {
+    if (d.drill === null || d.value === null) return;
+    const key = drillKey(f, view, d.drill);
+    if (key) out.set(key, { token: d.drill, cell: d.value });
+  };
+  for (const r of a.by_age) add("affected", r.patients);
+  for (const r of a.by_sex) add("affected", r.patients);
+  for (const r of a.by_setting) add("affected", r.patients);
+  for (const r of coOccurring(f).pairs) add("co-occurring", r.patients);
+  for (const r of findings(f).findings) add("findings", r.patients);
+  return out;
+}
+
+/**
+ * A patient's pid in one list: random per hospital, period, level and
+ * patient (core's H6d), so lists of two periods can't be joined up.
+ */
+function pidFor(
+  p: CohortPatient,
+  f: AnalysisFilters,
+  level: "deidentified" | "named",
+): string {
+  const b = bytesOf(
+    `pid|${DEMO_HOSPITAL}|${f.period.level}:${f.period.start}|${level}|${p.pid}`,
+    8,
+  );
+  return `P-${b.map((x) => PID_CHARS[x % PID_CHARS.length]).join("")}`;
+}
+const PID_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/** Core's list limits per person: 10 a minute, 50 a day, 300 patients a quarter. */
+export const LISTS_PER_MINUTE = 10;
+export const LISTS_PER_DAY = 50;
+export const PATIENTS_PER_QUARTER = 300;
 
 function matcher(drill: string, f: Win): (p: CohortPatient) => boolean {
   const i = drill.indexOf("-");
@@ -771,12 +908,6 @@ function matcher(drill: string, f: Win): (p: CohortPatient) => boolean {
       return (p) => p.sex === val;
     case "setting":
       return (p) => (p.setting ?? "none") === val;
-    case "loc":
-      return (p) => (p.location ?? "none") === val;
-    case "spec":
-      return (p) => (p.specialty ? slug(p.specialty) : "none") === val;
-    case "cond":
-      return (p) => scoped(p, f).some((c) => c.id === val);
     case "pair": {
       const [a, b] = val.split("-");
       return (p) => {
@@ -794,9 +925,13 @@ function matcher(drill: string, f: Win): (p: CohortPatient) => boolean {
   }
 }
 
-function rowOf(p: CohortPatient, f: Win): PatientRowOut {
+function rowOf(
+  p: CohortPatient,
+  f: Win,
+  level: "deidentified" | "named" = "deidentified",
+): PatientRowOut {
   return {
-    pid: p.pid,
+    pid: pidFor(p, f, level),
     age_band: p.age_band,
     sex: p.sex,
     setting: p.setting,
@@ -809,13 +944,14 @@ function rowOf(p: CohortPatient, f: Win): PatientRowOut {
       .map((x) => ({
         name: x.name,
         flag: x.flag,
-        source_label: x.source_label,
+        // A de-identified row shows no source (core 1.19.0).
+        source_label: level === "named" ? x.source_label : null,
       })),
   };
 }
 
 const namedRowOf = (p: CohortPatient, f: Win): NamedPatientRowOut => ({
-  ...rowOf(p, f),
+  ...rowOf(p, f, "named"),
   name: p.name,
   mrn: p.mrn,
 });
@@ -961,6 +1097,36 @@ export function createMockAnalysis({
    */
   const viewed = new Map<string, { print: string; namedUntil: number }>();
 
+  /** Each person's lists (times), and the patients each was sent per quarter. */
+  const lists = new Map<string, number[]>();
+  const reserved = new Map<string, Set<string>>();
+  /**
+   * Core's list limits, per person: 10 lists a minute, 50 a day and 300
+   * different patients in the calendar quarter of the list's period (429
+   * `rate_limited`). A refused list counts for nothing; an admitted one is
+   * recorded with the patients it sent.
+   */
+  function admitList(who: string, period: PeriodRef, subjects: string[]) {
+    const t = now();
+    const day = new Date(t).toISOString().slice(0, 10);
+    const times = lists.get(who) ?? [];
+    if (times.filter((x) => t - x < 60_000).length >= LISTS_PER_MINUTE)
+      fail(429, "rate_limited");
+    const today = times.filter(
+      (x) => new Date(x).toISOString().slice(0, 10) === day,
+    );
+    if (today.length >= LISTS_PER_DAY) fail(429, "rate_limited");
+    const [y, m] = period.start.split("-").map(Number);
+    const quarter = `${who}|${y}-Q${Math.floor((m - 1) / 3)}`;
+    const seen = reserved.get(quarter) ?? new Set<string>();
+    const fresh = subjects.filter((x) => !seen.has(x));
+    if (seen.size + fresh.length > PATIENTS_PER_QUARTER)
+      fail(429, "rate_limited");
+    for (const x of fresh) seen.add(x);
+    reserved.set(quarter, seen);
+    lists.set(who, [...today, t]);
+  }
+
   /** Whether names may show for this person right now, read live. */
   async function clearanceMe(): Promise<ClearanceMeOut> {
     if (namedAccess !== "on") return NOT_NAMED("switched_off");
@@ -1003,7 +1169,7 @@ export function createMockAnalysis({
       checkRequest(f);
       coldChecks(f);
       const out = VIEW_FNS[view](win(f)) as ViewOut[V];
-      return { ...out, history: history(f) };
+      return { ...withDrillKeys(view, out, f), history: history(f) };
     },
     async listPatients({
       drill,
@@ -1018,13 +1184,24 @@ export function createMockAnalysis({
       // Names are only ever a POST (the purpose stays out of URLs).
       if (level !== "deidentified")
         throw new ApiError(422, "level_not_supported");
-      if (!shownDrills(filters).has(drill))
+      const shown = shownDrills(filters).get(drill);
+      if (!shown) throw new ApiError(422, "too_small");
+      const hit = population(filters).filter(matcher(shown.token, filters));
+      // Nothing is computed for a list: it must be the cell it came from.
+      if (hit.length !== shown.cell || hit.length < SMALL_GROUP_MIN)
         throw new ApiError(422, "too_small");
-      const hit = population(filters).filter(matcher(drill, filters));
-      const patients = hit
+      // Core's rows: the first 200 patients by subject, then by pid.
+      const sent = [...hit]
         .sort((a, b) => a.pid.localeCompare(b.pid))
         .slice(0, PATIENT_ROWS_MAX)
-        .map((p) => rowOf(p, filters));
+        .map((p) => ({ p, pid: pidFor(p, filters, "deidentified") }))
+        .sort((a, b) => a.pid.localeCompare(b.pid));
+      admitList(
+        (await me())?.toLowerCase() ?? "",
+        asked.period,
+        sent.map((x) => x.p.pid),
+      );
+      const patients = sent.map((x) => rowOf(x.p, filters));
       recordAudit({
         at: new Date(now()).toISOString(),
         type: "security",
@@ -1038,7 +1215,7 @@ export function createMockAnalysis({
         count: patients.length,
         flag: null,
       });
-      return { level, count: hit.length, patients };
+      return { level, count: shown.cell, patients };
     },
     async listNamedPatients(q, opts) {
       await wait();
@@ -1111,14 +1288,15 @@ export function createMockAnalysis({
       (why === "other" && text === "")
     )
       return fail(422, "invalid");
-    if (!shownDrills(filters).has(drill)) return fail(422, "too_small");
+    const shown = shownDrills(filters).get(drill);
+    if (!shown) return fail(422, "too_small");
     const letter = lettersFor(p.id, t).find((c) => c.id === cover.clearance_id);
     if (!letter) return fail(403, "not_cleared");
-    const hit = population(filters).filter(matcher(drill, filters));
+    const hit = population(filters).filter(matcher(shown.token, filters));
     const patients = hit
+      .map((x) => namedRowOf(x, filters))
       .sort((a, b) => a.pid.localeCompare(b.pid))
-      .slice(0, PATIENT_ROWS_MAX)
-      .map((x) => namedRowOf(x, filters));
+      .slice(0, PATIENT_ROWS_MAX);
     const until = Math.min(Date.parse(cover.until), t + NAMED_VIEW_MS);
     if (record)
       recordAudit({

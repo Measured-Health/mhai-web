@@ -1,20 +1,23 @@
-// Reading the Analysis replies (spec §4, §5; core openapi 1.17.0). Each
+// Reading the Analysis replies (spec §4, §5; core openapi 1.19.0). Each
 // reply's shape is checked first, strictly (`analysis-schema.ts`: these
 // keys and no others), then its values. Each view is read on its own
 // and fails closed ("Couldn't load {view}") on a wrong shape or on any
 // value the server should have hidden: a shown 1–4, a non-whole count, a
 // share or median over a hidden count, a share that gives away 1–4 or its
 // complement, a set whose hidden members can be worked out, a drill on a
-// count under 5, or a series point that isn't a real day. A failed view
+// count under 5, a drill where core never sets one (`DRILL_ROWS`), or a
+// series point that isn't a real day. A failed view
 // never shows zeros and never takes the others down. The patient list is
 // read only at the level asked for, and fails closed on any field outside
-// its row: a de-identified row has no name or MRN, and a named row (Plan
-// 11c) adds only those two, with a `named_until` still in the future.
+// its row: a de-identified row has no name, MRN or source and its count is
+// the cell it was opened from; a named row (Plan 11c) adds only a name and
+// an MRN, with a `named_until` still in the future.
 import { SMALL_GROUP_MIN, isSmallCount } from "@mhai/ui/small-groups";
 import type { GuardedOut } from "../api/admin-contract";
 import type { DismissReason, FindingFlag } from "../api/alerts-contract";
 import type {
   AgeBand,
+  AnalysisFilters,
   ClearanceMeOut,
   ConditionRef,
   Drillable,
@@ -44,7 +47,13 @@ import {
   setGivesAway,
   shows,
 } from "./guards";
-import { filtersShapeOk, viewShapeOk } from "../api/analysis-schema";
+import {
+  DRILL_KEY_RE,
+  NO_DRILL_FILTERS,
+  PATIENTS_SCHEMA,
+  filtersShapeOk,
+  viewShapeOk,
+} from "../api/analysis-schema";
 import { isPeriodStart, periodSpan, prevPeriod, samePeriod } from "./periods";
 
 export type ViewState<T> = { status: "ok"; data: T } | { status: "failed" };
@@ -111,12 +120,41 @@ const isInstant = (v: unknown): v is string =>
 const count = (v: unknown) => guardedOk(v, "count");
 const share = (v: unknown) => guardedOk(v, "share", true);
 const minutes = (v: unknown) => guardedOk(v, "minutes", true);
-/** A count with a drill key only where it's shown and 5 or more. */
-function drillOk(v: unknown): boolean {
+/**
+ * Where core 1.19.0 sets a drill key: the affected view's age band, sex and
+ * setting rows, the co-occurring pairs and the findings, and only under
+ * condition, age band, sex or setting filters. Never on prevalence,
+ * location or specialty rows, nor under a location, specialty or source
+ * filter (pids are stable within a period, so lists split by a dimension
+ * the rows don't show could be compared to find a hidden small group).
+ */
+export const DRILL_ROWS = {
+  prevalence: [],
+  affected: ["by_age", "by_sex", "by_setting"],
+  "co-occurring": ["pairs"],
+  findings: ["findings"],
+  quality: [],
+} as const satisfies Record<ViewId, readonly string[]>;
+
+/** Whether core may set drills under these filters (see `DRILL_ROWS`). */
+export const drillContext = (f: AnalysisFilters): boolean =>
+  NO_DRILL_FILTERS.every((k) => f[k] === null);
+
+/**
+ * A count with a drill key only where it's shown and 5 or more, and only
+ * where a list is `allowed`: a key anywhere else fails the view.
+ */
+function drillOk(v: unknown, allowed: boolean): boolean {
   if (!count(v) || !isObj(v) || !("drill" in v)) return false;
   const g = v as unknown as G;
   if (v.drill === null) return true;
-  return isId(v.drill) && !hidden(g) && g.value! >= SMALL_GROUP_MIN;
+  return (
+    allowed &&
+    isStr(v.drill) &&
+    DRILL_KEY_RE.test(v.drill) &&
+    !hidden(g) &&
+    g.value! >= SMALL_GROUP_MIN
+  );
 }
 
 const conditionOk = (c: unknown) =>
@@ -225,6 +263,7 @@ function partOk(total: G, part: G): boolean {
 }
 
 function prevalenceOk(v: Obj): boolean {
+  // Prevalence counts cases, not patients: it never has a drill.
   // Not a set against `patients`: one patient can count under several
   // conditions, so patients − cases gives nothing away.
   const t = v.total;
@@ -238,7 +277,7 @@ function prevalenceOk(v: Obj): boolean {
     v.by_condition,
     (r) =>
       conditionOk(r.condition) &&
-      drillOk(r.cases) &&
+      drillOk(r.cases, false) &&
       newExistingOk(r.cases, r.new, r.existing),
     (r) => conditionKey(r.condition),
   );
@@ -262,9 +301,10 @@ function partitionOk(
   patients: G,
   keyOk: (r: Obj) => boolean,
   key: (r: Obj) => unknown,
+  drills: boolean,
 ): boolean {
   return (
-    rows(v, (r) => keyOk(r) && drillOk(r.patients), key) &&
+    rows(v, (r) => keyOk(r) && drillOk(r.patients, drills), key) &&
     !setGivesAway(
       patients,
       (v as Obj[]).map((r) => r.patients as G),
@@ -272,7 +312,7 @@ function partitionOk(
   );
 }
 
-function affectedOk(v: Obj): boolean {
+function affectedOk(v: Obj, drills: boolean): boolean {
   const p = v.patients as G;
   return (
     partitionOk(
@@ -280,30 +320,35 @@ function affectedOk(v: Obj): boolean {
       p,
       (r) => r.band === null || oneOf(AGE_BANDS, r.band),
       (r) => r.band,
+      drills,
     ) &&
     partitionOk(
       v.by_sex,
       p,
       (r) => oneOf(SEXES, r.sex),
       (r) => r.sex,
+      drills,
     ) &&
     partitionOk(
       v.by_setting,
       p,
       (r) => r.setting === null || oneOf(SETTINGS, r.setting),
       (r) => r.setting,
+      drills,
     ) &&
     partitionOk(
       v.by_location,
       p,
       (r) => r.location === null || locationOk(r.location),
       (r) => (r.location as Obj | null)?.id ?? null,
+      false,
     ) &&
     partitionOk(
       v.by_specialty,
       p,
       (r) => strOrNull(r.specialty),
       (r) => r.specialty,
+      false,
     )
   );
 }
@@ -314,9 +359,13 @@ function affectedOk(v: Obj): boolean {
  * and nothing shows beside a hidden first condition. The share of the
  * first condition is hidden with either count, and gives nothing away.
  */
-function pairOk(r: Obj): boolean {
+function pairOk(r: Obj, drills: boolean): boolean {
   if (!conditionOk(r.a) || !conditionOk(r.b)) return false;
-  if (!count(r.a_patients) || !drillOk(r.patients) || !share(r.share_of_a))
+  if (
+    !count(r.a_patients) ||
+    !drillOk(r.patients, drills) ||
+    !share(r.share_of_a)
+  )
     return false;
   const a = r.a_patients as G;
   const both = r.patients as G;
@@ -333,15 +382,16 @@ function pairOk(r: Obj): boolean {
 /** A pair is the same whichever way round. */
 const pairKey = (r: Obj) =>
   [conditionKey(r.a), conditionKey(r.b)].map(String).sort();
-const coOccurringOk = (v: Obj) => rows(v.pairs, pairOk, pairKey);
+const coOccurringOk = (v: Obj, drills: boolean) =>
+  rows(v.pairs, (r) => pairOk(r, drills), pairKey);
 
-function findingsOk(v: Obj): boolean {
+function findingsOk(v: Obj, drills: boolean): boolean {
   const list = rows(
     v.findings,
     (r) =>
       strOrNull(r.name) &&
       (r.flag === null || oneOf(FLAGS, r.flag)) &&
-      drillOk(r.patients) &&
+      drillOk(r.patients, drills) &&
       count(r.results),
     (r) => [r.name, r.flag],
   );
@@ -425,7 +475,8 @@ function qualityRowOk(r: Obj): boolean {
 const qualityOk = (v: Obj) =>
   rows(v.by_condition, qualityRowOk, (r) => conditionKey(r.condition));
 
-const VIEW_OK: Record<ViewId, (v: Obj) => boolean> = {
+/** Each view's checks; `drills` is whether its context may carry drill keys. */
+const VIEW_OK: Record<ViewId, (v: Obj, drills: boolean) => boolean> = {
   prevalence: prevalenceOk,
   affected: affectedOk,
   "co-occurring": coOccurringOk,
@@ -435,16 +486,19 @@ const VIEW_OK: Record<ViewId, (v: Obj) => boolean> = {
 
 /**
  * One view's reply, read on its own; see the file comment. Given `asked`,
- * a reply for any other period fails too.
+ * a reply for any other period fails too; given `filters`, a drill key
+ * under a filter core never drills under fails it as well.
  */
 export function readView<V extends ViewId>(
   view: V,
   raw: unknown,
   asked?: PeriodRef,
+  filters?: AnalysisFilters,
 ): ViewState<ViewOut[V]> {
   const ok = Object.hasOwn(VIEW_OK, view) ? VIEW_OK[view] : null;
   if (!ok || !viewShapeOk(view, raw) || !isObj(raw)) return FAILED;
-  if (!metaOk(raw) || !ok(raw)) return FAILED;
+  const drills = filters === undefined || drillContext(filters);
+  if (!metaOk(raw) || !ok(raw, drills)) return FAILED;
   if (asked && !samePeriod(asked, raw.period as PeriodRef)) return FAILED;
   return { status: "ok", data: BUILD[view](raw) as ViewOut[V] };
 }
@@ -699,7 +753,7 @@ function patientRowOk(r: Obj, keys: readonly string[]): boolean {
     exactKeys(r, keys) &&
     isStr(r.pid) &&
     PID.test(r.pid) &&
-    oneOf(AGE_BANDS, r.age_band) &&
+    (r.age_band === null || oneOf(AGE_BANDS, r.age_band)) &&
     oneOf(SEXES, r.sex) &&
     (r.setting === null || oneOf(SETTINGS, r.setting)) &&
     rows(r.conditions, (c) => exactKeys(c, CONDITION_KEYS) && conditionOk(c)) &&
@@ -735,13 +789,17 @@ const rowOf = (r: PatientRowOut): PatientRowOut => ({
 
 /**
  * The patients behind a shown count, read only at the level asked for: at
- * most 200 rows, a count of 5 or more, and no field outside the row. A named
- * reply also needs a `named_until` after `now` and the clearance it rests on.
+ * most 200 rows, a count of 5 or more, and no field outside the row. A
+ * de-identified reply is first read strictly (`PATIENTS_SCHEMA`: no source
+ * on a row), and given `cell`, its count must be that shown count exactly.
+ * A named reply also needs a `named_until` after `now` and the clearance it
+ * rests on.
  */
 export function readPatients(
   raw: unknown,
   expected: "deidentified",
   now: number,
+  cell?: number,
 ): ViewState<DeidentifiedPatientsOut>;
 export function readPatients(
   raw: unknown,
@@ -757,9 +815,12 @@ export function readPatients(
   raw: unknown,
   expected: PatientLevel,
   now: number,
+  cell?: number,
 ): ViewState<PatientsOut> {
   if (!isObj(raw) || raw.level !== expected) return FAILED;
   const named = expected === "named";
+  if (!named && !PATIENTS_SCHEMA.safeParse(raw).success) return FAILED;
+  if (!named && cell !== undefined && raw.count !== cell) return FAILED;
   if (!exactKeys(raw, named ? NAMED_REPLY_KEYS : REPLY_KEYS)) return FAILED;
   const list = raw.patients;
   const rowOk = named ? namedRowOk : (r: Obj) => patientRowOk(r, ROW_KEYS);

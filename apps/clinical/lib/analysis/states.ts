@@ -84,3 +84,50 @@ export function shouldRetryAnalysis(failures: number, e: unknown): boolean {
   }
   return failures < 3;
 }
+
+// ---- A patient list (`GET /analysis/patients`, core 1.19.0) ----------------------
+
+/**
+ * What a refused patient list means to the person. Only the status and the
+ * problem code are read.
+ *
+ * - off: 404, Analysis is off (as on the views).
+ * - gone: 422 `too_small`, the key no longer opens a list (another period,
+ *   filters or hospital, or the count changed). Says nothing about the group.
+ * - limit: 429, too many lists for now (10 a minute, 50 a day, or 300
+ *   different patients a quarter).
+ * - failed: anything else (a network error, 5xx, a reply that didn't read);
+ *   the only state with Try again.
+ */
+export type ListProblem = "off" | "gone" | "limit" | "failed";
+
+export function listProblemOf(e: unknown): ListProblem {
+  if (!(e instanceof ApiError)) return "failed";
+  if (e.status === 404) return "off";
+  if (e.status === 422 && e.code === "too_small") return "gone";
+  if (e.status === 429) return "limit";
+  return "failed";
+}
+
+export const LIST_GONE_TEXT = "This list is no longer available";
+export const LIST_LIMIT_TEXT =
+  "You've opened many patient lists; try again later";
+/** On a See patients core sent no key for (a shown count of 5 or more). */
+export const NO_DRILL_TEXT = "not available for this breakdown";
+/** Said with every list: core records each opening. */
+export const AUDITED_TEXT =
+  "This view is audited: opening a patient list is recorded under your name.";
+
+/** The words for a refused list; null for a plain failure ("Couldn't load these patients"). */
+export function listProblemText(p: ListProblem): string | null {
+  switch (p) {
+    case "off":
+      return OFF_TEXT;
+    case "gone":
+      return LIST_GONE_TEXT;
+    case "limit":
+      return LIST_LIMIT_TEXT;
+    default:
+      return null;
+  }
+}

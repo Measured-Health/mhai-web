@@ -15,6 +15,7 @@ import type {
 } from "@/lib/api/analysis-contract";
 import { createMockAnalysis } from "@/lib/api/mock-analysis";
 import { renderAdmin } from "@/tests/admin-render";
+import { drillKey } from "@/tests/drill";
 
 const holder = vi.hoisted(() => ({
   client: null as unknown as AnalysisClient,
@@ -32,9 +33,10 @@ import { findingBars } from "./findings-view";
 
 const S = (value: number): GuardedOut => ({ value, suppressed: false });
 const H: GuardedOut = { value: null, suppressed: true };
+/** A count with the drill key of row `drill` (a readable token), or none. */
 const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
   ...g,
-  drill,
+  drill: drill === null ? null : drillKey(drill),
 });
 const meta = (patients: GuardedOut): Meta => ({
   updated_at: "2026-10-22T06:00:00.000Z",

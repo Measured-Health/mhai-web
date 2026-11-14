@@ -230,16 +230,24 @@ const AUDITOR_WRITES: [Method, string][] = [
 const FILE = "platform/audit/exports/{id}/file";
 const PAGE = "platform/clearances/{id}/pages/{id}";
 const PNG = new Uint8Array([137, 80, 78, 71]);
+/** The recorded reveal: an auditor's, with a decimal id (core 1.19.0). */
+const REVEAL = "platform/audit/{id}/patients";
 /** What upstream sends back: a file for the file shapes, JSON for the rest. */
 const upstream = (shape: string) =>
   shape === FILE
     ? new Response("a,b\n", { headers: { "Content-Type": "text/csv" } })
     : shape === PAGE
       ? new Response(PNG, { headers: { "Content-Type": "image/png" } })
-      : Response.json({ ok: true });
+      : shape === REVEAL
+        ? Response.json({ pseudonyms: [] })
+        : Response.json({ ok: true });
 let n = 0;
 const concrete = (shape: string) =>
-  shape.split("/").map((p) => (p === "{id}" ? `id_${++n}-X` : p));
+  shape
+    .split("/")
+    .map((p) =>
+      p === "{id}" ? (shape === REVEAL ? `${++n}` : `id_${++n}-X`) : p,
+    );
 /** A query and body each strictly checked shape accepts. */
 const VALID: Record<string, { query?: string; body?: string }> = {
   "PUT platform/hospitals/{id}/model-policy": {
@@ -265,7 +273,8 @@ const WRITES = SHAPES.filter(
 const READS = SHAPES.filter(([m]) => m === "GET");
 
 describe("platform API proxy", () => {
-  it.each(SHAPES)(
+  // The reveal is an auditor's: its own tests are below.
+  it.each(SHAPES.filter(([, shape]) => shape !== REVEAL))(
     "every listed shape is forwarded for a platform admin: %s %s",
     async (method, shape) => {
       await session();
@@ -350,7 +359,9 @@ describe("platform API proxy", () => {
       fetchMock.mockResolvedValueOnce(
         shape === FILE || shape === PAGE
           ? upstream(shape)
-          : Response.json({ items: [] }),
+          : shape === REVEAL
+            ? Response.json({ pseudonyms: [] })
+            : Response.json({ items: [] }),
       );
       const res = await call(method, concrete(shape), {
         query: VALID[`${method} ${shape}`]?.query,
@@ -721,7 +732,7 @@ describe("platform API proxy", () => {
       expect(AUDIT_SHAPES).toHaveLength(15);
       for (const [method, shape] of AUDIT_SHAPES) {
         fetchMock.mockReset();
-        await session();
+        await session(shape === REVEAL ? { roles: ["auditor"] } : {});
         fetchMock.mockResolvedValueOnce(upstream(shape));
         const res = await call(method, concrete(shape), { body: "{}" });
         expect([method, shape, res.status]).toEqual([method, shape, 200]);
@@ -770,6 +781,76 @@ describe("platform API proxy", () => {
         expect([word, res.status]).toEqual([word, 404]);
       }
       expect(calls()).toHaveLength(1);
+    });
+
+    describe("the recorded reveal (core 1.19.0)", () => {
+      const reveal = (id = "42", query?: string) =>
+        call("GET", ["platform", "audit", id, "patients"], { query });
+
+      it("forwards an auditor's reveal of a decimal entry id, and the pids back exactly", async () => {
+        await session({ roles: ["auditor"] });
+        fetchMock.mockResolvedValueOnce(
+          Response.json({ pseudonyms: ["P-7F3K2", "P-AB12CD"] }),
+        );
+        const res = await reveal();
+        expect(res.status).toBe(200);
+        expect(res.headers.get("Cache-Control")).toBe("no-store");
+        expect(await res.json()).toEqual({
+          pseudonyms: ["P-7F3K2", "P-AB12CD"],
+        });
+        expect(calls()[0]![0]).toBe(
+          "http://api.test/api/v1/platform/audit/42/patients",
+        );
+      });
+
+      it("a platform admin is refused before upstream", async () => {
+        await session({ roles: ["platform_admin"] });
+        const res = await reveal();
+        expect(res.status).toBe(403);
+        expect(await res.json()).toEqual({ code: "forbidden" });
+        expect(fetchMock).not.toHaveBeenCalled();
+      });
+
+      it("an id that isn't core's decimal one, or any query, is 404 before upstream", async () => {
+        await session({ roles: ["auditor"] });
+        for (const id of ["0", "01", "ev_1", "1".repeat(20), "abc"]) {
+          const res = await reveal(id);
+          expect([id, res.status]).toEqual([id, 404]);
+        }
+        expect((await reveal("42", "?x=1")).status).toBe(404);
+        expect(fetchMock).not.toHaveBeenCalled();
+      });
+
+      it("a reply that isn't exactly at most 200 pseudonyms is 502, with nothing of it", async () => {
+        await session({ roles: ["auditor"] });
+        for (const body of [
+          { pseudonyms: ["P-7F3K2"], name: "Jo Patient" },
+          { pseudonyms: ["Jo Patient"] },
+          {
+            pseudonyms: Array.from({ length: 201 }, (_, i) => `P-${1000 + i}`),
+          },
+          { ids: [] },
+          [],
+        ]) {
+          fetchMock.mockResolvedValueOnce(Response.json(body));
+          const res = await reveal();
+          expect(res.status).toBe(502);
+          expect(await res.json()).toEqual({ code: "bad_gateway" });
+        }
+      });
+
+      it("a refusal passes only its code", async () => {
+        await session({ roles: ["auditor"] });
+        fetchMock.mockResolvedValueOnce(
+          Response.json(
+            { code: "not_found", detail: "P-7F3K2" },
+            { status: 404 },
+          ),
+        );
+        const res = await reveal();
+        expect(res.status).toBe(404);
+        expect(await res.json()).toEqual({ code: "not_found" });
+      });
     });
 
     it("platform/audit/a.b is 404", async () => {

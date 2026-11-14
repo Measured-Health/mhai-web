@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { LETTER_MAX_BYTES } from "@mhai/ui/clearances";
 import { handledFields } from "@/lib/api/alert-handled";
+import {
+  NO_DRILL_FILTERS,
+  PATIENTS_QUERY,
+  PATIENTS_SCHEMA,
+} from "@/lib/api/analysis-schema";
 import { isPeriodStart } from "@/lib/analysis/periods";
 import {
   canOpenNamedAccess,
@@ -326,12 +331,14 @@ function analysisQueryProblem(req: Request, path: string[]): string | null {
   if (req.method !== "GET" || path[0] !== "analysis" || path.length !== 2)
     return null;
   const view = path[1]!;
-  if (view !== "filters" && !CORE_VIEWS.has(view)) return null;
+  if (view !== "filters" && view !== "patients" && !CORE_VIEWS.has(view))
+    return null;
   const query: Record<string, string> = {};
   for (const [k, v] of new URL(req.url).searchParams) {
     if (Object.hasOwn(query, k)) return "validation_failed";
     query[k] = v;
   }
+  if (view === "patients") return patientsQueryProblem(query);
   if (view === "filters") {
     const q = FILTERS_QUERY.safeParse(query);
     if (!q.success) return "validation_failed";
@@ -355,6 +362,47 @@ function analysisQueryProblem(req: Request, path: string[]): string | null {
     return "validation_failed";
   return null;
 }
+
+/**
+ * A de-identified list's query (`getAnalysisPatients`, core openapi 1.19.0),
+ * with core's own codes: no `deidentified` level is `level_not_supported`
+ * (any other level never gets here: names are only the POST); a key that
+ * isn't one's shape, or any location, specialty or source filter (core never
+ * sets a drill under those), is `too_small`; one finished period
+ * (`invalid_range`); these keys only, once each (`validation_failed`); at
+ * most two filters (`too_many_filters`).
+ */
+function patientsQueryProblem(query: Record<string, string>): string | null {
+  if (query.level !== "deidentified") return "level_not_supported";
+  if (!/^[A-Za-z0-9_-]{43}$/.test(query.drill ?? "")) return "too_small";
+  if (NO_DRILL_FILTERS.some((k) => k in query)) return "too_small";
+  if (
+    query.period === undefined ||
+    query.start === undefined ||
+    "from" in query ||
+    "to" in query
+  )
+    return "invalid_range";
+  const q = PATIENTS_QUERY.safeParse(query);
+  if (!q.success) return "validation_failed";
+  if (!isPeriodStart(q.data.period, q.data.start)) return "invalid_range";
+  const set = (["condition", "age_band", "sex", "setting"] as const).filter(
+    (k) => q.data[k] !== undefined,
+  );
+  return set.length > 2 ? "too_many_filters" : null;
+}
+
+/**
+ * The replies the BFF reads before they reach the browser (core 1.19.0):
+ * the de-identified list, exactly `AnalysisPatients`. Anything else is 502
+ * `bad_gateway`, so no field outside the row (a name, an MRN, a source)
+ * ever leaves the server.
+ */
+const isPatientsList = (method: string, path: string[]) =>
+  method === "GET" &&
+  path.length === 2 &&
+  path[0] === "analysis" &&
+  path[1] === "patients";
 
 const ALERT_ACTIONS = new Set(["acknowledge", "dismiss"]);
 const SENT_TO = new Set(["you", "queue"]);
@@ -548,6 +596,19 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
         "Content-Type": got,
         "Cache-Control": "no-store",
         "Content-Disposition": "inline",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
+  if (isPatientsList(req.method, path)) {
+    const raw = await res.json().catch(() => undefined);
+    const list = PATIENTS_SCHEMA.safeParse(raw);
+    if (!list.success) return json(502, { code: "bad_gateway" });
+    return new Response(JSON.stringify(list.data), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
       },
     });

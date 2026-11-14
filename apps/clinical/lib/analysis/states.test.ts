@@ -4,8 +4,11 @@ import {
   BUSY_TEXT,
   INVALID_TEXT,
   NOT_READY_TEXT,
+  NO_DRILL_TEXT,
   OFF_TEXT,
   canRetry,
+  listProblemOf,
+  listProblemText,
   problemOf,
   problemText,
   shouldRetryAnalysis,
@@ -69,5 +72,36 @@ describe("analysis refusals in plain words", () => {
       false,
     );
     expect(shouldRetryAnalysis(0, new Error("network"))).toBe(true);
+  });
+});
+
+describe("a patient list's refusals (core 1.19.0)", () => {
+  it("maps 404, 422 too_small and 429; everything else is a plain failure", () => {
+    expect(listProblemOf(new ApiError(404, "not_found"))).toBe("off");
+    expect(listProblemOf(new ApiError(422, "too_small"))).toBe("gone");
+    expect(listProblemOf(new ApiError(429, "rate_limited"))).toBe("limit");
+    expect(listProblemOf(new ApiError(429, "anything"))).toBe("limit");
+    for (const e of [
+      new ApiError(422, "validation_failed"),
+      new ApiError(422, "level_not_supported"),
+      new ApiError(403, "forbidden"),
+      new ApiError(502, "bad_gateway"),
+      new ApiError(503, "unavailable"),
+      new Error("network"),
+      undefined,
+    ])
+      expect(listProblemOf(e)).toBe("failed");
+  });
+
+  it("says each in plain words, and never anything about the group's size", () => {
+    expect(listProblemText("off")).toBe(OFF_TEXT);
+    expect(listProblemText("gone")).toBe("This list is no longer available");
+    expect(listProblemText("limit")).toBe(
+      "You've opened many patient lists; try again later",
+    );
+    expect(listProblemText("failed")).toBeNull();
+    for (const p of ["off", "gone", "limit"] as const)
+      expect(listProblemText(p)).not.toMatch(/small|fewer|[0-9]/i);
+    expect(NO_DRILL_TEXT).toBe("not available for this breakdown");
   });
 });

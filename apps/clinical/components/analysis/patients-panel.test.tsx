@@ -37,12 +37,14 @@ import type { User } from "@/lib/auth/types";
 import { screenAdminAs } from "@/tests/admin";
 import {
   GRACE,
+  NAMED_DRILL,
   NAMED_FILTERS,
   OBI,
   analysisAs,
   renderSignedIn,
   showNames,
 } from "@/tests/named";
+import { drillKey } from "@/tests/drill";
 
 const holder = vi.hoisted(() => ({
   client: null as unknown as AnalysisClient,
@@ -64,9 +66,10 @@ const F90 = emptyFilters({ level: "quarter", start: "2026-07-01" });
 
 const S = (value: number): GuardedOut => ({ value, suppressed: false });
 const H: GuardedOut = { value: null, suppressed: true };
+/** A count with the drill key of row `drill` (a readable token), or none. */
 const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
   ...g,
-  drill,
+  drill: drill === null ? null : drillKey(drill),
 });
 const meta = (patients: GuardedOut): Meta => ({
   updated_at: "2026-10-22T06:00:00.000Z",
@@ -87,7 +90,7 @@ const PREV: PrevalenceOut = {
   by_condition: [
     {
       condition: E11,
-      cases: D(S(60), "cond-e11"),
+      cases: D(S(60)),
       new: S(10),
       existing: S(50),
     },
@@ -102,7 +105,7 @@ const row = (i: number, extra: Partial<PatientRowOut> = {}): PatientRowOut => ({
   sex: "female",
   setting: null,
   conditions: [E11],
-  findings: [{ name: "HbA1c", flag: "high", source_label: "Main lab" }],
+  findings: [{ name: "HbA1c", flag: "high", source_label: null }],
   ...extra,
 });
 const reply = (
@@ -120,15 +123,39 @@ const renderWith = (ui: ReactElement) =>
 const patientQueries = () =>
   qc.getQueryCache().findAll({ queryKey: ["analysis", "patients"] });
 
-/** The prevalence view with PREV, its rows sent by the stub. */
-function prevalenceWith(list: AnalysisClient["listPatients"]) {
+/**
+ * One drillable pair (Type 2 diabetes + Hypertension, `cell` patients) and
+ * one hidden pair, in the co-occurring view; its list sent by the stub.
+ * Prevalence never has a list (core 1.19.0), so the panel is opened here.
+ */
+function pairWith(list: AnalysisClient["listPatients"], cell = 5) {
+  const body: CoOccurringOut = {
+    ...meta(S(600)),
+    pairs: [
+      {
+        a: E11,
+        b: { id: "i10", name: "Hypertension", icd10: "I10" },
+        a_patients: S(cell * 2),
+        patients: D(S(cell), "pair-e11-i10"),
+        share_of_a: S(0.5),
+      },
+      {
+        a: { id: "j45", name: "Asthma", icd10: "J45" },
+        b: E11,
+        a_patients: S(60),
+        patients: D(H),
+        share_of_a: H,
+      },
+    ],
+  };
   holder.client = {
     ...holder.client,
-    getView: (async () => structuredClone(PREV)) as AnalysisClient["getView"],
+    getView: (async () => structuredClone(body)) as AnalysisClient["getView"],
     listPatients: list,
   };
-  renderWith(<PrevalenceView filters={F90} />);
+  renderWith(<CoOccurringView filters={F90} />);
 }
+
 const seeButton = () => screen.findByRole("button", { name: /^See patients/ });
 async function openList() {
   const b = await seeButton();
@@ -167,19 +194,21 @@ describe("See patients", () => {
         [1, 2, 3, 4, 5, 6].map((i) => row(i)),
       ),
     );
-    prevalenceWith(spy);
+    pairWith(spy, 6);
     const { panel } = await openList();
-    expect(panel).toHaveAccessibleName(/patients · Type 2 diabetes · E11$/);
+    expect(panel).toHaveAccessibleName(
+      /patients · Type 2 diabetes \+ Hypertension$/,
+    );
     expect(
       await within(panel).findByRole("heading", {
-        name: "6 patients · Type 2 diabetes · E11",
+        name: "6 patients · Type 2 diabetes + Hypertension",
       }),
     ).toBeVisible();
     expect(
       within(panel).getByText("De-identified: no names or record numbers"),
     ).toBeVisible();
     expect(spy).toHaveBeenCalledWith({
-      drill: "cond-e11",
+      drill: drillKey("pair-e11-i10"),
       level: "deidentified",
       filters: F90,
     });
@@ -191,13 +220,14 @@ describe("See patients", () => {
   });
 
   it("portals the panel to the page, with print:hidden on its own root", async () => {
-    prevalenceWith(
+    pairWith(
       vi.fn(async () =>
         reply(
           6,
           [1, 2, 3, 4, 5, 6].map((i) => row(i)),
         ),
       ),
+      6,
     );
     const { panel } = await openList();
     const root = panel.parentElement!;
@@ -210,9 +240,9 @@ describe("See patients", () => {
   });
 
   it("a hidden count has no See patients", async () => {
-    prevalenceWith(vi.fn());
+    pairWith(vi.fn());
     const list = await screen.findByRole("list", {
-      name: "Cases by condition",
+      name: "Patients by pair",
     });
     const [shown, hidden] = within(list).getAllByRole("listitem");
     expect(
@@ -224,7 +254,7 @@ describe("See patients", () => {
   });
 
   it("is disabled offline, with the reason", async () => {
-    prevalenceWith(vi.fn());
+    pairWith(vi.fn());
     const b = await seeButton();
     goOffline();
     try {
@@ -242,7 +272,7 @@ describe("See patients", () => {
 
 describe("PatientsPanel", () => {
   it("rows show the pseudonymous ID, age band, sex and location type, and never a name or MRN", async () => {
-    prevalenceWith(async () =>
+    pairWith(async () =>
       reply(5, [
         row(1),
         row(2, { age_band: "80+", sex: "male", setting: "emergency" }),
@@ -267,7 +297,6 @@ describe("PatientsPanel", () => {
     expect(a).toHaveTextContent("Type 2 diabetes · E11");
     expect(a).toHaveTextContent("HbA1c");
     expect(a).toHaveTextContent("High");
-    expect(a).toHaveTextContent("Main lab");
     expect(b).toHaveTextContent("Age 80 and over");
     expect(b).toHaveTextContent("Male");
     expect(b).toHaveTextContent("Emergency");
@@ -287,7 +316,7 @@ describe("PatientsPanel", () => {
       { ward_bed: "4B" },
     ]) {
       qc = new QueryClient();
-      prevalenceWith(async () => ({
+      pairWith(async () => ({
         ...reply(
           5,
           [1, 2, 3, 4].map((i) => row(i)),
@@ -312,7 +341,7 @@ describe("PatientsPanel", () => {
     }
     // A named level is refused too.
     qc = new QueryClient();
-    prevalenceWith(
+    pairWith(
       async () =>
         ({
           ...reply(
@@ -330,11 +359,13 @@ describe("PatientsPanel", () => {
   });
 
   it("200 of 214 shows Showing the first 200 of 214", async () => {
-    prevalenceWith(async () =>
-      reply(
-        214,
-        Array.from({ length: 200 }, (_, i) => row(i)),
-      ),
+    pairWith(
+      async () =>
+        reply(
+          214,
+          Array.from({ length: 200 }, (_, i) => row(i)),
+        ),
+      214,
     );
     const { panel } = await openList();
     expect(
@@ -342,7 +373,7 @@ describe("PatientsPanel", () => {
     ).toBeVisible();
     expect(
       within(panel).getByRole("heading", {
-        name: "214 patients · Type 2 diabetes · E11",
+        name: "214 patients · Type 2 diabetes + Hypertension",
       }),
     ).toBeVisible();
     expect(
@@ -352,21 +383,82 @@ describe("PatientsPanel", () => {
     ).toHaveLength(200);
   });
 
-  it("too small reads This group is too small to list", async () => {
-    prevalenceWith(async () => {
+  it("422 too_small reads This list is no longer available, with no Try again", async () => {
+    pairWith(async () => {
       throw new ApiError(422, "too_small");
     });
     const { panel } = await openList();
     expect(
-      await within(panel).findByText("This group is too small to list"),
+      await within(panel).findByText("This list is no longer available"),
     ).toBeVisible();
+    expect(
+      within(panel).queryByRole("button", { name: "Try again" }),
+    ).toBeNull();
     expect(within(panel).queryByText(/Couldn't load/)).toBeNull();
     expect(within(panel).queryByRole("list", { name: "Patients" })).toBeNull();
   });
 
+  it("429 reads You've opened many patient lists; try again later, with no Try again", async () => {
+    pairWith(async () => {
+      throw new ApiError(429, "rate_limited");
+    });
+    const { panel } = await openList();
+    expect(
+      await within(panel).findByText(
+        "You've opened many patient lists; try again later",
+      ),
+    ).toBeVisible();
+    expect(
+      within(panel).queryByRole("button", { name: "Try again" }),
+    ).toBeNull();
+    expect(within(panel).queryByRole("list", { name: "Patients" })).toBeNull();
+  });
+
+  it("404 reads as Analysis switched off, as on the views", async () => {
+    pairWith(async () => {
+      throw new ApiError(404, "not_found");
+    });
+    const { panel } = await openList();
+    expect(
+      await within(panel).findByText(
+        "Analysis is not switched on for this hospital.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("says the view is audited, before and with the list", async () => {
+    pairWith(async () =>
+      reply(
+        5,
+        [1, 2, 3, 4, 5].map((i) => row(i)),
+      ),
+    );
+    const { panel } = await openList();
+    await within(panel).findByRole("list", { name: "Patients" });
+    expect(
+      within(panel).getByText(
+        "This view is audited: opening a patient list is recorded under your name.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("a list whose count isn't the cell it was opened from fails closed", async () => {
+    pairWith(async () =>
+      reply(
+        7,
+        [1, 2, 3, 4, 5, 6, 7].map((i) => row(i)),
+      ),
+    );
+    const { panel } = await openList();
+    expect(
+      await within(panel).findByText("Couldn't load these patients"),
+    ).toBeVisible();
+    expect(within(panel).queryByText(/P-1001/)).toBeNull();
+  });
+
   it("a failed load tries again", async () => {
     let n = 0;
-    prevalenceWith(async () => {
+    pairWith(async () => {
       n += 1;
       if (n === 1) throw new ApiError(400, "bad_request");
       return reply(
@@ -384,7 +476,7 @@ describe("PatientsPanel", () => {
   });
 
   it("closing returns focus", async () => {
-    prevalenceWith(async () =>
+    pairWith(async () =>
       reply(
         5,
         [1, 2, 3, 4, 5].map((i) => row(i)),
@@ -408,7 +500,7 @@ describe("PatientsPanel", () => {
   });
 
   it("the list is gone from the cache after closing", async () => {
-    prevalenceWith(async () =>
+    pairWith(async () =>
       reply(
         5,
         [1, 2, 3, 4, 5].map((i) => row(i)),
@@ -426,12 +518,13 @@ describe("PatientsPanel", () => {
       "affected",
       F90,
     );
-    const n = sample.by_location.find((r) => r.location?.id === "ed")!.patients
+    // Lists are on location type rows, never a ward (core 1.19.0).
+    const n = sample.by_setting.find((r) => r.setting === "emergency")!.patients
       .value!;
     const rows = Math.min(n, 200);
     renderWith(<AffectedView filters={F90} />);
     const ward = await screen.findByRole("list", {
-      name: "Patients by ward or clinic",
+      name: "Patients by location type",
     });
     const ed = within(ward)
       .getAllByRole("listitem")
@@ -443,7 +536,7 @@ describe("PatientsPanel", () => {
     const panel = screen.getByRole("dialog");
     expect(
       await within(panel).findByRole("heading", {
-        name: `${n} patients · Ward or clinic: Emergency`,
+        name: `${n} patients · Location type: Emergency`,
       }),
     ).toBeVisible();
     const { events } = await createMockAdmin({ delayMs: 0 }).listActivity({});
@@ -469,7 +562,7 @@ describe("PatientsPanel", () => {
     holder.client = { ...holder.client, listPatients: spy };
     renderWith(
       <PatientsPanel
-        drill="sex-female"
+        drill={NAMED_DRILL}
         label="Sex: Female"
         filters={F90}
         level="deidentified"
@@ -478,7 +571,7 @@ describe("PatientsPanel", () => {
     );
     await screen.findByRole("list", { name: "Patients" });
     expect(spy).toHaveBeenCalledWith({
-      drill: "sex-female",
+      drill: NAMED_DRILL,
       level: "deidentified",
       filters: F90,
     });
@@ -526,11 +619,12 @@ const FIND: FindingsOut = {
   },
 };
 
-/** Serve this reply for every view, and five rows for any list. */
+/** Serve this reply for every view, and five rows of the shown cell for any list. */
 function serveView(view: unknown) {
+  const cell = view === CO ? 40 : view === FIND ? 30 : 5;
   const spy = vi.fn(async () =>
     reply(
-      5,
+      cell,
       [1, 2, 3, 4, 5].map((i) => row(i)),
     ),
   );
@@ -562,11 +656,11 @@ describe("See patients in the other views", () => {
     );
     expect(
       await screen.findByRole("heading", {
-        name: "5 patients · Type 2 diabetes + Hypertension",
+        name: "40 patients · Type 2 diabetes + Hypertension",
       }),
     ).toBeVisible();
     expect(spy).toHaveBeenCalledWith({
-      drill: "pair-e11-i10",
+      drill: drillKey("pair-e11-i10"),
       level: "deidentified",
       filters: F90,
     });
@@ -588,10 +682,12 @@ describe("See patients in the other views", () => {
     );
     expect(
       await screen.findByRole("heading", {
-        name: "5 patients · Potassium · Low",
+        name: "30 patients · Potassium · Low",
       }),
     ).toBeVisible();
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ drill: "f1" }));
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ drill: drillKey("f1") }),
+    );
     // Alerts are not patients: no See patients there.
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(
@@ -603,8 +699,8 @@ describe("See patients in the other views", () => {
 });
 
 describe("See patients in the tables", () => {
-  it("the prevalence table ends with a Patients column; a hidden count has an empty cell", async () => {
-    prevalenceWith(async () =>
+  it("the co-occurring table ends with a Patients column; a hidden count has an empty cell", async () => {
+    pairWith(async () =>
       reply(
         5,
         [1, 2, 3, 4, 5].map((i) => row(i)),
@@ -612,14 +708,18 @@ describe("See patients in the tables", () => {
     );
     await seeButton();
     await showTable();
-    const table = screen.getByRole("table", { name: "Cases by condition" });
+    const table = screen.getByRole("table", {
+      name: "Conditions found together",
+    });
     const heads = within(table)
       .getAllByRole("columnheader")
       .map((h) => h.textContent);
     expect(heads.at(-1)).toBe("Patient list");
     expect(new Set(heads).size).toBe(heads.length);
     const [, shown, hidden] = within(table).getAllByRole("row");
-    expect(cellsOf(shown!).at(-1)).toBe("See patients · Type 2 diabetes · E11");
+    expect(cellsOf(shown!).at(-1)).toBe(
+      "See patients · Type 2 diabetes + Hypertension",
+    );
     expect(cellsOf(hidden!).at(-1)).toBe("");
     expect(within(hidden!).queryByRole("button")).toBeNull();
     // It opens the list, and closing gives focus back to it.
@@ -683,13 +783,13 @@ describe("See patients in the tables", () => {
   });
 
   it("is disabled offline in the table too, with the reason", async () => {
-    prevalenceWith(vi.fn());
+    pairWith(vi.fn());
     await seeButton();
     await showTable();
     goOffline();
     try {
       const b = within(
-        screen.getByRole("table", { name: "Cases by condition" }),
+        screen.getByRole("table", { name: "Conditions found together" }),
       ).getByRole("button", { name: /^See patients/ });
       expect(b).toBeDisabled();
       expect(b).toHaveAttribute(
@@ -709,7 +809,7 @@ describe("See patients in the tables", () => {
       removeEventListener() {},
     }));
     try {
-      prevalenceWith(async () =>
+      pairWith(async () =>
         reply(
           5,
           [1, 2, 3, 4, 5].map((i) => row(i)),
@@ -718,12 +818,14 @@ describe("See patients in the tables", () => {
       await seeButton();
       await showTable();
       expect(screen.queryByRole("table")).toBeNull();
-      const cards = screen.getByRole("list", { name: "Cases by condition" });
+      const cards = screen.getByRole("list", {
+        name: "Conditions found together",
+      });
       const [shown, hidden] = within(cards).getAllByRole("listitem");
       // Not a label-and-value pair: the card's action, after the numbers.
-      expect(within(shown!).queryByText("Patients")).toBeNull();
+      expect(within(shown!).queryByText("Patient list")).toBeNull();
       const b = within(shown!).getByRole("button", {
-        name: "See patients · Type 2 diabetes · E11",
+        name: "See patients · Type 2 diabetes + Hypertension",
       });
       expect(shown!.lastElementChild).toContainElement(b);
       expect(within(hidden!).queryByRole("button")).toBeNull();
@@ -748,7 +850,7 @@ describe("Named access in the patients panel", () => {
     };
     renderSignedIn(
       <PatientsPanel
-        drill="sex-female"
+        drill={NAMED_DRILL}
         label="Sex: Female"
         filters={NAMED_FILTERS}
         onClose={() => {}}
@@ -785,7 +887,7 @@ describe("Named access in the patients panel", () => {
     expect(listNamed).toHaveBeenCalledTimes(1);
     const [body, opts] = listNamed.mock.calls[0]!;
     expect(body).toEqual({
-      drill: "sex-female",
+      drill: NAMED_DRILL,
       purpose: "clinical_follow_up",
       filters: NAMED_FILTERS,
     });
@@ -894,5 +996,32 @@ describe("Named access in the patients panel", () => {
       goOnline();
     }
     expect(b).toBeEnabled();
+  });
+});
+
+describe("See patients where core sends no key", () => {
+  it("prevalence: a shown count of 5 or more is off, saying it isn't available for this breakdown; a hidden one has nothing", async () => {
+    const list = vi.fn();
+    holder.client = {
+      ...holder.client,
+      getView: (async () => structuredClone(PREV)) as AnalysisClient["getView"],
+      listPatients: list,
+    };
+    renderWith(<PrevalenceView filters={F90} />);
+    const rows = await screen.findByRole("list", {
+      name: "Cases by condition",
+    });
+    const [shown, hidden] = within(rows).getAllByRole("listitem");
+    const b = within(shown!).getByRole("button", {
+      name: "See patients · Type 2 diabetes · E11",
+    });
+    expect(b).toBeDisabled();
+    expect(b).toHaveAccessibleDescription("Not available for this breakdown");
+    expect(hidden).toHaveTextContent("Fewer than 5");
+    expect(within(hidden!).queryByRole("button")).toBeNull();
+    expect(hidden).not.toHaveTextContent(/available/);
+    await userEvent.click(b);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(list).not.toHaveBeenCalled();
   });
 });

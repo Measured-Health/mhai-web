@@ -390,6 +390,13 @@ export const KINDS: Record<string, Kind> = {
     (e) => join("Opened a de-identified patient list", patients(e)),
     { targets: ["patient"] },
   ),
+  // Core's own name for a de-identified list (`analysis.patients_viewed`,
+  // 1.19.0), once it maps it: the same words; its pids behind the reveal.
+  analysis_patients_viewed: k(
+    "analysis",
+    (e) => join("Opened a de-identified patient list", patients(e)),
+    { targets: ["patient"] },
+  ),
   // Named access.
   drilldown_named: k(
     "named_access",
@@ -645,7 +652,8 @@ export const KINDS: Record<string, Kind> = {
         : "Opened an entry",
     { targets: ["event"] },
   ),
-  audit_patients_viewed: k("audit", "Showed patient ids for an entry", {
+  // The recorded reveal (`audit.patients_viewed`, core 1.19.0).
+  audit_patients_viewed: k("audit", "Revealed the patients of an entry", {
     targets: ["event"],
   }),
   audit_check_run: k(

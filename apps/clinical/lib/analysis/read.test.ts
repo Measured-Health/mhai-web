@@ -23,13 +23,15 @@ import {
   readPatients,
   readView,
 } from "./read";
+import { drillKey } from "@/tests/drill";
 
 const S = (value: number): GuardedOut => ({ value, suppressed: false });
 const H: GuardedOut = { value: null, suppressed: true };
 const NONE: GuardedOut = { value: null, suppressed: false };
+/** A count with the drill key of row `drill` (a readable token), or none. */
 const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
   ...g,
-  drill,
+  drill: drill === null ? null : drillKey(drill),
 });
 
 const F: AnalysisFilters = {
@@ -80,7 +82,7 @@ function prevalence(over: Partial<PrevalenceOut> = {}): PrevalenceOut {
     by_condition: [
       {
         condition: E11,
-        cases: D(S(60), "cond-e11"),
+        cases: D(S(60)),
         new: S(10),
         existing: S(50),
       },
@@ -122,11 +124,11 @@ function affected(over: Partial<AffectedOut> = {}): AffectedOut {
           label: "Ward 4 (Medical)",
           setting: "admitted",
         },
-        patients: D(S(200), "loc-ward4"),
+        patients: D(S(200)),
       },
-      { location: null, patients: D(S(15), "loc-none") },
+      { location: null, patients: D(S(15)) },
     ],
-    by_specialty: [{ specialty: "Cardiology", patients: D(S(215), "spec-c") }],
+    by_specialty: [{ specialty: "Cardiology", patients: D(S(215)) }],
     ...over,
   };
 }
@@ -575,7 +577,7 @@ describe("readView", () => {
     u.by_age[0].patients = D(S(0), "age-0to17");
     expect(ok("affected", u)).toBe("failed");
     const w = affected();
-    w.by_age[1].patients = D(S(15), "age 18");
+    w.by_age[1].patients = { ...S(15), drill: "age 18" };
     expect(ok("affected", w)).toBe("failed");
   });
 
@@ -789,9 +791,7 @@ describe("readPatients", () => {
     sex: "female",
     setting: "admitted",
     conditions: [E11],
-    findings: [
-      { name: "Potassium", flag: "high", source_label: "Results system" },
-    ],
+    findings: [{ name: "Potassium", flag: "high", source_label: null }],
   };
   const reply = (
     over: Record<string, unknown> = {},
@@ -882,6 +882,54 @@ describe("readPatients", () => {
     expect(
       readPatients(reply({ count: 300 }, rows(201)), "deidentified", NOW)
         .status,
+    ).toBe("failed");
+  });
+
+  it("a source on a de-identified row fails (core sends it null)", () => {
+    expect(
+      readPatients(
+        reply({}, [
+          {
+            ...row,
+            findings: [{ ...row.findings[0], source_label: "Results system" }],
+          },
+        ]),
+        "deidentified",
+        NOW,
+      ).status,
+    ).toBe("failed");
+  });
+
+  it("an age not recorded reads; an unknown band fails", () => {
+    expect(
+      readPatients(reply({}, [{ ...row, age_band: null }]), "deidentified", NOW)
+        .status,
+    ).toBe("ok");
+    expect(
+      readPatients(
+        reply({}, [{ ...row, age_band: "30-39" }]),
+        "deidentified",
+        NOW,
+      ).status,
+    ).toBe("failed");
+  });
+
+  it("given the cell it was opened from, a list of any other count fails", () => {
+    expect(readPatients(reply(), "deidentified", NOW, 12).status).toBe("ok");
+    expect(readPatients(reply(), "deidentified", NOW, 13).status).toBe(
+      "failed",
+    );
+  });
+
+  it("more than 10 conditions or findings on a row fail", () => {
+    expect(
+      readPatients(
+        reply({}, [
+          { ...row, conditions: Array.from({ length: 11 }, () => E11) },
+        ]),
+        "deidentified",
+        NOW,
+      ).status,
     ).toBe("failed");
   });
 
@@ -1108,5 +1156,75 @@ describe("readClearanceMe", () => {
       { ...off, clearance_id: "cl_act" },
     ])
       expect(readClearanceMe(raw), JSON.stringify(raw)).toBeNull();
+  });
+});
+
+describe("where a drill key may be (core 1.19.0)", () => {
+  const read = (v: ViewId, raw: unknown, f: AnalysisFilters = F) =>
+    readView(v, raw, undefined, f).status;
+
+  it("the affected view's age, sex and setting rows, pairs and findings read", () => {
+    expect(read("affected", affected())).toBe("ok");
+    expect(read("co-occurring", coOccurring())).toBe("ok");
+    expect(read("findings", findings())).toBe("ok");
+  });
+
+  it("a drill on prevalence, a location or a specialty fails the view", () => {
+    const p = prevalence();
+    p.by_condition[0]!.cases = D(p.by_condition[0]!.cases, "cond-e11");
+    expect(read("prevalence", p)).toBe("failed");
+    const a = affected();
+    a.by_location[0]!.patients = D(S(200), "loc-ward4");
+    expect(read("affected", a)).toBe("failed");
+    const b = affected();
+    b.by_specialty[0]!.patients = D(S(215), "spec-c");
+    expect(read("affected", b)).toBe("failed");
+  });
+
+  it("under a location, specialty or source filter, any drill fails; under the row filters it reads", () => {
+    for (const k of ["location", "specialty", "source"] as const) {
+      const f = { ...F, [k]: "x1" };
+      expect([k, read("affected", affected(), f)]).toEqual([k, "failed"]);
+      expect([k, read("findings", findings(), f)]).toEqual([k, "failed"]);
+    }
+    for (const [k, v] of [
+      ["condition", "e11"],
+      ["age_band", "40-64"],
+      ["sex", "female"],
+      ["setting", "admitted"],
+    ] as const)
+      expect([k, read("affected", affected(), { ...F, [k]: v })]).toEqual([
+        k,
+        "ok",
+      ]);
+  });
+
+  it("a drill that isn't a 43-character key fails", () => {
+    for (const drill of [
+      "sex-female",
+      "x".repeat(44),
+      `${"a".repeat(40)}P-ABCD`,
+    ]) {
+      const a = affected();
+      a.by_sex[0]!.patients = { ...S(110), drill };
+      expect([drill, read("affected", a)]).toEqual([drill, "failed"]);
+    }
+  });
+
+  it("a drill on a hidden count, or one under 5, fails", () => {
+    const a = affected();
+    a.by_sex[2]!.patients = D(S(0), "sex-other");
+    expect(read("affected", a)).toBe("failed");
+  });
+
+  it("the mock never offers a drill under a location filter, nor on prevalence", async () => {
+    const opts = await mock.getFilterOptions(F.period);
+    const f = { ...F, location: opts.locations[0]!.id };
+    const a = await mock.getView("affected", f);
+    for (const rows of [a.by_age, a.by_sex, a.by_setting])
+      for (const r of rows) expect(r.patients.drill).toBeNull();
+    const p = await mock.getView("prevalence", F);
+    for (const r of p.by_condition) expect(r.cases.drill).toBeNull();
+    expect(read("affected", a, f)).toBe("ok");
   });
 });

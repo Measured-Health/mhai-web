@@ -32,6 +32,8 @@ export type PatientsQuery = {
   /** Names are never asked for here: that is `useNamedPatients`, a POST. */
   level: "deidentified";
   filters: AnalysisFilters;
+  /** The shown count it was opened from: the list's count must equal it. */
+  cell?: number;
 };
 
 /**
@@ -125,6 +127,7 @@ export function useAnalysisView<V extends ViewId>(
         view,
         await getAnalysisClient().getView(view, f),
         f.period,
+        f,
       );
       return s.status === "ok"
         ? { status: "ok", data: orderView(view, hideAllWhenFew<V>(s.data)) }
@@ -163,22 +166,29 @@ export function frameState<T>(
 
 /**
  * The de-identified patients behind one shown count; null loads nothing.
- * Never kept: the list leaves the cache as soon as nothing shows it.
+ * Never kept: the list leaves the cache as soon as nothing shows it. Each
+ * list is audited by core and counts against the person's limits, so it
+ * is fetched once per opening and never on focus or reconnect; a refusal
+ * (4xx: gone, a limit reached, switched off) is never retried.
  */
 export const usePatients = (q: PatientsQuery | null) =>
   useQuery({
     queryKey: ANALYSIS_KEYS.patients(q),
-    queryFn: async () =>
-      readPatients(
-        await getAnalysisClient().listPatients(q!),
+    queryFn: async () => {
+      const { drill, level, filters, cell } = q!;
+      return readPatients(
+        await getAnalysisClient().listPatients({ drill, level, filters }),
         "deidentified",
         Date.now(),
-      ),
+        cell,
+      );
+    },
     enabled: q !== null,
     gcTime: 0,
     // Fetched once per opening: a refetch would log a second viewing.
     staleTime: Infinity,
     refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
     ...READ_RETRY,
   });
 

@@ -149,7 +149,8 @@ describe("the sample log", () => {
   });
 
   it("holds three named drill-downs at Northgate under one active letter", async () => {
-    const { m } = setup();
+    // The reveal is an auditor's.
+    const { m } = setup(undefined, TEAM_EMAILS.amara);
     const { events } = await m.listAudit({ type: ["named_access"] });
     const named = events.filter((e) => e.kind === "drilldown_named");
     expect(named).toHaveLength(3);
@@ -236,7 +237,8 @@ describe("reading the log", () => {
   });
 
   it("q finds an event by request id and by pseudonym", async () => {
-    const { m } = setup();
+    // The reveal is an auditor's.
+    const { m } = setup(undefined, TEAM_EMAILS.amara);
     const { events } = await m.listAudit({});
     const one = events[3];
     const byId = await m.listAudit({ q: one.id });
@@ -276,7 +278,8 @@ describe("reading the log", () => {
   });
 
   it("a pseudonym search adds audit_searched with searched_kind pseudonym", async () => {
-    const { m } = setup();
+    // The reveal is an auditor's.
+    const { m } = setup(undefined, TEAM_EMAILS.amara);
     const named = (await m.listAudit({ type: ["named_access"] })).events.find(
       (e) => e.kind === "drilldown_named",
     )!;
@@ -316,7 +319,8 @@ describe("reading the log", () => {
   });
 
   it("no list, detail or export record carries a pseudonym outside the reveal", async () => {
-    const { m } = setup();
+    // The reveal is an auditor's.
+    const { m } = setup(undefined, TEAM_EMAILS.amara);
     const named = (await m.listAudit({ type: ["named_access"] })).events.find(
       (e) => e.kind === "drilldown_named",
     )!;
@@ -360,7 +364,8 @@ describe("reading the log", () => {
   });
 
   it("opening an event and showing patient ids each add an entry", async () => {
-    const { m } = setup();
+    // The reveal is an auditor's.
+    const { m } = setup(undefined, TEAM_EMAILS.amara);
     const named = (await m.listAudit({ type: ["named_access"] })).events.find(
       (e) => e.kind === "drilldown_named",
     )!;
@@ -377,13 +382,42 @@ describe("reading the log", () => {
       404,
       "not_found",
     ]);
+    // An entry with no list behind it (not a drill-down or a pid search).
     const plain = (await m.listAudit({})).events.find(
-      (e) => e.kind !== "drilldown_named",
+      (e) => e.kind === "signed_in",
     )!;
     expect(await failure(m.getAuditPatients(plain.id))).toEqual([
       404,
       "not_found",
     ]);
+  });
+
+  it("the reveal is an auditor's: a platform admin is refused, and nothing is recorded", async () => {
+    const { m, as } = setup();
+    const dd = (await m.listAudit({ type: ["analysis"] })).events.find(
+      (e) => e.kind === "drilldown_deidentified",
+    )!;
+    expect(await failure(m.getAuditPatients(dd.id))).toEqual([
+      403,
+      "forbidden",
+    ]);
+    as(TEAM_EMAILS.amara);
+    const before = (await m.listAudit({ type: ["audit"] })).events.filter(
+      (e) => e.kind === "audit_patients_viewed",
+    ).length;
+    expect(before).toBe(0);
+    // A de-identified drill-down's list: its count, then at most 200 pids.
+    const d = await m.getAuditEvent(dd.id);
+    expect(d.patients?.count).toBeGreaterThanOrEqual(5);
+    const { pseudonyms } = await m.getAuditPatients(dd.id);
+    expect(pseudonyms).toHaveLength(d.patients!.count);
+    expect(pseudonyms.length).toBeLessThanOrEqual(200);
+    for (const p of pseudonyms) expect(isPseudonym(p)).toBe(true);
+    const after = (await m.listAudit({ type: ["audit"] })).events.filter(
+      (e) => e.kind === "audit_patients_viewed",
+    );
+    expect(after).toHaveLength(1);
+    expect(after[0]!.target).toEqual({ kind: "event", id: dd.id });
   });
 
   it("people search needs 2 characters", async () => {
@@ -984,7 +1018,7 @@ describe("the reader accepts every reply", () => {
       "error",
       "unproven",
     ] as const) {
-      const { m, advance } = setup({ integrity });
+      const { m, advance } = setup({ integrity }, TEAM_EMAILS.amara);
       const filters: AuditFilters[] = [
         {},
         { hospital: "h_northgate" },

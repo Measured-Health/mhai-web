@@ -12,12 +12,14 @@ import { FILTER_OPTIONS } from "../api/analysis-fixtures";
 import { createMockAnalysis } from "../api/mock-analysis";
 import { analysisCsv, csvFilename } from "./csv";
 import { emptyFilters } from "./filters";
+import { drillKey } from "@/tests/drill";
 
 const S = (value: number): GuardedOut => ({ value, suppressed: false });
 const H: GuardedOut = { value: null, suppressed: true };
+/** A count with the drill key of row `drill` (a readable token), or none. */
 const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
   ...g,
-  drill,
+  drill: drill === null ? null : drillKey(drill),
 });
 const F: AnalysisFilters = emptyFilters({
   level: "quarter",
@@ -52,13 +54,13 @@ const prevalence: PrevalenceOut = {
   by_condition: [
     {
       condition: { id: "e11", name: "Type 2 diabetes", icd10: "E11" },
-      cases: D(S(100), "cond-e11"),
+      cases: D(S(100)),
       new: S(25),
       existing: S(75),
     },
     {
       condition: { id: "unmapped", name: null, icd10: null },
-      cases: D(S(20), "cond-unmapped"),
+      cases: D(S(20)),
       new: S(5),
       existing: S(15),
     },

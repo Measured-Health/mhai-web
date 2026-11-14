@@ -624,6 +624,8 @@ export function createMockAudit(
     getAuditPatients: (id) =>
       core.read((m) => {
         up();
+        // The reveal is an auditor's (the BFF refuses anyone else).
+        if (m.role !== "auditor") fail(403, "forbidden");
         const list = pseudonyms[id];
         if (!list || !log.some((e) => e.id === id)) fail(404, "not_found");
         record(actorOf(m), "audit_patients_viewed", {
