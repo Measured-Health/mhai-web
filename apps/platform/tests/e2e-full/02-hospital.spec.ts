@@ -34,10 +34,14 @@ test("hospitals: the list, the live hospital, its model policy", async ({
  * page, which core can't serve yet (no GET /platform/hospitals/{id}), so
  * the call the section makes is made directly, as the signed-in admin.
  */
-test("model policy: the hospital's policy through the BFF", async ({ page }) => {
+test("model policy: the hospital's policy through the BFF", async ({
+  page,
+}) => {
   await signIn(page, "padmin");
   const id = readState("hospital.id");
-  const r = await page.request.get(`/api/v1/platform/hospitals/${id}/model-policy`);
+  const r = await page.request.get(
+    `/api/v1/platform/hospitals/${id}/model-policy`,
+  );
   expect(r.status()).toBe(200);
   const p = (await r.json()) as Record<string, unknown>;
   expect(Object.keys(p).sort()).toEqual(

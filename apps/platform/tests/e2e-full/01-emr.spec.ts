@@ -58,12 +58,10 @@ test("EMR: add the synthetic source, test it, switch it on", async ({
       .getByLabel(/Private address ranges/i)
       .fill(readState("synth.cidr"));
   } else
-    test
-      .info()
-      .annotations.push({
-        type: "gap",
-        description: "no private network fields",
-      });
+    test.info().annotations.push({
+      type: "gap",
+      description: "no private network fields",
+    });
   await page.getByRole("button", { name: "Continue" }).click();
   const add = page.getByRole("dialog", { name: /^Add FHIR R4 server for / });
   await typeCode(page, await freshCode(page, "padmin"), add);
