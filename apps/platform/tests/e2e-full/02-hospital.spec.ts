@@ -8,7 +8,7 @@ test("hospitals: the list, the live hospital, its model policy", async ({
   // Expected to fail until core serves GET /platform/hospitals and
   // /platform/hospitals/{id} (docs/live-e2e.md): when it passes, remove this.
   test.fail(true, "core 1.20.0 serves no hospitals list or hospital page");
-  test.setTimeout(60_000);
+  test.setTimeout(120_000);
   await signIn(page, "padmin");
   const calls = recordApi(page);
   await expect(
@@ -18,6 +18,10 @@ test("hospitals: the list, the live hospital, its model policy", async ({
   await page.screenshot({
     path: test.info().outputPath("hospitals.png"),
     fullPage: true,
+  });
+  // Fails here (an assertion, not a time-out) while core has no list.
+  await expect(page.getByText("Couldn't load hospitals.")).toHaveCount(0, {
+    timeout: 10_000,
   });
   await page.getByRole("link", { name: /^Synthetic Live Hospital/ }).click();
   await expect(

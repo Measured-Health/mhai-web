@@ -13,16 +13,18 @@ const bell = (page: Page) =>
     .filter({ visible: true });
 
 test("alerts: unread count, acknowledge, dismiss", async ({ page }) => {
-  test.setTimeout(900_000);
+  test.setTimeout(1_800_000);
   await signIn(page, "clinician");
   const calls = recordApi(page);
-  // The source is polled every minute or two: wait for the count.
+  // The late result comes a while after the first sync, which itself may
+  // wait out a back-off (the first poll after switching on can miss the
+  // egress allow-list): up to 26 minutes for the count.
   await expect(async () => {
     await page.goto("/notifications");
     await expect(bell(page)).toHaveAccessibleName(/\d+ unread/, {
       timeout: 5_000,
     });
-  }).toPass({ timeout: 780_000, intervals: [15_000] });
+  }).toPass({ timeout: 1_560_000, intervals: [15_000] });
   await page.screenshot({
     path: test.info().outputPath("inbox.png"),
     fullPage: true,

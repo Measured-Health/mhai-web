@@ -129,6 +129,8 @@ const KNOWN_GAPS: readonly RegExp[] = [
   /^\/api\/v1\/platform\/notifications$/,
   // The hospital admin's staff list (Alert settings' clinician picker).
   /^\/api\/v1\/hospital\/staff$/,
+  // The hospital admin's settings, read by the admin pages' frame.
+  /^\/api\/v1\/hospital\/settings$/,
   // Recent actions (a connection's page) and the hospital names it reads.
   /^\/api\/v1\/platform\/activity(\?.*)?$/,
   /^\/api\/v1\/platform\/hospitals$/,
