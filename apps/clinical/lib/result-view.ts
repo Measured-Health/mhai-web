@@ -38,6 +38,56 @@ export interface ResultView {
    * draft carries; null when the API didn't say.
    */
   generatedBy: { label: string; notice: string | null } | null;
+  /**
+   * The cited reference sources (core 1.29.0): title, an https link or
+   * null, who published it, and its credit notice. Empty when none.
+   */
+  references: {
+    title: string;
+    url: string | null;
+    source: string;
+    attribution: string | null;
+  }[];
+}
+
+/** The only link shape shown: https, a host name, a plain path and query. */
+const SOURCE_URL =
+  /^https:\/\/(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?:\/[A-Za-z0-9._~%/?=&+-]*)?$/;
+const MAX_REFERENCES = 50;
+
+const text = (v: unknown, max: number): string | null =>
+  typeof v === "string" && v.trim() !== "" && v.length <= max ? v : null;
+
+/**
+ * Read defensively: an entry needs a title and a source; a link only when
+ * it is an https page of the shape above (else no link); each chunk once.
+ */
+export function referencesView(s: unknown): ResultView["references"] {
+  if (!Array.isArray(s)) return [];
+  const out: ResultView["references"] = [];
+  const seen = new Set<string>();
+  for (const e of s.slice(0, MAX_REFERENCES)) {
+    if (typeof e !== "object" || e === null) continue;
+    const { chunk_id, title, url, source, attribution } = e as Record<
+      string,
+      unknown
+    >;
+    const t = text(title, 300);
+    const src = text(source, 64);
+    if (typeof chunk_id !== "string" || seen.has(chunk_id) || !t || !src)
+      continue;
+    seen.add(chunk_id);
+    out.push({
+      title: t,
+      url:
+        typeof url === "string" && url.length <= 500 && SOURCE_URL.test(url)
+          ? url
+          : null,
+      source: src,
+      attribution: text(attribution, 600),
+    });
+  }
+  return out;
 }
 
 const PROVIDER_NAME: Record<string, string> = {
@@ -183,5 +233,6 @@ export function toResultView(r: ClinicalResultOut): ResultView {
     detailsNotStored:
       r.citations.length === 0 && (r.cited_chunk_ids?.length ?? 0) > 0,
     generatedBy: generatedByView(r.generated_by),
+    references: referencesView(r.cited_sources),
   };
 }
