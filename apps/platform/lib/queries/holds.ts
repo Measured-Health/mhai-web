@@ -99,18 +99,14 @@ function useHoldWrite<V>(
   return useKeyedMutation(send, { onSuccess: (h) => holdSaved(qc, h) }, extra);
 }
 
-export type EditHoldInput = {
-  review_on?: string;
-  note?: string | null;
-  version: number;
-};
+export type EditHoldInput = { review_on?: string; version: number };
+/** No note: a lift carries only its reason and the authority's reference. */
 export type RequestLiftInput = {
   reason: LiftReason;
-  note?: string;
   authority: string;
 } & StepUp;
 
-/** The review date and the note; no step-up. */
+/** The review date; no step-up. Core doesn't serve it yet (501). */
 export function useEditHold(id: string) {
   return useHoldWrite((body: EditHoldInput, key) =>
     getPlatformClient().editHold(id, body, { idempotencyKey: key }),
@@ -118,7 +114,7 @@ export function useEditHold(id: string) {
 }
 
 /*
- * Request, approve and undo carry the person's two-step code in their
+ * Request and approve carry the person's two-step code in their
  * variables, so the cache forgets each call as soon as nothing watches it
  * (gcTime 0). Callers `reset()` after every answer, which lets it go at once.
  */
@@ -142,14 +138,6 @@ export function useApproveLift(id: string) {
 export function useCancelLift(id: string) {
   return useHoldWrite((body: { version: number }, key) =>
     getPlatformClient().cancelLift(id, body, { idempotencyKey: key }),
-  );
-}
-
-export function useUndoLift(id: string) {
-  return useHoldWrite(
-    (body: { version: number } & StepUp, key) =>
-      getPlatformClient().undoLift(id, body, { idempotencyKey: key }),
-    { gcTime: 0 },
   );
 }
 

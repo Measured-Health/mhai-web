@@ -23,7 +23,7 @@ export function HoldsCards({ rows }: { rows: LegalHold[] }) {
           <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-[12.5px]">
             <div className="col-span-2">
               <dt className="text-ink-3">What it covers</dt>
-              <dd>{scopeLabel(h.scope)}</dd>
+              <dd>{scopeLabel()}</dd>
             </div>
             <div>
               <dt className="text-ink-3">Reason</dt>

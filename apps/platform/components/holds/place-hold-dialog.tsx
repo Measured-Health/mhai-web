@@ -15,11 +15,9 @@ import { ApiError } from "@mhai/api-client/errors";
 import { platformError } from "@/lib/errors";
 import { HOLD_HINT, holdReasonLabel } from "@/lib/holds/labels";
 import {
-  ASKED_BY_MAX,
-  NOTE_MAX,
+  REFERENCE_HINT,
   REFERENCE_MAX,
   defaultReviewOn,
-  scopeLabel,
   todayLocal,
   validatePlace,
   type PlaceForm,
@@ -39,24 +37,26 @@ import { Modal } from "../team/modal";
 import { HospitalPicker } from "./hospital-picker";
 
 /** Refusals that end the placement: the form shows them, not the code step. */
-const ENDS_IT = ["removal_started", "hospital_removed"];
+const ENDS_IT = ["removal_started", "hospital_removed", "conflict"];
+/** Placing: a clash is a reference already used by an open hold. */
+const PLACE_WORDS = {
+  conflict: "An open legal hold already has this reference. Use another.",
+};
 
 type Errors = ReturnType<typeof validatePlace>;
 
 const blank = (hospital: Person | null): PlaceForm => ({
   hospital,
-  scope: "all",
-  from: "",
-  to: "",
   reason: "",
   reference: "",
-  asked_by: "",
-  note: "",
   review_on: defaultReviewOn(todayLocal()),
 });
 
 /**
- * Place a hold: a form, then **Continue** to the person's two-step code.
+ * Place a hold: a form, then **Continue** to the person's two-step code. A
+ * hold keeps all of the hospital's records and carries no note and no name
+ * of who asked (core 1.26.0): only the reason, a document reference and the
+ * review date.
  * With `hospital` given it is fixed (a hospital's own page); otherwise it is
  * chosen here. Content mounts only while open, so each opening starts empty.
  */
@@ -96,24 +96,13 @@ function PlaceFlow({
     setErrors((p) => ({ ...p, [k]: undefined }));
   };
 
-  const covers = scopeLabel({
-    from: f.scope === "dates" ? f.from || null : null,
-    to: f.scope === "dates" ? f.to || null : null,
-  });
-
   const confirm = (input: StepUpInput) => {
     const code = codeOf(input);
-    const note = f.note.trim();
     place.run(
       {
         hospital_id: f.hospital!.id,
-        ...(f.scope === "dates"
-          ? { from: f.from, ...(f.to ? { to: f.to } : {}) }
-          : {}),
         reason: f.reason as Exclude<PlaceForm["reason"], "">,
         reference: f.reference.trim(),
-        asked_by: f.asked_by.trim(),
-        ...(note ? { note } : {}),
         review_on: f.review_on,
         ...code,
       },
@@ -125,7 +114,7 @@ function PlaceFlow({
         onError: (e) => {
           if (!(e instanceof ApiError && ENDS_IT.includes(e.code)))
             return false;
-          setRefusal(platformError(e).title);
+          setRefusal(platformError(e, PLACE_WORDS).title);
           setStep("form");
           if (e.code === "hospital_removed")
             void qc.invalidateQueries({ queryKey: queryKeys.hospitals });
@@ -167,9 +156,9 @@ function PlaceFlow({
         title={`Place a legal hold on ${f.hospital?.name ?? "this hospital"}?`}
         intro={
           <>
-            <p>{covers}.</p>
+            <p>All of the hospital&apos;s records.</p>
             <p className="mt-1">
-              Records it covers are kept until the hold is lifted.
+              They are kept until two platform admins lift the hold.
             </p>
           </>
         }
@@ -204,26 +193,13 @@ function FormStep({
 }) {
   const id = useId();
   const hospitalRef = useRef<HTMLInputElement>(null);
-  const fromRef = useRef<HTMLInputElement>(null);
-  const toRef = useRef<HTMLInputElement>(null);
   const reasonRef = useRef<HTMLInputElement>(null);
   const referenceRef = useRef<HTMLInputElement>(null);
-  const askedByRef = useRef<HTMLInputElement>(null);
-  const noteRef = useRef<HTMLTextAreaElement>(null);
   const reviewRef = useRef<HTMLInputElement>(null);
   // Focus waits a tick for the messages to render; never after unmount.
   const focusTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(focusTimer.current), []);
-  const ORDER = [
-    "hospital",
-    "from",
-    "to",
-    "reason",
-    "reference",
-    "asked_by",
-    "note",
-    "review_on",
-  ] as const;
+  const ORDER = ["hospital", "reason", "reference", "review_on"] as const;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -233,12 +209,8 @@ function FormStep({
     if (bad) {
       const target = {
         hospital: hospitalRef,
-        from: fromRef,
-        to: toRef,
         reason: reasonRef,
         reference: referenceRef,
-        asked_by: askedByRef,
-        note: noteRef,
         review_on: reviewRef,
       }[bad];
       clearTimeout(focusTimer.current);
@@ -253,16 +225,14 @@ function FormStep({
     ) : null;
   const describe = (k: keyof PlaceForm) => {
     const ids = [
-      k === "reference" || k === "asked_by" || k === "note"
-        ? `${id}-${k}-hint`
-        : null,
+      k === "reference" ? `${id}-${k}-hint` : null,
       errors[k] ? `${id}-${k}-err` : null,
     ].filter(Boolean);
     return ids.length ? ids.join(" ") : undefined;
   };
   const hint = (k: string): ReactNode => (
     <p id={`${id}-${k}-hint`} className="mt-1 text-[12.5px] text-ink-3">
-      {HOLD_HINT}
+      {REFERENCE_HINT}
     </p>
   );
   const label = "mb-1.5 block text-[12.5px] text-ink-2";
@@ -289,67 +259,11 @@ function FormStep({
         )}
       </div>
 
-      <fieldset>
-        <legend className={legend}>What it covers</legend>
-        <div className="flex flex-wrap gap-1.5">
-          {(
-            [
-              ["all", "All records"],
-              ["dates", "From – To"],
-            ] as const
-          ).map(([v, text]) => (
-            <label key={v} className="cursor-pointer">
-              <input
-                type="radio"
-                name={`${id}-scope`}
-                checked={f.scope === v}
-                onChange={() => set("scope", v)}
-                className="peer sr-only"
-              />
-              <span className={chip}>
-                {f.scope === v && <Check aria-hidden className="size-3.5" />}
-                {text}
-              </span>
-            </label>
-          ))}
-        </div>
-        {f.scope === "dates" && (
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label htmlFor={`${id}-from`} className={label}>
-                From
-              </label>
-              <input
-                ref={fromRef}
-                id={`${id}-from`}
-                type="date"
-                value={f.from}
-                aria-invalid={errors.from ? true : undefined}
-                aria-describedby={describe("from")}
-                onChange={(e) => set("from", e.target.value)}
-                className={inputClass}
-              />
-              {err("from")}
-            </div>
-            <div>
-              <label htmlFor={`${id}-to`} className={label}>
-                To (empty means until lifted)
-              </label>
-              <input
-                ref={toRef}
-                id={`${id}-to`}
-                type="date"
-                value={f.to}
-                aria-invalid={errors.to ? true : undefined}
-                aria-describedby={describe("to")}
-                onChange={(e) => set("to", e.target.value)}
-                className={inputClass}
-              />
-              {err("to")}
-            </div>
-          </div>
-        )}
-      </fieldset>
+      <div>
+        <p className={legend}>What it covers</p>
+        <p className="text-[14px]">All records</p>
+        <p className="mt-1 text-[12.5px] text-ink-3">{HOLD_HINT}</p>
+      </div>
 
       <fieldset aria-describedby={describe("reason")}>
         <legend className={legend}>
@@ -380,7 +294,7 @@ function FormStep({
 
       <div>
         <label htmlFor={`${id}-reference`} className={label}>
-          Reference <span aria-hidden>*</span>
+          Reference (document reference) <span aria-hidden>*</span>
           <span className="sr-only">(required)</span>
         </label>
         <input
@@ -396,45 +310,6 @@ function FormStep({
         />
         {hint("reference")}
         {err("reference")}
-      </div>
-
-      <div>
-        <label htmlFor={`${id}-asked_by`} className={label}>
-          Asked for by <span aria-hidden>*</span>
-          <span className="sr-only">(required)</span>
-        </label>
-        <input
-          ref={askedByRef}
-          id={`${id}-asked_by`}
-          type="text"
-          maxLength={ASKED_BY_MAX}
-          value={f.asked_by}
-          aria-invalid={errors.asked_by ? true : undefined}
-          aria-describedby={describe("asked_by")}
-          onChange={(e) => set("asked_by", e.target.value)}
-          className={inputClass}
-        />
-        {hint("asked_by")}
-        {err("asked_by")}
-      </div>
-
-      <div>
-        <label htmlFor={`${id}-note`} className={label}>
-          Note {f.reason === "other" ? "(required)" : "(optional)"}
-        </label>
-        <textarea
-          ref={noteRef}
-          id={`${id}-note`}
-          rows={2}
-          maxLength={NOTE_MAX}
-          value={f.note}
-          aria-invalid={errors.note ? true : undefined}
-          aria-describedby={describe("note")}
-          onChange={(e) => set("note", e.target.value)}
-          className={`${inputClass} py-2.5`}
-        />
-        {hint("note")}
-        {err("note")}
       </div>
 
       <div>

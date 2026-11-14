@@ -65,34 +65,39 @@ checked first (`services/emr/scripts/image-check.sh`, mhai-multiagent
 
 ## The paths
 
-| Spec                                | Path                                                                                            |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------- |
-| clinical `01-ask`                   | sign in with two-step, ask, the answer with its drafted-by label, agree (feedback), My feedback |
-| clinical `02-alerts`                | the bell's unread count, the inbox, acknowledge, dismiss with a reason                          |
-| clinical `03-notification-settings` | switch alert pop-ups off, read back after a reload, on again                                    |
-| clinical `04-alert-settings`        | the hospital admin's alert settings: records status, units, a level saved and read back         |
-| clinical `05-analysis`              | the views, a filter, the not-ready state, the de-identified drill-down                          |
-| platform `01-emr`                   | add the record connection (private network, key file), test it, switch it on                    |
-| platform `02-hospital`              | Hospitals, the hospital's page and its AI model policy                                          |
-| platform `03-ops`                   | System health and jobs, Usage (analytics)                                                       |
-| platform `04-audit`                 | the audit log and one entry                                                                     |
-| platform `90-reveal`                | the auditor reveal of the analyst's drill-down                                                  |
-| both `00-tour`                      | every page: it renders and no call to the BFF fails                                             |
+| Spec                                | Path                                                                                                 |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| clinical `01-ask`                   | sign in with two-step, ask, the answer with its drafted-by label, agree (feedback), My feedback      |
+| clinical `02-alerts`                | the bell's unread count, the inbox, acknowledge, dismiss with a reason                               |
+| clinical `03-notification-settings` | switch alert pop-ups off, read back after a reload, on again                                         |
+| clinical `04-alert-settings`        | the hospital admin's alert settings: records status, units, a level saved and read back              |
+| clinical `05-analysis`              | the views, a filter, the not-ready state, the de-identified drill-down                               |
+| platform `01-emr`                   | add the record connection (private network, key file), test it, switch it on                         |
+| platform `02-hospital`              | Hospitals, the hospital's page and its AI model policy                                               |
+| platform `03-ops`                   | System health and jobs, Usage (analytics)                                                            |
+| platform `04-audit`                 | the audit log and one entry                                                                          |
+| platform `05-admin`                 | team, activity and legal holds on core 1.26.0; invites, notifications and settings Not available yet |
+| platform `90-reveal`                | the auditor reveal of the analyst's drill-down                                                       |
+| both `00-tour`                      | every page: it renders and no call to the BFF fails                                                  |
 
 A call that fails is printed as `API <path>: <status> <method> <url>`: the
-evidence of a mismatch. A call to a route core doesn't serve yet, made by a
-part of the page that isn't under test, is printed as `GAP` and doesn't
-fail the path (`tests/e2e-full/live.ts`, `KNOWN_GAPS`).
+evidence of a mismatch. A call to a route core doesn't serve yet (404), or
+registers but doesn't do yet (501 `not_implemented`), made by a part of the
+page that isn't under test, is printed as `GAP` and doesn't fail the path
+(`tests/e2e-full/live.ts`, `KNOWN_GAPS`).
 
 ## Not integrated yet
 
 Core (openapi 1.20.0) has no route yet for these, so their screens can't
 work live:
 
-- platform: the hospitals list and a hospital's page (`/platform/hospitals`,
-  `/platform/hospitals/{id}`, so the AI model policy section can't be
-  reached), notifications (the bell), the sidebar's Analysis across hospitals status, legal holds, settings, team,
-  activity, named access, the analytics e-mail setting;
+- platform (core 1.26.0, mhai-multiagent #164 and #165): the hospitals
+  list and page, team, activity, legal holds and the analytics e-mail
+  setting are served. Notifications (the bell), platform settings, named
+  access, team invites, hold edits and lift undo answer 501
+  `not_implemented`: the app shows a calm Not available yet. Hospital
+  writes (add, edit, deactivate, reactivate, removal), SSO writes and
+  first-admin invites aren't served at all;
 - hospital admin: staff, hospital settings, activity, usage and review
   oversight (`/hospital/staff`, `/hospital/settings`, ...). Alert settings
   works, but its clinician picker reads the staff list;

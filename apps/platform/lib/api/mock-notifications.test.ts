@@ -98,11 +98,12 @@ describe("mock notifications", () => {
     expect(tunde.unseen).toBe(before.unseen);
     expect(tunde.items.every((i) => !i.seen)).toBe(true);
 
-    // An auditor keeps their own read state too.
+    // An auditor reads them but can't mark them seen (core 1.26.0).
     as(TEAM_EMAILS.amara);
-    expect((await m.markSeen({ ids: [first.id] }, KEY())).unseen).toBe(
-      before.unseen - 1,
-    );
+    await expect(m.markSeen({ ids: [first.id] }, KEY())).rejects.toMatchObject({
+      status: 403,
+      code: "forbidden",
+    });
     as(TEAM_EMAILS.tunde);
     expect((await m.listNotifications()).unseen).toBe(before.unseen);
   });

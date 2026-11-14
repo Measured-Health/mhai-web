@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
@@ -7,11 +7,9 @@ import {
   __setPlatformClientForTests,
 } from "@/lib/api/client";
 import type { PlatformClient } from "@/lib/api/contract";
-import { TEAM_EMAILS } from "@/lib/api/fixtures";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp } from "@/lib/api/step-up";
 import { dateLabel } from "@/lib/format";
-import { HOLD_HINT } from "@/lib/holds/labels";
 import { ADA, AMARA, renderWithAuth } from "@/tests/render";
 import { HoldView } from "./hold-view";
 
@@ -39,23 +37,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** As another person, straight to the API. */
-async function as<T>(email: string, fn: () => Promise<T>) {
-  const was = who;
-  who = email;
-  try {
-    return await fn();
-  } finally {
-    who = was;
-  }
-}
-
 const details = () => screen.getByRole("region", { name: "Details" });
 const term = (t: string) =>
   within(details()).getByText(t, { selector: "dt" }).nextElementSibling!;
 
 describe("a hold's page", () => {
-  it("shows every field, including the note, to an auditor, with no controls", async () => {
+  it("shows every field to an auditor, with no controls; no note and no name of who asked (core 1.26.0)", async () => {
     renderWithAuth(<HoldView id="hold_hh" />, { user: AMARA });
     expect(
       await screen.findByRole("heading", { name: "BRD-2026-03" }),
@@ -71,11 +58,9 @@ describe("a hold's page", () => {
     expect(term("What it covers")).toHaveTextContent("All records");
     expect(term("Reason")).toHaveTextContent("Other");
     expect(term("Reference")).toHaveTextContent("BRD-2026-03");
-    expect(term("Asked for by")).toHaveTextContent("Havana Hospital's board");
-    expect(term("Note")).toHaveTextContent(
-      "Board request pending legal review",
-    );
-    expect(term("Placed by")).toHaveTextContent(/^Ada Bakare · /);
+    expect(within(details()).queryByText("Asked for by")).toBeNull();
+    expect(within(details()).queryByText("Note")).toBeNull();
+    expect(term("Placed")).toHaveTextContent(/^Placed by Ada Bakare · /);
     expect(term("Review date")).toBeInTheDocument();
     expect(term("Status")).toHaveTextContent(/^Lifted by Ada Bakare · /);
     // Nothing to press but the menu and the bell.
@@ -100,6 +85,18 @@ describe("a hold's page", () => {
         await screen.findByRole("region", { name: "Details" }),
       ).findByText(`Active · placed by Ada Bakare · ${dateLabel(h.placed_at)}`),
     ).toBeInTheDocument();
+  });
+
+  it("a hold the command line placed says Placed by the system, with no reason", async () => {
+    renderWithAuth(<HoldView id="hold_rg" />, { user: AMARA });
+    expect(
+      await screen.findByRole("heading", { name: "LH-2025-0042" }),
+    ).toBeInTheDocument();
+    expect(term("Placed")).toHaveTextContent(/^Placed by the system · /);
+    expect(term("Reason")).toHaveTextContent(
+      "Not given (placed by the system)",
+    );
+    expect(screen.queryByText(/Provisioning command line/)).toBeNull();
   });
 
   it("stopped_removal shows the banner", async () => {
@@ -147,77 +144,41 @@ describe("a hold's page", () => {
   });
 });
 
-describe("editing a hold", () => {
-  it("edit changes the review date; scope, reason and reference have no edit control", async () => {
+describe("changing a hold's review date", () => {
+  it("core doesn't serve it yet: the dialog says Not available yet, calmly, and nothing changes", async () => {
     const spy = vi.spyOn(api, "editHold");
     renderWithAuth(<HoldView id="hold_hv" />);
     await userEvent.click(
       await within(
         await screen.findByRole("region", { name: "Details" }),
-      ).findByRole("button", { name: "Edit" }),
+      ).findByRole("button", { name: "Change review date" }),
     );
-    const d = screen.getByRole("dialog", { name: "Edit the legal hold" });
-    // Only the review date and the note.
-    expect(within(d).getAllByRole("textbox")).toHaveLength(1);
-    expect(within(d).getByLabelText(/^Note/)).toHaveAttribute(
-      "maxLength",
-      "500",
-    );
-    expect(within(d).getByLabelText(/^Note/)).toHaveAccessibleDescription(
-      HOLD_HINT,
-    );
-    for (const l of [/What it covers/, /^Reason/, /^Reference/])
+    const d = screen.getByRole("dialog", { name: "Change the review date" });
+    // Only the review date: a hold has no note.
+    expect(within(d).queryAllByRole("textbox")).toHaveLength(0);
+    for (const l of [/^Note/, /What it covers/, /^Reason/, /^Reference/])
       expect(within(d).queryByLabelText(l)).toBeNull();
+    const before = term("Review date").textContent;
     const date = within(d).getByLabelText(/^Review date/);
     await userEvent.clear(date);
     await userEvent.type(date, "2031-03-03");
     await userEvent.click(within(d).getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(term("Review date")).toHaveTextContent("3 Mar 2031"),
-    );
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(spy.mock.calls[0]![1]).toMatchObject({
+    const note = await within(d).findByText("Not available yet");
+    expect(note.closest("[role=status]")).not.toBeNull();
+    expect(within(d).queryByRole("alert")).toBeNull();
+    expect(within(d).getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(spy.mock.calls[0]![1]).toEqual({
       review_on: "2031-03-03",
       version: 1,
     });
-    // No step-up for an edit.
-    expect(spy.mock.calls[0]![1]).not.toHaveProperty("mfa_code");
+    expect(term("Review date").textContent).toBe(before);
   });
 
-  it("a stale edit shows Changed by someone else and reloads", async () => {
-    renderWithAuth(<HoldView id="hold_hv" />);
-    await userEvent.click(
-      await within(
-        await screen.findByRole("region", { name: "Details" }),
-      ).findByRole("button", { name: "Edit" }),
-    );
-    const d = screen.getByRole("dialog", { name: "Edit the legal hold" });
-    // Tunde changes it meanwhile.
-    await as(TEAM_EMAILS.tunde, () =>
-      api.editHold(
-        "hold_hv",
-        { review_on: "2032-01-15", version: 1 },
-        { idempotencyKey: "t" },
-      ),
-    );
-    await userEvent.type(within(d).getByLabelText(/^Note/), "Ada's note");
-    await userEvent.click(within(d).getByRole("button", { name: "Save" }));
-    expect(
-      await within(d).findByText("Changed by someone else"),
-    ).toBeInTheDocument();
-    await userEvent.click(within(d).getByRole("button", { name: "Reload" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    await waitFor(() =>
-      expect(term("Review date")).toHaveTextContent("15 Jan 2032"),
-    );
-    expect(term("Note")).not.toHaveTextContent("Ada's note");
-  });
-
-  it("a lifted hold has no Edit", async () => {
+  it("a lifted hold has no Change review date", async () => {
     renderWithAuth(<HoldView id="hold_lc" />);
     await screen.findByRole("region", { name: "Details" });
     expect(
-      within(details()).queryByRole("button", { name: "Edit" }),
+      within(details()).queryByRole("button", { name: "Change review date" }),
     ).toBeNull();
   });
 });

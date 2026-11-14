@@ -33,13 +33,9 @@ const HOLD_STATUS: Record<HoldStatus, string> = {
 /** A hold's history: what each event did, in the actor's voice. */
 const EVENT: Record<HoldEvent["action"], string> = {
   placed: "Placed the hold",
-  edited: "Changed the review date or note",
   lift_requested: "Asked to lift the hold",
   lift_cancelled: "Cancelled the lift request",
-  lift_lapsed: "The lift request lapsed",
-  lifted: "Approved the lift",
-  lift_undone: "Undid the lift",
-  released: "Records released",
+  lifted: "Approved the lift: the hold was lifted",
 };
 const FILTER: Record<HoldStatusFilter, string> = {
   open: "Open",
@@ -53,7 +49,9 @@ function word<K extends string>(t: Record<K, string>, k: string): string {
   return t[k as K];
 }
 
-export const holdReasonLabel = (r: HoldReason) => word(HOLD_REASON, r);
+/** A hold the provisioning command line placed has no reason. */
+export const holdReasonLabel = (r: HoldReason | null) =>
+  r === null ? "Not given (placed by the system)" : word(HOLD_REASON, r);
 export const liftReasonLabel = (r: LiftReason) => word(LIFT_REASON, r);
 export const holdStatusLabel = (s: HoldStatus) => word(HOLD_STATUS, s);
 export const holdFilterLabel = (s: HoldStatusFilter) => word(FILTER, s);
@@ -74,9 +72,9 @@ export const HOLD_FILTERS: readonly HoldStatusFilter[] = [
 
 /** Whether every code on a hold (and its lift) is one this app has words for. */
 export const holdIsKnown = (h: LegalHold) =>
-  HOLD_REASONS.includes(h.reason) &&
+  (h.reason === null || HOLD_REASONS.includes(h.reason)) &&
   HOLD_STATUSES.includes(h.status) &&
   (!h.lift || LIFT_REASONS.includes(h.lift.reason));
 
 export const HOLD_HINT =
-  "Don't include patient names, hospital numbers or dates of birth.";
+  "A hold carries no notes and no names: only the reason and a document reference.";

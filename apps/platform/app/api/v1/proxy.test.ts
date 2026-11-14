@@ -219,9 +219,8 @@ const SHAPES: [Method, string][] = [
   ...EMR_SHAPES,
   ...CLEARANCE_SHAPES,
 ];
-/** The writes an auditor may make: their own read state, and the audit ones. */
+/** The writes an auditor may make: the audit ones (core 1.26.0: not seen). */
 const AUDITOR_WRITES: [Method, string][] = [
-  ["POST", "platform/notifications/seen"],
   ["POST", "platform/audit/undisplayable"],
   ["POST", "platform/audit/exports"],
   ["POST", "platform/audit/verify"],
@@ -264,6 +263,15 @@ const VALID: Record<string, { query?: string; body?: string }> = {
   },
   "DELETE platform/analytics/changes/{id}/follow-up": {
     body: '{"version":2}',
+  },
+  "PATCH platform/team/{id}": {
+    body: '{"role":"auditor","version":3,"mfa_code":"123456"}',
+  },
+  "POST platform/legal-holds": {
+    body: '{"hospital_id":"h1","reason":"court_case","reference":"LH-2026-0042","review_on":"2027-05-01","mfa_code":"123456"}',
+  },
+  "POST platform/legal-holds/{id}/lift": {
+    body: '{"reason":"case_closed","authority":"CT-2026-0091","backup_code":"abcd-efgh"}',
   },
 };
 const WRITES = SHAPES.filter(
@@ -313,42 +321,72 @@ describe("platform API proxy", () => {
     },
   );
 
-  it("proxy: an auditor may POST seen but not PUT the preference", async () => {
+  it("proxy: an auditor can't mark notifications seen or PUT the preference (core 1.26.0)", async () => {
     await session({ roles: ["auditor"] });
-    fetchMock.mockResolvedValueOnce(Response.json({ unseen: 0 }));
-    const seen = await call("POST", ["platform", "notifications", "seen"], {
-      body: '{"ids":["ntf_1"]}',
-      headers: { "idempotency-key": "k-seen-1" },
-    });
-    expect(seen.status).toBe(200);
-    expect(await seen.json()).toEqual({ unseen: 0 });
-    expect(calls()).toHaveLength(1);
-    const [url, init] = calls()[0];
-    expect(url).toBe("http://api.test/api/v1/platform/notifications/seen");
-    expect(init.method).toBe("POST");
-    expect(init.body).toBe('{"ids":["ntf_1"]}');
-    expect(headersOf(calls()[0]).get("Idempotency-Key")).toBe("k-seen-1");
-
-    fetchMock.mockClear();
-    const put = await call("PUT", ["platform", "me", "analytics-email"], {
-      body: '{"mode":"critical","version":1}',
-    });
-    expect(put.status).toBe(403);
-    expect(await put.json()).toEqual({ code: "forbidden" });
-    // The exception is exactly one path: nearby writes stay refused.
-    for (const [method, path] of [
-      ["PUT", ["platform", "notifications", "seen"]],
-      ["POST", ["platform", "notifications"]],
-      ["POST", ["platform", "me", "analytics-email"]],
-    ] as [Method, string[]][]) {
-      const res = await call(method, path);
-      expect([403, 404]).toContain(res.status);
+    for (const [method, path, body] of [
+      ["POST", ["platform", "notifications", "seen"], '{"ids":["ntf_1"]}'],
+      [
+        "PUT",
+        ["platform", "me", "analytics-email"],
+        '{"mode":"critical","version":1}',
+      ],
+    ] as [Method, string[], string][]) {
+      const res = await call(method, path, { body });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ code: "forbidden" });
     }
-    // ...and the seen exception still needs this app's origin.
-    const cross = await call("POST", ["platform", "notifications", "seen"], {
-      origin: "http://evil.test",
-    });
-    expect(cross.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("team and hold writes are checked strictly: no dates, notes or names on a hold, a reference for a lift's authority", async () => {
+    await session();
+    fetchMock.mockImplementation(async () => Response.json({}));
+    const bad: [Method, string[], string][] = [
+      // A role change with a field core doesn't take.
+      [
+        "PATCH",
+        ["platform", "team", "tm_1"],
+        '{"role":"auditor","version":1,"note":"x"}',
+      ],
+      ["PATCH", ["platform", "team", "tm_1"], '{"role":"owner","version":1}'],
+      // A hold for a date range, with a note, or naming who asked.
+      [
+        "POST",
+        ["platform", "legal-holds"],
+        '{"hospital_id":"h1","reason":"other","reference":"LH-2026-0042","review_on":"2027-05-01","from":"2025-01-01"}',
+      ],
+      [
+        "POST",
+        ["platform", "legal-holds"],
+        '{"hospital_id":"h1","reason":"other","reference":"LH-2026-0042","review_on":"2027-05-01","note":"Board asked"}',
+      ],
+      [
+        "POST",
+        ["platform", "legal-holds"],
+        '{"hospital_id":"h1","reason":"other","reference":"LH-2026-0042","review_on":"2027-05-01","asked_by":"Dr Obi"}',
+      ],
+      [
+        "POST",
+        ["platform", "legal-holds"],
+        '{"hospital_id":"h1","reason":"other","reference":"HC/2026/0412","review_on":"2027-05-01"}',
+      ],
+      // A lift's authority in free text, or with a note.
+      [
+        "POST",
+        ["platform", "legal-holds", "hold_1", "lift"],
+        '{"reason":"case_closed","authority":"Counsel\'s letter"}',
+      ],
+      [
+        "POST",
+        ["platform", "legal-holds", "hold_1", "lift"],
+        '{"reason":"case_closed","authority":"CT-2026-0091","note":"x"}',
+      ],
+    ];
+    for (const [method, path, body] of bad) {
+      const res = await call(method, path, { body });
+      expect(res.status).toBe(422);
+      expect(await res.json()).toEqual({ code: "validation_failed" });
+    }
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

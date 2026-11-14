@@ -33,7 +33,7 @@ const get = (id: string) => api.getHospital(id);
 const section = () => screen.getByRole("region", { name: "Legal holds" });
 
 describe("the hospital's legal holds", () => {
-  it("Harbour View lists HC/2026/0412 as Active, linked", async () => {
+  it("Harbour View lists HC-2026-0412 as Active, linked", async () => {
     renderWithAuth(
       <HospitalHoldsSection
         hospital={await get("h_harbour")}
@@ -41,7 +41,7 @@ describe("the hospital's legal holds", () => {
       />,
     );
     const link = within(section()).getByRole("link", {
-      name: /HC\/2026\/0412/,
+      name: /HC-2026-0412/,
     });
     expect(link).toHaveAttribute("href", "/legal-holds/hold_hv");
     expect(link).toHaveTextContent("All records");
@@ -71,8 +71,10 @@ describe("the hospital's legal holds", () => {
     const d = screen.getByRole("dialog", { name: "Place a legal hold" });
     expect(within(d).getByText("Havana Hospital")).toBeInTheDocument();
     await userEvent.click(within(d).getByLabelText("Complaint"));
-    await userEvent.type(within(d).getByLabelText(/^Reference/), "CMP-77");
-    await userEvent.type(within(d).getByLabelText(/^Asked for by/), "Legal");
+    await userEvent.type(
+      within(d).getByLabelText(/^Reference/),
+      "CMP-2026-0077",
+    );
     await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
     const s = await screen.findByRole("dialog", {
       name: "Place a legal hold on Havana Hospital?",
@@ -105,7 +107,7 @@ describe("the hospital's legal holds", () => {
       },
     );
     expect(
-      within(section()).getByRole("link", { name: /HC\/2026\/0412/ }),
+      within(section()).getByRole("link", { name: /HC-2026-0412/ }),
     ).toBeInTheDocument();
     expect(within(section()).queryByRole("button")).toBeNull();
   });

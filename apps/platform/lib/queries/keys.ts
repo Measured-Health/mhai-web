@@ -20,7 +20,10 @@ export const queryKeys = {
   analysis: ["analysis"] as const,
 };
 
-/** The query client's defaults: memory-only cache, no retry on a 4xx. */
+/**
+ * The query client's defaults: memory-only cache, no retry on a 4xx, nor on
+ * a 501 `not_implemented` (READ_RETRY: core doesn't do it yet).
+ */
 export const QUERY_DEFAULTS = {
   queries: { ...READ_RETRY, refetchOnWindowFocus: false },
 };

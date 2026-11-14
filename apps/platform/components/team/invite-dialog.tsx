@@ -114,11 +114,18 @@ function InviteForm({ onClose }: { onClose(): void }) {
       <p className="text-sm text-ink-2">
         They get an email to set up their account.
       </p>
-      {failure && (
-        <Banner tone="bad" title={failure.title}>
-          {failure.body || "No invite was sent."}
-        </Banner>
-      )}
+      {failure &&
+        (failure.unavailable ? (
+          // Core keeps no invites yet (501): calm, nothing to try again.
+          <Banner tone="info" title={failure.title}>
+            Measured Health hasn&apos;t switched on team invites yet. No invite
+            was sent. Platform accounts are made by Measured Health for now.
+          </Banner>
+        ) : (
+          <Banner tone="bad" title={failure.title}>
+            {failure.body || "No invite was sent."}
+          </Banner>
+        ))}
       {field("name", "Name", name, setName, nameRef)}
       {field("email", "Email", email, setEmail, emailRef)}
       <RoleFields
@@ -131,7 +138,11 @@ function InviteForm({ onClose }: { onClose(): void }) {
         <Button variant="ghost" disabled={invite.isPending} onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={invite.isPending} {...net.props}>
+        <Button
+          type="submit"
+          disabled={invite.isPending || !!failure?.unavailable}
+          {...net.props}
+        >
           {invite.isPending ? "Sending…" : "Send invite"}
         </Button>
       </div>

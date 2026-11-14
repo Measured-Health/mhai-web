@@ -21,13 +21,13 @@ const REFUSED: Record<string, string> = {
  * Analysis switch ("on" or "off").
  */
 export function actionLabel(
-  a: ActivityAction,
+  a: ActivityAction | (string & {}),
   target?: string | null,
   reason?: string | null,
   detail?: string | null,
 ): string {
   const t = target?.trim() || null;
-  switch (a) {
+  switch (a as ActivityAction) {
     case "hospital_added":
       return "added the hospital";
     case "hospital_updated":
@@ -180,6 +180,8 @@ export function actionLabel(
       return to ? `set the AI model to ${to}` : "changed the AI model";
     }
   }
+  // An action core added that this app has no words for yet: as it is.
+  return `did “${a.replace(/_/g, " ")}”${t ? ` (${t})` : ""}`;
 }
 
 const WHEN = new Intl.DateTimeFormat("en-GB", {

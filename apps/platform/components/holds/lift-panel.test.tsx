@@ -10,11 +10,11 @@ import { TEAM_EMAILS } from "@/lib/api/fixtures";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp, MOCK_CODE } from "@/lib/api/step-up";
 import type { User } from "@/lib/auth/types";
-import { dateLabel } from "@/lib/format";
 import { HOLD_HINT } from "@/lib/holds/labels";
+import { REFERENCE_HINT } from "@/lib/holds/rules";
 import { useHold } from "@/lib/queries/holds";
 import { ADA, renderWithAuth } from "@/tests/render";
-import { LiftPanel } from "./lift-panel";
+import { LIFT_EFFECT, LiftPanel } from "./lift-panel";
 
 const net = vi.hoisted(() => ({ online: true }));
 vi.mock("@mhai/ui/hooks/use-online", () => ({ useOnline: () => net.online }));
@@ -69,38 +69,36 @@ async function typeCode(d: HTMLElement, code = MOCK_CODE) {
 }
 
 describe("requesting a lift", () => {
-  it("Request lift needs a reason, the authority and the code; Other needs a note", async () => {
+  it("Request lift needs a reason, a document reference for the authority and the code; there is no note", async () => {
     const spy = vi.spyOn(api, "requestLift");
     await open("hold_hv");
     await userEvent.click(btn("Request lift"));
     const d = screen.getByRole("dialog", { name: /^Lift legal hold/ });
     const confirm = within(d).getByRole("button", { name: "Request lift" });
+    // Core keeps no free text on a lift: no note box, even for Other.
+    expect(within(d).queryByLabelText(/^Note/)).toBeNull();
     await userEvent.click(confirm);
     expect(within(d).getByText("Choose a reason.")).toBeInTheDocument();
     await userEvent.click(within(d).getByLabelText("Other"));
-    await userEvent.click(confirm);
-    expect(within(d).getByText("Add a note.")).toBeInTheDocument();
-    await userEvent.type(within(d).getByLabelText(/^Note/), "Settled");
+    expect(within(d).queryByLabelText(/^Note/)).toBeNull();
     await userEvent.click(confirm);
     expect(
-      within(d).getByText("Enter authority for lifting."),
+      within(d).getByText("Enter authority for lifting (document reference)."),
     ).toBeInTheDocument();
-    await userEvent.type(
-      within(d).getByLabelText(/^Authority for lifting/),
-      "Counsel's letter 20 Oct 2026",
-    );
+    const authority = within(d).getByLabelText(/^Authority for lifting/);
+    await userEvent.type(authority, "Counsel's letter 20 Oct 2026");
+    await userEvent.click(confirm);
+    expect(
+      within(d).getByText("Use a document reference, like CT-2026-0091."),
+    ).toBeInTheDocument();
+    await userEvent.clear(authority);
+    await userEvent.type(authority, "CT-2026-0091");
     await userEvent.click(confirm);
     expect(within(d).getByText("Enter your 6-digit code.")).toBeInTheDocument();
     expect(spy).not.toHaveBeenCalled();
     await typeCode(d);
     await userEvent.click(confirm);
-    // The dialog (which says it too) closes once the request is made.
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(
-      within(panel()).getByText(
-        "The hold stays active until a different platform admin approves.",
-      ),
-    ).toBeInTheDocument();
     expect(
       within(panel()).getByText(
         "Waiting for a different platform admin to approve",
@@ -108,24 +106,19 @@ describe("requesting a lift", () => {
     ).toBeInTheDocument();
     expect(spy.mock.calls[0]![1]).toEqual({
       reason: "other",
-      note: "Settled",
-      authority: "Counsel's letter 20 Oct 2026",
+      authority: "CT-2026-0091",
       mfa_code: MOCK_CODE,
     });
   });
 
-  it("the hint shows under the note and the authority", async () => {
+  it("the authority box explains a document reference, and the no-names hint", async () => {
     await open("hold_ng");
     await userEvent.click(btn("Request lift"));
     const d = screen.getByRole("dialog", { name: /^Lift legal hold/ });
-    expect(within(d).getAllByText(HOLD_HINT)).toHaveLength(2);
-    expect(within(d).getByLabelText(/^Note/)).toHaveAccessibleDescription(
-      HOLD_HINT,
-    );
     const authority = within(d).getByLabelText(/^Authority for lifting/);
-    expect(authority).toHaveAttribute("maxLength", "200");
+    expect(authority).toHaveAttribute("maxLength", "22");
     expect(authority).toHaveAccessibleDescription(
-      `For example: Counsel's letter 14 Oct 2026, ref ABC-123 ${HOLD_HINT}`,
+      `${REFERENCE_HINT} ${HOLD_HINT}`,
     );
   });
 
@@ -136,7 +129,7 @@ describe("requesting a lift", () => {
     await userEvent.click(within(d).getByLabelText("The case is closed"));
     await userEvent.type(
       within(d).getByLabelText(/^Authority for lifting/),
-      "Court order",
+      "CO-2026-0007",
     );
     await typeCode(d, "000000");
     await userEvent.click(
@@ -164,35 +157,28 @@ describe("approving a lift (two people)", () => {
     expect(btn("Cancel request")).toBeEnabled();
   });
 
-  it("Riverside, as Ada, shows the effect with 1240 records, then Approve lift with the code makes it 'Lifted · records released on …'", async () => {
+  it("Riverside, as Ada, says the lift lands at once; Approve lift with the code lifts it, with no undo", async () => {
     const spy = vi.spyOn(api, "approveLift");
     await open("hold_rc");
-    const h = await api.getHold("hold_rc");
-    const effect = `When this hold is lifted, records it alone was keeping become due for the daily clean-up. About 1240 records are already past their retention period and would be deleted in the clean-up after ${dateLabel(h.lift!.due_after)}.`;
-    expect(within(panel()).getByText(effect)).toBeInTheDocument();
-    expect(
-      within(panel()).getByText(
-        "The hold stays active until a different platform admin approves.",
-      ),
-    ).toBeInTheDocument();
+    expect(within(panel()).getByText(LIFT_EFFECT)).toBeInTheDocument();
+    expect(within(panel()).getByText("CT-2026-0091")).toBeInTheDocument();
     expect(
       within(panel()).getByText(/^Requested by Tunde Okafor · /),
     ).toBeInTheDocument();
     await userEvent.click(btn("Approve lift"));
     const d = screen.getByRole("dialog", { name: /^Approve lifting/ });
-    expect(within(d).getByText(effect)).toBeInTheDocument();
+    expect(within(d).getByText(LIFT_EFFECT)).toBeInTheDocument();
     const confirm = within(d).getByRole("button", { name: "Approve lift" });
     expect(confirm.className).toMatch(/bad|danger/);
     await typeCode(d);
     await userEvent.click(confirm);
     expect(
-      await within(panel()).findByText(
-        `Lifted · records released on ${dateLabel(new Date(clock + 7 * D).toISOString())}`,
-      ),
+      await within(panel()).findByText(/^Lifted by Ada Bakare · /),
     ).toBeInTheDocument();
     expect(spy.mock.calls[0]![1]).toEqual({ version: 2, mfa_code: MOCK_CODE });
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(btn("Undo lift")).toBeEnabled();
+    // No grace period, so nothing to undo.
+    expect(within(panel()).queryAllByRole("button")).toHaveLength(0);
   });
 
   it("an approval refused as same_person shows A different platform admin must approve this.", async () => {
@@ -230,9 +216,7 @@ describe("approving a lift (two people)", () => {
       within(d).getByRole("button", { name: "Approve lift" }),
     );
     expect(
-      await within(panel()).findByText(
-        "This request lapsed after 7 days. Make a new request.",
-      ),
+      await within(panel()).findByText("This request lapsed after 7 days."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(
@@ -277,36 +261,16 @@ describe("approving a lift (two people)", () => {
 });
 
 describe("after the lift", () => {
-  // Preflight S8-14: the grace-period hold is Lakeside, not Westfield.
-  it("Lakeside shows Undo lift; undo with the code puts the hold back", async () => {
-    const spy = vi.spyOn(api, "undoLift");
-    await open("hold_lc");
-    const h = await api.getHold("hold_lc");
-    expect(
-      within(panel()).getByText(
-        `Lifted · records released on ${dateLabel(h.lift!.released_on!)}`,
-      ),
-    ).toBeInTheDocument();
-    await userEvent.click(btn("Undo lift"));
-    const d = screen.getByRole("dialog", { name: "Put the hold back?" });
-    expect(within(d).getByText("Its records stay kept.")).toBeInTheDocument();
-    await typeCode(d);
-    await userEvent.click(within(d).getByRole("button", { name: "Undo lift" }));
-    // Back to keeping records: Active, or Review due when its date is past
-    // (Lakeside's is).
-    expect(
-      await within(panel()).findByRole("button", { name: "Request lift" }),
-    ).toBeEnabled();
-    expect((await api.getHold("hold_lc")).status).toMatch(
-      /^(active|review_due)$/,
-    );
-    expect(spy.mock.calls[0]![1]).toEqual({ version: 3, mfa_code: MOCK_CODE });
-  });
-
-  it("Havana shows no lift controls", async () => {
-    await open("hold_hh");
-    expect(within(panel()).getByText(/^Lifted by Ada Bakare · /)).toBeVisible();
-    expect(within(panel()).queryAllByRole("button")).toHaveLength(0);
+  it("a lifted hold shows who lifted it and no controls: no undo", async () => {
+    for (const id of ["hold_lc", "hold_hh"]) {
+      const { unmount } = renderWithAuth(<Page id={id} />);
+      await screen.findByRole("region", { name: "Lift" });
+      expect(
+        within(panel()).getByText(/^Lifted by Ada Bakare · /),
+      ).toBeVisible();
+      expect(within(panel()).queryAllByRole("button")).toHaveLength(0);
+      unmount();
+    }
   });
 });
 
@@ -316,7 +280,6 @@ describe("offline", () => {
     for (const [id, names] of [
       ["hold_hv", ["Request lift"]],
       ["hold_rc", ["Approve lift", "Cancel request"]],
-      ["hold_lc", ["Undo lift"]],
     ] as const) {
       const { unmount } = renderWithAuth(<Page id={id} />);
       await screen.findByRole("region", { name: "Lift" });

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import type { LegalHold } from "@/lib/api/holds-contract";
 import { dateLabel } from "@/lib/format";
 import { holdReasonLabel } from "@/lib/holds/labels";
-import { scopeLabel, statusLine } from "@/lib/holds/rules";
+import { placedByLabel, scopeLabel, statusLine } from "@/lib/holds/rules";
 import { Section } from "../hospitals/section";
 import { HoldStatus } from "./hold-status";
 
@@ -18,16 +18,15 @@ function Row({ term, children }: { term: string; children: ReactNode }) {
 }
 
 /**
- * Everything about a hold, the note included: auditors see it all. `action`
- * is Edit, for platform admins on a hold that isn't lifted.
+ * Everything about a hold: auditors see it all. A hold keeps every record
+ * and carries no note and no name of who asked (core keeps neither).
+ * `action` is Change review date, for platform admins on an open hold.
  */
 export function HoldFacts({
   hold: h,
-  now,
   action,
 }: {
   hold: LegalHold;
-  now: number;
   action?: ReactNode;
 }) {
   return (
@@ -41,21 +40,17 @@ export function HoldFacts({
             {h.hospital.name}
           </Link>
         </Row>
-        <Row term="What it covers">{scopeLabel(h.scope)}</Row>
+        <Row term="What it covers">{scopeLabel()}</Row>
         <Row term="Reason">{holdReasonLabel(h.reason)}</Row>
         <Row term="Reference">
           <span className="font-mono">{h.reference}</span>
         </Row>
-        <Row term="Asked for by">{h.asked_by}</Row>
-        <Row term="Note">
-          {h.note ?? <span className="text-ink-3">None</span>}
-        </Row>
-        <Row term="Placed by">
-          {h.placed_by.name} · {dateLabel(h.placed_at)}
+        <Row term="Placed">
+          {placedByLabel(h)} · {dateLabel(h.placed_at)}
         </Row>
         <Row term="Review date">{dateLabel(h.review_on)}</Row>
         <Row term="Status">
-          <HoldStatus hold={h} text={statusLine(h, now)} />
+          <HoldStatus hold={h} text={statusLine(h)} />
         </Row>
       </dl>
     </Section>

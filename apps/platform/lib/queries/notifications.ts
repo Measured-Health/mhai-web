@@ -15,6 +15,7 @@ import {
 } from "../api/notifications-contract";
 import { notificationOk } from "../analytics/read";
 import { queryKeys } from "./keys";
+import { isNotImplemented } from "../errors";
 import { SessionEnded, sessionEpoch } from "./session-end";
 
 /** How often the bell looks for new changes, while the tab is open and online. */
@@ -69,7 +70,9 @@ export function useNotifications() {
     queryKey: notificationsKey,
     queryFn: () => getPlatformClient().listNotifications(),
     select: read,
-    refetchInterval: visible && online ? POLL_MS : false,
+    // Core doesn't serve notifications yet (501): stop asking until reload.
+    refetchInterval: (q) =>
+      visible && online && !isNotImplemented(q.state.error) ? POLL_MS : false,
     refetchIntervalInBackground: false,
     // A reconnect while the tab is hidden sends nothing.
     refetchOnReconnect: visible,

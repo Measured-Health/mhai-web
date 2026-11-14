@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Platform admin screens on core's contract** (openapi 1.25.0 and 1.26.0,
+  mhai-multiagent #164 and #165). The hospitals list and page, the team,
+  activity, legal holds and the analytics e-mail are read with strict zod
+  schemas: a reply that doesn't match is a failed read (502), never shown
+  in part.
+  - Team: changing a member's role takes your own two-step code (a
+    demotion does as much damage as a removal), says their sessions end
+    and they sign in again, and words `own_role`, `last_admin` and
+    `conflict`. Every member is active: core keeps no invites, so Invite
+    team member answers a calm Not available yet.
+  - Legal holds keep every record: the form has no dates, no note and no
+    "asked for by" (core keeps no free text and no names; they read back
+    null). A hold's reference and a lift's authority are document
+    references (`LH-2026-0042`, `CT-2026-0091`), checked in the form and
+    the BFF. A lift lands at once on approval: no grace period, no Undo
+    lift, no records-due count. A hold the provisioning command line placed
+    says "Placed by the system", with no reason. Changing a hold's review
+    date is Not available yet.
+  - Activity lists only actions a person took; an action this app has no
+    words for yet is shown as it is.
+  - Auditors can't mark notifications seen: the BFF refuses it (core makes
+    it a write), and the bell doesn't offer it to them.
+  - What core answers 501 `not_implemented` (team invites, notifications,
+    platform settings, named access, hold edits, lift undo) shows a calm
+    "Not available yet", is never retried and stops the bell's poll.
+  - New refusals in plain words: `own_role`, `last_admin`, `same_person`,
+    `expired`, `invalid_range`, `hospital_removed`, `not_implemented`.
+  - The demo follows the same rules.
+
 ### Added
 
 - **Analysis drill-down on core's live route** (core openapi 1.19.0,

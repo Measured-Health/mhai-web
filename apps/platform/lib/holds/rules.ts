@@ -1,58 +1,56 @@
 // What a hold covers and how a placement is checked.
 import type { Person } from "@/lib/api/contract";
 import {
+  DOCUMENT_REFERENCE,
   REVIEW_MONTHS,
+  placedBySystem,
   type HoldReason,
   type LegalHold,
 } from "@/lib/api/holds-contract";
 import { dateLabel } from "@/lib/format";
 
-export const REFERENCE_MAX = 100;
-export const ASKED_BY_MAX = 200;
-export const NOTE_MAX = 500;
+/** A reference's and a lift's authority's longest form (`ABCDEFGH-2026-12345678`). */
+export const REFERENCE_MAX = 22;
+/** What a document reference looks like, for the hint under the box. */
+export const REFERENCE_HINT =
+  "A document reference: 2 to 8 capital letters, the year, then a number, like LH-2026-0042.";
 
-/** "All records", "Records from 1 Jan 2025 to 30 Jun 2025", or "…, until lifted". */
-export function scopeLabel(scope: LegalHold["scope"]): string {
-  if (!scope.from) return "All records";
-  const from = `Records from ${dateLabel(scope.from)}`;
-  return scope.to
-    ? `${from} to ${dateLabel(scope.to)}`
-    : `${from}, until lifted`;
-}
+/** What a hold covers: always all of the hospital's records (core 1.26.0). */
+export const scopeLabel = (): string => "All records";
 
-/**
- * A lifted hold: until its records are released it says so; after that,
- * who lifted it and when.
- */
-export function liftedLine(h: LegalHold, now: number): string {
+/** "Placed by the system" for the command line's holds, else the person. */
+export const placedByLabel = (h: Pick<LegalHold, "placed_by">) =>
+  placedBySystem(h) ? "Placed by the system" : `Placed by ${h.placed_by.name}`;
+
+/** A lifted hold: who lifted it and when (a lift lands at once). */
+export function liftedLine(h: LegalHold): string {
   const l = h.lift;
-  const until = l?.released_on;
-  if (until && now < Date.parse(until))
-    return `Lifted · records released on ${dateLabel(until)}`;
   const who = l?.approved_by?.name;
   const at = l?.approved_at;
   return `Lifted${who ? ` by ${who}` : ""}${at ? ` · ${dateLabel(at)}` : ""}`;
 }
 
-/** Lifted, and its records not yet released: the lift can be undone. */
-export const inGrace = (h: LegalHold, now: number) =>
-  h.status === "lifted" &&
-  !!h.lift?.released_on &&
-  now < Date.parse(h.lift.released_on);
-
 /** A hold's status in a line: who placed an active one, and when. */
-export function statusLine(h: LegalHold, now: number): string {
+export function statusLine(h: LegalHold): string {
   switch (h.status) {
-    case "active":
-      return `Active · placed by ${h.placed_by.name} · ${dateLabel(h.placed_at)}`;
+    case "active": {
+      const by = placedBySystem(h)
+        ? "placed by the system"
+        : `placed by ${h.placed_by.name}`;
+      return `Active · ${by} · ${dateLabel(h.placed_at)}`;
+    }
     case "review_due":
       return `Review due · ${dateLabel(h.review_on)}`;
     case "lift_requested":
       return "Lift requested · still active";
     case "lifted":
-      return liftedLine(h, now);
+      return liftedLine(h);
   }
 }
+
+/** Whether a reference (or a lift's authority) has core's shape. */
+export const isDocumentReference = (v: string) =>
+  DOCUMENT_REFERENCE.test(v.trim());
 
 /** Today as a calendar date (YYYY-MM-DD) where the person is. */
 export function todayLocal(now = new Date()): string {
@@ -71,19 +69,17 @@ export function defaultReviewOn(today: string): string {
   return first.toISOString().slice(0, 10);
 }
 
+/** No dates, no note, no name: a hold keeps every record (core 1.26.0). */
 export type PlaceForm = {
   hospital: Person | null;
-  scope: "all" | "dates";
-  from: string;
-  to: string;
   reason: HoldReason | "";
   reference: string;
-  asked_by: string;
-  note: string;
   review_on: string;
 };
 
-const over = (n: number) => `Keep it under ${n} characters.`;
+/** The latest review date core takes: five years from today. */
+export const latestReviewOn = (today: string) =>
+  `${Number(today.slice(0, 4)) + 5}${today.slice(4)}`;
 
 /** Each field that isn't right, with its message; empty when all is well. */
 export function validatePlace(
@@ -92,43 +88,29 @@ export function validatePlace(
 ): Partial<Record<keyof PlaceForm, string>> {
   const e: Partial<Record<keyof PlaceForm, string>> = {};
   if (!f.hospital) e.hospital = "Choose a hospital.";
-  if (f.scope === "dates") {
-    if (!f.from) e.from = "Choose the start date.";
-    else if (f.to && f.to < f.from)
-      e.to = "The end date must be on or after the start date.";
-  }
   if (!f.reason) e.reason = "Choose a reason.";
   const ref = f.reference.trim();
   if (!ref) e.reference = "Enter the reference.";
-  else if (ref.length > REFERENCE_MAX) e.reference = over(REFERENCE_MAX);
-  const by = f.asked_by.trim();
-  if (!by) e.asked_by = "Enter who asked for it.";
-  else if (by.length > ASKED_BY_MAX) e.asked_by = over(ASKED_BY_MAX);
-  const note = f.note.trim();
-  if (f.reason === "other" && !note) e.note = "Add a note.";
-  else if (note.length > NOTE_MAX) e.note = over(NOTE_MAX);
+  else if (!isDocumentReference(ref))
+    e.reference = "Use a document reference, like LH-2026-0042.";
   if (!f.review_on || f.review_on <= today)
     e.review_on = "Choose a review date after today.";
+  else if (f.review_on > latestReviewOn(today))
+    e.review_on = "Choose a review date within 5 years.";
   return e;
 }
 
-export type EditForm = { review_on: string; note: string };
+export type EditForm = { review_on: string };
 
-/**
- * An edit's review date and note. A changed review date must be after
- * today; a hold placed for Other keeps a note.
- */
+/** An edit's review date: a changed one must be after today. */
 export function validateEdit(
   f: EditForm,
-  h: Pick<LegalHold, "review_on" | "reason">,
+  h: Pick<LegalHold, "review_on">,
   today = todayLocal(),
 ): Partial<Record<keyof EditForm, string>> {
   const e: Partial<Record<keyof EditForm, string>> = {};
   if (!f.review_on) e.review_on = "Choose a review date.";
   else if (f.review_on !== h.review_on && f.review_on <= today)
     e.review_on = "Choose a review date after today.";
-  const note = f.note.trim();
-  if (h.reason === "other" && !note) e.note = "Add a note.";
-  else if (note.length > NOTE_MAX) e.note = over(NOTE_MAX);
   return e;
 }

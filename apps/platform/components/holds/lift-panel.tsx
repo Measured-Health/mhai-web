@@ -2,22 +2,20 @@
 import { useState } from "react";
 import { ApiError } from "@mhai/api-client/errors";
 import {
+  DOCUMENT_REFERENCE,
   LIFT_REASONS,
-  type HoldLift,
   type LegalHold,
   type LiftReason,
 } from "@/lib/api/holds-contract";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
 import { platformError } from "@/lib/errors";
-import { dateLabel } from "@/lib/format";
 import { HOLD_HINT, liftReasonLabel } from "@/lib/holds/labels";
-import { inGrace, liftedLine } from "@/lib/holds/rules";
+import { REFERENCE_HINT, REFERENCE_MAX, liftedLine } from "@/lib/holds/rules";
 import {
   useApproveLift,
   useCancelLift,
   useRefreshHold,
   useRequestLift,
-  useUndoLift,
 } from "@/lib/queries/holds";
 import { useStepUpCall } from "@/lib/queries/step-up-call";
 import { Banner } from "@mhai/ui/banner";
@@ -34,25 +32,28 @@ import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 
 const STAYS_ACTIVE =
   "The hold stays active until a different platform admin approves.";
+/** A lift's authority is the document that allows it, as a reference. */
 const AUTHORITY = {
-  label: "Authority for lifting",
-  max: 200,
-  hint: "For example: Counsel's letter 14 Oct 2026, ref ABC-123",
+  label: "Authority for lifting (document reference)",
+  max: REFERENCE_MAX,
+  hint: REFERENCE_HINT,
+  pattern: DOCUMENT_REFERENCE,
+  patternError: "Use a document reference, like CT-2026-0091.",
 };
 /** Refusals that mean the hold is not as the person saw it: say so, reload. */
 const REFUSED = ["expired", "same_person", "conflict", "not_found"];
 
-/** What approving does, in the server's numbers (a whole-hospital count). */
-export const liftEffect = (l: HoldLift) =>
-  `When this hold is lifted, records it alone was keeping become due for the daily clean-up. About ${l.records_due} records are already past their retention period and would be deleted in the clean-up after ${dateLabel(l.due_after)}.`;
+/** What approving does: the hold is lifted at once, and can't be undone. */
+export const LIFT_EFFECT =
+  "Approving lifts the hold at once. Records it alone was keeping become due for the daily clean-up straight away, and the lift can't be undone.";
 
-type Asking = "request" | "approve" | "undo" | null;
+type Asking = "request" | "approve" | null;
 
 /**
- * Lifting a hold takes two platform admins: one asks (reason, authority and
- * their code), a different one approves with their own code. Who may
- * approve is the server's `requested_by_you`. A lifted hold keeps its
- * records 7 more days, and Undo lift (one person, with a code) puts it back.
+ * Lifting a hold takes two platform admins: one asks (reason, the
+ * authority's document reference and their code), a different one approves
+ * with their own code. Who may approve is the server's `requested_by_you`.
+ * The hold is lifted at once on approval: no grace period, no undo.
  * Auditors see the words and no buttons.
  */
 export function LiftPanel({ hold: h }: { hold: LegalHold }) {
@@ -60,14 +61,12 @@ export function LiftPanel({ hold: h }: { hold: LegalHold }) {
   const canAct = isPlatformAdmin(user);
   const toast = useToast();
   const net = useNeedsConnection("lift-offline");
-  const [now] = useState(() => Date.now());
   const [asking, setAsking] = useState<Asking>(null);
   // The version the person saw when they began: they act on that, only.
   const [seen, setSeen] = useState(h.version);
   const [refusal, setRefusal] = useState<string | null>(null);
   const request = useStepUpCall(useRequestLift(h.id));
   const approve = useStepUpCall(useApproveLift(h.id));
-  const undo = useStepUpCall(useUndoLift(h.id));
   const cancel = useCancelLift(h.id);
   const refresh = useRefreshHold(h.id);
 
@@ -80,7 +79,6 @@ export function LiftPanel({ hold: h }: { hold: LegalHold }) {
     setAsking(null);
     request.clear();
     approve.clear();
-    undo.clear();
   };
   /** It isn't as the person saw it: close, say why, show the latest. */
   const refused = (e: unknown) => {
@@ -99,7 +97,6 @@ export function LiftPanel({ hold: h }: { hold: LegalHold }) {
     request.run(
       {
         reason: input.reason as LiftReason,
-        ...(input.note ? { note: input.note } : {}),
         authority: input.extra ?? "",
         ...codeOf(input),
       },
@@ -108,21 +105,7 @@ export function LiftPanel({ hold: h }: { hold: LegalHold }) {
   const confirmApprove = (input: StepUpInput) =>
     approve.run(
       { version: seen, ...codeOf(input) },
-      {
-        onSuccess: (r) =>
-          done(
-            "Hold lifted",
-            r.lift?.released_on
-              ? `Its records are kept until ${dateLabel(r.lift.released_on)}.`
-              : undefined,
-          ),
-        onError: refused,
-      },
-    );
-  const confirmUndo = (input: StepUpInput) =>
-    undo.run(
-      { version: seen, ...codeOf(input) },
-      { onSuccess: () => done("Hold put back"), onError: refused },
+      { onSuccess: () => done("Hold lifted"), onError: refused },
     );
   const doCancel = () => {
     setRefusal(null);
@@ -140,7 +123,6 @@ export function LiftPanel({ hold: h }: { hold: LegalHold }) {
 
   const open = h.status === "active" || h.status === "review_due";
   const lift = h.status === "lift_requested" ? h.lift : null;
-  const grace = inGrace(h, now);
   const line = "text-[13.5px] text-ink-2 [overflow-wrap:anywhere]";
 
   return (
@@ -177,16 +159,12 @@ export function LiftPanel({ hold: h }: { hold: LegalHold }) {
             <dt className="text-ink-3">Reason for lifting</dt>
             <dd>{liftReasonLabel(lift.reason)}</dd>
             <dt className="text-ink-3">Authority</dt>
-            <dd className="[overflow-wrap:anywhere]">{lift.authority}</dd>
-            {lift.note && (
-              <>
-                <dt className="text-ink-3">Note</dt>
-                <dd className="[overflow-wrap:anywhere]">{lift.note}</dd>
-              </>
-            )}
+            <dd className="font-mono [overflow-wrap:anywhere]">
+              {lift.authority}
+            </dd>
           </dl>
           <p className="text-[13.5px] font-semibold">{STAYS_ACTIVE}</p>
-          <p className={line}>{liftEffect(lift)}</p>
+          <p className={line}>{LIFT_EFFECT}</p>
           <TwoPersonActions
             request={lift}
             canAct={canAct}
@@ -200,23 +178,10 @@ export function LiftPanel({ hold: h }: { hold: LegalHold }) {
       )}
 
       {h.status === "lifted" && (
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-[13.5px] font-semibold">{liftedLine(h, now)}</p>
-          {canAct && grace && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-auto"
-              {...net.props}
-              onClick={() => begin("undo")}
-            >
-              Undo lift
-            </Button>
-          )}
-        </div>
+        <p className="text-[13.5px] font-semibold">{liftedLine(h)}</p>
       )}
 
-      {canAct && (open || lift || grace) && <OfflineNote id="lift-offline" />}
+      {canAct && (open || lift) && <OfflineNote id="lift-offline" />}
 
       {canAct && (
         <>
@@ -229,7 +194,7 @@ export function LiftPanel({ hold: h }: { hold: LegalHold }) {
               label: liftReasonLabel(r),
             }))}
             reasonLabel="Reason for lifting"
-            noteFor="other"
+            noNote
             extra={AUTHORITY}
             hint={HOLD_HINT}
             confirmLabel="Request lift"
@@ -242,24 +207,13 @@ export function LiftPanel({ hold: h }: { hold: LegalHold }) {
           <StepUpDialog
             open={asking === "approve" && !!lift}
             title={`Approve lifting ${h.reference}?`}
-            intro={lift ? <p>{liftEffect(lift)}</p> : undefined}
+            intro={<p>{LIFT_EFFECT}</p>}
             confirmLabel="Approve lift"
             tone="danger"
             busy={approve.busy}
             error={approve.error}
             onClose={close}
             onConfirm={confirmApprove}
-          />
-          <StepUpDialog
-            open={asking === "undo" && grace}
-            title="Put the hold back?"
-            intro={<p>Its records stay kept.</p>}
-            confirmLabel="Undo lift"
-            tone="primary"
-            busy={undo.busy}
-            error={undo.error}
-            onClose={close}
-            onConfirm={confirmUndo}
           />
         </>
       )}

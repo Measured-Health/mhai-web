@@ -29,7 +29,10 @@ function changed(qc: QueryClient) {
 
 export type InviteTeamInput = { name: string; email: string; role: TeamRole };
 
-/** Invites a team member: one Idempotency-Key per submit, reused on retries. */
+/**
+ * Invites a team member: one Idempotency-Key per submit, reused on retries.
+ * Core keeps no invites yet (501 `not_implemented`).
+ */
 export function useInviteTeam() {
   const qc = useQueryClient();
   return useKeyedMutation(
@@ -39,15 +42,25 @@ export function useInviteTeam() {
   );
 }
 
-export type ChangeRoleInput = { id: string; role: TeamRole; version: number };
+export type ChangeRoleInput = {
+  id: string;
+  role: TeamRole;
+  version: number;
+} & StepUp;
 
-/** Changes a role; `version` is the one the person saw. */
+/**
+ * Changes a role with the person's own two-step code (core 1.26.0: a
+ * demotion is as damaging as a removal); `version` is the one the person
+ * saw. The code is in the variables, so the cache forgets the call at once
+ * (gcTime 0); callers `reset()` after.
+ */
 export function useChangeRole() {
   const qc = useQueryClient();
   return useKeyedMutation(
     ({ id, ...body }: ChangeRoleInput, key) =>
       getPlatformClient().changeRole(id, body, { idempotencyKey: key }),
     { onSuccess: () => changed(qc) },
+    { gcTime: 0 },
   );
 }
 

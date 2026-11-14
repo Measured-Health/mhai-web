@@ -5,6 +5,8 @@ import { useRef, useState } from "react";
 import { isChange, type Notification } from "@/lib/api/notifications-contract";
 import { openAuditAt } from "@/lib/audit/nav";
 import { useAuth } from "@/lib/auth/auth-context";
+import { isPlatformAdmin } from "@/lib/auth/types";
+import { isNotImplemented } from "@/lib/errors";
 import { useMarkSeen, useNotifications } from "@/lib/queries/notifications";
 import { Dialog } from "@mhai/ui/dialog";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
@@ -28,6 +30,9 @@ export function NotificationBell() {
 }
 
 function BellAndList() {
+  const { user } = useAuth();
+  // Marking seen is a write: core refuses an auditor (403).
+  const canMark = isPlatformAdmin(user);
   const router = useRouter();
   const desktop = useIsDesktop();
   const q = useNotifications();
@@ -39,8 +44,11 @@ function BellAndList() {
 
   // The last good count stays through a failed check; no count before one.
   const unseen = q.data?.unseen ?? 0;
+  // Core doesn't serve notifications yet (501): a calm note, not a failure.
+  const unavailable = open && isNotImplemented(q.error);
   // A failed read fails the list, even with an older one in hand.
-  const failed = open && (q.isError || (!!q.data && !q.data.ok));
+  const failed =
+    open && !unavailable && (q.isError || (!!q.data && !q.data.ok));
   const items = q.data?.ok ? q.data.items : [];
   // The first read is waiting for a connection: say so, not "Loading…".
   const waiting = open && !q.data && q.fetchStatus === "paused";
@@ -53,7 +61,7 @@ function BellAndList() {
       if (r.isError || !r.data?.ok) return;
       const ids = r.data.items.filter((i) => !i.seen).map((i) => i.id);
       setFresh(new Set(ids));
-      if (ids.length) mark.mutate(ids);
+      if (ids.length && canMark) mark.mutate(ids);
     });
   };
   const markAll = () =>
@@ -81,12 +89,13 @@ function BellAndList() {
     <NotificationsList
       items={items}
       failed={failed}
+      unavailable={unavailable}
       loading={open && q.isPending && !waiting}
       offline={waiting}
       fresh={fresh}
       onRetry={() => void q.refetch()}
       onOpen={go}
-      unseen={unseen}
+      unseen={canMark ? unseen : 0}
       onMarkAll={markAll}
     />
   );

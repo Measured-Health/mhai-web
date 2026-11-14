@@ -53,8 +53,17 @@ test("an auditor has the bell but no email setting", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Devices" })).toBeVisible();
   await expect(page.getByRole("radiogroup")).toHaveCount(0);
   await expect(page.getByText("Analytics email")).toHaveCount(0);
-  // The auditor still has the bell.
+  // The auditor still has the bell, but marking seen is a write in core
+  // (1.26.0): no Mark all seen, and opening it leaves the count.
   await expect(bell(page)).toBeVisible();
+  const before = await bell(page).getAttribute("aria-label");
+  await bell(page).click();
+  await expect(list(page).getByRole("button").first()).toBeVisible();
+  await expect(
+    list(page).getByRole("button", { name: "Mark all seen" }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(bell(page)).toHaveAttribute("aria-label", before!);
 });
 
 test("the bell counts new changes, the list opens, and they're marked seen", async ({
