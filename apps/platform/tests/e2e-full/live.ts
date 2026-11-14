@@ -133,6 +133,10 @@ const KNOWN_GAPS: readonly RegExp[] = [
   /^\/api\/v1\/platform\/settings$/,
   // Named access (501 in core 1.26.0).
   /^\/api\/v1\/platform\/named-access$/,
+  // The sidebar's Analysis across hospitals status: core serves it (1.25.0),
+  // but this app's BFF answers 404 while Analysis isn't signed off
+  // (ANALYSIS_SIGNED_OFF), as live-full.sh runs it.
+  /^\/api\/v1\/platform\/analysis\/status$/,
 ];
 
 /** Prints the failed calls (status 400 and up), for the run's log; returns those that count. */

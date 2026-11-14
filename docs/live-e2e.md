@@ -98,7 +98,10 @@ work live:
   access, team invites, hold edits and lift undo answer 501
   `not_implemented`: the app shows a calm Not available yet. Hospital
   writes (add, edit, deactivate, reactivate, removal), SSO writes and
-  first-admin invites aren't served at all;
+  first-admin invites aren't served at all. The sidebar's Analysis status
+  is served too (1.25.0), but the platform BFF answers 404 for it while
+  Analysis isn't signed off, as `live-full.sh` runs the app, so it is
+  printed as `GAP`;
 - hospital admin: staff, hospital settings, activity, usage and review
   oversight need core 1.24.0 (mhai-multiagent #163); the screens follow it
   (`06-hospital-admin`). Invites, removing a person, resets, reminders
