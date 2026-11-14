@@ -4,6 +4,7 @@
 // type and in the range it says, and nothing else. A reply that doesn't
 // match is a failed read, never a guess (secure-build: fail-closed readers).
 import { z } from "zod";
+import { isPatientId } from "../patient-link";
 
 const INSTANT =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
@@ -68,6 +69,9 @@ export const ALERT_SCHEMA = z.strictObject({
   finding: FINDING,
   likely_causes: z.array(CAUSE).max(3),
   patient: z.strictObject({
+    // Not in core 1.22.0's AlertOut yet (see TODO.md): optional, and only
+    // ever a canonical lower-case uuid, so a malformed one fails the read.
+    id: z.string().refine(isPatientId).optional(),
     full_name: label,
     // Null for a patient with no MRN.
     mrn: text(64).nullable(),

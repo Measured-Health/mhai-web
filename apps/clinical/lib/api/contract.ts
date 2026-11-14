@@ -23,6 +23,12 @@ export interface QueryCreateIn {
   specialty?: string;
   /** When the app queued the question offline (contract v1.2.0); checked, not stored. */
   client_created_at?: string;
+  /**
+   * The MHAI patient the question is about (core 1.22.0): a lower-case uuid.
+   * Core answers 404 `not_found` unless it is an active patient of the
+   * caller's hospital, and while EMR is off. Never queued offline.
+   */
+  patient_id?: string;
 }
 
 export interface QueryStatusOut {

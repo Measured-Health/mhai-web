@@ -3,6 +3,12 @@ import { toResultView } from "../result-view";
 import { getClient } from "./client";
 import { FIXTURES } from "./fixtures";
 import { createMockClient, pickScenario } from "./mock";
+import {
+  createMockAlerts,
+  MOCK_ACTIVE_PATIENT_IDS,
+  MOCK_MERGED_PATIENT_ID,
+} from "./mock-alerts";
+import { isPatientId } from "../patient-link";
 
 const q = (text: string) => ({
   patient_data: { age: 54, sex: "male" as const, symptoms: ["x"] },
@@ -25,6 +31,41 @@ describe("mock client", () => {
     expect(pickScenario(q("Please FAIL this request."))).toBe("failed");
     expect(pickScenario(q("Potassium 2.9 on routine bloods"))).toBe("review");
     expect(pickScenario(q("Fever for 3 days"))).toBe("caution");
+  });
+
+  it("follows core's rules for a linked patient: active only, 404 otherwise, 422 if malformed", async () => {
+    const c = createMockClient();
+    const active = [...MOCK_ACTIVE_PATIENT_IDS][0]!;
+    await expect(
+      c.createQuery({ ...q("chest pain"), patient_id: active }),
+    ).resolves.toHaveProperty("query_id");
+    for (const unknown of [
+      MOCK_MERGED_PATIENT_ID,
+      "0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f",
+    ])
+      await expect(
+        c.createQuery({ ...q("chest pain"), patient_id: unknown }),
+      ).rejects.toMatchObject({ status: 404, code: "not_found" });
+    for (const bad of [
+      active.toUpperCase(),
+      "00000000-0000-0000-0000-000000000000",
+      "204817",
+      "",
+    ])
+      await expect(
+        c.createQuery({ ...q("chest pain"), patient_id: bad }),
+      ).rejects.toMatchObject({ status: 422, code: "validation_failed" });
+  });
+
+  it("gives every sample alert's patient a well-formed id", async () => {
+    const { alerts } = await createMockAlerts({
+      delayMs: 0,
+      arrivals: false,
+      me: async () => "Dr. Test",
+    }).listAlerts({ limit: 100 });
+    expect(alerts.length).toBeGreaterThan(0);
+    for (const a of alerts) expect(isPatientId(a.patient.id)).toBe(true);
+    expect(MOCK_ACTIVE_PATIENT_IDS.has(MOCK_MERGED_PATIENT_ID)).toBe(false);
   });
 
   it("walks through stages, then completes with a result", async () => {

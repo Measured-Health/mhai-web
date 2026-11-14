@@ -59,6 +59,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** A question as the app sends it (core's `QueryCreateIn`). */
+const ASK = {
+  patient_data: { age: 54, sex: "male", symptoms: ["Chest pain"] },
+  clinical_question: "Synthetic question: chest pain, what to rule out?",
+  urgency: "urgent",
+};
+
 const ctx = (...path: string[]) => ({ params: Promise.resolve({ path }) });
 const get = (url = "http://demo.test/api/v1/queries/q1") =>
   new Request(url, { headers: { host: "demo.test", cookie: "other=1" } });
@@ -110,25 +117,111 @@ describe("clinical API proxy", () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({ query_id: "q2" }, { status: 202 }),
     );
-    const res = await POST(post('{"a":1}'), ctx("queries"));
+    const res = await POST(post(JSON.stringify(ASK)), ctx("queries"));
     expect(res.status).toBe(202);
-    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].body).toBe(
-      '{"a":1}',
-    );
+    expect(
+      JSON.parse(
+        String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body),
+      ),
+    ).toEqual(ASK);
+  });
+
+  describe("a question's linked patient (core 1.22.0)", () => {
+    const PID = "6f1c2a01-5e1d-4c3b-9a7e-000000000001";
+    const sent = () =>
+      JSON.parse(
+        String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body),
+      ) as Record<string, unknown>;
+
+    it("passes a lower-case uuid through", async () => {
+      await session();
+      fetchMock.mockResolvedValueOnce(
+        Response.json({ query_id: "q2" }, { status: 202 }),
+      );
+      const res = await POST(
+        post(JSON.stringify({ ...ASK, patient_id: PID })),
+        ctx("queries"),
+      );
+      expect(res.status).toBe(202);
+      expect(sent().patient_id).toBe(PID);
+    });
+
+    it.each([
+      ["upper case", PID.toUpperCase()],
+      ["the nil uuid", "00000000-0000-0000-0000-000000000000"],
+      ["no dashes", PID.replace(/-/g, "")],
+      ["braces", `{${PID}}`],
+      ["an MRN", "204817"],
+      ["a number", 204817],
+      ["null", null],
+      ["an empty string", ""],
+      ["a path", "../hospital/staff"],
+      ["a list", [PID]],
+    ])("refuses %s before upstream, 422", async (_, patient_id) => {
+      await session();
+      const res = await POST(
+        post(JSON.stringify({ ...ASK, patient_id })),
+        ctx("queries"),
+      );
+      expect(res.status).toBe(422);
+      expect(await res.json()).toEqual({ code: "validation_failed" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses a body core wouldn't take: an extra key, a patient name, bad JSON", async () => {
+      await session();
+      for (const body of [
+        JSON.stringify({ ...ASK, mrn: "204817" }),
+        JSON.stringify({ ...ASK, patient: { id: PID } }),
+        JSON.stringify({
+          ...ASK,
+          patient_data: { ...ASK.patient_data, full_name: "Maryam Abdullahi" },
+        }),
+        JSON.stringify({ ...ASK, urgency: "now" }),
+        "{}",
+        "not json",
+        "",
+      ]) {
+        const res = await POST(post(body), ctx("queries"));
+        expect(res.status).toBe(422);
+        expect(await res.json()).toEqual({ code: "validation_failed" });
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("keeps core's 404 to its code: the same answer for every patient", async () => {
+      await session();
+      fetchMock.mockResolvedValueOnce(
+        Response.json(
+          { code: "not_found", detail: `patient ${PID} is excluded` },
+          { status: 404 },
+        ),
+      );
+      const res = await POST(
+        post(JSON.stringify({ ...ASK, patient_id: PID })),
+        ctx("queries"),
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ code: "not_found" });
+    });
   });
 
   it("forwards a valid Idempotency-Key and drops a bad one", async () => {
     await session();
     fetchMock.mockResolvedValue(Response.json({}, { status: 202 }));
     await POST(
-      post("{}", "http://demo.test", { "Idempotency-Key": "k-1" }),
+      post(JSON.stringify(ASK), "http://demo.test", {
+        "Idempotency-Key": "k-1",
+      }),
       ctx("queries"),
     );
     expect(
       (fetchMock.mock.calls[0] as [string, RequestInit])[1].headers,
     ).toMatchObject({ "Idempotency-Key": "k-1" });
     await POST(
-      post("{}", "http://demo.test", { "Idempotency-Key": "bad key!" }),
+      post(JSON.stringify(ASK), "http://demo.test", {
+        "Idempotency-Key": "bad key!",
+      }),
       ctx("queries"),
     );
     expect(

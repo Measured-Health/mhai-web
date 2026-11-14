@@ -5,6 +5,7 @@ import type {
 } from "../api/alerts-contract";
 import type { Urgency } from "../api/contract";
 import { emptyForm, type FormValues } from "../form-schema";
+import { isPatientId, type PatientLink } from "../patient-link";
 import { findingLine, recordedLabel, severityOf } from "./alert-view";
 
 const PRIORITY: Record<AlertSeverity, Urgency> = {
@@ -70,20 +71,43 @@ export function askFromAlert(a: AlertOut, now: number): FormValues {
   };
 }
 
+/**
+ * The patient to link the question to (core 1.22.0 `patient_id`), when the
+ * alert carries MHAI's patient id and the patient wasn't excluded. The name
+ * and MRN are the ones the card showed; only the id is ever sent.
+ */
+export function patientFromAlert(a: AlertOut): PatientLink | null {
+  const id = a.patient.id;
+  if (!isPatientId(id) || a.withdrawn === "excluded") return null;
+  return { id, name: a.patient.full_name, mrn: a.patient.mrn };
+}
+
 // One pre-filled form waiting for the consultation page, in memory only. The
 // URL carries a random token that says nothing about the patient (R3).
-let stash: { token: string; values: FormValues } | null = null;
+let stash: {
+  token: string;
+  values: FormValues;
+  patient: PatientLink | null;
+} | null = null;
 
-/** Holds `values` for the next consultation form; returns the token for `/?prefill=`. */
-export function stashPrefill(values: FormValues): string {
+/** Holds `values` (and the patient link) for the next consultation form; returns the token for `/?prefill=`. */
+export function stashPrefill(
+  values: FormValues,
+  patient: PatientLink | null = null,
+): string {
   const token = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-  stash = { token, values };
+  stash = { token, values, patient };
   return token;
 }
 
 /** The waiting form for this token, or null (unknown, replaced or cleared). Reading keeps it. */
 export function readPrefill(token: string | null): FormValues | null {
   return token && stash?.token === token ? stash.values : null;
+}
+
+/** The waiting form's patient link for this token, or null. Reading keeps it. */
+export function readPrefillPatient(token: string | null): PatientLink | null {
+  return token && stash?.token === token ? stash.patient : null;
 }
 
 /** After the question is sent, and on sign-out. */

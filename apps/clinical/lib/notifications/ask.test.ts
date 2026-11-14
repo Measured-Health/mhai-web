@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { ALERT_NOW, makeAlert } from "@/tests/alerts";
 import { validate } from "../form-schema";
-import { askFromAlert, clearPrefill, readPrefill, stashPrefill } from "./ask";
+import {
+  askFromAlert,
+  clearPrefill,
+  patientFromAlert,
+  readPrefill,
+  readPrefillPatient,
+  stashPrefill,
+} from "./ask";
 
 describe("askFromAlert", () => {
   it("fills age, sex, priority, and the finding as a symptom and the question", () => {
@@ -104,5 +111,53 @@ describe("the prefill hand-over", () => {
     expect(readPrefill(t2)?.age).toBe("1");
     clearPrefill();
     expect(readPrefill(t2)).toBeNull();
+  });
+});
+
+describe("the patient link (core 1.22.0)", () => {
+  const PID = "6f1c2a01-5e1d-4c3b-9a7e-000000000001";
+  const withId = (id: string | undefined, over = {}) =>
+    makeAlert({ patient: { ...makeAlert().patient, id }, ...over });
+
+  it("links the alert's patient by id, with the name and MRN the card showed", () => {
+    expect(patientFromAlert(withId(PID))).toEqual({
+      id: PID,
+      name: "Maryam Abdullahi",
+      mrn: "204817",
+    });
+  });
+
+  it("links nobody without a well-formed id, or once the patient was excluded", () => {
+    expect(patientFromAlert(makeAlert())).toBeNull();
+    expect(patientFromAlert(withId(PID.toUpperCase()))).toBeNull();
+    expect(patientFromAlert(withId("204817"))).toBeNull();
+    expect(
+      patientFromAlert(withId("00000000-0000-0000-0000-000000000000")),
+    ).toBeNull();
+    expect(
+      patientFromAlert(
+        withId(PID, { status: "dismissed", withdrawn: "excluded" }),
+      ),
+    ).toBeNull();
+  });
+
+  it("never puts the patient in the form's values", () => {
+    const text = JSON.stringify(askFromAlert(withId(PID), ALERT_NOW));
+    expect(text).not.toContain(PID);
+  });
+
+  it("waits with the form, by its token only, until replaced or cleared", () => {
+    const link = patientFromAlert(withId(PID))!;
+    const t = stashPrefill(askFromAlert(withId(PID), ALERT_NOW), link);
+    expect(t).not.toContain(PID);
+    expect(readPrefillPatient(t)).toEqual(link);
+    expect(readPrefillPatient("other")).toBeNull();
+    expect(readPrefillPatient(null)).toBeNull();
+    const t2 = stashPrefill(askFromAlert(makeAlert(), ALERT_NOW));
+    expect(readPrefillPatient(t)).toBeNull();
+    expect(readPrefillPatient(t2)).toBeNull();
+    stashPrefill(askFromAlert(withId(PID), ALERT_NOW), link);
+    clearPrefill();
+    expect(readPrefillPatient(t)).toBeNull();
   });
 });

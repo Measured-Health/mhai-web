@@ -117,6 +117,10 @@ test("Ask MHAI about it fills a consultation without the name or MRN", async ({
   // The prefill key is removed from the address once it has been used.
   await expect(page).not.toHaveURL(/prefill/);
   await expect(page.getByLabel("Age")).toHaveValue("67");
+  // The name and MRN show only where the question is linked to the patient
+  // (About patient), never in the question itself.
+  const about = page.getByRole("group", { name: "About patient" });
+  await expect(about).toContainText("Maryam Abdullahi");
   if (isMobile(page)) await page.getByRole("button", { name: "Next" }).click();
   const question = page.getByLabel("Clinical question");
   await expect(question).toHaveValue(
@@ -125,8 +129,6 @@ test("Ask MHAI about it fills a consultation without the name or MRN", async ({
   expect(await question.inputValue()).not.toMatch(
     /Maryam|Abdullahi|204817|Ward 3/,
   );
-  const form = await page.locator("body").innerText();
-  expect(form).not.toMatch(/Maryam|Abdullahi|204817/);
   expect(page.url()).not.toMatch(/Maryam|204817/);
 });
 

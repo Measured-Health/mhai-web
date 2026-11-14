@@ -63,6 +63,8 @@ interface Sample {
   category: string;
   name: string;
   mrn: string;
+  /** MHAI's synthetic patient id (what core would send as `patient.id`). */
+  patientId: string;
   location: AlertLocationOut | null;
   age: number | null;
   sex: Sex | null;
@@ -106,6 +108,7 @@ const SEEDS: Seed[] = [
     category: "blood-chemistry",
     name: "Maryam Abdullahi",
     mrn: "204817",
+    patientId: "6f1c2a01-5e1d-4c3b-9a7e-000000000001",
     location: { kind: "admitted", ward: "Ward 3", bed: "Bed 12" },
     age: 67,
     sex: "female",
@@ -141,6 +144,7 @@ const SEEDS: Seed[] = [
     category: "blood-gases",
     name: "Ibrahim Danladi",
     mrn: "377190",
+    patientId: "6f1c2a02-5e1d-4c3b-9a7e-000000000002",
     location: { kind: "emergency" },
     age: 59,
     sex: "male",
@@ -177,6 +181,7 @@ const SEEDS: Seed[] = [
     category: "blood-count",
     name: "Esther Okoye",
     mrn: "128844",
+    patientId: "6f1c2a03-5e1d-4c3b-9a7e-000000000003",
     location: { kind: "outpatient", clinic: "Cardiology clinic" },
     age: 74,
     sex: "female",
@@ -201,6 +206,7 @@ const SEEDS: Seed[] = [
     category: "vital-signs",
     name: "Oluwafunmilayo Adebayo-Ogunleye-Fashola",
     mrn: "559031",
+    patientId: "6f1c2a04-5e1d-4c3b-9a7e-000000000004",
     location: null,
     age: 38,
     sex: "female",
@@ -226,6 +232,7 @@ const SEEDS: Seed[] = [
     category: "kidney-function",
     name: "Samuel Bassey",
     mrn: "640212",
+    patientId: "6f1c2a05-5e1d-4c3b-9a7e-000000000005",
     location: { kind: "admitted", ward: "Ward 5", bed: null },
     age: 81,
     sex: "male",
@@ -248,6 +255,7 @@ const SEEDS: Seed[] = [
     category: "heart-markers",
     name: "Blessing Uche",
     mrn: "702366",
+    patientId: "6f1c2a06-5e1d-4c3b-9a7e-000000000006",
     location: { kind: "outpatient", clinic: null },
     age: 63,
     sex: "female",
@@ -275,6 +283,7 @@ const SEEDS: Seed[] = [
     category: "blood-chemistry",
     name: "Kemi Afolabi",
     mrn: "815540",
+    patientId: "6f1c2a07-5e1d-4c3b-9a7e-000000000007",
     location: { kind: "admitted", ward: "Ward 2", bed: "Bed 7" },
     age: 70,
     sex: "female",
@@ -299,6 +308,7 @@ const SEEDS: Seed[] = [
     category: "blood-sugar",
     name: "Peter Ogbu",
     mrn: "903117",
+    patientId: "6f1c2a08-5e1d-4c3b-9a7e-000000000008",
     location: { kind: "outpatient", clinic: "Diabetes clinic" },
     age: 52,
     sex: "male",
@@ -334,6 +344,7 @@ const ARRIVALS: Sample[] = [
     category: "blood-count",
     name: "Emeka Nnamdi",
     mrn: "318552",
+    patientId: "6f1c2a09-5e1d-4c3b-9a7e-000000000009",
     location: { kind: "admitted", ward: "Ward 2", bed: "Bed 4" },
     age: 45,
     sex: "male",
@@ -364,6 +375,7 @@ const ARRIVALS: Sample[] = [
     category: "blood-chemistry",
     name: "Halima Garba",
     mrn: "401276",
+    patientId: "6f1c2a0a-5e1d-4c3b-9a7e-00000000000a",
     location: { kind: "emergency" },
     age: 72,
     sex: "female",
@@ -382,12 +394,27 @@ const ARRIVALS: Sample[] = [
     category: "blood-chemistry",
     name: "Joseph Eke",
     mrn: "512903",
+    patientId: "6f1c2a0b-5e1d-4c3b-9a7e-00000000000b",
     location: { kind: "outpatient", clinic: "Renal clinic" },
     age: 58,
     sex: "male",
     source: "Main record",
   },
 ];
+
+/**
+ * Samuel Bassey's record was merged into another after his alert was raised:
+ * a question linked to him is 404 `not_found`, as core answers for a patient
+ * who is no longer active (merged, excluded or another hospital's).
+ */
+export const MOCK_MERGED_PATIENT_ID = "6f1c2a05-5e1d-4c3b-9a7e-000000000005";
+
+/** The demo hospital's active patients: the only ids a question may name. */
+export const MOCK_ACTIVE_PATIENT_IDS: ReadonlySet<string> = new Set(
+  [...SEEDS, ...ARRIVALS]
+    .map((s) => s.patientId)
+    .filter((id) => id !== MOCK_MERGED_PATIENT_ID),
+);
 
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -420,7 +447,12 @@ function build(
         recorded_at: before === null ? null : iso(createdAt - before),
       })),
     })),
-    patient: { full_name: s.name, mrn: s.mrn, location: s.location },
+    patient: {
+      id: s.patientId,
+      full_name: s.name,
+      mrn: s.mrn,
+      location: s.location,
+    },
     age: s.age,
     sex: s.sex,
     source_label: s.source,

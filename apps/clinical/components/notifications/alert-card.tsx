@@ -18,7 +18,11 @@ import {
   recordLink,
   recordedLabel,
 } from "@/lib/notifications/alert-view";
-import { askFromAlert, stashPrefill } from "@/lib/notifications/ask";
+import {
+  askFromAlert,
+  patientFromAlert,
+  stashPrefill,
+} from "@/lib/notifications/ask";
 import { eventClock } from "@/lib/time";
 import { useShell } from "../shell/shell-context";
 import { Banner } from "@mhai/ui/banner";
@@ -117,9 +121,12 @@ export function AlertCard({
       },
     );
   };
-  // The prefill waits in memory; the URL carries only a random token (R3, R11).
+  // The prefill and the patient link wait in memory; the URL carries only a
+  // random token (R3, R11).
   const ask = () =>
-    navigate(`/?prefill=${stashPrefill(askFromAlert(alert, now))}`);
+    navigate(
+      `/?prefill=${stashPrefill(askFromAlert(alert, now), patientFromAlert(alert))}`,
+    );
 
   return (
     <>

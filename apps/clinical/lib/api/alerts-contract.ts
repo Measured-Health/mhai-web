@@ -64,6 +64,12 @@ export interface AlertRoutingOut {
 }
 
 export interface AlertPatientOut {
+  /**
+   * MHAI's patient id, when the reply carries one. Core 1.22.0 doesn't send
+   * it yet (a gap, see TODO.md): until it does, no question links the
+   * patient. Never shown.
+   */
+  id?: string;
   full_name: string;
   /** The hospital's own MRN; null for a patient with none ("No MRN recorded"). */
   mrn: string | null;

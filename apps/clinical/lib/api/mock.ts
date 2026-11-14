@@ -5,7 +5,10 @@ import type {
   QueryCreateIn,
   Stage,
 } from "./contract";
+import { ApiError } from "./errors";
 import { FIXTURES } from "./fixtures";
+import { MOCK_ACTIVE_PATIENT_IDS } from "./mock-alerts";
+import { isPatientId } from "../patient-link";
 import { createMockCorrections } from "./mock-corrections";
 
 type Scenario = keyof typeof FIXTURES | "failed";
@@ -97,6 +100,14 @@ export function createMockClient({
   let n = 0;
   return {
     async createQuery(q) {
+      // Core 1.22.0's rules for a linked patient: malformed is 422; anyone
+      // but an active patient of this hospital is 404, the same for each.
+      if (q.patient_id !== undefined) {
+        if (!isPatientId(q.patient_id))
+          throw new ApiError(422, "validation_failed");
+        if (!MOCK_ACTIVE_PATIENT_IDS.has(q.patient_id))
+          throw new ApiError(404, "not_found");
+      }
       const id = `mock-${++n}-${Math.random().toString(36).slice(2, 8)}`;
       jobs.set(id, { started: now(), scenario: pickScenario(q), q });
       return { query_id: id };
