@@ -8,6 +8,30 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Find a patient by MRN on the question form** (core 1.29.0,
+  `POST /patients/lookup`, mhai-multiagent #172):
+  - "Find patient by MRN" sits where About patient goes. The clinician
+    types the whole MRN and presses Find (no search as you type: every
+    lookup counts). A hit fills About patient with the name and MRN;
+    Remove brings the box back.
+  - Plain answers for no active patient with that MRN (404), two patients
+    sharing it (409), too many lookups (429, with the 5 a minute and 50 a
+    day limits explained), and a calm retry when the service is busy.
+  - The BFF forwards only a trimmed `{mrn}` of up to 64 letters, digits,
+    spaces, dots, slashes, hyphens or underscores, in the body (an MRN in
+    the address is 422), for a clinician on two-step; the reply is read
+    strictly and must name the MRN asked about, else 502. Core's text is
+    never passed on.
+  - The MRN and the patient are held in memory only and forgotten when the
+    form is cleared or the clinician signs out. The demo follows core's
+    rules, limits included.
+
+### Fixed
+
+- **An alert for a patient who is no longer active** (core 1.27.0 sends
+  `patient.id` null for an excluded or merged patient) no longer fails the
+  whole alerts list: it reads as an alert with no patient to link.
+
 - **A question about a patient** (core 1.22.0, `POST /queries`
   `patient_id`, EMR PR 13, mhai-multiagent #161):
   - Ask MHAI about it on an alert links the question to the patient when
@@ -19,8 +43,8 @@ All notable changes to this project are documented here. The format follows
   - The BFF checks the whole question strictly before core (the patient
     only as a lower-case uuid, else 422). A linked question is never
     saved on the device offline.
-  - Live, nothing links yet: core's alerts carry no patient id, and there
-    is no patient lookup for clinicians (TODO.md).
+  - Live, both link: core 1.27.0's alerts carry the patient id, and Find
+    patient by MRN uses core 1.29.0.
 
 - **Granting and removing the Analyst role from Staff** (core 1.24.0,
   `PATCH /hospital/staff/{id}` with step-up, mhai-multiagent #163):

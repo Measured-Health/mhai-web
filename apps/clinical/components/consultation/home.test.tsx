@@ -31,6 +31,11 @@ vi.mock("@/lib/api/client", () => ({
   }),
 }));
 
+const lookupPatient = vi.fn();
+vi.mock("@/lib/api/lookup", () => ({
+  getLookupClient: () => ({ lookupPatient }),
+}));
+
 import Page from "@/app/(clinical)/(clinician)/page";
 import { AppShell } from "@/components/shell/app-shell";
 
@@ -71,6 +76,7 @@ beforeEach(() => {
   push.mockClear();
   replace.mockClear();
   createQuery.mockClear();
+  lookupPatient.mockReset();
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -578,5 +584,184 @@ describe("Home: a question about a patient (core 1.22.0 patient_id)", () => {
     expect(
       screen.getByRole("group", { name: "About patient" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("Home: find a patient by MRN (core 1.29.0)", () => {
+  const FOUND = {
+    id: "6f1c2a01-5e1d-4c3b-9a7e-000000000001",
+    full_name: "Maryam Abdullahi",
+    mrn: "204817",
+    age: 67,
+    sex: "female",
+  };
+  const box = () =>
+    screen.getByRole("textbox", { name: "Find patient by MRN" });
+  const findIt = async (mrn: string) => {
+    await userEvent.type(box(), mrn);
+    await userEvent.click(screen.getByRole("button", { name: "Find" }));
+  };
+  const open = () =>
+    mount(
+      <Seeded>
+        <Page />
+      </Seeded>,
+    );
+  const sentWith = (n = 0) =>
+    (createQuery.mock.calls[n] as unknown as [QueryCreateIn])[0];
+
+  it("a hit fills About patient; the question carries only the id", async () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    const log = vi.spyOn(console, "log");
+    lookupPatient.mockResolvedValueOnce(FOUND);
+    await open();
+    expect(box()).toHaveAttribute("autocomplete", "off");
+    await findIt("204817");
+    expect(lookupPatient).toHaveBeenCalledWith("204817");
+    const about = await screen.findByRole("group", { name: "About patient" });
+    expect(about).toHaveTextContent("Maryam Abdullahi");
+    expect(about).toHaveTextContent("204817");
+    expect(
+      screen.getByRole("button", {
+        name: "Remove Maryam Abdullahi from this question",
+      }),
+    ).toHaveFocus();
+    expect(
+      screen.getByText("The patient was found and linked to this question."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Filled in from a patient alert/)).toBeNull();
+    expect(
+      screen.queryByRole("textbox", { name: "Find patient by MRN" }),
+    ).not.toBeInTheDocument();
+    expect(search.toString()).toBe("");
+    expect(document.title).not.toMatch(/Maryam|204817/);
+    await userEvent.type(screen.getByLabelText(/^Age/), "67");
+    await userEvent.click(screen.getByRole("radio", { name: "Female" }));
+    await userEvent.click(screen.getByRole("radio", { name: /Routine/ }));
+    await userEvent.type(
+      screen.getByLabelText(/^Presenting symptoms/),
+      "Weakness{Enter}",
+    );
+    await userEvent.type(
+      screen.getByLabelText(/^Clinical question/),
+      "Low potassium: next steps?",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
+    await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/c/q2"));
+    expect(sentWith().patient_id).toBe(FOUND.id);
+    expect(JSON.stringify(sentWith())).not.toMatch(/Maryam|204817/);
+    expect(setItem).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("Enter in the box finds; it never sends the question", async () => {
+    lookupPatient.mockResolvedValueOnce(FOUND);
+    await open();
+    await userEvent.type(box(), "204817{Enter}");
+    await screen.findByRole("group", { name: "About patient" });
+    expect(lookupPatient).toHaveBeenCalledTimes(1);
+    expect(createQuery).not.toHaveBeenCalled();
+  });
+
+  it("checks the MRN first, without spending a lookup", async () => {
+    await open();
+    await userEvent.click(screen.getByRole("button", { name: "Find" }));
+    expect(
+      screen.getByText(/Enter the patient's full MRN/),
+    ).toBeInTheDocument();
+    expect(box()).toHaveFocus();
+    await findIt("2048%");
+    expect(
+      screen.getByText(/An MRN has letters and numbers/),
+    ).toBeInTheDocument();
+    expect(lookupPatient).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [404, "not_found", /No active patient with that MRN in your hospital/],
+    [
+      409,
+      "conflict",
+      /More than one patient has that MRN; ask your records team/,
+    ],
+    [429, "rate_limited", /Too many lookups for now; try again later/],
+    [503, "not_ready", /Couldn't look up the patient just now/],
+    [0, "network", /Couldn't look up the patient just now/],
+    [403, "mfa_required", /needs two-step sign-in/],
+    [502, "bad_gateway", /Couldn't look up the patient\. Check the MRN/],
+  ])(
+    "a %i says so in plain words, and keeps the box",
+    async (status, code, says) => {
+      lookupPatient.mockRejectedValueOnce(new ApiError(status, code));
+      await open();
+      await findIt("204817");
+      expect(await screen.findByText(says)).toBeInTheDocument();
+      expect(box()).toHaveFocus();
+      expect(box()).toHaveAttribute("aria-invalid", "true");
+      expect(
+        screen.queryByRole("group", { name: "About patient" }),
+      ).not.toBeInTheDocument();
+      expect(document.body.textContent).not.toMatch(new RegExp(code));
+    },
+  );
+
+  it("explains the limits on a 429", async () => {
+    lookupPatient.mockRejectedValueOnce(new ApiError(429, "rate_limited"));
+    await open();
+    await findIt("204817");
+    expect(
+      await screen.findByText(/5 times a minute and 50 times a day/),
+    ).toBeInTheDocument();
+  });
+
+  it("Remove brings the box back, empty", async () => {
+    lookupPatient.mockResolvedValueOnce(FOUND);
+    await open();
+    await findIt("204817");
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Remove Maryam Abdullahi from this question",
+      }),
+    );
+    expect(box()).toHaveValue("");
+    expect(document.body.textContent).not.toMatch(/Maryam|204817/);
+  });
+
+  it("clearing the form forgets the MRN typed and the patient found", async () => {
+    lookupPatient.mockResolvedValueOnce(FOUND);
+    await open();
+    await userEvent.type(box(), "377190");
+    await userEvent.click(
+      screen.getByRole("button", { name: /Febrile child/ }),
+    );
+    expect(box()).toHaveValue("");
+    await findIt("204817");
+    await screen.findByRole("group", { name: "About patient" });
+    await userEvent.click(
+      screen.getByRole("button", { name: /Febrile child/ }),
+    );
+    expect(
+      screen.queryByRole("group", { name: "About patient" }),
+    ).not.toBeInTheDocument();
+    expect(box()).toHaveValue("");
+    expect(document.body.textContent).not.toMatch(/Maryam|204817|377190/);
+  });
+
+  it("an answer that comes after the form was cleared is dropped", async () => {
+    let answer!: (v: typeof FOUND) => void;
+    lookupPatient.mockReturnValueOnce(
+      new Promise((r) => {
+        answer = r;
+      }),
+    );
+    await open();
+    await findIt("204817");
+    await userEvent.click(
+      screen.getByRole("button", { name: /Febrile child/ }),
+    );
+    await act(async () => answer(FOUND));
+    expect(
+      screen.queryByRole("group", { name: "About patient" }),
+    ).not.toBeInTheDocument();
   });
 });

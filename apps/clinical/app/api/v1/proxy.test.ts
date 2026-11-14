@@ -2300,3 +2300,169 @@ describe("clearance routes (Plan 11)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("a clinician's patient lookup by MRN (core 1.29.0)", () => {
+  const FOUND = {
+    id: "6f1c2a01-5e1d-4c3b-9a7e-000000000001",
+    full_name: "Maryam Abdullahi",
+    mrn: "SYN-204817",
+    age: 67,
+    sex: "female",
+  };
+  const as = (roles: Role[] = ["clinician"], mfaEnabled = true) =>
+    writeSession({
+      token: "tok",
+      expiresAt: Date.now() + 10 * 60_000,
+      user: { ...TEST_USER, roles, mfaEnabled },
+      steps: [],
+    });
+  const lookup = (
+    body: string,
+    {
+      url = "http://demo.test/api/v1/patients/lookup",
+      origin = "http://demo.test",
+    } = {},
+  ) =>
+    new Request(url, {
+      method: "POST",
+      headers: {
+        host: "demo.test",
+        origin,
+        "content-type": "application/json",
+        "x-forwarded-for": "203.0.113.9",
+      },
+      body,
+    });
+  const at = ctx("patients", "lookup");
+  const MRN = JSON.stringify({ mrn: " SYN-204817 " });
+
+  it("forwards only the trimmed {mrn}, in the body, and reads the one patient", async () => {
+    await as();
+    fetchMock.mockResolvedValueOnce(
+      Response.json(FOUND, { headers: { "Cache-Control": "no-store" } }),
+    );
+    const res = await POST(lookup(MRN), at);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(await res.json()).toEqual(FOUND);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://api.test/api/v1/patients/lookup");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({ mrn: "SYN-204817" });
+    // Only the headers the BFF builds.
+    expect(Object.keys(init.headers as object).sort()).toEqual(
+      onNats
+        ? ["Authorization", "Content-Type", "X-MHAI-Audience"]
+        : ["Accept", "Authorization", "Content-Type"],
+    );
+  });
+
+  it.each([
+    ["no MRN", "{}"],
+    ["an empty MRN", JSON.stringify({ mrn: "   " })],
+    ["a long MRN", JSON.stringify({ mrn: "1".repeat(65) })],
+    ["a wildcard", JSON.stringify({ mrn: "2048%" })],
+    ["a control character", JSON.stringify({ mrn: "20\u000748" })],
+    ["a number", JSON.stringify({ mrn: 204817 })],
+    ["a list", JSON.stringify({ mrn: ["SYN-1"] })],
+    ["an extra key", JSON.stringify({ mrn: "SYN-1", name: "Maryam" })],
+    ["a name search", JSON.stringify({ full_name: "Maryam" })],
+    ["bad JSON", "not json"],
+    ["no body", ""],
+  ])("refuses %s before upstream, 422", async (_, body) => {
+    await as();
+    const res = await POST(lookup(body), at);
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ code: "validation_failed" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an MRN in the address (a query string), 422", async () => {
+    await as();
+    const res = await POST(
+      lookup(MRN, {
+        url: "http://demo.test/api/v1/patients/lookup?mrn=SYN-204817",
+      }),
+      at,
+    );
+    expect(res.status).toBe(422);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("serves no other shape under patients", async () => {
+    await as();
+    for (const [method, path] of [
+      ["GET", ["patients", "lookup"]],
+      ["POST", ["patients"]],
+      ["POST", ["patients", "search"]],
+      ["POST", ["patients", "lookup", "x"]],
+      ["GET", ["patients", "SYN-204817"]],
+      ["PATCH", ["patients", "lookup"]],
+    ] as const) {
+      const req = new Request(`http://demo.test/api/v1/${path.join("/")}`, {
+        method,
+        headers: { host: "demo.test", origin: "http://demo.test" },
+        ...(method === "GET" ? {} : { body: MRN }),
+      });
+      const handler = { GET, POST, PATCH, DELETE }[method];
+      const res = await handler(req, ctx(...path));
+      expect(res.status).toBe(404);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("is a clinician's, on two-step, from this app's own pages", async () => {
+    await as(["hospital_admin"]);
+    expect((await POST(lookup(MRN), at)).status).toBe(403);
+    await as(["clinician"], false);
+    const noMfa = await POST(lookup(MRN), at);
+    expect(noMfa.status).toBe(403);
+    expect(await noMfa.json()).toEqual({ code: "mfa_required" });
+    await as(["admin"]);
+    expect((await POST(lookup(MRN), at)).status).toBe(403);
+    await as();
+    expect(
+      (await POST(lookup(MRN, { origin: "http://evil.test" }), at)).status,
+    ).toBe(403);
+    jar.values.clear();
+    expect((await POST(lookup(MRN), at)).status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [404, "not_found"],
+    [409, "conflict"],
+    [429, "rate_limited"],
+    [503, "not_ready"],
+    [422, "validation_failed"],
+  ])("keeps core's %i to its code, never its text", async (status, code) => {
+    await as();
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { code, detail: "MRN SYN-204817 matched Maryam Abdullahi" },
+        { status, headers: { "Retry-After": "60" } },
+      ),
+    );
+    const res = await POST(lookup(MRN), at);
+    expect(res.status).toBe(status);
+    expect(await res.text()).toBe(JSON.stringify({ code }));
+  });
+
+  it.each([
+    ["an extra key", { ...FOUND, dob: "1959-01-01" }],
+    ["another MRN", { ...FOUND, mrn: "SYN-999" }],
+    ["a list", [FOUND, FOUND]],
+    ["an upper-case id", { ...FOUND, id: FOUND.id.toUpperCase() }],
+    ["not JSON", "<html>"],
+  ])("fails closed on %s (502)", async (_, reply) => {
+    await as();
+    fetchMock.mockResolvedValueOnce(
+      typeof reply === "string"
+        ? new Response(reply, { status: 200 })
+        : Response.json(reply),
+    );
+    const res = await POST(lookup(MRN), at);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ code: "bad_gateway" });
+  });
+});

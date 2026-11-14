@@ -4,6 +4,7 @@ const unauthorized = vi.hoisted(() => vi.fn());
 vi.mock("../auth/events", () => ({ reportUnauthorized: unauthorized }));
 import { AlertHandledError, ApiError } from "./errors";
 import { createLiveAlertsClient } from "./live-alerts";
+import { patientFromAlert } from "../notifications/ask";
 
 const fetchImpl = vi.fn<typeof fetch>();
 const client = () => createLiveAlertsClient({ fetchImpl });
@@ -165,7 +166,6 @@ describe("live alerts client", () => {
       "00000000-0000-0000-0000-000000000000",
       "SYN-0001",
       7,
-      null,
     ]) {
       fetchImpl.mockImplementation(async () =>
         Response.json(corePage([coreAlert(patient(bad))])),
@@ -174,6 +174,26 @@ describe("live alerts client", () => {
         status: 502,
       });
     }
+  });
+
+  it("reads a null patient id (no longer active) as no link, and keeps the alert", async () => {
+    fetchImpl.mockImplementation(async () =>
+      Response.json(
+        corePage([
+          coreAlert({
+            patient: {
+              id: null,
+              full_name: "Synthetic Patient",
+              mrn: "SYN-0001",
+              location: null,
+            },
+          }),
+        ]),
+      ),
+    );
+    const [a] = (await client().listAlerts({})).alerts;
+    expect(a!.patient.id).toBeNull();
+    expect(patientFromAlert(a!)).toBeNull();
   });
 
   it("reads a withdrawn and an amended alert", async () => {
