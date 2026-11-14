@@ -12,7 +12,10 @@ import {
   NOT_STANDARDISED,
   SEVERITY,
   findingLine,
+  alertNotes,
+  behindNotice,
   handledLine,
+  mrnLabel,
   likelyCauses,
   locationLabel,
   recordLink,
@@ -247,5 +250,96 @@ describe("evidence and routing", () => {
       queue: true,
     });
     expect(ROUTE_LABEL).toEqual({ you: "For you", queue: "Hospital queue" });
+  });
+});
+
+describe("core 1.20.0: no MRN, withdrawn, amended, preliminary, late", () => {
+  it("a patient with no MRN reads Not recorded", () => {
+    expect(mrnLabel(null)).toBe("Not recorded");
+    expect(mrnLabel("  ")).toBe("Not recorded");
+    expect(mrnLabel("SYN-0001")).toBe("SYN-0001");
+  });
+
+  it("a withdrawn alert says MHAI withdrew it and why, never a person", () => {
+    expect(
+      handledLine(
+        makeAlert({
+          status: "dismissed",
+          handled_by: null,
+          handled_at: at(9, 12),
+          withdrawn: "source_retracted",
+        }),
+        ALERT_NOW,
+      ),
+    ).toBe("Withdrawn · 09:12 · The result was withdrawn in the record");
+    expect(
+      handledLine(
+        makeAlert({
+          status: "dismissed",
+          handled_by: null,
+          withdrawn: "excluded",
+        }),
+        ALERT_NOW,
+      ),
+    ).toBe("Withdrawn · The patient was taken out of record alerts");
+    expect(
+      handledLine(
+        makeAlert({
+          status: "dismissed",
+          handled_by: null,
+          withdrawn: "source_amended",
+        }),
+        ALERT_NOW,
+      ),
+    ).toBe("Withdrawn · The result was changed in the record");
+  });
+
+  it("notes a preliminary, late or changed result", () => {
+    expect(alertNotes(makeAlert(), ALERT_NOW)).toEqual([]);
+    expect(
+      alertNotes(
+        makeAlert({
+          preliminary: true,
+          arrived_late: true,
+          amended: { previous_value: "6.1", amended_at: at(9, 30) },
+        }),
+        ALERT_NOW,
+      ),
+    ).toEqual([
+      "Preliminary result: it may still change.",
+      "This result reached MHAI late.",
+      "Changed in the record at 09:30 (was 6.1).",
+    ]);
+    expect(
+      alertNotes(
+        makeAlert({ amended: { previous_value: null, amended_at: null } }),
+        ALERT_NOW,
+      ),
+    ).toEqual(["Changed in the record."]);
+  });
+});
+
+describe("sources behind (core 1.20.0 sources_status)", () => {
+  it("names the systems that are behind, and nothing when all are current", () => {
+    expect(behindNotice(undefined)).toBeNull();
+    expect(
+      behindNotice([
+        { label: "Main record", status: "current", last_update_at: null },
+      ]),
+    ).toBeNull();
+    expect(
+      behindNotice([
+        { label: "Main record", status: "behind", last_update_at: null },
+        { label: "Lab", status: "current", last_update_at: null },
+        { label: "Ward feed", status: "behind", last_update_at: null },
+      ]),
+    ).toBe(
+      "Main record and Ward feed haven't updated recently, so alerts may be missing.",
+    );
+    expect(
+      behindNotice([
+        { label: "Main record", status: "behind", last_update_at: null },
+      ]),
+    ).toBe("Main record hasn't updated recently, so alerts may be missing.");
   });
 });
