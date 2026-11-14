@@ -15,9 +15,66 @@ beforeEach(() => {
   unauthorized.mockReset();
 });
 
+/** One alert exactly as core openapi 1.20.0 sends it (synthetic). */
+const coreAlert = (over: Record<string, unknown> = {}) => ({
+  id: "0b8c7a9e-6a43-4b8e-9a3c-1f2d3e4f5a6b",
+  severity: "critical",
+  status: "new",
+  finding: {
+    name: "Potassium",
+    value: "6.93",
+    unit: "mmol/L",
+    flag: "high",
+    reference_range: "3.5–5.1",
+    recorded_at: "2026-11-14T03:50:00.123456789Z",
+    code_system: "loinc",
+    standardised: true,
+  },
+  likely_causes: [],
+  patient: {
+    full_name: "Synthetic Patient",
+    mrn: "SYN-0001",
+    location: { kind: "admitted", ward: "Ward 3" },
+  },
+  age: 67,
+  sex: "unknown",
+  source_label: "Synthetic record",
+  emr_link: null,
+  handled_by: null,
+  handled_at: null,
+  dismiss_reason: null,
+  created_at: "2026-11-14T03:51:00Z",
+  category: { id: "blood_chemistry", label: "Blood chemistry" },
+  routing: { to_you: false, queue: true },
+  arrived_late: false,
+  preliminary: false,
+  amended: null,
+  withdrawn: null,
+  ...over,
+});
+const corePage = (alerts: unknown[] = []) => ({
+  alerts,
+  next_cursor: null,
+  sources: ["Synthetic record"],
+  queue: true,
+  sources_status: [
+    { label: "Synthetic record", status: "current", last_update_at: null },
+  ],
+  grouped: null,
+});
+const SETTINGS = { alert_popups: true, correction_popups: true };
+/** The right reply for each path, as core sends it. */
+const byPath = async (input: RequestInfo | URL) => {
+  const u = String(input);
+  if (u.includes("unread-count")) return Response.json({ count: 2 });
+  if (u.includes("notification-settings")) return Response.json(SETTINGS);
+  if (/acknowledge|dismiss/.test(u)) return Response.json(coreAlert());
+  return Response.json(corePage());
+};
+
 describe("live alerts client", () => {
   it("reads alerts, the count and the settings through the proxy", async () => {
-    fetchImpl.mockImplementation(async () => Response.json({}));
+    fetchImpl.mockImplementation(byPath);
     await client().listAlerts({});
     await client().listAlerts({
       status: "new",
@@ -42,7 +99,7 @@ describe("live alerts client", () => {
   });
 
   it("sends sent_to in the query", async () => {
-    fetchImpl.mockImplementation(async () => Response.json({}));
+    fetchImpl.mockImplementation(byPath);
     await client().listAlerts({ sent_to: "queue" });
     await client().listAlerts({ status: "new", sent_to: "you", cursor: "20" });
     expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
@@ -51,18 +108,106 @@ describe("live alerts client", () => {
     ]);
   });
 
-  it("returns the alert page as the API sent it, record link included", async () => {
-    const page = {
-      alerts: [{ id: "al-1", emr_link: "https://record.example/p/1" }],
-      next_cursor: null,
-      sources: [],
-    };
+  it("returns the alert page as core sent it, record link included", async () => {
+    const page = corePage([
+      coreAlert({ emr_link: "https://record.example/p/1" }),
+    ]);
     fetchImpl.mockImplementation(async () => Response.json(page));
-    expect(await client().listAlerts({})).toEqual(page);
+    const got = await client().listAlerts({});
+    expect(got.alerts[0]!.emr_link).toBe("https://record.example/p/1");
+    expect(got.sources_status).toEqual(page.sources_status);
+  });
+
+  it("reads a missing bed or clinic as null, and a patient with no MRN", async () => {
+    fetchImpl.mockImplementation(async () =>
+      Response.json(
+        corePage([
+          coreAlert(),
+          coreAlert({
+            patient: {
+              full_name: "Synthetic Two",
+              mrn: null,
+              location: { kind: "outpatient" },
+            },
+          }),
+        ]),
+      ),
+    );
+    const { alerts } = await client().listAlerts({});
+    expect(alerts[0]!.patient.location).toEqual({
+      kind: "admitted",
+      ward: "Ward 3",
+      bed: null,
+    });
+    expect(alerts[1]!.patient).toEqual({
+      full_name: "Synthetic Two",
+      mrn: null,
+      location: { kind: "outpatient", clinic: null },
+    });
+  });
+
+  it("reads a withdrawn and an amended alert", async () => {
+    const withdrawn = coreAlert({
+      status: "dismissed",
+      withdrawn: "source_retracted",
+      amended: { previous_value: "6.1", amended_at: "2026-11-14T04:00:00Z" },
+    });
+    fetchImpl.mockImplementation(async () =>
+      Response.json(corePage([withdrawn])),
+    );
+    const { alerts } = await client().listAlerts({});
+    expect(alerts[0]).toMatchObject({
+      withdrawn: "source_retracted",
+      amended: { previous_value: "6.1" },
+    });
+  });
+
+  it.each([
+    ["an unknown field", corePage([coreAlert({ extra: "x" })])],
+    [
+      "a field core always sends, missing",
+      { ...corePage(), sources_status: undefined },
+    ],
+    [
+      "a cause marked high (never sent in v1)",
+      corePage([
+        coreAlert({
+          likely_causes: [{ label: "x", confidence: "high", evidence: [] }],
+        }),
+      ]),
+    ],
+    ["an unknown severity", corePage([coreAlert({ severity: "severe" })])],
+    [
+      "a time without a zone",
+      corePage([coreAlert({ created_at: "2026-11-14T03:51:00" })]),
+    ],
+    [
+      "the old assumed page (no queue)",
+      { alerts: [], next_cursor: null, sources: [] },
+    ],
+  ])("fails closed (502) on %s", async (_, body) => {
+    fetchImpl.mockImplementation(async () => Response.json(body));
+    await expect(client().listAlerts({})).rejects.toMatchObject({
+      status: 502,
+      code: "bad_gateway",
+    });
+  });
+
+  it("fails closed on a count or settings reply of another shape", async () => {
+    fetchImpl.mockImplementation(async () => Response.json({ count: -1 }));
+    await expect(client().getUnreadCount()).rejects.toMatchObject({
+      status: 502,
+    });
+    fetchImpl.mockImplementation(async () =>
+      Response.json({ alert_popups: true }),
+    );
+    await expect(client().getNotificationSettings()).rejects.toMatchObject({
+      status: 502,
+    });
   });
 
   it("acknowledges, dismisses and saves settings with the idempotency key", async () => {
-    fetchImpl.mockImplementation(async () => Response.json({ id: "a 1" }));
+    fetchImpl.mockImplementation(byPath);
     await client().acknowledgeAlert("a 1", { idempotencyKey: "k1" });
     await client().dismissAlert(
       "a 1",

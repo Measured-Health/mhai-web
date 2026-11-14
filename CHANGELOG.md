@@ -160,6 +160,18 @@ All notable changes to this project are documented here. The format follows
   - Every reply is read strictly (zod; 502 when it doesn't match), with
     core's additive fields (`paused`, `credentials_missing`,
     `poll_seconds`, `private_network`, `private_cidrs`).
+- **Patient alerts read core's live replies** (core openapi 1.20.0, EMR PRs
+  8a and 8b). The alerts client was written against the planned contract
+  and returned replies unchecked; it now reads every reply strictly (zod:
+  each field core sends, nothing else; a mismatch is 502 `bad_gateway`,
+  never a partial card). A missing bed or clinic reads as none.
+  - A patient with no MRN shows "Not recorded" (core sends `mrn: null`).
+  - An alert MHAI withdrew says so, never a person: "Withdrawn · The
+    result was withdrawn in the record" (or changed in the record, or the
+    patient taken out of record alerts).
+  - A preliminary, late or changed result is noted on the card.
+  - When a connected system is behind (`sources_status`), the inbox says
+    alerts may be missing, so an empty list isn't read as "no alerts".
 - **Devices and system health read core's live replies** (core openapi
   1.20.0). Found by the full live check:
   - Your devices (both apps' account page) always said "Couldn't load

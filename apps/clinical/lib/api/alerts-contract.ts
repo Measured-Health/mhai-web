@@ -1,6 +1,6 @@
-// Patient alerts and notification settings, hand-written from Plan 5a's
-// assumed contract (spec §10 item 20). To be replaced by types generated from
-// the backend OpenAPI schema. EMR-agnostic (ADR 0003): the API sends MHAI's
+// Patient alerts and notification settings, as core openapi 1.20.0 sends
+// them (EMR PRs 8a and 8b). The live client reads every reply strictly with
+// the schemas in `alerts-schema.ts`; these types are what the screens use. EMR-agnostic (ADR 0003): the API sends MHAI's
 // canonical shape with display labels; `emr_link` and `source_label` come
 // from the backend as they are, and nothing here names a vendor.
 import type { Sex } from "./contract";
@@ -32,7 +32,7 @@ export interface FindingOut {
   reference_range: string | null;
   /** ISO 8601. */
   recorded_at: string | null;
-  /** Kept for audit; never shown. */
+  /** Kept for audit; never shown. Core sends `loinc` or `local`. */
   code_system: string | null;
   /** False while the source's code isn't mapped (ADR 0003): "Not standardised". */
   standardised: boolean;
@@ -65,8 +65,8 @@ export interface AlertRoutingOut {
 
 export interface AlertPatientOut {
   full_name: string;
-  /** The hospital's own MRN. */
-  mrn: string;
+  /** The hospital's own MRN; null for a patient with none ("No MRN recorded"). */
+  mrn: string | null;
   /** Null reads "Location not recorded". */
   location: AlertLocationOut | null;
 }
@@ -93,6 +93,27 @@ export interface AlertOut {
   /** What the alert is about, by the hospital's category label. */
   category?: { id: string; label: string } | null;
   routing?: AlertRoutingOut;
+  /** The result reached MHAI late (core 1.20.0). */
+  arrived_late?: boolean;
+  /** A preliminary result: it may still change at source. */
+  preliminary?: boolean;
+  /** The result was changed at source after the alert: its value before. */
+  amended?: { previous_value: string | null; amended_at: string | null } | null;
+  /**
+   * Withdrawn by MHAI, not by a person (status `dismissed`, no one named):
+   * the result was changed or withdrawn at source, or the patient was
+   * excluded from alerts.
+   */
+  withdrawn?: AlertWithdrawn | null;
+}
+
+export type AlertWithdrawn = "source_amended" | "source_retracted" | "excluded";
+
+/** A connected system's freshness: `behind` when paused or silent for three polls. */
+export interface SourceStatusOut {
+  label: string;
+  status: "current" | "behind";
+  last_update_at: string | null;
 }
 
 /** `you`: alerts routed to you; `queue`: alerts on the hospital queue only. */
@@ -116,6 +137,11 @@ export interface AlertPageOut {
   sources: string[];
   /** The hospital uses the queue, so the list offers the Sent to filter. */
   queue?: boolean;
+  /**
+   * Every switched-on source and whether it is up to date: an empty list
+   * means "no alerts" only when every source is `current` (core 1.20.0).
+   */
+  sources_status?: SourceStatusOut[];
 }
 
 export interface UnreadCountOut {

@@ -14,6 +14,7 @@ import {
 } from "@/lib/notification-queries";
 import {
   ALERT_STATUS_LABEL,
+  behindNotice,
   ROUTE_LABEL,
   SEVERITY,
   showSources,
@@ -69,6 +70,7 @@ export function AlertsView() {
     [q.data],
   );
   const sources = q.data?.pages[0]?.sources ?? [];
+  const behind = behindNotice(q.data?.pages[0]?.sources_status);
   const multi = showSources(sources);
   const hasQueue = q.data?.pages[0]?.queue === true;
   const focusId = ctx?.focusId ?? null;
@@ -229,20 +231,38 @@ export function AlertsView() {
             </div>
           )
         ) : alerts.length === 0 ? (
-          <p className="mt-4 text-[13.5px] text-ink-3">{EMPTY[status]}</p>
+          <>
+            {behind && (
+              <div className="mt-4">
+                <Banner tone="warn" title="Records may be out of date">
+                  {behind}
+                </Banner>
+              </div>
+            )}
+            <p className="mt-4 text-[13.5px] text-ink-3">{EMPTY[status]}</p>
+          </>
         ) : (
-          <ul
-            aria-label="Patient alerts"
-            aria-busy={q.isFetching || undefined}
-            inert={q.isPlaceholderData || undefined}
-            className={`mt-4 flex flex-col gap-3 ${q.isPlaceholderData ? "opacity-60" : ""}`}
-          >
-            {alerts.map((a) => (
-              <li key={a.id}>
-                <AlertCard alert={a} now={now} showSource={multi} />
-              </li>
-            ))}
-          </ul>
+          <>
+            {behind && (
+              <div className="mt-4">
+                <Banner tone="warn" title="Records may be out of date">
+                  {behind}
+                </Banner>
+              </div>
+            )}
+            <ul
+              aria-label="Patient alerts"
+              aria-busy={q.isFetching || undefined}
+              inert={q.isPlaceholderData || undefined}
+              className={`mt-4 flex flex-col gap-3 ${q.isPlaceholderData ? "opacity-60" : ""}`}
+            >
+              {alerts.map((a) => (
+                <li key={a.id}>
+                  <AlertCard alert={a} now={now} showSource={multi} />
+                </li>
+              ))}
+            </ul>
+          </>
         )}
         {q.hasNextPage && (
           <Button

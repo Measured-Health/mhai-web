@@ -9,10 +9,12 @@ import {
   useDismissAlert,
 } from "@/lib/notification-queries";
 import {
+  alertNotes,
   findingLine,
   handledLine,
   likelyCauses,
   locationLabel,
+  mrnLabel,
   recordLink,
   recordedLabel,
 } from "@/lib/notifications/alert-view";
@@ -72,6 +74,7 @@ export function AlertCard({
   const handled = handledLine(alert, now);
   const recorded = recordedLabel(alert.finding, now);
   const causes = likelyCauses(alert, now);
+  const notes = alertNotes(alert, now);
   const link = recordLink(alert.emr_link);
   const busy = ack.isPending || dismiss.isPending;
   // A disabled action always says why (Global Constraints).
@@ -159,6 +162,15 @@ export function AlertCard({
             </>
           )}
         </h3>
+        {notes.length > 0 && (
+          <ul className="mt-1.5 flex flex-col gap-0.5 text-[12.5px] text-ink-2">
+            {notes.map((n) => (
+              <li key={n} className="[overflow-wrap:anywhere]">
+                {n}
+              </li>
+            ))}
+          </ul>
+        )}
         {!alert.finding.standardised && (
           <div className="mt-1.5">
             <NotStandardisedChip />
@@ -216,7 +228,7 @@ export function AlertCard({
           </dd>
           <dt className="text-ink-3">MRN</dt>
           <dd className="font-mono [overflow-wrap:anywhere]">
-            {alert.patient.mrn}
+            {mrnLabel(alert.patient.mrn)}
           </dd>
           <dt className="text-ink-3">Where</dt>
           <dd className="flex items-start gap-1 [overflow-wrap:anywhere]">

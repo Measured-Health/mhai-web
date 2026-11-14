@@ -127,6 +127,9 @@ export function recordApi(page: Page): ApiCall[] {
 const KNOWN_GAPS: readonly RegExp[] = [
   // The platform bell.
   /^\/api\/v1\/platform\/notifications$/,
+  // The sidebar's Analysis across hospitals status (not in core yet; its
+  // timing decides whether the call lands inside a recorded path).
+  /^\/api\/v1\/platform\/analysis\/status$/,
   // The hospital admin's staff list (Alert settings' clinician picker).
   /^\/api\/v1\/hospital\/staff$/,
   // The hospital admin's settings, read by the admin pages' frame.
