@@ -422,20 +422,24 @@ describe("assumed endpoints", () => {
   });
   it("lists, drops and revokes devices", async () => {
     await signedIn();
-    upstream.mockResolvedValueOnce([
-      {
-        id: "s1",
-        device: "Chrome on Windows",
-        location: "Lagos",
-        last_seen_at: "2026-10-15T08:00:00Z",
-        current: true,
-      },
-    ]);
+    // Core's SessionList (openapi 1.20.0): the network prefix never passes.
+    upstream.mockResolvedValueOnce({
+      sessions: [
+        {
+          id: "s1",
+          created_at: "2026-10-15T07:00:00Z",
+          last_seen_at: "2026-10-15T08:00:00Z",
+          ua_summary: "Chrome on Windows",
+          ip_prefix: "203.0.113.0/24",
+          current: true,
+        },
+      ],
+    });
     expect(await (await devices()).json()).toEqual([
       {
         id: "s1",
         label: "Chrome on Windows",
-        place: "Lagos",
+        place: null,
         lastActiveAt: Date.parse("2026-10-15T08:00:00Z"),
         current: true,
       },
