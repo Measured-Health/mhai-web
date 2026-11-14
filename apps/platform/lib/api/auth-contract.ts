@@ -37,13 +37,6 @@ export interface ApiMfaRequired {
    */
   mfa_enrolled?: boolean;
 }
-export interface ApiSession {
-  id: string;
-  device: string;
-  location?: string | null;
-  last_seen_at: string; // ISO 8601
-  current: boolean;
-}
 /** The platform app never asks for or keeps one (no "trust this device"). */
 export interface ApiDeviceToken {
   device_token?: string;

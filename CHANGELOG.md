@@ -157,6 +157,17 @@ All notable changes to this project are documented here. The format follows
   - A preliminary, late or changed result is noted on the card.
   - When a connected system is behind (`sources_status`), the inbox says
     alerts may be missing, so an empty list isn't read as "no alerts".
+- **Devices and system health read core's live replies** (core openapi
+  1.20.0). Found by the full live check:
+  - Your devices (both apps' account page) always said "Couldn't load
+    your devices": core's `GET /auth/sessions` sends `{sessions: [...]}`
+    with `ua_summary`, not a bare list with `device` and `location`. Both
+    BFFs now read it strictly (`@mhai/api-client/server/sessions`) and
+    never pass on the network prefix.
+  - System health's "Parts of the system" always failed: core sends the
+    four parts it has (app, workers, evidence, guidelines) and no
+    clean-up block until those services exist. The reader takes that, and
+    still fails closed on an unknown, missing or repeated part.
 - The clinical app reads core's user as built: `hospital` is `{id, name}`
   and there is no `username` (the outbox is bound to the user id).
 
