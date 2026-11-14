@@ -52,8 +52,12 @@ for (const name of NAV)
       fullPage: true,
     });
     const bad = reportApi(`platform ${name}`, calls.slice(from));
+    // Usage's What changed fails closed until core's first weekly
+    // evaluation ({unavailable: true}): by design, as in 03-ops.
     await expect(
-      page.getByText(/Something went wrong|couldn't load|can't load/i),
+      page.getByText(
+        /Something went wrong|couldn't load (?!what changed)|can't load/i,
+      ),
     ).toHaveCount(0);
     expect(bad, JSON.stringify(bad)).toEqual([]);
   });
