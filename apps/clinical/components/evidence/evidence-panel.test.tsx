@@ -262,3 +262,58 @@ describe("contract v1.2.0: cited, details not stored", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("references (core 1.30.0)", () => {
+  const sources = [
+    {
+      chunk_id: "KB#1000001",
+      title: "Synthetamol (Boxed warning)",
+      url: "https://dailymed.nlm.nih.gov/dailymed/lookup.cfm?setid=synthetic",
+      source: "openFDA",
+      attribution:
+        "Data provided by the U.S. Food and Drug Administration (open.fda.gov). Provided as is, without warranty of any kind.",
+    },
+    {
+      chunk_id: "KB#1000004",
+      title: "Synthetic Fever",
+      url: null,
+      source: "MedlinePlus",
+      attribution: "Source: MedlinePlus, National Library of Medicine.",
+    },
+  ];
+
+  it("shows each reference's title as a safe link, its source and its credit", () => {
+    panel({
+      ...FIXTURES.high,
+      citations: [],
+      cited_chunk_ids: ["KB#1000001", "KB#1000004"],
+      cited_sources: sources,
+    });
+    const list = screen.getByRole("region", { name: "References" });
+    const link = within(list).getByRole("link", {
+      name: /Synthetamol \(Boxed warning\)/,
+    });
+    expect(link).toHaveAttribute("href", sources[0]!.url);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(within(list).getByText("Synthetic Fever")).toBeInTheDocument();
+    expect(within(list).queryAllByRole("link")).toHaveLength(1);
+    expect(within(list).getByText("Source: openFDA")).toBeInTheDocument();
+    expect(
+      within(list).getByText(
+        /Data provided by the U\.S\. Food and Drug Administration/,
+      ),
+    ).toBeInTheDocument();
+    // The answer cited sources it can show: never "can't be shown yet".
+    expect(
+      screen.queryByText("Sources for this answer can't be shown yet."),
+    ).toBeNull();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/KB#|1000001|cited_sources/);
+  });
+
+  it("shows nothing when there are no references", () => {
+    panel(FIXTURES.high);
+    expect(screen.queryByRole("region", { name: "References" })).toBeNull();
+  });
+});

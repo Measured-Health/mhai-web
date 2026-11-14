@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **References with the answer** (core 1.30.0, `cited_sources`,
+  mhai-multiagent reference library PR 3): the evidence panel lists each
+  cited reference source (an FDA drug label or a MedlinePlus health topic)
+  with its title, a link to the source page (https only, opened in a new
+  tab), who published it and its credit notice. Read defensively: an entry
+  without a title or source is left out, and any other link shape shows no
+  link. Nothing changes until core sends the field.
+
 - **Find a patient by MRN on the question form** (core 1.29.0,
   `POST /patients/lookup`, mhai-multiagent #172):
   - "Find patient by MRN" sits where About patient goes. The clinician

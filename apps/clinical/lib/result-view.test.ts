@@ -406,3 +406,80 @@ describe("who drafted the answer (generated_by, core 1.10.0)", () => {
     expect(shown).not.toMatch(/generated_by|route|provider/);
   });
 });
+
+describe("cited sources (core 1.30.0)", () => {
+  const MEDLINE = {
+    chunk_id: "KB#1000004",
+    title: "Synthetic Fever",
+    url: "https://medlineplus.gov/syntheticfever.html",
+    source: "MedlinePlus",
+    attribution: "Source: MedlinePlus, National Library of Medicine.",
+  };
+
+  it("lists each cited reference with its title, link and credit", () => {
+    const v = toResultView(
+      base({
+        cited_sources: [
+          MEDLINE,
+          {
+            ...MEDLINE,
+            chunk_id: "KB#1000001",
+            title: "Synthetamol (Boxed warning)",
+            url: null,
+            source: "openFDA",
+            attribution: null,
+          },
+          MEDLINE,
+        ],
+      }),
+    );
+    expect(v.references).toEqual([
+      {
+        title: "Synthetic Fever",
+        url: "https://medlineplus.gov/syntheticfever.html",
+        source: "MedlinePlus",
+        attribution: "Source: MedlinePlus, National Library of Medicine.",
+      },
+      {
+        title: "Synthetamol (Boxed warning)",
+        url: null,
+        source: "openFDA",
+        attribution: null,
+      },
+    ]);
+  });
+
+  it("is empty when the API sends none (an older core)", () => {
+    expect(toResultView(base()).references).toEqual([]);
+    expect(
+      toResultView(base({ cited_sources: "x" as unknown as [] })).references,
+    ).toEqual([]);
+  });
+
+  it("never links anything but an https page, and drops entries it can't show", () => {
+    for (const url of [
+      "http://medlineplus.gov/x.html",
+      "javascript:alert(1)",
+      "https://user@medlineplus.gov/",
+      "https://medlineplus.gov:8443/x",
+      'https://medlineplus.gov/x"><script>',
+      "//medlineplus.gov/x",
+      42,
+    ]) {
+      const [r] = toResultView(
+        base({ cited_sources: [{ ...MEDLINE, url } as never] }),
+      ).references;
+      expect(r?.url, String(url)).toBeNull();
+    }
+    for (const bad of [
+      { ...MEDLINE, title: "" },
+      { ...MEDLINE, title: 7 },
+      { ...MEDLINE, source: null },
+      null,
+      "KB#1000004",
+    ])
+      expect(
+        toResultView(base({ cited_sources: [bad as never] })).references,
+      ).toEqual([]);
+  });
+});

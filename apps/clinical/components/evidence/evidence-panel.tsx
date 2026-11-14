@@ -131,6 +131,8 @@ const BADGE: Record<SourceStatus, readonly [string, string]> = {
 
 export function SourceCards({ view }: { view: ResultView }) {
   const { source } = useHighlight();
+  // The references below name what was cited.
+  if (!view.sources.length && view.references.length) return null;
   if (!view.sources.length)
     return (
       <p className="text-[12.5px] text-ink-3">
@@ -175,6 +177,50 @@ export function SourceCards({ view }: { view: ResultView }) {
   );
 }
 
+/**
+ * The cited reference sources: each title (a link to the source page when
+ * there is one, opened in a new tab), who published it and its credit
+ * notice. Nothing when the answer cited none.
+ */
+export function References({ view }: { view: ResultView }) {
+  if (!view.references.length) return null;
+  return (
+    <section aria-label="References">
+      <h3 className={H3}>References</h3>
+      <ul className="flex flex-col gap-2">
+        {view.references.map((r, i) => (
+          <li
+            key={`${r.title}-${i}`}
+            className="rounded-[14px] border border-line bg-white px-3 py-2.5 text-[12.5px] leading-snug"
+          >
+            {r.url ? (
+              <a
+                href={r.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-mint-deep underline underline-offset-2"
+              >
+                {r.title}
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            ) : (
+              <span className="font-semibold">{r.title}</span>
+            )}
+            <small className="mt-1 block text-[11px] text-ink-2">
+              Source: {r.source}
+            </small>
+            {r.attribution && (
+              <small className="mt-0.5 block text-[11px] text-ink-3">
+                {r.attribution}
+              </small>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function EvidencePanel({ view }: { view: ResultView }) {
   return (
     <div className="flex flex-col gap-[18px]">
@@ -196,6 +242,7 @@ export function EvidencePanel({ view }: { view: ResultView }) {
       <SafetyChecks view={view} />
       <ConfidenceBars view={view} />
       <SourceCards view={view} />
+      <References view={view} />
     </div>
   );
 }
