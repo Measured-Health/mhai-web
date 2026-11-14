@@ -13,6 +13,7 @@ import { resetAlertsClient } from "./api/alerts";
 import { resetEmrClient } from "./api/emr";
 import { resetPatientsClient } from "./api/patients";
 import { clearPrefill } from "./notifications/ask";
+import type { PatientLink } from "./patient-link";
 import { RESULT_LABEL, type ResultKind } from "./labels";
 
 export interface SessionItem {
@@ -33,6 +34,8 @@ export interface SessionItem {
   /** Saved offline (lib/offline): not on the server yet, or rejected by it. */
   pending?: "waiting" | "failed";
   query: QueryCreateIn;
+  /** The patient the question was linked to (memory only), for Edit question. */
+  patient?: PatientLink;
 }
 
 /**

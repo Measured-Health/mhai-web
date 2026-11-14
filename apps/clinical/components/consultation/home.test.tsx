@@ -4,8 +4,10 @@ import { useEffect, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Providers } from "@/app/providers";
 import type { QueryCreateIn } from "@/lib/api/contract";
+import { ApiError } from "@/lib/api/errors";
 import {
   askFromAlert,
+  patientFromAlert,
   readPrefill,
   stashPrefill,
 } from "@/lib/notifications/ask";
@@ -425,5 +427,156 @@ describe("Home from a patient alert", () => {
     expect(readPrefill(token)).not.toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
     expect(readPrefill(token)).toBeNull();
+  });
+});
+
+describe("Home: a question about a patient (core 1.22.0 patient_id)", () => {
+  const PID = "6f1c2a01-5e1d-4c3b-9a7e-000000000001";
+  const alert = () =>
+    makeAlert({
+      patient: { ...makeAlert().patient, id: PID },
+    });
+  const arrive = () => {
+    const a = alert();
+    const token = stashPrefill(askFromAlert(a, ALERT_NOW), patientFromAlert(a));
+    search = new URLSearchParams({ prefill: token });
+    return token;
+  };
+  const sentWith = (n = 0) =>
+    (createQuery.mock.calls[n] as unknown as [QueryCreateIn])[0];
+
+  it("is linked from the alert, shows who, and sends only the id", async () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    const token = arrive();
+    await mount(<Page />);
+    const about = screen.getByRole("group", { name: "About patient" });
+    expect(about).toHaveTextContent("Maryam Abdullahi");
+    expect(about).toHaveTextContent("204817");
+    // The question itself carries neither, and the address only the token.
+    expect(
+      (screen.getByLabelText(/^Clinical question/) as HTMLTextAreaElement)
+        .value,
+    ).not.toMatch(/Maryam|204817/);
+    expect(search.toString()).toBe(`prefill=${token}`);
+    await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
+    await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/c/q2"));
+    const q = sentWith();
+    expect(q.patient_id).toBe(PID);
+    expect(JSON.stringify(q)).not.toMatch(/Maryam|Abdullahi|204817/);
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it("can be removed: the focus moves on and the question goes without it", async () => {
+    arrive();
+    await mount(<Page />);
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Remove Maryam Abdullahi from this question",
+      }),
+    );
+    expect(
+      screen.queryByRole("group", { name: "About patient" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Age/)).toHaveFocus();
+    expect(
+      screen.getByText("The patient was removed from this question."),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Maryam|204817/);
+    await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
+    await vi.waitFor(() => expect(createQuery).toHaveBeenCalledTimes(1));
+    expect(sentWith()).not.toHaveProperty("patient_id");
+  });
+
+  it("isn't offered from an alert without the patient's id", async () => {
+    search = new URLSearchParams({
+      prefill: stashPrefill(
+        askFromAlert(makeAlert(), ALERT_NOW),
+        patientFromAlert(makeAlert()),
+      ),
+    });
+    await mount(<Page />);
+    expect(
+      screen.queryByRole("group", { name: "About patient" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("on a 404, says the patient isn't available and asks without them", async () => {
+    createQuery.mockRejectedValueOnce(new ApiError(404, "not_found"));
+    arrive();
+    await mount(<Page />);
+    await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
+    expect(
+      await screen.findByText("This patient isn't available for questions"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Couldn't send your question"),
+    ).not.toBeInTheDocument();
+    // Nothing more was tried with the patient.
+    expect(createQuery).toHaveBeenCalledTimes(1);
+    const without = screen.getByRole("button", {
+      name: "Ask without the patient",
+    });
+    expect(without).toHaveFocus();
+    await userEvent.click(without);
+    await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/c/q2"));
+    expect(createQuery).toHaveBeenCalledTimes(2);
+    expect(sentWith(0).patient_id).toBe(PID);
+    expect(sentWith(1)).not.toHaveProperty("patient_id");
+    expect(sentWith(1).clinical_question).toBe(sentWith(0).clinical_question);
+  });
+
+  it("a 404 then Remove clears the warning; the next Analyse goes without", async () => {
+    createQuery.mockRejectedValueOnce(new ApiError(404, "not_found"));
+    arrive();
+    await mount(<Page />);
+    await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
+    await screen.findByText("This patient isn't available for questions");
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Remove Maryam Abdullahi from this question",
+      }),
+    );
+    expect(
+      screen.queryByText("This patient isn't available for questions"),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
+    await vi.waitFor(() => expect(createQuery).toHaveBeenCalledTimes(2));
+    expect(sentWith(1)).not.toHaveProperty("patient_id");
+  });
+
+  it("another refusal is the usual error, never the patient's", async () => {
+    createQuery.mockRejectedValueOnce(new ApiError(422, "validation_failed"));
+    arrive();
+    await mount(<Page />);
+    await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
+    expect(
+      await screen.findByText("Couldn't send your question"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("This patient isn't available for questions"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offline, a linked question isn't saved on this device", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    const pushState = vi.spyOn(window.history, "pushState");
+    arrive();
+    await act(async () => {
+      render(
+        <Providers auth={{ initialUser: TEST_USER }}>
+          <Page />
+        </Providers>,
+      );
+    });
+    await userEvent.click(screen.getByRole("button", { name: /Analyse/ }));
+    expect(
+      await screen.findByText("This question needs a connection"),
+    ).toBeInTheDocument();
+    expect(pushState).not.toHaveBeenCalled();
+    expect(createQuery).not.toHaveBeenCalled();
+    // The form and the link are still there.
+    expect(
+      screen.getByRole("group", { name: "About patient" }),
+    ).toBeInTheDocument();
   });
 });

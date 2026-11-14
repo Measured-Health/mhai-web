@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { LETTER_MAX_BYTES } from "@mhai/ui/clearances";
 import { handledFields } from "@/lib/api/alert-handled";
+import { QUERY_CREATE_SCHEMA } from "@/lib/api/query-schema";
 import {
   NO_DRILL_FILTERS,
   PATIENTS_QUERY,
@@ -472,6 +473,19 @@ function shapeAllowed(method: string, path: string[]): boolean {
   return true;
 }
 
+/** `POST queries`: a new question. */
+const isAsk = (method: string, path: string[]) =>
+  method === "POST" && path.length === 1 && path[0] === "queries";
+
+/** The body as JSON, or undefined (which no schema accepts). */
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Same-origin proxy for clinical, alert and hospital admin calls: adds the token the browser never sees. */
 async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   const { path } = await ctx.params;
@@ -541,7 +555,14 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
     const text = await req.text();
     if (Buffer.byteLength(text) > MAX_BODY)
       return json(413, { code: "too_large" });
-    if (text) {
+    if (isAsk(req.method, path)) {
+      // A question, and the patient it may name, checked strictly before
+      // upstream: only the checked body is forwarded (core 1.22.0).
+      const q = QUERY_CREATE_SCHEMA.safeParse(parseJson(text));
+      if (!q.success) return json(422, { code: "validation_failed" });
+      body = JSON.stringify(q.data);
+      type = "application/json";
+    } else if (text) {
       body = text;
       type = "application/json";
     }

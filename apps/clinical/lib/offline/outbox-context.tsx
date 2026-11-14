@@ -341,6 +341,10 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
       loaded,
       loadError,
       async queueQuery(q) {
+        // A question linked to a patient never waits on this device: the
+        // patient's id stays in memory only (secure-build).
+        if (q.patient_id !== undefined)
+          throw new Error("A linked patient is never saved on this device");
         const w = await (who.current ??= ownerWait()).promise;
         const localId = `local-${crypto.randomUUID()}`;
         await box.add(w.owner, "query", { q, localId });

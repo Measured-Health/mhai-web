@@ -118,6 +118,19 @@ describe("OutboxProvider", () => {
     expect(result.current.session.get(localId)).toBeUndefined();
   });
 
+  it("never saves a question linked to a patient on this device", async () => {
+    const { result } = renderHook(use, { wrapper });
+    await act(async () => {
+      await expect(
+        result.current.box.queueQuery({
+          ...Q,
+          patient_id: "6f1c2a01-5e1d-4c3b-9a7e-000000000001",
+        }),
+      ).rejects.toThrow("never saved on this device");
+    });
+    expect(result.current.box.items).toEqual([]);
+  });
+
   it("keeps items after a network failure, and marks a rejected one", async () => {
     createQuery
       .mockRejectedValueOnce(new ApiError(0, "network"))

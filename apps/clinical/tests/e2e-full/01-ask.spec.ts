@@ -34,3 +34,37 @@ test("ask: the answer, its drafted-by label, and feedback", async ({
   await page.waitForLoadState("networkidle");
   expect(reportApi("ask", calls)).toEqual([]);
 });
+
+/**
+ * A question's linked patient against core 1.22.0 with EMR on: a patient id
+ * that names no active patient of the hospital is core's 404 `not_found`
+ * (the same answer for unknown, another hospital's, excluded or merged);
+ * a malformed one never leaves the BFF (422). Synthetic ids only.
+ */
+test("ask: a linked patient core doesn't know is 404; a malformed one 422", async ({
+  page,
+  baseURL,
+}) => {
+  await signIn(page, "clinician");
+  const ask = (patient_id: unknown) =>
+    page.request.post("/api/v1/queries", {
+      headers: {
+        Origin: baseURL!,
+        "Idempotency-Key": crypto.randomUUID(),
+      },
+      data: {
+        patient_data: { age: 54, sex: "male", symptoms: ["Chest pain"] },
+        clinical_question: "Synthetic live question: linked patient check.",
+        urgency: "routine",
+        patient_id,
+      },
+    });
+  const unknown = await ask(crypto.randomUUID());
+  expect(unknown.status()).toBe(404);
+  expect(await unknown.json()).toEqual({ code: "not_found" });
+  for (const bad of ["SYN-0001", crypto.randomUUID().toUpperCase()]) {
+    const r = await ask(bad);
+    expect(r.status()).toBe(422);
+    expect(await r.json()).toEqual({ code: "validation_failed" });
+  }
+});

@@ -146,6 +146,36 @@ describe("live alerts client", () => {
     });
   });
 
+  it("reads the patient's id when sent, and fails closed on a malformed one", async () => {
+    const PID = "6f1c2a01-5e1d-4c3b-9a7e-000000000001";
+    const patient = (id: unknown) => ({
+      patient: {
+        id,
+        full_name: "Synthetic Patient",
+        mrn: "SYN-0001",
+        location: null,
+      },
+    });
+    fetchImpl.mockImplementation(async () =>
+      Response.json(corePage([coreAlert(patient(PID))])),
+    );
+    expect((await client().listAlerts({})).alerts[0]!.patient.id).toBe(PID);
+    for (const bad of [
+      PID.toUpperCase(),
+      "00000000-0000-0000-0000-000000000000",
+      "SYN-0001",
+      7,
+      null,
+    ]) {
+      fetchImpl.mockImplementation(async () =>
+        Response.json(corePage([coreAlert(patient(bad))])),
+      );
+      await expect(client().listAlerts({})).rejects.toMatchObject({
+        status: 502,
+      });
+    }
+  });
+
   it("reads a withdrawn and an amended alert", async () => {
     const withdrawn = coreAlert({
       status: "dismissed",

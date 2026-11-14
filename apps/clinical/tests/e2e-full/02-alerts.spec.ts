@@ -70,3 +70,29 @@ test("alerts: unread count, acknowledge, dismiss", async ({ page }) => {
   });
   expect(reportApi("alerts", calls)).toEqual([]);
 });
+
+/**
+ * "Ask MHAI about it" from a live alert. Core 1.22.0's AlertOut carries no
+ * patient id, so the form is filled but not linked to the patient (a core
+ * gap, TODO.md). When core adds the id, this test is the one to change.
+ */
+test("alerts: ask from an alert fills the form, unlinked until core sends the patient id", async ({
+  page,
+}) => {
+  await signIn(page, "clinician");
+  const calls = recordApi(page);
+  await page.goto("/notifications");
+  await page.getByRole("button", { name: "Handled", exact: true }).click();
+  const first = page.getByRole("article").first();
+  await expect(first).toBeVisible({ timeout: 30_000 });
+  await first.getByRole("button", { name: "Ask MHAI about it" }).click();
+  await expect(page.getByText(/^Filled in from a patient alert/)).toBeVisible();
+  await expect(page.getByRole("group", { name: "About patient" })).toHaveCount(
+    0,
+  );
+  await page.screenshot({
+    path: test.info().outputPath("ask-from-alert.png"),
+    fullPage: true,
+  });
+  expect(reportApi("alerts-ask", calls)).toEqual([]);
+});

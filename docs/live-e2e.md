@@ -65,24 +65,24 @@ checked first (`services/emr/scripts/image-check.sh`, mhai-multiagent
 
 ## The paths
 
-| Spec                                | Path                                                                                                 |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| clinical `01-ask`                   | sign in with two-step, ask, the answer with its drafted-by label, agree (feedback), My feedback      |
-| clinical `02-alerts`                | the bell's unread count, the inbox, acknowledge, dismiss with a reason                               |
-| clinical `03-notification-settings` | switch alert pop-ups off, read back after a reload, on again                                         |
-| clinical `04-alert-settings`        | the hospital admin's alert settings: records status, units, a level saved and read back              |
-| clinical `05-analysis`              | the views, a filter, the not-ready state, the de-identified drill-down                               |
-| platform `01-emr`                   | add the record connection (private network, key file), test it, switch it on                         |
-| platform `02-hospital`              | Hospitals, the hospital's page and its AI model policy                                               |
-| platform `03-ops`                   | System health and jobs, Usage (analytics)                                                            |
-| platform `04-audit`                 | the audit log and one entry                                                                          |
-| platform `05-admin`                 | team, activity and legal holds on core 1.26.0; invites, notifications and settings Not available yet |
-| platform `06-rule-set`              | the hospital page's Patient alerts section: the warning, the active rule set written back            |
-| platform `90-reveal`                | the auditor reveal of the analyst's drill-down                                                       |
-| clinical `06-hospital-admin`        | staff and a person's panel, a settings edit with step-up, usage, activity, oversight                 |
-| clinical `07-analyst-role`          | the hospital admin removes and gives back the synthetic analyst's role, with step-up                 |
-| clinical `08-patients`              | patient matches and exclusions: the explanations, an unknown MRN refused with step-up                |
-| both `00-tour`                      | every page: it renders and no call to the BFF fails                                                  |
+| Spec                                | Path                                                                                                                                                                |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| clinical `01-ask`                   | sign in with two-step, ask, the answer with its drafted-by label, agree (feedback), My feedback; a linked patient core doesn't know (404) and a malformed one (422) |
+| clinical `02-alerts`                | the bell's unread count, the inbox, acknowledge, dismiss with a reason; Ask MHAI about it (not linked until core sends the patient id)                              |
+| clinical `03-notification-settings` | switch alert pop-ups off, read back after a reload, on again                                                                                                        |
+| clinical `04-alert-settings`        | the hospital admin's alert settings: records status, units, a level saved and read back                                                                             |
+| clinical `05-analysis`              | the views, a filter, the not-ready state, the de-identified drill-down                                                                                              |
+| platform `01-emr`                   | add the record connection (private network, key file), test it, switch it on                                                                                        |
+| platform `02-hospital`              | Hospitals, the hospital's page and its AI model policy                                                                                                              |
+| platform `03-ops`                   | System health and jobs, Usage (analytics)                                                                                                                           |
+| platform `04-audit`                 | the audit log and one entry                                                                                                                                         |
+| platform `05-admin`                 | team, activity and legal holds on core 1.26.0; invites, notifications and settings Not available yet                                                                |
+| platform `06-rule-set`              | the hospital page's Patient alerts section: the warning, the active rule set written back                                                                           |
+| platform `90-reveal`                | the auditor reveal of the analyst's drill-down                                                                                                                      |
+| clinical `06-hospital-admin`        | staff and a person's panel, a settings edit with step-up, usage, activity, oversight                                                                                |
+| clinical `07-analyst-role`          | the hospital admin removes and gives back the synthetic analyst's role, with step-up                                                                                |
+| clinical `08-patients`              | patient matches and exclusions: the explanations, an unknown MRN refused with step-up                                                                               |
+| both `00-tour`                      | every page: it renders and no call to the BFF fails                                                                                                                 |
 
 A call that fails is printed as `API <path>: <status> <method> <url>`: the
 evidence of a mismatch. A call to a route core doesn't serve yet (404), or

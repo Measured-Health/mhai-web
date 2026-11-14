@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
-import { Send } from "lucide-react";
+import { Send, UserRound, X } from "lucide-react";
 import type { QueryCreateIn } from "@/lib/api/contract";
 import { emptyForm, validate, type FormValues } from "@/lib/form-schema";
+import { mrnLabel } from "@/lib/notifications/alert-view";
+import type { PatientLink } from "@/lib/patient-link";
 import { Button } from "@mhai/ui/button";
 import { cn } from "@mhai/ui/cn";
 import { ErrorSummary } from "./error-summary";
@@ -79,12 +81,67 @@ function Field({
   );
 }
 
+/**
+ * "About patient": the patient the question is linked to, as the alert the
+ * clinician started from showed them. Only MHAI's id for the patient is sent;
+ * the name and MRN stay on this screen, in memory.
+ */
+function AboutPatient({
+  patient,
+  onClear,
+}: {
+  patient: PatientLink;
+  onClear(): void;
+}) {
+  return (
+    <div id="f-patient" className="mb-3.5">
+      <p id="l-patient" className="mb-1.5 text-[12.5px] text-ink-2">
+        About patient
+      </p>
+      <div
+        role="group"
+        aria-labelledby="l-patient"
+        className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-lilac-2 bg-mint-wash px-3.5 py-2"
+      >
+        <UserRound aria-hidden className="size-4 shrink-0 text-mint-deep" />
+        <span className="font-semibold [overflow-wrap:anywhere]">
+          {patient.name}
+        </span>
+        <span className="font-mono text-[13px] text-ink-2 [overflow-wrap:anywhere]">
+          <span className="text-ink-3">MRN </span>
+          {mrnLabel(patient.mrn)}
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="ml-auto"
+          aria-label={`Remove ${patient.name} from this question`}
+          onClick={onClear}
+        >
+          <X aria-hidden className="size-4" />
+          Remove
+        </Button>
+      </div>
+      <p className="mt-1.5 text-xs text-ink-3">
+        The question is linked to this patient. Their name and record number
+        aren&apos;t added to it.
+      </p>
+    </div>
+  );
+}
+
 export function ConsultationForm({
   initial = emptyForm,
+  patient = null,
+  onClearPatient,
   onSubmit,
   onDirtyChange,
 }: {
   initial?: FormValues;
+  /** The patient the question is about, from an alert; null when none. */
+  patient?: PatientLink | null;
+  onClearPatient?(): void;
   onSubmit(q: QueryCreateIn): void;
   onDirtyChange?(dirty: boolean): void;
 }) {
@@ -207,6 +264,16 @@ export function ConsultationForm({
           </span>
           <b className="text-sm">Patient</b>
         </legend>
+        {patient && onClearPatient && (
+          <AboutPatient
+            patient={patient}
+            onClear={() => {
+              onClearPatient();
+              // The button is gone: the focus moves to the first field.
+              formRef.current?.querySelector<HTMLElement>("#age")?.focus();
+            }}
+          />
+        )}
         <div className="grid grid-cols-[140px_1fr] gap-3.5 max-sm:grid-cols-1">
           <Field id="age" label="Age" required error={errors.age}>
             <input
