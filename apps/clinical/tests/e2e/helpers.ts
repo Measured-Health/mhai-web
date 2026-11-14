@@ -122,6 +122,8 @@ export async function openAdmin(
     | "Staff"
     | "Hospital settings"
     | "Alert settings"
+    | "Patient matches"
+    | "Patient exclusions"
     | "Activity"
     | "Usage"
     | "Named access",

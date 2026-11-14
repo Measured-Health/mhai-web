@@ -1063,6 +1063,119 @@ describe("patient alert and notification settings routes", () => {
   });
 });
 
+describe("patient matches and exclusions (core 1.21.0)", () => {
+  const as = (roles: Role[], mfaEnabled = true) =>
+    writeSession({
+      token: "tok",
+      expiresAt: Date.now() + 10 * 60_000,
+      user: { ...TEST_USER, roles, mfaEnabled },
+      steps: [],
+    });
+  const post = (path: string, body: string) =>
+    new Request(`http://demo.test/api/v1/hospital/${path}`, {
+      method: "POST",
+      headers: {
+        host: "demo.test",
+        origin: "http://demo.test",
+        "content-type": "application/json",
+        "Idempotency-Key": "k-1",
+      },
+      body,
+    });
+  const CONFIRM = JSON.stringify({ keep: "a", mfa_code: "123456" });
+  const EXCLUDE = JSON.stringify({
+    mrn: "SYN-1",
+    reason: "objection",
+    backup_code: "aaaa-bbbb",
+  });
+
+  it("forwards the list, a decision and an exclusion for a hospital admin, code in the body", async () => {
+    await as(["hospital_admin"]);
+    fetchMock.mockImplementation(async () => Response.json({}));
+    const results = [
+      await GET(get(), ctx("hospital", "patient-matches")),
+      await POST(
+        post("patient-matches/m-1/confirm", CONFIRM),
+        ctx("hospital", "patient-matches", "m-1", "confirm"),
+      ),
+      await POST(
+        post("patient-matches/m-1/reject", CONFIRM),
+        ctx("hospital", "patient-matches", "m-1", "reject"),
+      ),
+      await POST(
+        post("patient-exclusions", EXCLUDE),
+        ctx("hospital", "patient-exclusions"),
+      ),
+    ];
+    for (const r of results) expect(r.status).toBe(200);
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls.map(([u, i]) => [i.method, u])).toEqual([
+      ["GET", "http://api.test/api/v1/hospital/patient-matches"],
+      ["POST", "http://api.test/api/v1/hospital/patient-matches/m-1/confirm"],
+      ["POST", "http://api.test/api/v1/hospital/patient-matches/m-1/reject"],
+      ["POST", "http://api.test/api/v1/hospital/patient-exclusions"],
+    ]);
+    expect(calls[1]![1].body).toBe(CONFIRM);
+    expect(calls[3]![1].body).toBe(EXCLUDE);
+    expect(calls[3]![1].headers).toMatchObject({
+      Authorization: "Bearer tok",
+      "Idempotency-Key": "k-1",
+    });
+  });
+
+  it("refuses a clinician, a platform account and an admin without two-step", async () => {
+    for (const [roles, mfa, code] of [
+      [["clinician"], true, "forbidden"],
+      [["auditor"], true, "forbidden"],
+      [["hospital_admin"], false, "mfa_required"],
+    ] as [Role[], boolean, string][]) {
+      await as(roles, mfa);
+      for (const res of [
+        await GET(get(), ctx("hospital", "patient-matches")),
+        await POST(
+          post("patient-exclusions", EXCLUDE),
+          ctx("hospital", "patient-exclusions"),
+        ),
+      ]) {
+        expect(res.status, roles.join()).toBe(403);
+        expect(await res.json()).toEqual({ code });
+      }
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["POST", ["patient-matches"]],
+    ["GET", ["patient-matches", "m-1"]],
+    ["GET", ["patient-matches", "m-1", "confirm"]],
+    ["POST", ["patient-matches", "m-1"]],
+    ["POST", ["patient-matches", "m-1", "merge"]],
+    ["POST", ["patient-matches", "m-1", "confirm", "x"]],
+    ["DELETE", ["patient-matches", "m-1"]],
+    ["PATCH", ["patient-matches", "m-1", "confirm"]],
+    ["GET", ["patient-exclusions"]],
+    ["POST", ["patient-exclusions", "p-1"]],
+    ["DELETE", ["patient-exclusions"]],
+  ])(
+    "refuses %s %j with 404, without calling the API",
+    async (method, path) => {
+      await as(["hospital_admin"]);
+      const c = ctx("hospital", ...path);
+      const req = post(path.join("/"), "{}");
+      const res =
+        method === "GET"
+          ? await GET(get(), c)
+          : method === "DELETE"
+            ? await DELETE(new Request(req, { method: "DELETE" }), c)
+            : method === "PATCH"
+              ? await PATCH(new Request(req, { method: "PATCH" }), c)
+              : await POST(req, c);
+      expect(res.status).toBe(404);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe("alert settings and the alerts sent_to filter (Plan 13)", () => {
   const as = (roles: Role[], mfaEnabled = true) =>
     writeSession({

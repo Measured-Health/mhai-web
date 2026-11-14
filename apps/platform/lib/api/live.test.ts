@@ -266,6 +266,14 @@ const POLICY = () =>
     updated_at: "2026-11-05T09:00:00Z",
     usage: { month: "2026-11", used: 10, reserved: 0 },
   });
+/** A hospital's EMR rule set as core sends it (1.20.0). */
+const RULE_SET = () =>
+  Response.json({
+    hospital_id: "h_north",
+    version: "0-synthetic",
+    sha256: "ab".repeat(32),
+    activated_at: "2026-11-05T09:00:00Z",
+  });
 const SIGNOFFS = {
   clinical: { by: "Dr. A. Musa", at: "2026-02-01", ref: "CS-014" },
   privacy: { by: "Ngozi Eke", at: "2026-02-02", ref: "PR-007" },
@@ -426,6 +434,29 @@ const ROWS: Row[] = [
       ...CODE,
     },
     POLICY,
+  ],
+  [
+    "getEmrRuleSet",
+    (c) => c.getEmrRuleSet("h_north"),
+    "GET",
+    "/api/v1/platform/hospitals/h_north/emr-rule-set",
+    undefined,
+    RULE_SET,
+  ],
+  [
+    "setEmrRuleSet",
+    (c) =>
+      c.setEmrRuleSet("h_north", { version: null, sha256: null, ...CODE }, K),
+    "PUT",
+    "/api/v1/platform/hospitals/h_north/emr-rule-set",
+    { version: null, sha256: null, ...CODE },
+    () =>
+      Response.json({
+        hospital_id: "h_north",
+        version: null,
+        sha256: null,
+        activated_at: "2026-11-05T09:00:00Z",
+      }),
   ],
   [
     "inviteAdmin",

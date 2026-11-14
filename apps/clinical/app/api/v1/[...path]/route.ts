@@ -49,6 +49,7 @@ const STAFF_ACTIONS = new Set([
   "resend-invite",
 ]);
 const OVERSIGHT_ACTIONS = new Set(["remind", "assign"]);
+const MATCH_DECISIONS = new Set(["confirm", "reject"]);
 const READ_ONLY = new Set(["usage", "activity", "review-oversight"]);
 
 /** The hospital admin side: exactly the shapes the admin client uses (Plan 4). */
@@ -73,6 +74,13 @@ function hospitalShape(method: string, path: string[]): boolean {
   if (area === "settings" || area === "alert-settings")
     return n === 2 && (method === "GET" || method === "PATCH");
   if (area === "clearances") return clearanceShape(method, path);
+  // Patient matches and exclusions (core 1.21.0): the list, a decision
+  // (step-up code in the body) and an exclusion. Nothing else.
+  if (area === "patient-matches")
+    return n === 2
+      ? method === "GET"
+      : n === 4 && method === "POST" && MATCH_DECISIONS.has(action ?? "");
+  if (area === "patient-exclusions") return n === 2 && method === "POST";
   if (READ_ONLY.has(area ?? "")) return n === 2 && method === "GET";
   if (area === "corrections" && n === 4)
     return action === "eligible-reviewers"

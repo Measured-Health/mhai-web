@@ -16,6 +16,7 @@ import { ModelPolicySection } from "./model-policy-section";
 import { DangerZone } from "./danger-zone";
 import { RecentActions } from "./recent-actions";
 import { RemovalPanel } from "./removal-panel";
+import { RuleSetSection } from "./rule-set-section";
 import { SsoSection } from "./sso-section";
 import { StatusSection } from "./status-section";
 
@@ -78,6 +79,7 @@ export function HospitalView({ id }: { id: string }) {
               <SsoSection hospitalId={h.id} hospitalName={h.name} />
               <ModelPolicySection hospital={h} />
               <HospitalConnectionsSection hospital={h} />
+              <RuleSetSection hospital={h} />
               <RecentActions hospitalId={h.id} />
               <DangerZone hospital={h} />
             </>
