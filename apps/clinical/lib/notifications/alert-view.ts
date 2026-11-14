@@ -7,6 +7,7 @@ import type {
   DismissReason,
   FindingOut,
   LikelyCauseOut,
+  SourceStatusOut,
 } from "../api/alerts-contract";
 import { RESULT_LABEL } from "../labels";
 import { eventClock } from "../time";
@@ -180,11 +181,29 @@ export function likelyCauses(
  * "Acknowledged by Dr. Reyes · 09:12";
  * "Dismissed by Nurse Bello · 16 Oct 04:20 · Already known"; null while new.
  */
+/** Why MHAI withdrew an alert (core 1.20.0); no person did. */
+const WITHDRAWN: Record<NonNullable<AlertOut["withdrawn"]>, string> = {
+  source_amended: "The result was changed in the record",
+  source_retracted: "The result was withdrawn in the record",
+  excluded: "The patient was taken out of record alerts",
+};
+
 export function handledLine(
-  a: Pick<AlertOut, "status" | "handled_by" | "handled_at" | "dismiss_reason">,
+  a: Pick<
+    AlertOut,
+    "status" | "handled_by" | "handled_at" | "dismiss_reason" | "withdrawn"
+  >,
   now: number,
 ): string | null {
   if (a.status === "new") return null;
+  if (a.withdrawn && Object.hasOwn(WITHDRAWN, a.withdrawn))
+    return [
+      "Withdrawn",
+      a.handled_at ? eventClock(a.handled_at, now) || null : null,
+      WITHDRAWN[a.withdrawn],
+    ]
+      .filter(Boolean)
+      .join(" · ");
   const verb = a.status === "dismissed" ? "Dismissed" : "Acknowledged";
   const name = a.handled_by?.display_name?.trim();
   return [
@@ -209,3 +228,46 @@ export function recordLink(url: string | null | undefined): string | null {
 /** The source label and filter only matter with more than one connected system (R10). */
 export const showSources = (sources: readonly string[] | undefined) =>
   (sources?.length ?? 0) > 1;
+
+/** The MRN, or "Not recorded" for a patient with none (core 1.20.0). */
+export const mrnLabel = (mrn: string | null | undefined): string =>
+  mrn?.trim() || "Not recorded";
+
+/** What a clinician should know about the result itself, in plain words. */
+export function alertNotes(
+  a: Pick<AlertOut, "preliminary" | "arrived_late" | "amended">,
+  now: number,
+): string[] {
+  const out: string[] = [];
+  if (a.preliminary) out.push("Preliminary result: it may still change.");
+  if (a.arrived_late) out.push("This result reached MHAI late.");
+  if (a.amended) {
+    const when = a.amended.amended_at
+      ? eventClock(a.amended.amended_at, now) || null
+      : null;
+    const was = a.amended.previous_value?.trim();
+    out.push(
+      `Changed in the record${when ? ` at ${when}` : ""}${was ? ` (was ${was})` : ""}.`,
+    );
+  }
+  return out;
+}
+
+/**
+ * Which connected systems are behind (paused, or silent for three polls):
+ * an empty or short list may then be incomplete. Null when all are current.
+ */
+export function behindNotice(
+  status: SourceStatusOut[] | undefined,
+): string | null {
+  const names = (status ?? [])
+    .filter((s) => s.status === "behind")
+    .map((s) => s.label.trim())
+    .filter(Boolean);
+  if (names.length === 0) return null;
+  const list =
+    names.length === 1
+      ? names[0]!
+      : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return `${list} ${names.length === 1 ? "hasn't" : "haven't"} updated recently, so alerts may be missing.`;
+}
