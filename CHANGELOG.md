@@ -84,6 +84,7 @@ All notable changes to this project are documented here. The format follows
   - The demo follows the same rules.
 
 ### Added
+
 - **Patient matches and exclusions for hospital admins** (core openapi
   1.21.0, `/hospital/patient-matches`, `/hospital/patient-exclusions`).
   - Patient matches lists the possible duplicate patients side by side
