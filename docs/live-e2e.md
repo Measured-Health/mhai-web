@@ -78,6 +78,7 @@ checked first (`services/emr/scripts/image-check.sh`, mhai-multiagent
 | platform `04-audit`                 | the audit log and one entry                                                                     |
 | platform `90-reveal`                | the auditor reveal of the analyst's drill-down                                                  |
 | clinical `06-hospital-admin`        | staff and a person's panel, a settings edit with step-up, usage, activity, oversight            |
+| clinical `07-analyst-role`          | the hospital admin removes and gives back the synthetic analyst's role, with step-up            |
 | both `00-tour`                      | every page: it renders and no call to the BFF fails                                             |
 
 A call that fails is printed as `API <path>: <status> <method> <url>`: the
@@ -101,5 +102,4 @@ work live:
 
 And these have a route in core but no screen yet: patient matches and
 exclusions (`/hospital/patient-matches`, `/hospital/patient-exclusions`),
-the EMR rule set (`/platform/hospitals/{id}/emr-rule-set`) and granting the
-analyst role (`core users roles` only).
+the EMR rule set (`/platform/hospitals/{id}/emr-rule-set`).

@@ -455,3 +455,46 @@ test("the usage CSV carries the alert numbers, with small groups hidden", async 
   expect(csv).not.toMatch(/patient/i);
   await expect(page.getByText("Usage exported")).toBeVisible();
 });
+
+test("give and remove the Analyst role, each with your two-step code", async ({
+  page,
+}) => {
+  await asHospitalAdmin(page);
+  await manage(page, "Dr. Chidi Okafor").click();
+  const p = panel(page);
+  const analyst = p.getByRole("checkbox", { name: "Analyst" });
+  await expect(analyst).toHaveAccessibleDescription(
+    /Needs the Clinician role, an active account and two-step verification/,
+  );
+  await analyst.check();
+  await p.getByRole("button", { name: "Save changes" }).click();
+  const grant = page.getByRole("dialog", { name: "Save Dr. Okafor's access?" });
+  await expect(grant).toContainText(
+    "Dr. Okafor will see Analysis for this hospital",
+  );
+  await typeCode(page, "123456", grant);
+  await expect(page.getByText("Changes saved")).toBeVisible();
+  await expect(
+    p.getByText(/gave Dr. Okafor Analyst access/).first(),
+  ).toBeVisible();
+
+  await analyst.uncheck();
+  await p.getByRole("button", { name: "Save changes" }).click();
+  const remove = page.getByRole("dialog", {
+    name: "Save Dr. Okafor's access?",
+  });
+  await expect(remove).toContainText("Analysis access ends at once");
+  await typeCode(page, "123456", remove);
+  await expect(
+    p.getByText(/removed Analyst access from Dr. Okafor/).first(),
+  ).toBeVisible();
+
+  // Someone without two-step can't be given it; the box says why.
+  await p.getByRole("button", { name: "Close" }).click();
+  await manage(page, "Dr. Kofi Mensah").click();
+  const mensah = panel(page).getByRole("checkbox", { name: "Analyst" });
+  await expect(mensah).toBeDisabled();
+  await expect(mensah).toHaveAccessibleDescription(
+    /need two-step verification turned on/,
+  );
+});
