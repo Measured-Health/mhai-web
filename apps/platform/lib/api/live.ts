@@ -10,6 +10,11 @@ import {
   type WriteOpts,
 } from "./contract";
 import type { EmrClient } from "./emr-contract";
+import {
+  readConnection,
+  readConnections,
+  readConnectorTypes,
+} from "./emr-schema";
 import { dayLabel } from "@mhai/ui/clearances";
 import { analysisQueryParams, type AnalysisClient } from "./analysis-contract";
 import type {
@@ -108,17 +113,30 @@ function emrLive(ok: LiveOk): EmrClient {
   const id = encodeURIComponent;
   const connection = (x: string, rest = "") =>
     `/emr/connections/${id(x)}${rest}`;
+  // Every reply read strictly (core openapi 1.20.0): 502 when it doesn't match.
   return {
-    listConnectorTypes: () => ok("/emr/connector-types"),
+    listConnectorTypes: () =>
+      ok<unknown>("/emr/connector-types").then(readConnectorTypes),
     listConnections: (q) =>
-      ok(`/emr/connections${query({ hospital: q.hospital, state: q.state })}`),
-    getConnection: (x) => ok(connection(x)),
+      ok<unknown>(
+        `/emr/connections${query({ hospital: q.hospital, state: q.state })}`,
+      ).then(readConnections),
+    getConnection: (x) => ok<unknown>(connection(x)).then(readConnection),
     addConnection: (hospital, b, o) =>
-      ok(`/hospitals/${id(hospital)}/emr/connections`, "POST", b, o),
-    updateConnection: (x, b, o) => ok(connection(x), "PATCH", b, o),
+      ok<unknown>(
+        `/hospitals/${id(hospital)}/emr/connections`,
+        "POST",
+        b,
+        o,
+      ).then(readConnection),
+    updateConnection: (x, b, o) =>
+      ok<unknown>(connection(x), "PATCH", b, o).then(readConnection),
     setConnectionEnabled: (x, b, o) =>
-      ok(connection(x, "/enabled"), "PUT", b, o),
-    testConnection: (x, o) => ok(connection(x, "/test"), "POST", undefined, o),
+      ok<unknown>(connection(x, "/enabled"), "PUT", b, o).then(readConnection),
+    testConnection: (x, o) =>
+      ok<unknown>(connection(x, "/test"), "POST", undefined, o).then(
+        readConnection,
+      ),
   };
 }
 

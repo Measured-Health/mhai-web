@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useKeyedMutation } from "@mhai/api-client/keyed-mutation";
 import { getPlatformClient } from "../api/client";
-import type { HospitalSummary, StepUp } from "../api/contract";
+import type { Person, StepUp } from "../api/contract";
 import type {
   ConnectionIn,
   ConnectionPatch,
@@ -47,21 +47,27 @@ export function useConnection(id: string) {
   });
 }
 
-/** Hospitals that can still have a connection, for the Add page's picker. */
-export function useConnectableHospitals() {
+/**
+ * Hospitals that can have a connection, for the Add page: from the
+ * connections list alone (core's `GET /platform/emr/connections`), so the
+ * record screens need nothing but the record routes. Its `not_connected`
+ * are the hospitals, not removed, with none yet; the others are named on
+ * their connections. Sorted by name; `hospital` narrows it to one.
+ */
+export function useConnectableHospitals(hospital?: string) {
   return useQuery({
-    queryKey: [...emrKey, "hospitals"] as const,
-    queryFn: async () => {
-      const all: HospitalSummary[] = [];
-      let cursor: string | undefined;
-      do {
-        const p = await getPlatformClient().listHospitals(
-          cursor ? { cursor } : {},
-        );
-        all.push(...p.hospitals);
-        cursor = p.next_cursor ?? undefined;
-      } while (cursor);
-      return all.filter((h) => h.status !== "removed");
+    queryKey: [...emrKey, "hospitals", hospital ?? null] as const,
+    queryFn: async (): Promise<Person[]> => {
+      const p = await getPlatformClient().listConnections(
+        hospital ? { hospital } : {},
+      );
+      const byId = new Map<string, Person>();
+      for (const h of [
+        ...p.not_connected,
+        ...p.connections.map((c) => c.hospital),
+      ])
+        if (!hospital || h.id === hospital) byId.set(h.id, h);
+      return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
     },
   });
 }

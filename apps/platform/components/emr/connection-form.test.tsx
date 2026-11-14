@@ -93,7 +93,9 @@ describe("editing a connection", () => {
     await userEvent.click(screen.getByRole("button", { name: "Replace" }));
     const input = screen.getByLabelText("Private key");
     expect(input).toHaveValue("");
-    expect(input).toHaveAttribute("type", "password");
+    // A key file keeps its line breaks: a masked box of several lines.
+    expect(input.tagName).toBe("TEXTAREA");
+    expect(input).toHaveClass("[-webkit-text-security:disc]");
     expect(input).toHaveAttribute("autocomplete", "off");
     await type("Client ID", "mhai-havana-2");
     await save();

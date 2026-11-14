@@ -7,6 +7,7 @@ import type {
 import {
   canSwitchOn,
   connectionState,
+  privateRanges,
   validateConnection,
   type ConnectionForm,
 } from "./state";
@@ -178,5 +179,62 @@ describe("validateConnection", () => {
         "edit",
       ),
     ).toEqual({ private_key: "Use 4000 characters or fewer." });
+  });
+});
+
+describe("a private network (core 1.20.0: private_network, private_cidrs)", () => {
+  it("is optional, and off sends nothing about it", () => {
+    expect(validateConnection(form(), TYPE)).toEqual({});
+    expect(
+      validateConnection(
+        form({ private_network: false, private_cidrs: "nonsense" }),
+        TYPE,
+      ),
+    ).toEqual({});
+  });
+
+  it("on needs at least one range", () => {
+    expect(
+      validateConnection(
+        form({ private_network: true, private_cidrs: " " }),
+        TYPE,
+      ),
+    ).toEqual({ private_cidrs: "Enter the network ranges the system is on." });
+  });
+
+  it("takes up to 8 private IPv4 ranges of at most 256 addresses, one per line or comma", () => {
+    expect(
+      validateConnection(
+        form({
+          private_network: true,
+          private_cidrs: "10.20.30.0/24, 192.168.1.0/28\n172.16.5.0/24",
+        }),
+        TYPE,
+      ),
+    ).toEqual({});
+    expect(
+      privateRanges("10.20.30.0/24, 192.168.1.0/28\n172.16.5.0/24"),
+    ).toEqual(["10.20.30.0/24", "192.168.1.0/28", "172.16.5.0/24"]);
+  });
+
+  it.each([
+    ["a public range", "8.8.8.0/24"],
+    ["more than 256 addresses", "10.0.0.0/16"],
+    ["not a range", "10.20.30.0"],
+    ["an IPv6 range", "fd00::/64"],
+    ["a bad address", "10.20.300.0/24"],
+    [
+      "nine ranges",
+      Array.from({ length: 9 }, (_, i) => `10.0.${i}.0/24`).join(","),
+    ],
+  ])("refuses %s", (_, v) => {
+    expect(
+      validateConnection(
+        form({ private_network: true, private_cidrs: v }),
+        TYPE,
+      ).private_cidrs,
+    ).toBe(
+      "Use up to 8 private network ranges, each at most 256 addresses, for example 10.20.30.0/24.",
+    );
   });
 });

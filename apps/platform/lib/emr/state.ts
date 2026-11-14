@@ -32,7 +32,38 @@ export type ConnectionForm = {
   base_url: string;
   settings: Record<string, string>;
   credentials: Record<string, string>;
+  /** The system is on the hospital's own network (core 1.20.0, additive). */
+  private_network?: boolean;
+  /** Its ranges as typed, one per line or comma-separated. */
+  private_cidrs?: string;
 };
+
+/** Core's limits: at most 8 private IPv4 ranges, each at most a /24. */
+export const PRIVATE_RANGES_MAX = 8;
+const RANGES =
+  "Use up to 8 private network ranges, each at most 256 addresses, for example 10.20.30.0/24.";
+const CIDR = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/;
+
+/** The typed ranges, split on commas, spaces and lines; empty ones dropped. */
+export const privateRanges = (v: string | undefined): string[] =>
+  (v ?? "").split(/[\s,]+/).filter(Boolean);
+
+/** A private IPv4 range (10/8, 172.16/12, 192.168/16) of at most a /24. */
+function privateRange(r: string): boolean {
+  const m = CIDR.exec(r);
+  if (!m) return false;
+  const [a, b, c, d, bits] = m.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  if ([a, b, c, d].some((x) => x > 255) || bits < 24 || bits > 32) return false;
+  return (
+    a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
+  );
+}
 
 const tooLong = (max: number) => `Use ${max} characters or fewer.`;
 const HTTPS = "Use an address that starts with https://.";
@@ -73,6 +104,13 @@ export function validateConnection(
     if (!value) {
       if (required) out[f.key] = `Enter ${f.label}.`;
     } else if (value.length > f.max) out[f.key] = tooLong(f.max);
+  }
+  if (form.private_network) {
+    const ranges = privateRanges(form.private_cidrs);
+    if (ranges.length === 0)
+      out.private_cidrs = "Enter the network ranges the system is on.";
+    else if (ranges.length > PRIVATE_RANGES_MAX || !ranges.every(privateRange))
+      out.private_cidrs = RANGES;
   }
   return out;
 }

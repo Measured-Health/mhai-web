@@ -145,6 +145,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Record connections work against core's live routes** (core openapi
+  1.20.0). Found by the full live check:
+  - Add a connection named the hospital from `GET /platform/hospitals/{id}`,
+    which core doesn't serve yet, so the page never loaded. It now takes
+    the hospital from the connections list alone (`not_connected` and the
+    connections' hospitals), as does its picker.
+  - A key file (the FHIR private key, PEM) lost its line breaks in a
+    password box. Long secrets are now a masked box of several lines.
+  - A record system on the hospital's own network can be declared: "It is
+    on the hospital's private network", with its ranges (up to 8 private
+    IPv4 ranges of at most 256 addresses), sent as core's
+    `private_network` and `private_cidrs`.
+  - Every reply is read strictly (zod; 502 when it doesn't match), with
+    core's additive fields (`paused`, `credentials_missing`,
+    `poll_seconds`, `private_network`, `private_cidrs`).
 - **Patient alerts read core's live replies** (core openapi 1.20.0, EMR PRs
   8a and 8b). The alerts client was written against the planned contract
   and returned replies unchecked; it now reads every reply strictly (zod:

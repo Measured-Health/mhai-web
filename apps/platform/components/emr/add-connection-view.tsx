@@ -3,13 +3,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
-import { platformError } from "@/lib/errors";
 import {
   useAddConnection,
   useConnectableHospitals,
   useConnectorTypes,
 } from "@/lib/queries/emr";
-import { useHospital } from "@/lib/queries/hospitals";
 import { useStepUpCall } from "@/lib/queries/step-up-call";
 import { Banner } from "@mhai/ui/banner";
 import { useToast } from "@mhai/ui/toast";
@@ -85,20 +83,23 @@ function Picker({ note }: { note?: string }) {
   );
 }
 
+/**
+ * The hospital named in the link, from the connections list: one that is
+ * removed, or no hospital at all, isn't in it, so the picker is shown.
+ */
 function ForHospital({ id }: { id: string }) {
-  const h = useHospital(id);
-  if (h.isError) {
-    const w = platformError(h.error);
-    return w.gone ? (
-      <Picker note="That hospital wasn't found. Choose one below." />
-    ) : (
+  const h = useConnectableHospitals(id);
+  if (h.isError)
+    return (
       <CouldntLoad what="this hospital" onRetry={() => void h.refetch()} />
     );
-  }
   if (!h.data) return <Loading label="Loading hospital" />;
-  if (h.data.status === "removed")
-    return <Picker note="That hospital has been removed. Choose another." />;
-  return <AddForm hospitalId={id} hospitalName={h.data.name} />;
+  const found = h.data[0];
+  if (!found)
+    return (
+      <Picker note="That hospital wasn't found, or has been removed. Choose one below." />
+    );
+  return <AddForm hospitalId={id} hospitalName={found.name} />;
 }
 
 function AddForm({
