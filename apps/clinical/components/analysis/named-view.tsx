@@ -13,6 +13,7 @@ import { countLabel } from "@/lib/admin/report";
 import { useClearanceMe, useNamedPatients } from "@/lib/analysis-queries";
 import {
   AGE_LABEL,
+  AGE_NOT_RECORDED,
   NOT_STANDARDISED,
   SEX_LABEL,
   conditionText,
@@ -342,7 +343,9 @@ export function NamedView({
                       <td className="px-3 py-2 font-mono">{p.pid}</td>
                       <td className="px-3 py-2 text-ink-2">
                         {[
-                          `Age ${AGE_LABEL[p.age_band]}`,
+                          p.age_band
+                            ? `Age ${AGE_LABEL[p.age_band]}`
+                            : AGE_NOT_RECORDED,
                           sexText(p.sex),
                           settingText(p.setting),
                         ].join(" · ")}

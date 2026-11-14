@@ -13,6 +13,7 @@ import type {
   ClearanceMeOut,
 } from "@/lib/api/analysis-contract";
 import { ApiError } from "@/lib/api/errors";
+import { mockDrillKey } from "@/lib/api/mock-analysis";
 import { resetAudit } from "@/lib/api/mock-audit";
 import {
   createMockClearances,
@@ -26,6 +27,7 @@ import { screenAdminAs } from "@/tests/admin";
 import {
   GRACE,
   KEMI,
+  NAMED_DRILL,
   NAMED_FILTERS,
   analysisAs,
   renderSignedIn,
@@ -64,9 +66,10 @@ afterEach(() => {
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 
+/** The "Sex: Female" list under `filters`: its key is bound to them (core 1.19.0). */
 const panel = (filters: AnalysisFilters = NAMED_FILTERS) => (
   <PatientsPanel
-    drill="sex-female"
+    drill={mockDrillKey(filters, "affected", "sex-female")!}
     label="Sex: Female"
     filters={filters}
     onClose={() => {}}
@@ -447,7 +450,7 @@ describe("NamedView", () => {
       open(
         GRACE,
         <NamedView
-          drill="sex-female"
+          drill={NAMED_DRILL}
           filters={NAMED_FILTERS}
           purpose="audit"
           onEnd={onEnd}

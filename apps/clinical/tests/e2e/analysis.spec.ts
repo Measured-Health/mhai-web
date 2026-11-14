@@ -331,13 +331,23 @@ test("See patients opens the de-identified list; Activity shows the event", asyn
     await page.getByRole("button", { name: "Open menu" }).click();
   await analysisLink(page).click();
   await expect(page).toHaveURL(/\/analysis$/);
-  const see = page.getByRole("button", { name: /^See patients/ }).first();
+  // Lists are on the affected view's rows (core 1.19.0), not prevalence.
+  await openView(page, "Who is affected");
+  const see = page
+    .getByRole("button", { name: /^See patients · Sex: / })
+    .and(page.locator(":enabled"))
+    .first();
   await expect(see).toBeVisible();
   await see.click();
   const list = page.getByRole("dialog", { name: /patients ·/ });
   await expect(list).toBeVisible();
   await expect(
     list.getByText("De-identified: no names or record numbers"),
+  ).toBeVisible();
+  await expect(
+    list.getByText(
+      "This view is audited: opening a patient list is recorded under your name.",
+    ),
   ).toBeVisible();
   if (!isMobile(page)) {
     // A side panel against the window's right edge, full height, not
@@ -367,6 +377,77 @@ test("See patients opens the de-identified list; Activity shows the event", asyn
   await expect(
     page.getByText(/opened \d+ de-identified patients in Analysis/).first(),
   ).toBeVisible();
+});
+
+test("prevalence and ward rows have no list: See patients is off with its reason, and opens nothing", async ({
+  page,
+}) => {
+  await asAnalyst(page);
+  const prevalence = page.getByRole("region", {
+    name: "Prevalence and trends",
+  });
+  const off = prevalence.getByRole("button", { name: /^See patients · / });
+  await expect(off.first()).toBeVisible();
+  for (const b of await off.all()) {
+    await expect(b).toBeDisabled();
+    await expect(b).toHaveAccessibleDescription(
+      "Not available for this breakdown",
+    );
+  }
+  await off.first().click({ force: true });
+  await expect(page.getByRole("dialog", { name: /patients ·/ })).toHaveCount(0);
+
+  await openView(page, "Who is affected");
+  const ward = page.getByRole("list", { name: "Patients by ward or clinic" });
+  await expect(ward.getByRole("button").first()).toBeDisabled();
+  for (const b of await ward.getByRole("button").all())
+    await expect(b).toBeDisabled();
+  // Under a ward filter, nothing in the view opens a list.
+  await withFilters(page, async () => {
+    await page
+      .getByRole("combobox", { name: "Ward or clinic" })
+      .selectOption({ label: "Ward 4 (Medical)" });
+  });
+  const view = page.getByRole("region", { name: "Who is affected" });
+  await expect(
+    view.getByRole("list", { name: "Patients by sex" }),
+  ).toBeVisible();
+  await expect(
+    view
+      .getByRole("button", { name: /^See patients/ })
+      .and(page.locator(":enabled")),
+  ).toHaveCount(0);
+});
+
+test("after 10 lists in a minute the next says You've opened many patient lists; try again later", async ({
+  page,
+}) => {
+  await asAnalyst(page);
+  await openView(page, "Who is affected");
+  const see = page
+    .getByRole("button", { name: /^See patients · Sex: / })
+    .and(page.locator(":enabled"))
+    .first();
+  for (let i = 0; i < 10; i++) {
+    await see.click();
+    const list = page.getByRole("dialog", { name: /patients ·/i });
+    await expect(
+      list
+        .getByRole("list", { name: "Patients" })
+        .getByRole("listitem")
+        .first(),
+    ).toContainText(/P-[A-Z0-9]{5}/);
+    await list.getByRole("button", { name: "Close" }).click();
+    await expect(list).toHaveCount(0);
+  }
+  await see.click();
+  const list = page.getByRole("dialog", { name: /patients ·/i });
+  await expect(
+    list.getByText("You've opened many patient lists; try again later"),
+  ).toBeVisible();
+  await expect(list.getByRole("list", { name: "Patients" })).toHaveCount(0);
+  await expect(list.getByRole("button", { name: "Try again" })).toHaveCount(0);
+  await expect(list).not.toContainText(/P-[A-Z0-9]{4,}/);
 });
 
 test("the admin grants Analyst to a clinician and Activity shows it", async ({

@@ -24,7 +24,11 @@ import { PLATFORM_ADMINS } from "./clearances-fixtures";
 import {
   COLD_CONTEXTS_MAX,
   COLD_PERIOD,
+  LISTS_PER_DAY,
+  LISTS_PER_MINUTE,
+  PATIENTS_PER_QUARTER,
   createMockAnalysis,
+  mockDrillKey,
   share,
 } from "./mock-analysis";
 import { auditEvents, resetAudit } from "./mock-audit";
@@ -51,6 +55,9 @@ const VIEWS: ViewId[] = [
   "findings",
   "quality",
 ];
+/** The key of one row (its token), as the views would send it under `f`. */
+const KEY = (token: string, view: ViewId = "affected", f = F) =>
+  mockDrillKey(f, view, token)!;
 const mock = (o: Parameters<typeof createMockAnalysis>[0] = {}) =>
   createMockAnalysis({ delayMs: 0, ...o });
 const hideG: GuardedOut = { value: null, suppressed: true };
@@ -86,7 +93,7 @@ describe("sample cohort", () => {
 
   it("gives no patient row a name, MRN, date of birth or address", async () => {
     const { patients } = await mock().listPatients({
-      drill: "sex-female",
+      drill: KEY("sex-female"),
       level: "deidentified",
       filters: F,
     });
@@ -136,7 +143,8 @@ describe("sample analysis", () => {
     const ns = v.by_condition.find((c) => c.condition.name === null)!;
     expect(ns.condition.icd10).toBeNull();
     expect(ns.cases.value).toBe(19);
-    expect(ns.cases.drill).toBe("cond-unmapped");
+    // Prevalence counts cases, not patients: never a list (core 1.19.0).
+    expect(ns.cases.drill).toBeNull();
   });
 
   it("puts a drill only on shown counts of 5 or more", async () => {
@@ -145,7 +153,7 @@ describe("sample analysis", () => {
         if (d.drill === null) continue;
         expect(d.suppressed).toBe(false);
         expect(d.value).toBeGreaterThanOrEqual(SMALL_GROUP_MIN);
-        expect(d.drill).toMatch(/^[A-Za-z0-9_-]+$/);
+        expect(d.drill).toMatch(/^[A-Za-z0-9_-]{43}$/);
       }
     }
   });
@@ -153,7 +161,7 @@ describe("sample analysis", () => {
   it("caps patients at 200 and logs one audit event", async () => {
     const m = mock();
     const out = await m.listPatients({
-      drill: "sex-female",
+      drill: KEY("sex-female"),
       level: "deidentified",
       filters: F,
     });
@@ -328,7 +336,7 @@ describe("sample analysis", () => {
     });
     await expect(
       m.listPatients({
-        drill: "sex-female",
+        drill: KEY("sex-female"),
         level: "deidentified",
         filters: F,
       }),
@@ -783,7 +791,7 @@ describe("named patients", () => {
   ) =>
     as(email, namedAccess).listNamedPatients(
       {
-        drill: "sex-female",
+        drill: KEY("sex-female"),
         filters: F,
         purpose: "clinical_follow_up",
         ...over,
@@ -836,7 +844,7 @@ describe("named patients", () => {
     expect(readPatients(out, "named", clock).status).toBe("ok");
     // The de-identified list of the same people still has no names.
     const plain = await as(GRACE).listPatients({
-      drill: "sex-female",
+      drill: KEY("sex-female"),
       level: "deidentified",
       filters: F,
     });
@@ -1014,7 +1022,7 @@ describe("named patients", () => {
   it("names are never a GET: level named there is 422 level_not_supported", async () => {
     const e = await as(GRACE)
       .listPatients({
-        drill: "sex-female",
+        drill: KEY("sex-female"),
         // Only a de-identified level type-checks; a caller that forces one is refused.
         level: "named" as unknown as "deidentified",
         filters: F,
@@ -1027,7 +1035,7 @@ describe("named patients", () => {
   it("a retry with the same Idempotency-Key is one view, still checked afresh", async () => {
     const m = as(GRACE);
     const q: NamedPatientsIn = {
-      drill: "sex-female",
+      drill: KEY("sex-female"),
       filters: F,
       purpose: "audit",
     };
@@ -1056,7 +1064,7 @@ describe("named patients", () => {
   it("a key is bound to the person and the request, and keeps its named_until", async () => {
     const m = as(GRACE);
     const q: NamedPatientsIn = {
-      drill: "sex-female",
+      drill: KEY("sex-female"),
       filters: F,
       purpose: "audit",
     };
@@ -1065,7 +1073,7 @@ describe("named patients", () => {
     expect(auditEvents()).toHaveLength(1);
     // Another request under the same key: refused, and nothing recorded.
     for (const other of [
-      { ...q, drill: "sex-male" },
+      { ...q, drill: KEY("sex-male") },
       { ...q, purpose: "clinical_follow_up" as const },
       { ...q, filters: { ...F, sex: "female" as const } },
       { ...q, purpose: "other" as const, note: "Ward 4 recall" },
@@ -1151,5 +1159,142 @@ describe("named patients", () => {
     const mrns = COHORT.map((p) => p.mrn);
     expect(new Set(mrns).size).toBe(mrns.length);
     for (const m of mrns) expect(m).toMatch(/^HH-\d{6}$/);
+  });
+});
+
+/** Whether any count in a reply carries a drill key. */
+const anyDrill = (v: unknown) => /"drill":"/.test(JSON.stringify(v));
+
+describe("the drill-down, as core 1.19.0 enforces it", () => {
+  const listOf = (m: ReturnType<typeof mock>, drill: string, f = F) =>
+    m.listPatients({ drill, level: "deidentified", filters: f });
+  const refusal = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: ApiError) => [e.status, e.code],
+    );
+
+  it("keys only on age band, sex and setting rows, pairs and findings", async () => {
+    const m = mock();
+    const a = await m.getView("affected", F);
+    expect(a.by_sex.some((r) => r.patients.drill)).toBe(true);
+    expect(a.by_age.some((r) => r.patients.drill)).toBe(true);
+    for (const r of [...a.by_location, ...a.by_specialty])
+      expect(r.patients.drill).toBeNull();
+    for (const r of (await m.getView("prevalence", F)).by_condition)
+      expect(r.cases.drill).toBeNull();
+    expect(
+      (await m.getView("co-occurring", F)).pairs.some((r) => r.patients.drill),
+    ).toBe(true);
+    expect(
+      (await m.getView("findings", F)).findings.some((r) => r.patients.drill),
+    ).toBe(true);
+  });
+
+  it("no key at all under a location, specialty or source filter; keys under the row filters", async () => {
+    const opts = await mock().getFilterOptions(F.period);
+    for (const f of [
+      { ...F, location: opts.locations[0]!.id },
+      { ...F, specialty: opts.specialties[0]! },
+      { ...F, source: opts.sources[0]!.id },
+    ])
+      for (const v of ["affected", "co-occurring", "findings"] as const)
+        expect(anyDrill(await mock().getView(v, f))).toBe(false);
+    const sexF = { ...F, sex: "female" as Sex };
+    expect(anyDrill(await mock().getView("affected", sexF))).toBe(true);
+  });
+
+  it("a key opens only under its own period and filters: elsewhere 422 too_small", async () => {
+    const m = mock();
+    const key = KEY("sex-female");
+    expect((await listOf(m, key)).count).toBeGreaterThan(0);
+    const other = [
+      { ...F, sex: "female" as Sex },
+      { ...F, period: { level: "month" as const, start: "2026-05-01" } },
+    ];
+    for (const f of other)
+      expect(await refusal(listOf(m, key, f))).toEqual([422, "too_small"]);
+    // The location row's token never had a key.
+    expect(await refusal(listOf(m, KEY("loc-ward4")))).toEqual([
+      422,
+      "too_small",
+    ]);
+  });
+
+  it("the list's count is the shown cell; rows carry no source", async () => {
+    const m = mock();
+    const a = await m.getView("affected", F);
+    const row = a.by_sex.find((r) => r.patients.drill)!;
+    const out = await listOf(m, row.patients.drill!);
+    expect(out.count).toBe(row.patients.value);
+    for (const p of out.patients)
+      for (const x of p.findings) expect(x.source_label).toBeNull();
+  });
+
+  it("pids are random per period: the same patients differ between two periods", async () => {
+    const q = {
+      ...F,
+      period: { level: "quarter" as const, start: "2026-04-01" },
+    };
+    const m1 = {
+      ...F,
+      period: { level: "month" as const, start: "2026-05-01" },
+    };
+    const a = await listOf(mock(), KEY("sex-female", "affected", q), q);
+    const b = await listOf(mock(), KEY("sex-female", "affected", m1), m1);
+    const shared = a.patients.filter((p) =>
+      b.patients.some((x) => x.pid === p.pid),
+    );
+    expect(shared).toHaveLength(0);
+    // Stable within one period.
+    const again = await listOf(mock(), KEY("sex-female", "affected", q), q);
+    expect(again.patients.map((p) => p.pid)).toEqual(
+      a.patients.map((p) => p.pid),
+    );
+  });
+
+  it(`${LISTS_PER_MINUTE} lists a minute: the next is 429 rate_limited and records nothing`, async () => {
+    let t = Date.parse("2026-10-22T09:00:00Z");
+    const m = mock({ now: () => t, me: async () => "ana@demo.example" });
+    // A small group, so the quarter's patients don't run out first.
+    const f = { ...F, age_band: "0-17" as AgeBand };
+    const v = await m.getView("affected", f);
+    const drill = v.by_setting.find((r) => r.patients.drill)!.patients.drill!;
+    for (let i = 0; i < LISTS_PER_MINUTE; i++) await listOf(m, drill, f);
+    expect(await refusal(listOf(m, drill, f))).toEqual([429, "rate_limited"]);
+    expect(auditEvents()).toHaveLength(LISTS_PER_MINUTE);
+    t += 61_000;
+    await listOf(m, drill, f);
+    expect(auditEvents()).toHaveLength(LISTS_PER_MINUTE + 1);
+  });
+
+  it(`${LISTS_PER_DAY} lists a day`, async () => {
+    let t = Date.parse("2026-10-22T08:00:00Z");
+    const m = mock({ now: () => t, me: async () => "ana@demo.example" });
+    const f = { ...F, age_band: "0-17" as AgeBand };
+    const v = await m.getView("affected", f);
+    const drill = v.by_setting.find((r) => r.patients.drill)!.patients.drill!;
+    for (let i = 0; i < LISTS_PER_DAY; i++) {
+      await listOf(m, drill, f);
+      t += 7_000;
+    }
+    expect(await refusal(listOf(m, drill, f))).toEqual([429, "rate_limited"]);
+    t = Date.parse("2026-10-23T08:00:00Z");
+    expect((await listOf(m, drill, f)).count).toBeGreaterThan(0);
+  });
+
+  it(`${PATIENTS_PER_QUARTER} different patients a quarter, per person`, async () => {
+    const m = mock({ me: async () => "ana@demo.example" });
+    // Two lists of 200 different patients: the second would pass 300.
+    await listOf(m, KEY("sex-female"));
+    expect(await refusal(listOf(m, KEY("sex-male")))).toEqual([
+      429,
+      "rate_limited",
+    ]);
+    // The same patients again cost nothing new.
+    expect((await listOf(m, KEY("sex-female"))).patients).toHaveLength(200);
+    // Someone else has their own.
+    const other = mock({ me: async () => "ben@demo.example" });
+    expect((await listOf(other, KEY("sex-male"))).patients).toHaveLength(200);
   });
 });

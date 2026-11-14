@@ -31,6 +31,7 @@ import { orderView } from "@/lib/analysis/order";
 import { readView } from "@/lib/analysis/read";
 import { viewSummary } from "@/lib/analysis/summary";
 import { renderAdmin } from "@/tests/admin-render";
+import { drillKey } from "@/tests/drill";
 
 const holder = vi.hoisted(() => ({
   client: null as unknown as AnalysisClient,
@@ -67,9 +68,10 @@ async function expected<V extends ViewId>(
 
 const S = (value: number): GuardedOut => ({ value, suppressed: false });
 const H: GuardedOut = { value: null, suppressed: true };
+/** A count with the drill key of row `drill` (a readable token), or none. */
 const D = (g: GuardedOut, drill: string | null = null): Drillable => ({
   ...g,
-  drill,
+  drill: drill === null ? null : drillKey(drill),
 });
 const meta = (patients: GuardedOut): Meta => ({
   updated_at: "2026-10-22T06:00:00.000Z",
@@ -93,7 +95,7 @@ const WITH_HIDDEN_WEEK: PrevalenceOut = {
   by_condition: [
     {
       condition: E11,
-      cases: D(S(60), "cond-e11"),
+      cases: D(S(60)),
       new: S(10),
       existing: S(50),
     },
@@ -306,8 +308,9 @@ describe("AnalysisView", () => {
         countText(r.cases),
         countText(r.new),
         countText(r.existing),
-        r.cases.drill && !r.cases.suppressed
-          ? `See patients · ${conditionText(r.condition)}`
+        // Prevalence never has a list (core 1.19.0): off, with the reason.
+        !r.cases.suppressed && r.cases.value! >= 5
+          ? `See patients · ${conditionText(r.condition)}Not available for this breakdown`
           : "",
       ]);
     });
@@ -621,28 +624,28 @@ describe("AnalysisView", () => {
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
-  it("with no drill keys yet, See patients is off and says coming soon", async () => {
+  it("where core sends no drill key, See patients is off and says it isn't available for this breakdown", async () => {
     const real = holder.client.getView.bind(holder.client);
     vi.spyOn(holder.client, "getView").mockImplementation((async (
       v: ViewId,
       f: AnalysisFilters,
     ) => {
       const out = structuredClone(await real(v, f));
-      // As core sends it until its patient-list route exists.
+      // As core sends it on a breakdown it never lists.
       return JSON.parse(
         JSON.stringify(out).replace(/"drill":"[^"]*"/g, '"drill":null'),
       );
     }) as AnalysisClient["getView"]);
     await render();
     await loaded();
-    const soon = await screen.findAllByRole("button", {
-      name: /^See patients · .* · coming soon$/,
+    const off = await screen.findAllByRole("button", {
+      name: /^See patients · /,
     });
-    expect(soon.length).toBeGreaterThan(0);
-    for (const b of soon) expect(b).toBeDisabled();
-    expect(
-      screen.queryAllByRole("button", { name: /^See patients · [^·]*$/ }),
-    ).toHaveLength(0);
+    expect(off.length).toBeGreaterThan(0);
+    for (const b of off) {
+      expect(b).toBeDisabled();
+      expect(b).toHaveAccessibleDescription("Not available for this breakdown");
+    }
   });
 
   it("Download CSV builds the file for the active view and filters", async () => {

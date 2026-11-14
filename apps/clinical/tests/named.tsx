@@ -5,7 +5,7 @@ import type { ReactElement, ReactNode } from "react";
 import type { AdminClient } from "@/lib/api/admin";
 import type { AnalysisClient } from "@/lib/api/analysis";
 import type { AnalysisFilters } from "@/lib/api/analysis-contract";
-import { createMockAnalysis } from "@/lib/api/mock-analysis";
+import { createMockAnalysis, mockDrillKey } from "@/lib/api/mock-analysis";
 import { AuthProvider } from "@/lib/auth/auth-context";
 import { createMockAuthClient, DEMO_EMAILS } from "@/lib/auth/mock";
 import type { User } from "@/lib/auth/types";
@@ -25,6 +25,13 @@ export const NAMED_FILTERS: AnalysisFilters = {
   specialty: null,
   source: null,
 };
+
+/** The "Sex: Female" row's drill key under NAMED_FILTERS, as the sample sends it. */
+export const NAMED_DRILL = mockDrillKey(
+  NAMED_FILTERS,
+  "affected",
+  "sex-female",
+)!;
 
 const named = (u: User): User => ({
   ...u,

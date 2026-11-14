@@ -115,7 +115,8 @@ const emergencyCount = new WeakMap<Page, number>();
 /** Opens the Emergency group (5 or more patients) as a list, de-identified. */
 async function openEmergency(page: Page) {
   await openView(page, "Who is affected");
-  const ward = page.getByRole("list", { name: "Patients by ward or clinic" });
+  // Lists are only on age band, sex and location type rows (core 1.19.0).
+  const ward = page.getByRole("list", { name: "Patients by location type" });
   const emergency = ward
     .getByRole("listitem")
     .filter({ hasText: /^Emergency/ })
@@ -130,7 +131,7 @@ async function openEmergency(page: Page) {
   const panel = page.getByRole("dialog", { name: /patients ·/ });
   await expect(
     panel.getByRole("heading", {
-      name: `${n} patients · Ward or clinic: Emergency`,
+      name: `${n} patients · Location type: Emergency`,
     }),
   ).toBeVisible();
   await expect(

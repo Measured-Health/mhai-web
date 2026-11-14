@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AnalysisClient } from "./api/analysis";
 import type { AffectedOut } from "./api/analysis-contract";
 import { ApiError } from "./api/errors";
-import { createMockAnalysis } from "./api/mock-analysis";
+import { createMockAnalysis, mockDrillKey } from "./api/mock-analysis";
 import { emptyFilters } from "./analysis/filters";
 
 const holder = vi.hoisted(() => ({
@@ -134,7 +134,7 @@ describe("analysis queries", () => {
     expect(spy).not.toHaveBeenCalled();
 
     const q = {
-      drill: "sex-female",
+      drill: mockDrillKey(F, "affected", "sex-female")!,
       level: "deidentified" as const,
       filters: F,
     };

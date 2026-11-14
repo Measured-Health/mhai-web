@@ -1,6 +1,7 @@
-// The Analysis API: core openapi 1.17.0 (`getAnalysisFilters`,
-// `getAnalysisView`; checked strictly by `analysis-schema.ts`), plus the
-// patient lists of Plan 6 and 11c, which core adds later. Every number
+// The Analysis API: core openapi 1.19.0 (`getAnalysisFilters`,
+// `getAnalysisView` and `getAnalysisPatients`, the de-identified list;
+// checked strictly by `analysis-schema.ts`), plus the named list of Plan
+// 11c, which core adds later. Every number
 // is computed and hidden by the server under the small-group rule (a count of
 // 1 to 4 is `{ value: null, suppressed: true }`), and every set that adds up
 // is hidden as a set so no hidden member can be worked out. Nothing here can
@@ -57,7 +58,11 @@ export type AnalysisFilters = {
   source: string | null;
 };
 
-/** `drill` is set only on a shown count of 5 or more. Opaque: `[A-Za-z0-9_-]+`. */
+/**
+ * `drill` is set only on a shown count of 5 or more, and only where core
+ * allows a list (`DRILL_ROWS`): 43 characters of base64url, bound by core to
+ * the hospital, period, filters, view and row it was served with.
+ */
 export type Drillable = GuardedOut & { drill: string | null };
 
 export type FilterOptionsOut = {
@@ -165,15 +170,20 @@ export type ViewOut = {
 };
 
 export type PatientRowOut = {
-  /** Pseudonymous, stable within the hospital, never the MRN. */
+  /**
+   * Pseudonymous and random per hospital, period and patient (and level):
+   * never the MRN, and never the same in another period.
+   */
   pid: string;
-  age_band: AgeBand;
+  /** null when the age isn't recorded. */
+  age_band: AgeBand | null;
   sex: Sex;
   setting: Setting | null;
   conditions: ConditionRef[];
   findings: {
     name: string | null;
     flag: FindingFlag | null;
+    /** Always null on a de-identified row (a row shows no source). */
     source_label: string | null;
   }[];
 };

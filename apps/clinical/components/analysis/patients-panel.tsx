@@ -6,6 +6,7 @@ import {
   Eye,
   FileX2,
   OctagonAlert,
+  ShieldCheck,
   TriangleAlert,
   Users,
   WifiOff,
@@ -30,7 +31,6 @@ import type {
   PatientRowOut,
   Sex,
 } from "@/lib/api/analysis-contract";
-import { ApiError } from "@/lib/api/errors";
 import { countLabel } from "@/lib/admin/report";
 import {
   ANALYSIS_KEYS,
@@ -40,9 +40,9 @@ import {
 } from "@/lib/analysis-queries";
 import { shows } from "@/lib/analysis/guards";
 import {
-  AGE_LABEL,
   NOT_STANDARDISED,
   SEX_LABEL,
+  ageText,
   conditionText,
   settingText,
 } from "@/lib/analysis/labels";
@@ -52,6 +52,12 @@ import {
   networkDown,
   type EndReason,
 } from "@/lib/analysis/named";
+import {
+  AUDITED_TEXT,
+  NO_DRILL_TEXT,
+  listProblemOf,
+  listProblemText,
+} from "@/lib/analysis/states";
 import { useOptionalAuth } from "@/lib/auth/auth-context";
 import { Button } from "@mhai/ui/button";
 import { useOnline } from "@mhai/ui/hooks/use-online";
@@ -85,9 +91,6 @@ const FLAG_TEXT: Record<FindingFlag, { word: string; Icon: typeof ArrowUp }> = {
 const sexText = (s: Sex) =>
   s === "not_recorded" ? "Sex not recorded" : SEX_LABEL[s];
 
-const tooSmall = (e: unknown) =>
-  e instanceof ApiError && e.status === 422 && e.code === "too_small";
-
 function PatientRow({ p }: { p: PatientRowOut }) {
   const id = useId();
   return (
@@ -100,7 +103,7 @@ function PatientRow({ p }: { p: PatientRowOut }) {
       </b>
       <p className="text-ink-2">
         {[
-          `Age ${AGE_LABEL[p.age_band]}`,
+          p.age_band ? `Age ${ageText(p.age_band)}` : ageText(null),
           sexText(p.sex),
           settingText(p.setting),
         ].join(" · ")}
@@ -138,28 +141,32 @@ function PatientRow({ p }: { p: PatientRowOut }) {
 /**
  * The de-identified patients behind one shown count (spec §5, level 1): a
  * side panel from `md`, a sheet below it. Never printed, never exported;
- * the list leaves the cache when the panel closes.
+ * the list leaves the cache when the panel closes. `cell` is the count it
+ * was opened from: a list of any other size fails closed.
  */
 export function PatientsPanel({
   drill,
   label,
   filters,
+  cell,
   level = "deidentified",
   onClose,
 }: {
   drill: string;
   label: string;
   filters: AnalysisFilters;
+  cell?: number;
   level?: "deidentified";
   onClose(): void;
 }) {
-  const q = usePatients({ drill, level, filters });
+  const q = usePatients({ drill, level, filters, cell });
   const d = q.data?.status === "ok" ? q.data.data : null;
   const title = d
     ? `${countLabel(d.count)} patients · ${label}`
     : `Patients · ${label}`;
   const failed =
-    q.data?.status === "failed" || (q.isError && !tooSmall(q.error));
+    q.data?.status === "failed" ||
+    (q.isError && listProblemOf(q.error) === "failed");
 
   const named = useNames();
   const showing = named.view !== null;
@@ -343,7 +350,10 @@ function NamesOffer({ named }: { named: ReturnType<typeof useNames> }) {
   );
 }
 
-/** Plan 6's de-identified list, as it was. */
+/**
+ * The de-identified list (core 1.19.0): pids and the row's own fields, the
+ * notice that it is audited, and a plain-language state for each refusal.
+ */
 function PlainList({
   level,
   d,
@@ -355,11 +365,20 @@ function PlainList({
   q: ReturnType<typeof usePatients>;
   failed: boolean;
 }) {
+  const refused =
+    q.isError && !failed ? listProblemText(listProblemOf(q.error)) : null;
   return (
     <>
-      <p className="mb-3 flex items-center gap-1.5 text-[13px] text-ink-2">
+      <p className="mb-1.5 flex items-center gap-1.5 text-[13px] text-ink-2">
         <Users aria-hidden className="size-4 shrink-0" />
         {LEVEL_NOTE[level]}
+      </p>
+      <p
+        data-audited
+        className="mb-3 flex items-center gap-1.5 text-[13px] text-ink-2"
+      >
+        <ShieldCheck aria-hidden className="size-4 shrink-0" />
+        {AUDITED_TEXT}
       </p>
       {d ? (
         <>
@@ -375,9 +394,9 @@ function PlainList({
             ))}
           </ul>
         </>
-      ) : q.isError && tooSmall(q.error) ? (
+      ) : refused ? (
         <p role="status" className="text-[14px]">
-          This group is too small to list
+          {refused}
         </p>
       ) : failed ? (
         <div
@@ -458,38 +477,46 @@ export const SEE_COLUMN: TableColumn = {
 };
 
 /**
- * A shown count of 5 or more with no drill key yet: core sends every drill
- * as null until its patient-list route exists.
+ * A shown count of 5 or more that core sent no drill key for: a breakdown
+ * it never lists (prevalence, location, specialty, or under a location,
+ * specialty or source filter). Hidden counts and counts under 5 are never
+ * this: they show nothing at all.
  */
-export const drillSoon = (d: Drillable) =>
+export const noDrill = (d: Drillable) =>
   d.drill === null && shows(d) && d.value! >= SMALL_GROUP_MIN;
 
-export const DRILL_SOON = "coming soon";
-
-/** See patients, switched off until patient lists come: says so, opens nothing. */
-function SeePatientsSoon({ label }: { label: string }) {
+/** See patients, switched off where core sends no key: says why, opens nothing. */
+function SeePatientsOff({ label }: { label: string }) {
+  const reasonId = useId();
   return (
-    <button
-      type="button"
-      disabled
-      aria-label={`See patients · ${label} · ${DRILL_SOON}`}
-      className="mt-0.5 inline-flex min-h-11 cursor-not-allowed items-center gap-1 rounded-lg px-1 text-[12.5px] font-semibold text-ink-3"
-    >
-      See patients ({DRILL_SOON})
-    </button>
+    <span className="inline-flex flex-col items-start">
+      <button
+        type="button"
+        disabled
+        aria-label={`See patients · ${label}`}
+        aria-describedby={reasonId}
+        className="mt-0.5 inline-flex min-h-11 cursor-not-allowed items-center gap-1 rounded-lg px-1 text-[12.5px] font-semibold text-ink-3"
+      >
+        See patients
+        <span className="sr-only">{` · ${label}`}</span>
+      </button>
+      <span id={reasonId} className="px-1 text-[12px] text-ink-3">
+        {NO_DRILL_TEXT.charAt(0).toUpperCase() + NO_DRILL_TEXT.slice(1)}
+      </span>
+    </span>
   );
 }
 
 /**
- * See patients for a drillable count; a switched-off button saying "coming
- * soon" for a count of 5 or more with no drill key yet; else nothing (an
- * empty cell or note).
+ * See patients exactly where core sent a drill key; a switched-off button
+ * with its reason on any other shown count of 5 or more; else nothing (an
+ * empty cell or note), so a hidden or small group is never singled out.
  */
 export const seePatients = (d: Drillable, label: string): ReactNode =>
   drillable(d) ? (
     <SeePatients d={d} label={label} />
-  ) : drillSoon(d) ? (
-    <SeePatientsSoon label={label} />
+  ) : noDrill(d) ? (
+    <SeePatientsOff label={label} />
   ) : null;
 
 /**
@@ -535,6 +562,7 @@ export function SeePatients({ d, label }: { d: Drillable; label: string }) {
           drill={d.drill}
           label={label}
           filters={scope.filters}
+          cell={d.value!}
           onClose={() => setOpen(false)}
         />
       )}

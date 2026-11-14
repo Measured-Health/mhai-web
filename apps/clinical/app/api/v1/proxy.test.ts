@@ -21,6 +21,25 @@ import { __resetRefreshCacheForTests } from "@/lib/server/refresh";
 import type { Role, User } from "@/lib/auth/types";
 import { TEST_USER } from "@/tests/auth-wrapper";
 import { DELETE, GET, PATCH, POST } from "./[...path]/route";
+import { drillKey } from "@/tests/drill";
+
+/** A drill key, and a list core 1.19.0 could send for it. */
+const KEY = drillKey("sex-female");
+const LIST = {
+  level: "deidentified",
+  count: 7,
+  patients: [
+    {
+      pid: "P-7F3K2",
+      age_band: "40-64",
+      sex: "female",
+      setting: null,
+      conditions: [{ id: "e11", name: "Type 2 diabetes", icd10: "E11" }],
+      findings: [{ name: "HbA1c", flag: "high", source_label: null }],
+    },
+  ],
+};
+const PATIENTS_Q = `?drill=${KEY}&level=deidentified&period=month&start=2026-09-01`;
 
 // The suite runs on both transports (npm run test:nats). On NATS, Accept is
 // HTTP-only (never sent) and the audience comes from the subject.
@@ -1189,7 +1208,9 @@ describe("analysis routes", () => {
 
   it("the seven analysis shapes are accepted", async () => {
     await as(["clinician", "analyst"]);
-    fetchMock.mockImplementation(async () => Response.json({}));
+    fetchMock.mockImplementation(async (url: unknown) =>
+      Response.json(String(url).includes("/patients") ? LIST : {}),
+    );
     const shapes = [
       ["filters"],
       ["prevalence"],
@@ -1201,10 +1222,14 @@ describe("analysis routes", () => {
     ];
     for (const rest of shapes) {
       const res = await GET(
-        get(`${URL}/${rest[0]}?period=month&start=2026-09-01`),
+        get(
+          rest[0] === "patients"
+            ? `${URL}/patients${PATIENTS_Q}`
+            : `${URL}/${rest[0]}?period=month&start=2026-09-01`,
+        ),
         ctx("analysis", ...rest),
       );
-      expect(res.status).toBe(200);
+      expect([rest[0], res.status]).toEqual([rest[0], 200]);
     }
     expect(fetchMock).toHaveBeenCalledTimes(7);
     expect((fetchMock.mock.calls[1] as [string])[0]).toBe(
@@ -1363,6 +1388,108 @@ describe("analysis routes", () => {
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ code: "mfa_required" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  describe("the de-identified list (core 1.19.0)", () => {
+    const list = (search: string) =>
+      GET(get(`${URL}/patients${search}`), ctx("analysis", "patients"));
+    const base = {
+      drill: KEY,
+      level: "deidentified",
+      period: "month",
+      start: "2026-09-01",
+    };
+    const q = (over: Record<string, string | null> = {}) => {
+      const p = new URLSearchParams();
+      for (const [k, v] of Object.entries({ ...base, ...over }))
+        if (v !== null) p.set(k, v);
+      return `?${p}`;
+    };
+
+    it("forwards a valid query and sends back exactly the list, never cached", async () => {
+      await as(["clinician", "analyst"]);
+      fetchMock.mockResolvedValueOnce(Response.json(LIST));
+      const res = await list(q({ condition: "e11", sex: "female" }));
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Cache-Control")).toBe("no-store");
+      expect(await res.json()).toEqual(LIST);
+      expect((fetchMock.mock.calls[0] as [string])[0]).toBe(
+        `http://api.test/api/v1/analysis/patients${q({ condition: "e11", sex: "female" })}`,
+      );
+    });
+
+    it("checks the query before upstream, with core's codes", async () => {
+      await as(["clinician", "analyst"]);
+      const cases: [string, string][] = [
+        [q({ level: null }), "level_not_supported"],
+        [q({ drill: null }), "too_small"],
+        [q({ drill: "short" }), "too_small"],
+        [q({ drill: `${KEY}x` }), "too_small"],
+        [q({ location: "ward_4" }), "too_small"],
+        [q({ specialty: "cardiology" }), "too_small"],
+        [q({ source: "main" }), "too_small"],
+        [q({ period: null }), "invalid_range"],
+        [q({ start: "2026-09-02" }), "invalid_range"],
+        [`${q()}&from=2026-09-01`, "invalid_range"],
+        [q({ sex: "unknown" }), "validation_failed"],
+        [q({ extra: "1" }), "validation_failed"],
+        [`${q()}&sex=female&sex=male`, "validation_failed"],
+        [
+          q({ condition: "e11", sex: "female", age_band: "40-64" }),
+          "too_many_filters",
+        ],
+      ];
+      for (const [search, code] of cases) {
+        const res = await list(search);
+        expect([search, res.status, await res.json()]).toEqual([
+          search,
+          422,
+          { code },
+        ]);
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("a reply that isn't exactly the list is 502, with nothing of it", async () => {
+      await as(["clinician", "analyst"]);
+      const row = LIST.patients[0]!;
+      for (const body of [
+        { ...LIST, patients: [{ ...row, name: "Jo Patient" }] },
+        { ...LIST, patients: [{ ...row, mrn: "MRN-1" }] },
+        {
+          ...LIST,
+          patients: [
+            { ...row, findings: [{ ...row.findings[0], source_label: "Lab" }] },
+          ],
+        },
+        { ...LIST, patients: [{ ...row, pid: "12345" }] },
+        { ...LIST, count: 3 },
+        { ...LIST, level: "named" },
+        { ...LIST, extra: 1 },
+        { ...LIST, patients: Array.from({ length: 201 }, () => row) },
+      ]) {
+        fetchMock.mockResolvedValueOnce(Response.json(body));
+        const res = await list(q());
+        expect(res.status).toBe(502);
+        expect(await res.json()).toEqual({ code: "bad_gateway" });
+      }
+    });
+
+    it("core's refusals pass with their code only", async () => {
+      await as(["clinician", "analyst"]);
+      for (const [status, code] of [
+        [429, "rate_limited"],
+        [422, "too_small"],
+        [404, "not_found"],
+      ] as const) {
+        fetchMock.mockResolvedValueOnce(
+          Response.json({ code, detail: "P-7F3K2" }, { status }),
+        );
+        const res = await list(q());
+        expect(res.status).toBe(status);
+        expect(await res.json()).toEqual({ code });
+      }
+    });
   });
 });
 
@@ -1554,9 +1681,9 @@ describe("clearance routes (Plan 11)", () => {
       expect(await res.json()).toEqual({ code: "named_access_off" });
     }
     expect(fetchMock).not.toHaveBeenCalled();
-    fetchMock.mockImplementation(async () => Response.json({}));
-    expect((await patients("?level=deidentified")).status).toBe(200);
-    expect((await patients("?from=2026-01")).status).toBe(200);
+    fetchMock.mockImplementation(async () => Response.json(LIST));
+    expect((await patients(PATIENTS_Q)).status).toBe(200);
+    expect((await patients(`${PATIENTS_Q}&sex=female`)).status).toBe(200);
     // With the key on, names are still never a GET.
     vi.stubEnv("NAMED_ACCESS_SIGNED_OFF", "true");
     expect((await patients("?level=named")).status).toBe(403);
@@ -1912,9 +2039,9 @@ describe("clearance routes (Plan 11)", () => {
     expect((await named()).status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
     // A de-identified list still passes without named access.
-    fetchMock.mockImplementation(async () => Response.json({}));
-    expect((await named("?level=deidentified")).status).toBe(200);
-    expect((await named("")).status).toBe(200);
+    fetchMock.mockImplementation(async () => Response.json(LIST));
+    expect((await named(PATIENTS_Q)).status).toBe(200);
+    expect((await named(`${PATIENTS_Q}&setting=admitted`)).status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

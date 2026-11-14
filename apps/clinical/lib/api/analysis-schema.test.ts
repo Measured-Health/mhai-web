@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { readFilterOptions, readView } from "../analysis/read";
 import { emptyFilters } from "../analysis/filters";
 import type { PeriodRef, ViewId } from "./analysis-contract";
-import { filtersShapeOk, viewShapeOk } from "./analysis-schema";
+import {
+  DRILLABLE,
+  PATIENTS_QUERY,
+  PATIENTS_SCHEMA,
+  filtersShapeOk,
+  patientsShapeOk,
+  viewShapeOk,
+} from "./analysis-schema";
+import { drillKey } from "@/tests/drill";
 import { createMockAnalysis } from "./mock-analysis";
 
 const Q2: PeriodRef = { level: "quarter", start: "2026-04-01" };
@@ -153,5 +161,89 @@ describe("analysis replies, core 1.17.0, strictly", () => {
         sources: [],
       }).status,
     ).toBe("ok");
+  });
+});
+
+describe("the de-identified list and its query (core 1.19.0)", () => {
+  const row = {
+    pid: "P-7K2Q9",
+    age_band: null,
+    sex: "male",
+    setting: "emergency",
+    conditions: [{ id: "e11", name: null, icd10: null }],
+    findings: [{ name: null, flag: null, source_label: null }],
+  };
+  const list = { level: "deidentified", count: 5, patients: [row] };
+
+  it("reads exactly AnalysisPatients", () => {
+    expect(patientsShapeOk(list)).toBe(true);
+    expect(patientsShapeOk({ ...list, patients: [] })).toBe(true);
+  });
+
+  it("refuses any other key, a source, a count under 5, or more than 200 rows", () => {
+    for (const bad of [
+      { ...list, extra: 1 },
+      { ...list, count: 4 },
+      { ...list, count: 5.5 },
+      { ...list, level: "named" },
+      { ...list, patients: [{ ...row, name: "Jo" }] },
+      { ...list, patients: [{ ...row, mrn: "1" }] },
+      {
+        ...list,
+        patients: [
+          { ...row, findings: [{ name: null, flag: null, source_label: "x" }] },
+        ],
+      },
+      { ...list, patients: [{ ...row, pid: "P-12" }] },
+      { ...list, patients: [{ ...row, sex: null }] },
+      { ...list, patients: Array.from({ length: 201 }, () => row) },
+    ])
+      expect(PATIENTS_SCHEMA.safeParse(bad).success).toBe(false);
+  });
+
+  it("a drill key is exactly 43 characters of base64url, never with a pid in it", () => {
+    const ok = (drill: unknown) =>
+      DRILLABLE.safeParse({ value: 9, suppressed: false, drill }).success;
+    expect(ok(drillKey("sex-female"))).toBe(true);
+    expect(ok(null)).toBe(true);
+    expect(ok("sex-female")).toBe(false);
+    expect(ok("a".repeat(44))).toBe(false);
+    expect(ok(`${"a".repeat(36)}_P-ABCD`)).toBe(false);
+    expect(ok(`${"a".repeat(42)}=`)).toBe(false);
+  });
+
+  it("the query takes the key, the level, one period and only the row filters", () => {
+    const q = {
+      drill: drillKey("x"),
+      level: "deidentified",
+      period: "month",
+      start: "2026-09-01",
+    };
+    expect(PATIENTS_QUERY.safeParse(q).success).toBe(true);
+    expect(
+      PATIENTS_QUERY.safeParse({ ...q, condition: "e11", setting: "admitted" })
+        .success,
+    ).toBe(true);
+    for (const extra of [
+      { location: "w4" },
+      { specialty: "cardiology" },
+      { source: "main" },
+      { from: "2026-09-01" },
+      { level: "named" },
+      { drill: "short" },
+    ])
+      expect(PATIENTS_QUERY.safeParse({ ...q, ...extra }).success).toBe(false);
+  });
+
+  it("the mock's lists read", async () => {
+    const m = mock();
+    const f = emptyFilters(Q2);
+    const v = await m.getView("affected", f);
+    const drill = v.by_sex.find((r) => r.patients.drill)!.patients.drill!;
+    expect(
+      patientsShapeOk(
+        await m.listPatients({ drill, level: "deidentified", filters: f }),
+      ),
+    ).toBe(true);
   });
 });
