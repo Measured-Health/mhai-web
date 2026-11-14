@@ -69,9 +69,10 @@ export const ALERT_SCHEMA = z.strictObject({
   finding: FINDING,
   likely_causes: z.array(CAUSE).max(3),
   patient: z.strictObject({
-    // Not in core 1.22.0's AlertOut yet (see TODO.md): optional, and only
-    // ever a canonical lower-case uuid, so a malformed one fails the read.
-    id: z.string().refine(isPatientId).optional(),
+    // Core 1.27.0: a canonical lower-case uuid, or null for a patient no
+    // longer active (excluded or merged); a malformed one fails the read.
+    // Optional, for a core before 1.27.0.
+    id: z.string().refine(isPatientId).nullable().optional(),
     full_name: label,
     // Null for a patient with no MRN.
     mrn: text(64).nullable(),

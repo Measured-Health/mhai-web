@@ -26,6 +26,12 @@ All notable changes to this project are documented here. The format follows
     form is cleared or the clinician signs out. The demo follows core's
     rules, limits included.
 
+### Fixed
+
+- **An alert for a patient who is no longer active** (core 1.27.0 sends
+  `patient.id` null for an excluded or merged patient) no longer fails the
+  whole alerts list: it reads as an alert with no patient to link.
+
 - **A question about a patient** (core 1.22.0, `POST /queries`
   `patient_id`, EMR PR 13, mhai-multiagent #161):
   - Ask MHAI about it on an alert links the question to the patient when
@@ -37,8 +43,8 @@ All notable changes to this project are documented here. The format follows
   - The BFF checks the whole question strictly before core (the patient
     only as a lower-case uuid, else 422). A linked question is never
     saved on the device offline.
-  - Live, Ask MHAI about it doesn't link yet: core's alerts carry no
-    patient id (TODO.md). Find patient by MRN links live.
+  - Live, both link: core 1.27.0's alerts carry the patient id, and Find
+    patient by MRN uses core 1.29.0.
 
 - **Granting and removing the Analyst role from Staff** (core 1.24.0,
   `PATCH /hospital/staff/{id}` with step-up, mhai-multiagent #163):

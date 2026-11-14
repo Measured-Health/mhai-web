@@ -72,11 +72,11 @@ test("alerts: unread count, acknowledge, dismiss", async ({ page }) => {
 });
 
 /**
- * "Ask MHAI about it" from a live alert. Core 1.22.0's AlertOut carries no
- * patient id, so the form is filled but not linked to the patient (a core
- * gap, TODO.md). When core adds the id, this test is the one to change.
+ * "Ask MHAI about it" from a live alert. Since core 1.27.0 the alert carries
+ * MHAI's patient id, so the form is filled and linked: About patient shows
+ * the name the card showed.
  */
-test("alerts: ask from an alert fills the form, unlinked until core sends the patient id", async ({
+test("alerts: ask from an alert fills the form and links the patient", async ({
   page,
 }) => {
   await signIn(page, "clinician");
@@ -85,14 +85,18 @@ test("alerts: ask from an alert fills the form, unlinked until core sends the pa
   await page.getByRole("button", { name: "Handled", exact: true }).click();
   const first = page.getByRole("article").first();
   await expect(first).toBeVisible({ timeout: 30_000 });
+  const name = (
+    await first
+      .locator("dt", { hasText: /^Patient$/ })
+      .locator("+ dd")
+      .innerText()
+  ).trim();
   await first.getByRole("button", { name: "Ask MHAI about it" }).click();
-  await expect(page.getByText(/^Filled in from a patient alert/)).toBeVisible();
-  await expect(page.getByRole("group", { name: "About patient" })).toHaveCount(
-    0,
-  );
-  await page.screenshot({
-    path: test.info().outputPath("ask-from-alert.png"),
-    fullPage: true,
-  });
+  await expect(
+    page.getByText(/^Filled in from a patient alert and linked to the patient/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("group", { name: "About patient" }),
+  ).toContainText(name);
   expect(reportApi("alerts-ask", calls)).toEqual([]);
 });
