@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A question about a patient** (core 1.22.0, `POST /queries`
+  `patient_id`, EMR PR 13, mhai-multiagent #161):
+  - Ask MHAI about it on an alert links the question to the patient when
+    the alert carries MHAI's patient id: About patient on the form shows
+    the name and MRN the card showed, and Remove takes it off. Only the
+    id is sent.
+  - Core's 404 reads "This patient isn't available for questions", with
+    Ask without the patient.
+  - The BFF checks the whole question strictly before core (the patient
+    only as a lower-case uuid, else 422). A linked question is never
+    saved on the device offline.
+  - Live, nothing links yet: core's alerts carry no patient id, and there
+    is no patient lookup for clinicians (TODO.md).
+
 - **Granting and removing the Analyst role from Staff** (core 1.24.0,
   `PATCH /hospital/staff/{id}` with step-up, mhai-multiagent #163):
   - The Analyst box says what the role gives and what it needs (the
