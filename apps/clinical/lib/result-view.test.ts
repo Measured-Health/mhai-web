@@ -407,7 +407,7 @@ describe("who drafted the answer (generated_by, core 1.10.0)", () => {
   });
 });
 
-describe("cited sources (core 1.29.0)", () => {
+describe("cited sources (core 1.30.0)", () => {
   const MEDLINE = {
     chunk_id: "KB#1000004",
     title: "Synthetic Fever",

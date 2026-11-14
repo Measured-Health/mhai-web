@@ -39,7 +39,7 @@ export interface ResultView {
    */
   generatedBy: { label: string; notice: string | null } | null;
   /**
-   * The cited reference sources (core 1.29.0): title, an https link or
+   * The cited reference sources (core 1.30.0): title, an https link or
    * null, who published it, and its credit notice. Empty when none.
    */
   references: {

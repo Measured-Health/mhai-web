@@ -51,7 +51,7 @@ export interface Citation {
 }
 
 /**
- * Core 1.29.0 (additive): a cited shared reference source (an FDA drug label
+ * Core 1.30.0 (additive): a cited shared reference source (an FDA drug label
  * or a MedlinePlus health topic) as stored with the answer. `url` and
  * `attribution` are null when unknown. Read defensively (result-view.ts).
  */
@@ -104,7 +104,7 @@ export interface ClinicalResultOut {
   citations: Citation[];
   /** The ids the answer cited. `citations` stays empty until the pipeline stores their details. */
   cited_chunk_ids: string[];
-  /** Core 1.29.0: title, link and source credit of each cited reference source. */
+  /** Core 1.30.0: title, link and source credit of each cited reference source. */
   cited_sources?: CitedSource[];
   guardrail_details: {
     l1_persona: null;

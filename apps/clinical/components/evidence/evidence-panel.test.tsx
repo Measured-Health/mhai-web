@@ -263,7 +263,7 @@ describe("contract v1.2.0: cited, details not stored", () => {
   });
 });
 
-describe("references (core 1.29.0)", () => {
+describe("references (core 1.30.0)", () => {
   const sources = [
     {
       chunk_id: "KB#1000001",
