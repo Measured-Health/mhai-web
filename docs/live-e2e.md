@@ -91,7 +91,7 @@ work live:
 
 - platform: the hospitals list and a hospital's page (`/platform/hospitals`,
   `/platform/hospitals/{id}`, so the AI model policy section can't be
-  reached), notifications (the bell), legal holds, settings, team,
+  reached), notifications (the bell), the sidebar's Analysis across hospitals status, legal holds, settings, team,
   activity, named access, the analytics e-mail setting;
 - hospital admin: staff, hospital settings, activity, usage and review
   oversight (`/hospital/staff`, `/hospital/settings`, ...). Alert settings
