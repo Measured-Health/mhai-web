@@ -327,13 +327,19 @@ apps_up() {
 }
 
 # Playwright in the proxy's network namespace. LIVE_GREP narrows the run.
+# The browser is the one the lockfile's Playwright wants, installed once
+# into its own volume (the CI image carries only the version it was built
+# with, and a Playwright bump would otherwise stop every spec).
 run_pw() { # app project [args...]
   local app=$1; shift
   docker run --rm --init --ipc=host --network "container:$project-proxy" \
     -v "$repo:/work" -v "$nm_volume:/work/node_modules" -v "$state:/state" -v "$out:/out" \
     -e CI=1 -e LIVE_STATE=/state -e LIVE_OUT=/out -e LIVE_HOSPITAL="$hospital" \
     -e LIVE_DEBUG -e LIVE_DEBUG_PATHS -e LIVE_DEBUG_USER \
-    -w "/work/apps/$app" "$ci_image" npx playwright test -c playwright.full.config.ts "$@"
+    -v "${prefix}pw-browsers:/root/.cache/ms-playwright" \
+    -w "/work/apps/$app" "$ci_image" bash -c \
+    'npx playwright install chromium >/dev/null && exec npx playwright test -c playwright.full.config.ts "$@"' \
+    _ "$@"
 }
 
 grant_analyst() {
@@ -368,6 +374,7 @@ run_tests() {
 down() {
   docker rm -f "$project-proxy" "$project-web-clinical" "$project-web-platform" >/dev/null 2>&1 || true
   [ -f "$state/live.yml" ] && compose --profile test down -v --remove-orphans >/dev/null 2>&1 || true
+  docker volume rm "${prefix}pw-browsers" >/dev/null 2>&1 || true
   rm -rf "$state"
   echo "down: $project (images kept: $core_image $emr_image $intel_image)"
 }
