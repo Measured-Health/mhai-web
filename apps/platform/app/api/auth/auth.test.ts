@@ -455,7 +455,7 @@ describe("keep-alive", () => {
     vi.setSystemTime(T("09:00"));
     await signedIn();
     vi.setSystemTime(T("09:14"));
-    fetchMock.mockResolvedValueOnce(reply([]));
+    fetchMock.mockResolvedValueOnce(reply({ sessions: [] }));
     expect((await devices()).status).toBe(200);
     expect((await readSession())?.lastSeenAt).toBe(T("09:14"));
   });
@@ -610,21 +610,25 @@ describe("first sign-in and account", () => {
     expect((await readSession())?.user.backupCodesLeft).toBe(2);
 
     fetchMock.mockResolvedValueOnce(
-      reply([
-        {
-          id: "s1",
-          device: "Firefox on Mac",
-          location: "Lagos",
-          last_seen_at: "2026-10-15T08:00:00Z",
-          current: true,
-        },
-      ]),
+      // Core's SessionList (openapi 1.20.0): the network prefix never passes.
+      reply({
+        sessions: [
+          {
+            id: "s1",
+            created_at: "2026-10-15T07:00:00Z",
+            last_seen_at: "2026-10-15T08:00:00Z",
+            ua_summary: "Firefox on Mac",
+            ip_prefix: "203.0.113.0/24",
+            current: true,
+          },
+        ],
+      }),
     );
     expect(await (await devices()).json()).toEqual([
       {
         id: "s1",
         label: "Firefox on Mac",
-        place: "Lagos",
+        place: null,
         lastActiveAt: Date.parse("2026-10-15T08:00:00Z"),
         current: true,
       },
@@ -704,7 +708,7 @@ describe("guards", () => {
     await confirm(post({ code: "123456" }));
     fetchMock.mockResolvedValueOnce(reply({ recovery_codes: [] }));
     await newCodes(post());
-    fetchMock.mockResolvedValueOnce(reply([]));
+    fetchMock.mockResolvedValueOnce(reply({ sessions: [] }));
     await devices();
     fetchMock.mockResolvedValueOnce(reply());
     await dropDevice(del("s2"), params("s2"));

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { analysisOn, canUseNamedAccess } from "../auth/types";
-import { stepsFor, toDevice, toUser, type ApiUser } from "./map-user";
+import { stepsFor, toUser, type ApiUser } from "./map-user";
 
 describe("toUser", () => {
   it("maps what the API sends and nulls what it doesn't", () => {
@@ -187,36 +187,5 @@ describe("stepsFor", () => {
         terms_accepted_at: null,
       }),
     ).toEqual(["password", "terms"]);
-  });
-});
-
-describe("toDevice", () => {
-  it("maps a device", () => {
-    expect(
-      toDevice({
-        id: "s1",
-        device: "Chrome on Windows",
-        location: null,
-        last_seen_at: "2026-10-15T08:00:00Z",
-        current: true,
-      }),
-    ).toEqual({
-      id: "s1",
-      label: "Chrome on Windows",
-      place: null,
-      lastActiveAt: Date.parse("2026-10-15T08:00:00Z"),
-      current: true,
-    });
-  });
-  it("leaves out a last-seen time it can't read", () => {
-    expect(
-      toDevice({
-        id: "s2",
-        device: "Firefox on Linux",
-        location: null,
-        last_seen_at: "not a date",
-        current: false,
-      }).lastActiveAt,
-    ).toBeNull();
   });
 });
