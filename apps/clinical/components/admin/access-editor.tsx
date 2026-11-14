@@ -8,6 +8,12 @@ import type {
 } from "@/lib/api/admin-contract";
 import { useUpdateStaff } from "@/lib/admin-queries";
 import { NOT_AVAILABLE, type AdminError } from "@/lib/admin/errors";
+import {
+  ANALYST_GIVES,
+  analystBlocked,
+  analystChangeNote,
+  analystError,
+} from "@/lib/admin/analyst";
 import { ROLE_LABEL, SELF_ADD, guardFor, rolesText } from "@/lib/admin/staff";
 import { useAuth } from "@/lib/auth/auth-context";
 import { analysisOn } from "@/lib/auth/types";
@@ -20,8 +26,7 @@ import { StepUpDialog } from "./step-up-fields";
 
 const ROLES: readonly StaffRole[] = ["clinician", "analyst", "hospital_admin"];
 const ROLE_HINT: Partial<Record<StaffRole, string>> = {
-  analyst:
-    "Sees Analysis for this hospital: counts and de-identified patients.",
+  analyst: ANALYST_GIVES,
 };
 
 export interface AccessDraft {
@@ -111,10 +116,14 @@ export function AccessEditor({
     row.specialty && !specialties.includes(row.specialty)
       ? [row.specialty, ...specialties]
       : specialties;
-  const shownRoles = ROLES.filter((r) => r !== "analyst" || analysisOn(user));
+  const shownRoles = ROLES;
   // You can't give yourself a role (core: 403 self_change, ruling 14 Nov).
   const selfLocked = (r: StaffRole) => row.is_you && !row.roles.includes(r);
   const anySelfLocked = shownRoles.some(selfLocked);
+  // Analyst: off for the hospital, deactivated or without two-step can't be
+  // given it (core's 409 analysis_off, 422 not_eligible); said beside the box.
+  const analystBlock = analystBlocked(row, analysisOn(user));
+  const analystNote = patch?.roles ? analystChangeNote(row, patch.roles) : null;
 
   return (
     <section aria-labelledby={heading} className="flex flex-col gap-4">
@@ -131,6 +140,7 @@ export function AccessEditor({
               r === "hospital_admin" && !lock.ok && draft.roles.includes(r);
             const needsClinician = r === "analyst" && !clinician;
             const self = selfLocked(r);
+            const blocked = r === "analyst" && !!analystBlock && !self;
             const hintId = `${lockId}-${r}`;
             const describedBy =
               [lockedAdmin && lockId, self && selfId, ROLE_HINT[r] && hintId]
@@ -143,7 +153,7 @@ export function AccessEditor({
                     type="checkbox"
                     className="size-4 accent-mint"
                     checked={draft.roles.includes(r) && !needsClinician}
-                    disabled={lockedAdmin || needsClinician || self}
+                    disabled={lockedAdmin || needsClinician || self || blocked}
                     aria-describedby={describedBy}
                     onChange={() =>
                       setDraft((d) => ({ ...d, roles: toggle(d.roles, r) }))
@@ -154,7 +164,13 @@ export function AccessEditor({
                 {ROLE_HINT[r] && (
                   <p id={hintId} className="max-w-56 text-[12px] text-ink-3">
                     {ROLE_HINT[r]}
-                    {needsClinician && " Needs the Clinician role."}
+                    {blocked ? (
+                      <b className="mt-0.5 block font-semibold text-ink-2">
+                        {analystBlock}
+                      </b>
+                    ) : (
+                      needsClinician && " Tick Clinician first."
+                    )}
                   </p>
                 )}
               </div>
@@ -268,6 +284,7 @@ export function AccessEditor({
           blockedTitle="Turn on two-step verification in Profile & security to change staff access."
           offline={!online}
           send={(auth) => update.mutateAsync({ id: row.id, p: patch, auth })}
+          explain={(e) => analystError(e, row)}
           reset={update.reset}
           onKeep={() => setConfirming(false)}
           onDone={() => {
@@ -291,6 +308,7 @@ export function AccessEditor({
             {patch.specialty !== undefined &&
               ` Specialty: ${patch.specialty ?? "none"}.`}
           </p>
+          {analystNote && <p className="mt-2">{analystNote}</p>}
           {row.is_you && (
             <p className="mt-2">It takes effect next time you sign in.</p>
           )}
