@@ -10,6 +10,10 @@ export type FieldKind = "settings" | "credentials";
 /** The DOM id of one of the type's fields, so a form can focus it. */
 export const fieldId = (prefix: string, key: string) => `${prefix}-f-${key}`;
 
+/** A secret long enough to be a key file (core's `max` 1,000 and up): several lines. */
+const multiLine = (f: { kind: string; max: number }) =>
+  f.kind === "secret" && f.max >= 1000;
+
 /**
  * The fields the connection type declares, as given by the API. A secret is
  * write-only: in edit mode a saved one reads "Set · {date}" with Replace;
@@ -90,25 +94,43 @@ export function ConnectorFields({
             >
               {f.label}
             </label>
-            <input
-              id={id}
-              type={secret ? "password" : "text"}
-              autoComplete="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              value={(secret ? secrets : values)[f.key] ?? ""}
-              disabled={disabled}
-              aria-invalid={err ? true : undefined}
-              aria-describedby={describedBy}
-              onChange={(e) =>
-                onChange(
-                  secret ? "credentials" : "settings",
-                  f.key,
-                  e.target.value,
-                )
-              }
-              className={inputClass}
-            />
+            {secret && multiLine(f) ? (
+              // A key file (PEM) has line breaks, which a password box
+              // strips: a box of several lines, its text masked.
+              <textarea
+                id={id}
+                rows={4}
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                value={secrets[f.key] ?? ""}
+                disabled={disabled}
+                aria-invalid={err ? true : undefined}
+                aria-describedby={describedBy}
+                onChange={(e) => onChange("credentials", f.key, e.target.value)}
+                className={`${inputClass} font-mono [-webkit-text-security:disc]`}
+              />
+            ) : (
+              <input
+                id={id}
+                type={secret ? "password" : "text"}
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                value={(secret ? secrets : values)[f.key] ?? ""}
+                disabled={disabled}
+                aria-invalid={err ? true : undefined}
+                aria-describedby={describedBy}
+                onChange={(e) =>
+                  onChange(
+                    secret ? "credentials" : "settings",
+                    f.key,
+                    e.target.value,
+                  )
+                }
+                className={inputClass}
+              />
+            )}
             {hint && (
               <p id={`${id}-hint`} className="mt-1 text-[12px] text-ink-3">
                 {hint}

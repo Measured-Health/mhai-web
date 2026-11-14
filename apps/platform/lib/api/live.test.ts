@@ -70,6 +70,75 @@ const LETTERS = () =>
     clearances: [{ id: "cl_wait", today: "2026-10-23" }],
     next_cursor: null,
   });
+/** A record connection exactly as core openapi 1.20.0 sends it (synthetic). */
+const coreConnection = (over: Record<string, unknown> = {}) => ({
+  id: "emr_hv1",
+  hospital: { id: "h_havana", name: "Havana Hospital" },
+  type: "fhir_r4",
+  type_label: "FHIR R4 server",
+  source_label: "Main record",
+  enabled: false,
+  health: "never",
+  last_test: null,
+  last_sync: null,
+  errors_24h: 0,
+  paused: false,
+  credentials_missing: false,
+  base_url: "https://records.havana.example/fhir",
+  settings: { client_id: "a" },
+  credentials: [{ key: "private_key", set_at: "2026-11-14T03:00:00Z" }],
+  errors: [],
+  updated_by: null,
+  updated_at: null,
+  version: 1,
+  poll_seconds: 300,
+  private_network: false,
+  private_cidrs: [],
+  ...over,
+});
+const CONNECTION = () => Response.json(coreConnection());
+const CONNECTIONS = () =>
+  Response.json({
+    connections: [
+      Object.fromEntries(
+        Object.entries(coreConnection()).filter(
+          ([k]) =>
+            ![
+              "base_url",
+              "settings",
+              "credentials",
+              "errors",
+              "updated_by",
+              "updated_at",
+              "version",
+              "poll_seconds",
+              "private_network",
+              "private_cidrs",
+            ].includes(k),
+        ),
+      ),
+    ],
+    not_connected: [{ id: "h_west", name: "Westfield Clinic" }],
+  });
+const TYPES = () =>
+  Response.json({
+    types: [
+      {
+        id: "fhir_r4",
+        label: "FHIR R4 server",
+        summary: "Reads results.",
+        fields: [
+          {
+            key: "client_id",
+            label: "Client id",
+            kind: "text",
+            required: true,
+            max: 200,
+          },
+        ],
+      },
+    ],
+  });
 /** The switch as the server sends it: with Measured Health's day. */
 const SWITCH = () =>
   Response.json({ global: {}, hospitals: [], today: "2026-10-23" });
@@ -700,6 +769,7 @@ const ROWS: Row[] = [
     "GET",
     "/api/v1/platform/emr/connector-types",
     undefined,
+    TYPES,
   ],
   [
     "listConnections",
@@ -707,6 +777,7 @@ const ROWS: Row[] = [
     "GET",
     "/api/v1/platform/emr/connections?hospital=h_havana&state=off",
     undefined,
+    CONNECTIONS,
   ],
   [
     "getConnection",
@@ -714,6 +785,7 @@ const ROWS: Row[] = [
     "GET",
     "/api/v1/platform/emr/connections/emr_hv1",
     undefined,
+    CONNECTION,
   ],
   [
     "addConnection",
@@ -740,6 +812,7 @@ const ROWS: Row[] = [
       credentials: { private_key: "k" },
       mfa_code: "123456",
     },
+    CONNECTION,
   ],
   [
     "updateConnection",
@@ -752,6 +825,7 @@ const ROWS: Row[] = [
     "PATCH",
     "/api/v1/platform/emr/connections/emr_hv1",
     { source_label: "Main", version: 2, mfa_code: "123456" },
+    CONNECTION,
   ],
   [
     "setConnectionEnabled",
@@ -764,6 +838,7 @@ const ROWS: Row[] = [
     "PUT",
     "/api/v1/platform/emr/connections/emr_hv1/enabled",
     { enabled: false, version: 2, backup_code: "AAAA-BBBB" },
+    CONNECTION,
   ],
   [
     "testConnection",
@@ -771,6 +846,7 @@ const ROWS: Row[] = [
     "POST",
     "/api/v1/platform/emr/connections/emr_hv1/test",
     undefined,
+    CONNECTION,
   ],
   [
     "listClearances",
@@ -1049,7 +1125,29 @@ describe("live platform client", () => {
     ]);
   });
 
+  it("reads record connections strictly: core's shape passes, anything else is 502", async () => {
+    reply(CONNECTION);
+    expect(await client().getConnection("emr_hv1")).toEqual(coreConnection());
+    for (const bad of [
+      coreConnection({ extra: "x" }),
+      coreConnection({ private_cidrs: undefined }),
+      coreConnection({ credentials: [{ key: "private_key", value: "s" }] }),
+      coreConnection({
+        last_test: { at: "2026-11-14T03:00:00Z", ok: false, code: "boom" },
+      }),
+    ]) {
+      reply(() => Response.json(bad));
+      await expect(client().getConnection("emr_hv1")).rejects.toMatchObject({
+        status: 502,
+        code: "bad_gateway",
+      });
+    }
+  });
+
   it("the connections list sends hospital and state, and leaves out unset ones", async () => {
+    fetchImpl.mockImplementation(async (u) =>
+      /connections\/[^?]/.test(String(u)) ? CONNECTION() : CONNECTIONS(),
+    );
     await client().listConnections({});
     await client().listConnections({ state: "not_connected" });
     await client().listConnections({ hospital: "h_a b", state: "all" });

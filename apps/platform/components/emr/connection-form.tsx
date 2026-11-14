@@ -14,6 +14,7 @@ import type {
   EmrConnection,
 } from "@/lib/api/emr-contract";
 import {
+  privateRanges,
   validateConnection,
   type ConnectionForm as FormValues,
 } from "@/lib/emr/state";
@@ -61,6 +62,15 @@ function pick(d: Draft) {
   return { settings, credentials };
 }
 
+/** The private network part: only when it is on (core needs the ranges then). */
+const privatePart = (d: Draft) =>
+  d.form.private_network
+    ? {
+        private_network: true,
+        private_cidrs: privateRanges(d.form.private_cidrs),
+      }
+    : {};
+
 /** What Add sends, without the person's code. */
 export function addInput(d: Draft): Omit<ConnectionIn, keyof StepUp> {
   return {
@@ -68,6 +78,7 @@ export function addInput(d: Draft): Omit<ConnectionIn, keyof StepUp> {
     source_label: d.form.source_label.trim(),
     base_url: d.form.base_url.trim(),
     ...pick(d),
+    ...privatePart(d),
   };
 }
 
@@ -90,6 +101,12 @@ export function patchInput(
     }
   if (Object.keys(changed).length) out.settings = changed;
   if (Object.keys(credentials).length) out.credentials = credentials;
+  const on = d.form.private_network === true;
+  const ranges = on ? privateRanges(d.form.private_cidrs) : [];
+  const saved = c.private_cidrs ?? [];
+  if (on !== (c.private_network ?? false)) out.private_network = on;
+  if (ranges.join(",") !== (c.private_network ? saved.join(",") : ""))
+    out.private_cidrs = ranges;
   return out;
 }
 
@@ -97,7 +114,9 @@ export function patchInput(
 const needsTest = (p: ReturnType<typeof patchInput>) =>
   p.base_url !== undefined ||
   p.settings !== undefined ||
-  p.credentials !== undefined;
+  p.credentials !== undefined ||
+  p.private_network !== undefined ||
+  p.private_cidrs !== undefined;
 
 /**
  * The form for adding a connection or changing one. It checks the fields,
@@ -144,6 +163,12 @@ export function ConnectionForm({
     connection?.settings ?? {},
   );
   const [credentials, setCredentials] = useState<Record<string, string>>({});
+  const [privateNetwork, setPrivateNetwork] = useState(
+    connection?.private_network ?? false,
+  );
+  const [privateCidrs, setPrivateCidrs] = useState(
+    (connection?.private_cidrs ?? []).join("\n"),
+  );
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [asking, setAsking] = useState(false);
   const [focusReq, setFocusReq] = useState<{ k: string } | null>(null);
@@ -165,6 +190,8 @@ export function ConnectionForm({
       base_url: baseUrl,
       settings,
       credentials,
+      private_network: privateNetwork,
+      private_cidrs: privateCidrs,
     },
   });
   const dirty = connection
@@ -174,7 +201,8 @@ export function ConnectionForm({
       baseUrl !== "" ||
       typeId !== "" ||
       Object.values(settings).some(Boolean) ||
-      Object.values(credentials).some(Boolean);
+      Object.values(credentials).some(Boolean) ||
+      privateNetwork;
 
   const clear = (k: string) => setErrors((p) => ({ ...p, [k]: undefined }));
   const pickType = (t: string) => {
@@ -205,12 +233,15 @@ export function ConnectionForm({
       "source_label",
       "base_url",
       ...type.fields.map((f) => f.key),
+      "private_cidrs",
     ];
     const first = order.find((k) => errs[k]);
     if (first)
       return setFocusReq({
         k:
-          first === "source_label" || first === "base_url"
+          first === "source_label" ||
+          first === "base_url" ||
+          first === "private_cidrs"
             ? `${id}-${first}`
             : fieldId(id, first),
       });
@@ -348,6 +379,20 @@ export function ConnectionForm({
                 idPrefix={id}
               />
             )}
+            <PrivateNetwork
+              id={id}
+              on={privateNetwork}
+              ranges={privateCidrs}
+              error={errors.private_cidrs}
+              onToggle={(v) => {
+                setPrivateNetwork(v);
+                clear("private_cidrs");
+              }}
+              onRanges={(v) => {
+                setPrivateCidrs(v);
+                clear("private_cidrs");
+              }}
+            />
           </>
         )}
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -373,5 +418,73 @@ export function ConnectionForm({
         }}
       />
     </>
+  );
+}
+
+/**
+ * A record system inside the hospital's own network (core 1.20.0,
+ * additive): MHAI reaches it only at the ranges declared here, never any
+ * other private address.
+ */
+function PrivateNetwork({
+  id,
+  on,
+  ranges,
+  error,
+  onToggle,
+  onRanges,
+}: {
+  id: string;
+  on: boolean;
+  ranges: string;
+  error?: string;
+  onToggle(v: boolean): void;
+  onRanges(v: string): void;
+}) {
+  const fid = `${id}-private_cidrs`;
+  const hint = `${fid}-hint`;
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex min-h-11 items-center gap-2 text-[13.5px]">
+        <input
+          type="checkbox"
+          checked={on}
+          onChange={(e) => onToggle(e.target.checked)}
+          className="size-4"
+        />
+        It is on the hospital&apos;s private network
+      </label>
+      {on && (
+        <div>
+          <label
+            htmlFor={fid}
+            className="mb-1.5 block text-[12.5px] text-ink-2"
+          >
+            Private address ranges
+          </label>
+          <textarea
+            id={fid}
+            rows={2}
+            autoComplete="off"
+            spellCheck={false}
+            value={ranges}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={[error && `${fid}-err`, hint]
+              .filter(Boolean)
+              .join(" ")}
+            onChange={(e) => onRanges(e.target.value)}
+            className={inputClass}
+          />
+          <p id={hint} className="mt-1 text-[12px] text-ink-3">
+            One per line, for example 10.20.30.0/24. MHAI reaches only these.
+          </p>
+          {error && (
+            <p id={`${fid}-err`} className="mt-1 text-[13px] text-bad">
+              {error}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

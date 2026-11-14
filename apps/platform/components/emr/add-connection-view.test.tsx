@@ -161,6 +161,69 @@ describe("Add a connection", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("names the hospital from the record connections alone (core serves no hospital list yet)", async () => {
+    vi.spyOn(api, "listHospitals").mockRejectedValue(new Error("not served"));
+    vi.spyOn(api, "getHospital").mockRejectedValue(new Error("not served"));
+    renderWithAuth(<AddConnectionView />);
+    expect(await screen.findByText("Westfield Clinic")).toBeVisible();
+    expect(
+      await screen.findByRole("radio", { name: /FHIR R4 server/ }),
+    ).toBeInTheDocument();
+    nav.search = "";
+  });
+
+  it("a hospital that isn't listed gets the picker", async () => {
+    nav.search = "hospital=h_nowhere";
+    renderWithAuth(<AddConnectionView />);
+    expect(
+      await screen.findByText(
+        "That hospital wasn't found, or has been removed. Choose one below.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("keeps a key file's line breaks, and sends a private network's ranges", async () => {
+    const spy = vi.spyOn(api, "addConnection");
+    const pem =
+      "-----BEGIN PRIVATE KEY-----\nAAAA\nBBBB\n-----END PRIVATE KEY-----";
+    renderWithAuth(<AddConnectionView />);
+    await userEvent.click(
+      await screen.findByRole("radio", { name: /FHIR R4 server/ }),
+    );
+    await type("Name the hospital sees", "On-site record");
+    await type("Base address", "https://records.westfield.example/fhir");
+    await type("Client ID", "mhai-westfield");
+    const key = screen.getByLabelText("Private key");
+    expect(key.tagName).toBe("TEXTAREA");
+    await userEvent.click(key);
+    await userEvent.paste(pem);
+    await userEvent.click(
+      screen.getByRole("checkbox", {
+        name: "It is on the hospital's private network",
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      screen.getByText("Enter the network ranges the system is on."),
+    ).toBeVisible();
+    await type("Private address ranges", "10.20.30.0/24\n192.168.4.0/28");
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const d = screen.getByRole("dialog", {
+      name: "Add FHIR R4 server for Westfield Clinic?",
+    });
+    await userEvent.click(within(d).getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard(MOCK_CODE);
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Add connection" }),
+    );
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    expect(spy.mock.calls[0]![1]).toMatchObject({
+      credentials: { private_key: pem },
+      private_network: true,
+      private_cidrs: ["10.20.30.0/24", "192.168.4.0/28"],
+    });
+  });
+
   it("without a hospital it shows a picker of hospitals", async () => {
     nav.search = "";
     renderWithAuth(<AddConnectionView />);

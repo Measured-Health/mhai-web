@@ -55,6 +55,10 @@ export type EmrConnectionSummary = {
   last_sync: { at: string; ok: boolean; records: number } | null;
   /** Errors in the last 24 hours, summed. */
   errors_24h: number;
+  /** The source was paused by the safety breaker (core 1.20.0). */
+  paused?: boolean;
+  /** A required credential isn't set for the current address: send it again. */
+  credentials_missing?: boolean;
 };
 export type EmrConnection = EmrConnectionSummary & {
   base_url: string;
@@ -67,6 +71,17 @@ export type EmrConnection = EmrConnectionSummary & {
   updated_by: Person | null;
   updated_at: string | null;
   version: number;
+  /** How often it is read, in seconds (60 to 86,400). */
+  poll_seconds?: number;
+  /** On the hospital's private network, reached only at `private_cidrs`. */
+  private_network?: boolean;
+  private_cidrs?: string[];
+};
+
+/** A private network, as core takes it: on, with at most 8 ranges. */
+export type PrivateNetworkIn = {
+  private_network?: boolean;
+  private_cidrs?: string[];
 };
 
 /** What the screens show, from `connectionState` (lib/emr/state.ts). */
@@ -88,7 +103,8 @@ export type ConnectionIn = {
   base_url: string; // https only, ≤ 500
   settings: Record<string, string>;
   credentials: Record<string, string>; // secret fields, each 1–4000
-} & StepUp;
+} & PrivateNetworkIn &
+  StepUp;
 export type ConnectionPatch = {
   source_label?: string;
   base_url?: string;
@@ -96,7 +112,8 @@ export type ConnectionPatch = {
   /** Only the ones being replaced. */
   credentials?: Record<string, string>;
   version: number;
-} & StepUp;
+} & PrivateNetworkIn &
+  StepUp;
 
 export interface EmrClient {
   listConnectorTypes(): Promise<{ types: ConnectorType[] }>;
