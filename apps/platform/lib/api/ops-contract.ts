@@ -25,6 +25,11 @@ export type HealthOut = {
   errors: { kind: ErrorKind; last_hour: number; last_24h: number }[];
   versions: { part: PartKey; label: string }[];
   triage: { enabled: boolean };
+  /**
+   * The sample reading's. Core (1.20.0) doesn't send it until the clean-up
+   * service exists, nor the `clean_up` and `documents` parts: the reader
+   * (lib/ops/health.ts) takes both shapes.
+   */
   clean_up: {
     last_run_at: string | null;
     ok: boolean | null;

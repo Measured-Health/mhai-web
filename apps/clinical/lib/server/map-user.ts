@@ -1,6 +1,6 @@
-import type { ApiSession, ApiUser } from "../api/auth-contract";
+import type { ApiUser } from "../api/auth-contract";
 import { analysisSignedOff, namedSignedOff } from "./features";
-import type { Device, FirstStep, Role, User } from "../auth/types";
+import type { FirstStep, Role, User } from "../auth/types";
 
 export type { ApiUser, ApiLoginOk, ApiMfaRequired } from "../api/auth-contract";
 
@@ -88,15 +88,4 @@ export function stepsFor(u: ApiUser): FirstStep[] {
   if (u.must_change_password || u.terms_accepted_at === null)
     steps.push("terms");
   return steps;
-}
-
-export function toDevice(s: ApiSession): Device {
-  const seen = Date.parse(s.last_seen_at);
-  return {
-    id: s.id,
-    label: s.device,
-    place: s.location ?? null,
-    lastActiveAt: Number.isFinite(seen) ? seen : null,
-    current: s.current,
-  };
 }

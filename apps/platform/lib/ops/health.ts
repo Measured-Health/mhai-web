@@ -26,14 +26,26 @@ export type Block<T> = { status: "ok"; value: T } | { status: "failed" };
 export type PartsValue = {
   parts: { key: PartKey; status: PartStatus; since: string }[];
   triage: { enabled: boolean };
+  /** Null until core runs the clean-up service (no `clean_up` part). */
   cleanUp: {
     last_run_at: string | null;
     ok: boolean | null;
     paused: boolean;
     paused_by: Person | null;
     paused_at: string | null;
-  };
+  } | null;
 };
+
+/**
+ * The parts core always sends (openapi 1.20.0); `documents` and `clean_up`
+ * come only once those services exist.
+ */
+const REQUIRED_PARTS: readonly PartKey[] = [
+  "app",
+  "workers",
+  "evidence",
+  "guidelines",
+];
 export type QueueValue = { waiting: number; oldest_wait_s: number | null };
 export type FailedJobsValue = { now: number; last_24h: number };
 export type TimingValue = { last_hour: TimingBlock; last_24h: TimingBlock };
@@ -94,7 +106,7 @@ function readTimingBlock(v: unknown): TimingBlock | null {
 
 function readParts(o: Partial<HealthOut>): Block<PartsValue> {
   const { parts, triage, clean_up: c } = o as Record<string, unknown>;
-  if (!Array.isArray(parts) || !isObj(triage) || !isObj(c)) return FAILED;
+  if (!Array.isArray(parts) || !isObj(triage)) return FAILED;
   if (typeof triage.enabled !== "boolean") return FAILED;
   const rows: PartsValue["parts"] = [];
   for (const p of parts) {
@@ -107,12 +119,20 @@ function readParts(o: Partial<HealthOut>): Block<PartsValue> {
       return FAILED;
     rows.push({ key: p.key, status: p.status, since: p.since });
   }
-  if (
-    new Set(rows.map((r) => r.key)).size !== PART_KEYS.length ||
-    rows.length !== PART_KEYS.length
-  )
+  const keys = new Set(rows.map((r) => r.key));
+  // Each part once, every part core always sends, and the clean-up block
+  // exactly when the clean-up part is there.
+  if (keys.size !== rows.length || !REQUIRED_PARTS.every((k) => keys.has(k)))
     return FAILED;
+  if (keys.has("clean_up") !== (c !== undefined)) return FAILED;
+  if (c === undefined)
+    return ok({
+      parts: rows,
+      triage: { enabled: triage.enabled },
+      cleanUp: null,
+    });
   if (
+    !isObj(c) ||
     !(c.last_run_at === null || isTime(c.last_run_at)) ||
     !(c.ok === null || typeof c.ok === "boolean") ||
     typeof c.paused !== "boolean" ||

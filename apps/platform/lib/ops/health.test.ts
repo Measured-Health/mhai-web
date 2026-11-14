@@ -94,6 +94,75 @@ describe("readHealth", () => {
       expect(s.blocks[b].status).toBe("ok");
   });
 
+  it("reads core 1.20.0's reading: four parts, no clean-up block yet", () => {
+    const core = {
+      updated_at: new Date(NOW - 5_000).toISOString(),
+      overall: "problem",
+      parts: [
+        { key: "app", status: "ok", since: "2026-10-22T11:00:00.898Z" },
+        { key: "workers", status: "ok", since: "2026-10-22T11:00:12.895Z" },
+        { key: "evidence", status: "ok", since: "2026-10-22T11:00:12.895Z" },
+        {
+          key: "guidelines",
+          status: "problem",
+          since: "2026-10-22T11:00:00.898Z",
+        },
+      ],
+      queue: { waiting: 0, oldest_wait_s: null },
+      failed_jobs: { now: 0, last_24h: 0 },
+      timing: {
+        last_hour: {
+          overall: { p50_ms: 29, p95_ms: 29 },
+          steps: [
+            { step: "privacy", p50_ms: 0, p95_ms: 0 },
+            { step: "guidelines", p50_ms: 1, p95_ms: 1 },
+            { step: "answer", p50_ms: 0, p95_ms: 0 },
+            { step: "evidence", p50_ms: 0, p95_ms: 0 },
+          ],
+        },
+        last_24h: {
+          overall: { p50_ms: 29, p95_ms: 29 },
+          steps: [
+            { step: "privacy", p50_ms: 0, p95_ms: 0 },
+            { step: "guidelines", p50_ms: 1, p95_ms: 1 },
+            { step: "answer", p50_ms: 0, p95_ms: 0 },
+            { step: "evidence", p50_ms: 0, p95_ms: 0 },
+          ],
+        },
+      },
+      errors: [
+        { kind: "timeout", last_hour: 0, last_24h: 0 },
+        { kind: "unreachable", last_hour: 0, last_24h: 0 },
+        { kind: "unreadable", last_hour: 0, last_24h: 0 },
+        { kind: "invalid", last_hour: 0, last_24h: 0 },
+        { kind: "other", last_hour: 0, last_24h: 0 },
+      ],
+      versions: [],
+      triage: { enabled: false },
+    } as unknown as HealthOut;
+    const s = read(core);
+    for (const b of BLOCKS) expect(s.blocks[b].status).toBe("ok");
+    const parts = s.blocks.parts;
+    expect(
+      parts.status === "ok" && parts.value.parts.map((p) => p.key),
+    ).toEqual(["app", "workers", "evidence", "guidelines"]);
+    expect(parts.status === "ok" && parts.value.cleanUp).toBeNull();
+  });
+
+  it("the clean-up part needs its block, and its block needs the part", () => {
+    const out = fresh();
+    const noBlock = { ...out } as Record<string, unknown>;
+    delete noBlock.clean_up;
+    expect(read(noBlock as unknown as HealthOut).blocks.parts.status).toBe(
+      "failed",
+    );
+    const noPart = {
+      ...out,
+      parts: out.parts.filter((p) => p.key !== "clean_up"),
+    };
+    expect(read(noPart).blocks.parts.status).toBe("failed");
+  });
+
   it("a part missing or repeated fails the parts block alone", () => {
     const out = fresh();
     const missing = { ...out, parts: out.parts.slice(1) };

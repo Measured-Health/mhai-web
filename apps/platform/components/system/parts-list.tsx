@@ -18,7 +18,7 @@ export function PartsList({ value, now }: { value: PartsValue; now: number }) {
               since {timeLabel(p.since, now)}
             </span>
           </div>
-          {p.key === "clean_up" && (
+          {p.key === "clean_up" && cleanUp && (
             <div className="mt-1 pl-7 text-[13px] text-ink-2">
               <p>
                 {cleanUp.last_run_at
