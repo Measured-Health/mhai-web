@@ -11,6 +11,7 @@ import {
 import type { QueryCreateIn, Urgency } from "./api/contract";
 import { resetAlertsClient } from "./api/alerts";
 import { resetEmrClient } from "./api/emr";
+import { resetPatientsClient } from "./api/patients";
 import { clearPrefill } from "./notifications/ask";
 import { RESULT_LABEL, type ResultKind } from "./labels";
 
@@ -109,6 +110,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     clearPrefill();
     resetAlertsClient();
     resetEmrClient();
+    resetPatientsClient();
   }, [queryClient]);
   const value = useMemo(
     () => ({

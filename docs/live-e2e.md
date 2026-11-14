@@ -99,7 +99,10 @@ work live:
 - Usage's What changed fails closed while alerts are on (F4, F10 in
   TODO.md).
 
-And these have a route in core but no screen yet: patient matches and
-exclusions (`/hospital/patient-matches`, `/hospital/patient-exclusions`),
-the EMR rule set (`/platform/hospitals/{id}/emr-rule-set`) and granting the
-analyst role (`core users roles` only).
+Patient matches and exclusions (`/hospital/patient-matches`,
+`/hospital/patient-exclusions`) and the EMR rule set
+(`/platform/hospitals/{id}/emr-rule-set`) have screens now: Hospital admin →
+Patient matches and Patient exclusions, and the hospital page's Patient
+alerts section. The live specs `06-patients` (clinical) and
+`05-rule-set` (platform) read them; the seed still activates the rule set
+directly in the database.

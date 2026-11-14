@@ -52,6 +52,10 @@ import {
   type ModelPolicyMockOptions,
 } from "./mock-model-policy";
 import {
+  emrRuleSetMock,
+  type EmrRuleSetMockOptions,
+} from "./mock-emr-rule-set";
+import {
   createClearanceMock,
   type ClearanceMockOptions,
 } from "./mock-clearances";
@@ -232,6 +236,7 @@ export function createMockPlatform({
   clearances,
   analysis,
   cloudProviders,
+  emrEnabled,
   onCore,
 }: {
   now?: () => number;
@@ -265,6 +270,8 @@ export function createMockPlatform({
   analysis?: AnalysisMode;
   /** The cloud providers the deployment enables (see `ModelPolicyMockOptions`). */
   cloudProviders?: ModelPolicyMockOptions["cloudProviders"];
+  /** Patient records are on for the deployment (see `EmrRuleSetMockOptions`). */
+  emrEnabled?: EmrRuleSetMockOptions["emrEnabled"];
   /** For tests: the core the areas are built on, once it exists. */
   onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
@@ -1119,5 +1126,6 @@ export function createMockPlatform({
     ...createClearanceMock(core, { clearances }),
     ...analysisMock(core, { analysis }),
     ...modelPolicyMock(core, { cloudProviders }),
+    ...emrRuleSetMock(core, { emrEnabled }),
   };
 }

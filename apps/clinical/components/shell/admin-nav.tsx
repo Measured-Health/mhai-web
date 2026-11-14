@@ -5,7 +5,9 @@ import {
   ChartColumn,
   ChartPie,
   FileKey,
+  GitMerge,
   Settings,
+  UserX,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -31,6 +33,18 @@ export const ADMIN_LINKS = [
     label: "Alert settings",
     sub: "Units, what to flag, who hears",
     Icon: BellRing,
+  },
+  {
+    href: "/admin/patient-matches",
+    label: "Patient matches",
+    sub: "Possible duplicate patients",
+    Icon: GitMerge,
+  },
+  {
+    href: "/admin/patient-exclusions",
+    label: "Patient exclusions",
+    sub: "Stop using a patient's records",
+    Icon: UserX,
   },
   {
     href: "/admin/activity",
