@@ -9,6 +9,7 @@ import type { PatientLink } from "@/lib/patient-link";
 import { Button } from "@mhai/ui/button";
 import { cn } from "@mhai/ui/cn";
 import { ErrorSummary } from "./error-summary";
+import { PatientFinder } from "./patient-finder";
 import { PriorityPicker } from "./priority-picker";
 import { Segmented } from "./segmented";
 import { SymptomInput } from "./symptom-input";
@@ -83,7 +84,7 @@ function Field({
 
 /**
  * "About patient": the patient the question is linked to, as the alert the
- * clinician started from showed them. Only MHAI's id for the patient is sent;
+ * clinician started from showed them, or as "Find patient by MRN" found them. Only MHAI's id for the patient is sent;
  * the name and MRN stay on this screen, in memory.
  */
 function AboutPatient({
@@ -135,6 +136,7 @@ export function ConsultationForm({
   initial = emptyForm,
   patient = null,
   onClearPatient,
+  onFindPatient,
   onSubmit,
   onDirtyChange,
 }: {
@@ -142,6 +144,8 @@ export function ConsultationForm({
   /** The patient the question is about, from an alert; null when none. */
   patient?: PatientLink | null;
   onClearPatient?(): void;
+  /** Offers "Find patient by MRN" while no patient is linked. */
+  onFindPatient?(patient: PatientLink): void;
   onSubmit(q: QueryCreateIn): void;
   onDirtyChange?(dirty: boolean): void;
 }) {
@@ -271,6 +275,17 @@ export function ConsultationForm({
               onClearPatient();
               // The button is gone: the focus moves to the first field.
               formRef.current?.querySelector<HTMLElement>("#age")?.focus();
+            }}
+          />
+        )}
+        {!patient && onFindPatient && (
+          <PatientFinder
+            onFound={(p) => {
+              flushSync(() => onFindPatient(p));
+              // The box is gone: the focus moves to the patient's Remove.
+              formRef.current
+                ?.querySelector<HTMLElement>("#f-patient button")
+                ?.focus();
             }}
           />
         )}
