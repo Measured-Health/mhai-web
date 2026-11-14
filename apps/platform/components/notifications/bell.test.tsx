@@ -1,4 +1,4 @@
-import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { onlineManager } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -362,20 +362,32 @@ describe("the analytics bell", () => {
     expect(await bell()).toHaveFocus();
   });
 
-  it("an auditor has the bell too, and seen is per person", async () => {
+  it("an auditor has the bell too, but marking seen is a write (core 1.26.0): nothing is sent", async () => {
     who = AMARA.email;
-    const view = renderWithAuth(<NotificationBell />, { user: AMARA });
+    const seen = vi.spyOn(api, "markSeen");
+    renderWithAuth(<NotificationBell />, { user: AMARA });
     await userEvent.click(await bell("Notifications, 6 new"));
     await screen.findByRole("list", { name: "New usage changes" });
-    expect(await bell("Notifications")).toBeInTheDocument();
-    view.unmount();
-    who = ADA.email;
-    renderWithAuth(<NotificationBell />);
+    expect(screen.queryByRole("button", { name: "Mark all seen" })).toBeNull();
     expect(await bell("Notifications, 6 new")).toBeInTheDocument();
-    cleanup();
-    who = AMARA.email;
-    renderWithAuth(<NotificationBell />, { user: AMARA });
-    expect(await bell("Notifications")).toBeInTheDocument();
+    expect(seen).not.toHaveBeenCalled();
+  });
+
+  it("notifications not served yet (501): a calm Not available yet, no retry, no poll", async () => {
+    const list = vi
+      .spyOn(api, "listNotifications")
+      .mockRejectedValue(new ApiError(501, "not_implemented"));
+    const seen = vi.spyOn(api, "markSeen");
+    renderWithAuth(<NotificationBell />);
+    await userEvent.click(await bell("Notifications"));
+    const d = await screen.findByRole("dialog", { name: "Notifications" });
+    expect(await within(d).findByText("Not available yet")).toBeInTheDocument();
+    expect(within(d).queryByText(/Couldn't load/)).toBeNull();
+    expect(within(d).queryByRole("button", { name: "Try again" })).toBeNull();
+    // The first read and the opening's look: never retried.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(list.mock.calls.length).toBeLessThanOrEqual(2);
+    expect(seen).not.toHaveBeenCalled();
   });
 
   it("focus moves into the dialog and back to the bell", async () => {
@@ -482,16 +494,12 @@ describe("the bell's integrity item", () => {
     expect((await api.listNotifications()).unseen).toBe(0);
   });
 
-  it("an auditor sees it, and seen is per person", async () => {
+  it("an auditor sees it, and their opening marks nothing seen", async () => {
     installBroken();
     who = AMARA.email;
-    const view = renderWithAuth(<NotificationBell />, { user: AMARA });
+    renderWithAuth(<NotificationBell />, { user: AMARA });
     await userEvent.click(await bell("Notifications, 7 new"));
     expect(within(list()).getAllByRole("button")[0]).toHaveTextContent(WORDS);
-    expect(await bell("Notifications")).toBeInTheDocument();
-    view.unmount();
-    who = ADA.email;
-    renderWithAuth(<NotificationBell />);
     expect(await bell("Notifications, 7 new")).toBeInTheDocument();
   });
 });

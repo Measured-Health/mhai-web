@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/errors";
 import { useStaff, useStaffAction } from "@/lib/admin-queries";
-import { DEMO_EMAILS } from "@/lib/auth/mock";
+import { DEMO_EMAILS, MOCK_CODE } from "@/lib/auth/mock";
 import type { Role } from "@/lib/auth/types";
 import { screenAdminAs } from "@/tests/admin";
 import { renderWithAuth, TEST_USER } from "@/tests/auth-wrapper";
@@ -37,7 +37,13 @@ function StaffScreen() {
       </p>
       <button
         type="button"
-        onClick={() => act.mutate({ id: "s-okafor", action: "deactivate" })}
+        onClick={() =>
+          act.mutate({
+            id: "s-okafor",
+            action: "deactivate",
+            auth: { mfaCode: MOCK_CODE },
+          })
+        }
       >
         deactivate
       </button>

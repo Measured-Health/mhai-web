@@ -16,7 +16,7 @@ import { safeDayLabel } from "@/lib/clearances/status";
 import { namedAccessFor } from "@/lib/clearances/summary";
 import { eventClock } from "@/lib/time";
 import { adminError } from "@/lib/admin/errors";
-import { inviteNote, policyBroken, sortName } from "@/lib/admin/staff";
+import { policyBroken, sortName } from "@/lib/admin/staff";
 import { useNow } from "@mhai/ui/hooks/use-now";
 import { Avatar } from "../shell/account-menu";
 import { Banner } from "@mhai/ui/banner";
@@ -24,7 +24,7 @@ import { Button } from "@mhai/ui/button";
 import { SidePanel } from "@mhai/ui/side-panel";
 import { Skeleton } from "@mhai/ui/skeleton";
 import { AccessEditor } from "./access-editor";
-import { AccountActions, RemindButton } from "./account-actions";
+import { AccountActions } from "./account-actions";
 import { StaffStatusChip } from "./chips";
 
 const JOINED = new Intl.DateTimeFormat("en-GB", {
@@ -114,20 +114,14 @@ export function StaffPanel({
   return (
     <SidePanel open={staffId !== null} onClose={onClose} title="Staff member">
       {row ? (
-        <Member
-          row={row}
-          list={list}
-          settings={settings.data}
-          now={now}
-          onClose={onClose}
-        />
+        <Member row={row} list={list} settings={settings.data} now={now} />
       ) : staff.isSuccess ? (
         <div role="status">
           <b className="block text-[15px]">
             This person is no longer on the staff list
           </b>
           <p className="mt-1 text-[13.5px] text-ink-2">
-            Someone else may have removed them. Nothing was changed.
+            They may no longer be at this hospital. Nothing was changed.
           </p>
           <Button variant="ghost" className="mt-4" onClick={onClose}>
             Back to staff
@@ -158,17 +152,14 @@ function Member({
   list,
   settings,
   now,
-  onClose,
 }: {
   row: StaffOut;
   list: StaffOut[];
   settings: HospitalSettingsOut | undefined;
   now: number;
-  onClose(): void;
 }) {
   const activity = useStaffActivity(row.id);
   const recentId = useId();
-  const note = inviteNote(row, now);
   const { access: named, retry: retryNamed } = useNamedAccessOf(row);
   return (
     <div className="flex flex-col gap-5">
@@ -181,7 +172,7 @@ function Member({
             {[row.email, joined(row)].filter(Boolean).join(" · ")}
           </small>
           <div className="mt-2">
-            <StaffStatusChip staff={row} now={now} />
+            <StaffStatusChip staff={row} />
           </div>
           {named !== undefined && <NamedAccessLine access={named} />}
           {retryNamed && <NamedAccessFailed retry={retryNamed} />}
@@ -192,10 +183,8 @@ function Member({
         <Banner tone="warn" title="Two-step verification isn't set up">
           Hospital policy requires it. {row.display_name} will be asked at next
           sign-in.
-          <RemindButton row={row} />
         </Banner>
       )}
-      {note && <p className="text-[13px] text-ink-2">{note}</p>}
 
       {settings ? (
         <AccessEditor
@@ -209,12 +198,7 @@ function Member({
         <Skeleton className="h-48" />
       )}
 
-      <AccountActions
-        row={row}
-        list={list}
-        onRemoved={onClose}
-        named={!!named}
-      />
+      <AccountActions row={row} list={list} named={!!named} />
 
       <section aria-labelledby={recentId}>
         <h3 id={recentId} className="mb-2 text-[13px] font-semibold">

@@ -16,15 +16,14 @@ import { HoldHistory } from "./hold-history";
 import { LiftPanel } from "./lift-panel";
 
 /**
- * One legal hold: its facts (the note included), the lift controls and its
- * history. Platform admins edit the review date and note and lift it;
- * auditors see all of it and none of the controls.
+ * One legal hold: its facts, the lift controls and its history. Platform
+ * admins can ask to change the review date (core doesn't serve it yet) and
+ * lift it; auditors see all of it and none of the controls.
  */
 export function HoldView({ id }: { id: string }) {
   const { user } = useAuth();
   const q = useHold(id);
   const [editing, setEditing] = useState(false);
-  const [now] = useState(() => Date.now());
   const h = q.data;
   const gone = q.isError && platformError(q.error).gone;
   const canAct = isPlatformAdmin(user);
@@ -51,7 +50,11 @@ export function HoldView({ id }: { id: string }) {
               </Link>
             </Banner>
           ) : strange || (q.isError && !h) ? (
-            <CouldntLoad what="this legal hold" onRetry={reload} />
+            <CouldntLoad
+              what="this legal hold"
+              error={q.error}
+              onRetry={reload}
+            />
           ) : !shown ? (
             <Loading label="Loading legal hold" />
           ) : (
@@ -64,7 +67,6 @@ export function HoldView({ id }: { id: string }) {
               )}
               <HoldFacts
                 hold={shown}
-                now={now}
                 action={
                   canAct && shown.status !== "lifted" ? (
                     <Button
@@ -72,7 +74,7 @@ export function HoldView({ id }: { id: string }) {
                       variant="ghost"
                       onClick={() => setEditing(true)}
                     >
-                      Edit
+                      Change review date
                     </Button>
                   ) : undefined
                 }

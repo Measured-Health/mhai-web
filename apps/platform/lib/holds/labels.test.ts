@@ -49,28 +49,19 @@ describe("hold labels", () => {
 
   it("words every history event", () => {
     expect(
-      (
-        [
-          "placed",
-          "edited",
-          "lift_requested",
-          "lift_cancelled",
-          "lift_lapsed",
-          "lifted",
-          "lift_undone",
-          "released",
-        ] as const
-      ).map(holdEventLabel),
+      (["placed", "lift_requested", "lift_cancelled", "lifted"] as const).map(
+        holdEventLabel,
+      ),
     ).toEqual([
       "Placed the hold",
-      "Changed the review date or note",
       "Asked to lift the hold",
       "Cancelled the lift request",
-      "The lift request lapsed",
-      "Approved the lift",
-      "Undid the lift",
-      "Records released",
+      "Approved the lift: the hold was lifted",
     ]);
+  });
+
+  it("a hold the command line placed has no reason, and says so", () => {
+    expect(holdReasonLabel(null)).toBe("Not given (placed by the system)");
   });
 
   it("never prints a code it doesn't know", () => {
@@ -78,9 +69,9 @@ describe("hold labels", () => {
     expect(() => holdEventLabel("nope" as HoldEvent["action"])).toThrow();
   });
 
-  it("has the privacy hint", () => {
+  it("says a hold carries no notes and no names", () => {
     expect(HOLD_HINT).toBe(
-      "Don't include patient names, hospital numbers or dates of birth.",
+      "A hold carries no notes and no names: only the reason and a document reference.",
     );
   });
 });

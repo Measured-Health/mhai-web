@@ -1,5 +1,5 @@
 "use client";
-import { Search, UserPlus } from "lucide-react";
+import { Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { StaffOut } from "@/lib/api/admin-contract";
@@ -10,17 +10,15 @@ import {
   staffCounts,
   type StaffFilter,
 } from "@/lib/admin/staff";
-import { adminError } from "@/lib/admin/errors";
+import { NOT_AVAILABLE, adminError } from "@/lib/admin/errors";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
 import { useNow } from "@mhai/ui/hooks/use-now";
-import { useOnline } from "@mhai/ui/hooks/use-online";
 import { FilterChip } from "../corrections/filter-chip";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { Skeleton } from "@mhai/ui/skeleton";
 import { AdminFrame } from "./admin-frame";
-import { InviteDialog } from "./invite-dialog";
 import { StaffPanel } from "./staff-panel";
 import { StaffCards, StaffTable } from "./staff-list";
 
@@ -34,8 +32,6 @@ export function StaffView() {
   const [filter, setFilter] = useState<StaffFilter>("all");
   const [search, setSearch] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
-  const [inviting, setInviting] = useState(false);
-  const online = useOnline();
   const lastOpened = useRef<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -61,8 +57,8 @@ export function StaffView() {
   }, [openId, qc]);
 
   const list = q.data ?? [];
-  const counts = staffCounts(list, now);
-  const rows = filterStaff(list, filter, search, now);
+  const counts = staffCounts(list);
+  const rows = filterStaff(list, filter, search);
   const hospital = user?.hospital ?? "your hospital";
   const failed = q.isError ? adminError(q.error) : null;
   const waiting = q.isPending && !q.isError && q.fetchStatus === "paused";
@@ -73,21 +69,13 @@ export function StaffView() {
     <AdminFrame
       title="Staff"
       actions={
-        <div className="flex flex-col items-end gap-1">
-          <Button
-            disabled={!online}
-            aria-describedby={online ? undefined : "invite-offline"}
-            onClick={() => setInviting(true)}
-          >
-            <UserPlus aria-hidden className="size-4" />
-            Invite staff
-          </Button>
-          {!online && (
-            <p id="invite-offline" className="text-[12px] text-ink-3">
-              You&apos;re offline. Reconnect to invite people.
-            </p>
-          )}
-        </div>
+        <p
+          id="invite-not-yet"
+          className="max-w-72 text-right text-[12.5px] text-ink-3"
+        >
+          <b className="block text-ink-2">Inviting staff: {NOT_AVAILABLE}</b>
+          Measured Health creates staff accounts for now.
+        </p>
       }
     >
       {showControls && (
@@ -182,7 +170,6 @@ export function StaffView() {
       </p>
 
       <StaffPanel staffId={openId} onClose={() => setOpenId(null)} />
-      {inviting && <InviteDialog onClose={() => setInviting(false)} />}
     </AdminFrame>
   );
 }

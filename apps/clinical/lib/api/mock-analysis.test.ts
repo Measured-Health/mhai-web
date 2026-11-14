@@ -173,7 +173,7 @@ describe("sample analysis", () => {
       kind: "analysis_patients_viewed",
       type: "security",
       flag: null,
-      count: 200,
+      count: null,
     });
   });
 
@@ -923,10 +923,11 @@ describe("named patients", () => {
   it("after Analyst is removed, Kemi gets 403", async () => {
     expect(await code(named(KEMI))).toBe("ok");
     const kemi = (await admin.listStaff()).find((s) => s.id === "s-kemi")!;
-    await admin.updateStaff("s-kemi", {
-      version: kemi.version,
-      roles: ["clinician"],
-    });
+    await admin.updateStaff(
+      "s-kemi",
+      { version: kemi.version, roles: ["clinician"] },
+      { mfaCode: MOCK_CODE },
+    );
     expect(await code(named(KEMI))).toBe("403 not_cleared");
     expect(await as(KEMI).getClearanceMe()).toMatchObject({
       named: false,
@@ -988,7 +989,7 @@ describe("named patients", () => {
     ).toBe("ok");
   });
 
-  it("each named view records one flagged event with the count and purpose and no name", async () => {
+  it("each named view records one flagged event with the purpose and no name", async () => {
     const out = await named(GRACE, { purpose: "quality_improvement" });
     if (out.level !== "named") throw new Error("not named");
     const ev = auditEvents();
@@ -997,7 +998,7 @@ describe("named patients", () => {
       kind: "analysis_named_viewed",
       type: "security",
       flag: "alert",
-      count: 200,
+      count: null,
       purpose: "quality_improvement",
       actor: { display_name: "Grace Nwosu" },
       target: null,

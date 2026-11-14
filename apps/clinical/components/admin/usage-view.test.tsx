@@ -198,7 +198,7 @@ describe("UsageView: patient alerts", () => {
     await userEvent.click(screen.getByRole("button", { name: "Export CSV" }));
     const csv = download.mock.calls[0][1] as string;
     expect(csv).toContain("Alerts: total,128\r\n");
-    expect(csv).toContain("Alerts: dismissed as Other,Fewer than 5\r\n");
+    expect(csv).toContain("Alerts: Blood gases and lactate,Fewer than 5\r\n");
     expect(localStorage.length + sessionStorage.length).toBe(0);
   });
 
@@ -206,8 +206,8 @@ describe("UsageView: patient alerts", () => {
     renderAdmin(<UsageView />);
     const group = await screen.findByRole("region", { name: "Patient alerts" });
     expect(
-      within(group).getByRole("region", { name: "What changed" }),
-    ).toHaveTextContent("Critical within 15 min: 71%, down from 88%");
+      within(group).getByRole("region", { name: "Who received them" }),
+    ).toHaveTextContent("Hospital queue97");
     const bySpecialty = screen.getByRole("region", { name: "By specialty" });
     expect(
       bySpecialty.compareDocumentPosition(group) &
@@ -222,12 +222,12 @@ describe("UsageView: patient alerts", () => {
       screen.getByLabelText("Period"),
       "last_90_days",
     );
-    expect(
-      await screen.findByText("Not enough data to compare"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Most alerts in the week of 3 Oct: 45"),
-    ).toBeInTheDocument();
+    const group = await screen.findByRole("region", { name: "Patient alerts" });
+    await waitFor(() =>
+      expect(
+        within(group).getByText("Alerts", { selector: "span" }).closest("div"),
+      ).toHaveTextContent("525"),
+    );
   });
 
   it("shows no alerts group when alerts aren't switched on (Review Focus 5)", async () => {
@@ -254,7 +254,7 @@ describe("UsageView: patient alerts", () => {
       within(group).getByRole("button", { name: "Try again" }),
     );
     expect(
-      await screen.findByText("Critical within 15 min: 71%, down from 88%"),
+      await screen.findByRole("region", { name: "Who received them" }),
     ).toBeInTheDocument();
   });
 

@@ -10,14 +10,19 @@ import {
   createStepUp,
   MOCK_NEW_BACKUP_CODES,
 } from "@/lib/auth/mock";
-import { createMockAdmin } from "./mock-admin";
+import { createMockAdmin, MOCK_ANALYST_CAP } from "./mock-admin";
 import { totp } from "@mhai/api-client/totp";
 import { ADMIN_NOW, mockAdminAs, mockAdminWith } from "@/tests/admin";
 import { ApiError } from "./errors";
 import { recordAudit, resetAudit } from "./mock-audit";
-import type { GuardedOut, UsageAlertsOut } from "./admin-contract";
-import { PERIODS } from "@/lib/admin/report";
-import { readAlerts, whatChanged } from "@/lib/admin/alert-usage";
+import type { StepUpAuth, UsageAlertsOut } from "./admin-contract";
+import {
+  ACTIVITY_PAGE_SCHEMA,
+  SETTINGS_SCHEMA,
+  STAFF_LIST_SCHEMA,
+  STAFF_SCHEMA,
+  USAGE_SCHEMA,
+} from "./admin-schema";
 import { SMALL_GROUP_MIN } from "@mhai/ui/small-groups";
 
 const code = async (p: Promise<unknown>) => {
@@ -30,16 +35,16 @@ const code = async (p: Promise<unknown>) => {
   return "ok";
 };
 const GOOD = { mfaCode: MOCK_CODE };
-const KEY = { idempotencyKey: "k-1" };
+const WRONG = { mfaCode: "000000" };
 const director = () => mockAdminAs(DEMO_EMAILS.director);
 const row = async (a: ReturnType<typeof director>, id: string) =>
   (await a.listStaff()).find((s) => s.id === id)!;
 
-describe("the sample hospital", () => {
-  it("lists 14 synthetic staff and marks who you are", async () => {
+describe("the sample hospital follows core's contract (1.24.0)", () => {
+  it("lists 12 synthetic staff and marks who you are", async () => {
     const a = director();
     const staff = await a.listStaff();
-    expect(staff).toHaveLength(14);
+    expect(staff).toHaveLength(12);
     expect(staff.filter((s) => s.is_you).map((s) => s.id)).toEqual(["s-obi"]);
     expect(
       (await mockAdminAs(DEMO_EMAILS.hospitalAdmin).listStaff()).find(
@@ -51,18 +56,36 @@ describe("the sample hospital", () => {
     );
   });
 
+  it("sends exactly what core sends: no invites, reviewing derived", async () => {
+    const a = director();
+    const staff = await a.listStaff();
+    expect(STAFF_LIST_SCHEMA.safeParse(staff).success).toBe(true);
+    for (const s of staff) {
+      expect(s.status).not.toBe("invited");
+      expect(s.invited_at).toBeNull();
+      expect(s.invite_expires_at).toBeNull();
+      expect(s.review_specialties).toEqual([]);
+      expect(s.can_review).toBe(
+        s.status === "active" && s.roles.includes("clinician"),
+      );
+    }
+    expect(SETTINGS_SCHEMA.safeParse(await a.getSettings()).success).toBe(true);
+    for (const p of ["this_month", "last_month", "last_90_days"] as const)
+      expect(USAGE_SCHEMA.safeParse(await a.getUsage(p)).success).toBe(true);
+    expect(
+      ACTIVITY_PAGE_SCHEMA.safeParse(await a.listActivity({})).success,
+    ).toBe(true);
+  });
+
   it("has the states the screens need", async () => {
     const staff = await director().listStaff();
     const by = (id: string) => staff.find((s) => s.id === id)!;
     expect(by("s-mensah").issues).toEqual(["mfa_not_set_up"]);
-    expect(by("s-adeyemi")).toMatchObject({ status: "invited" });
-    expect(Date.parse(by("s-adeyemi").invite_expires_at!)).toBeGreaterThan(
-      ADMIN_NOW,
-    );
-    expect(by("s-sani").issues).toEqual(["invite_expired"]);
     expect(by("s-eze").status).toBe("deactivated");
+    expect(by("s-eze").can_review).toBe(false);
     expect(by("s-nwosu").roles).toEqual(["hospital_admin"]);
     expect(by("s-obi").roles).toEqual(["clinician", "hospital_admin"]);
+    expect(by("s-kemi").roles).toEqual(["clinician", "analyst"]);
   });
 
   it("returns copies, so a caller can't change the hospital by accident", async () => {
@@ -71,108 +94,473 @@ describe("the sample hospital", () => {
     expect((await a.listStaff())[0]!.full_name).not.toBe("changed");
   });
 
-  it("refuses changes to your own access (403 self_change)", async () => {
+  it("settings as core keeps them: no single sign-on, no reviewing by specialty", async () => {
+    const s = await director().getSettings();
+    expect(s.sso).toEqual({ status: "not_set_up", domain: null });
+    expect(s.allowed_email_domains).toEqual([]);
+    expect(s.reviewers_share_specialty).toBe(false);
+  });
+});
+
+describe("staff writes need a step-up code", () => {
+  it("changes roles and specialty with a code, and refuses a wrong one", async () => {
     const a = director();
-    const me = await row(a, "s-obi");
-    expect(await code(a.staffAction("s-obi", "deactivate"))).toBe(
-      "403 self_change",
-    );
-    expect(await code(a.removeStaff("s-obi", GOOD, KEY))).toBe(
-      "403 self_change",
-    );
+    const bello = await row(a, "s-bello");
     expect(
       await code(
-        a.updateStaff("s-obi", { version: me.version, roles: ["clinician"] }),
+        a.updateStaff(
+          "s-bello",
+          { version: bello.version, specialty: "Surgery" },
+          WRONG,
+        ),
       ),
-    ).toBe("403 self_change");
-    // Your specialty is still yours to change.
+    ).toBe("403 mfa_invalid");
+    const next = await a.updateStaff(
+      "s-bello",
+      { version: bello.version, specialty: "Surgery" },
+      GOOD,
+    );
+    expect(next).toMatchObject({
+      specialty: "Surgery",
+      version: bello.version + 1,
+    });
+    expect(STAFF_SCHEMA.safeParse(next).success).toBe(true);
+    expect((await a.listActivity({})).events[0]).toMatchObject({
+      kind: "specialty_changed",
+      specialty: "Surgery",
+    });
+  });
+
+  it("an edit that changes nothing answers the person without spending a code", async () => {
+    const a = director();
+    const bello = await row(a, "s-bello");
     expect(
       await code(
-        a.updateStaff("s-obi", { version: me.version, specialty: "Surgery" }),
+        a.updateStaff(
+          "s-bello",
+          { version: bello.version, specialty: bello.specialty },
+          WRONG,
+        ),
       ),
     ).toBe("ok");
   });
 
-  it("lets an admin give themselves a role, recorded as a flagged security event", async () => {
+  it("refuses any role you add to yourself, Clinician included (403 self_change)", async () => {
     const a = mockAdminAs(DEMO_EMAILS.hospitalAdmin);
     const me = await row(a, "s-nwosu");
-    const next = await a.updateStaff("s-nwosu", {
-      version: me.version,
-      roles: ["clinician", "hospital_admin"],
-    });
-    expect(next.roles).toEqual(["clinician", "hospital_admin"]);
-    const [e] = (await a.listActivity({})).events;
-    expect(e).toMatchObject({
-      type: "security",
-      kind: "self_role_change",
-      actor: { display_name: "Grace Nwosu" },
-      target: { display_name: "Grace Nwosu" },
-      roles_added: ["clinician"],
-      flag: "alert",
-    });
     expect(
-      (await a.listActivity({ flagged: true })).events.some(
-        (x) => x.kind === "self_role_change",
+      await code(
+        a.updateStaff(
+          "s-nwosu",
+          { version: me.version, roles: ["clinician", "hospital_admin"] },
+          GOOD,
+        ),
       ),
-    ).toBe(true);
-    // Changing someone else's roles is not flagged.
-    const okafor = await row(a, "s-okafor");
-    await a.updateStaff("s-okafor", {
-      version: okafor.version,
-      roles: ["clinician", "hospital_admin"],
-    });
-    const [other] = (await a.listActivity({})).events;
-    expect(other).toMatchObject({ kind: "roles_changed", flag: null });
+    ).toBe("403 self_change");
+    expect((await row(a, "s-nwosu")).roles).toEqual(["hospital_admin"]);
+    // Nothing is flagged: core refuses, so no self change is ever logged.
+    expect((await a.listActivity({ flagged: true })).events).toEqual([]);
   });
 
-  it("giving yourself Analyst logs the flagged self change and the Analyst kind", async () => {
-    const a = mockAdminAs(DEMO_EMAILS.hospitalAdmin);
-    const me = await row(a, "s-nwosu");
-    await a.updateStaff("s-nwosu", {
-      version: me.version,
-      roles: ["clinician", "analyst", "hospital_admin"],
-    });
-    const { events } = await a.listActivity({});
-    expect(events.slice(0, 2)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ kind: "self_role_change", flag: "alert" }),
-        expect.objectContaining({ kind: "analyst_granted" }),
-      ]),
+  it("lets you remove your own Clinician role, never your own admin role", async () => {
+    const a = director();
+    const me = await row(a, "s-obi");
+    expect(
+      await code(
+        a.updateStaff(
+          "s-obi",
+          { version: me.version, roles: ["clinician"] },
+          GOOD,
+        ),
+      ),
+    ).toBe("403 self_change");
+    const next = await a.updateStaff(
+      "s-obi",
+      { version: me.version, roles: ["hospital_admin"] },
+      GOOD,
+    );
+    expect(next.roles).toEqual(["hospital_admin"]);
+    expect(next.can_review).toBe(false);
+  });
+
+  it("checks refusals that need no code first, so they never spend one", async () => {
+    const backup = { backupCode: MOCK_BACKUP_CODES[2]! };
+    const a = director();
+    const me = await row(a, "s-obi");
+    expect(
+      await code(
+        a.updateStaff(
+          "s-obi",
+          { version: me.version, roles: ["clinician"] },
+          backup,
+        ),
+      ),
+    ).toBe("403 self_change");
+    expect(await code(a.staffAction("s-obi", "deactivate", backup))).toBe(
+      "403 self_change",
+    );
+    // The code is still good.
+    expect(await code(a.staffAction("s-bello", "deactivate", backup))).toBe(
+      "ok",
     );
   });
 
-  it("analyst without clinician is 422", async () => {
-    const a = director();
-    const okafor = await row(a, "s-okafor");
+  it("keeps at least one active hospital admin with two-step (409 last_admin)", async () => {
+    // An admin who isn't on the list, so "yourself" never applies here.
+    const a = mockAdminAs(null);
+    await a.staffAction("s-nwosu", "deactivate", GOOD);
+    // Dr. Obi is now the only active hospital admin.
+    expect(await code(a.staffAction("s-obi", "deactivate", GOOD))).toBe(
+      "409 last_admin",
+    );
+    const obi = await row(a, "s-obi");
     expect(
       await code(
-        a.updateStaff("s-okafor", {
-          version: okafor.version,
-          roles: ["analyst"],
-        }),
+        a.updateStaff(
+          "s-obi",
+          { version: obi.version, roles: ["clinician"] },
+          GOOD,
+        ),
       ),
-    ).toBe("422 invalid");
+    ).toBe("409 last_admin");
+    expect(await code(a.staffAction("s-nwosu", "reactivate", GOOD))).toBe("ok");
+    expect(await code(a.staffAction("s-obi", "deactivate", GOOD))).toBe("ok");
   });
 
-  it("logs granting and removing Analyst as their own kinds", async () => {
+  it("a stale version is refused (409 conflict), and an unknown id is 404", async () => {
+    const a = director();
+    const before = await row(a, "s-bello");
+    await a.updateStaff(
+      "s-bello",
+      { version: before.version, specialty: "Cardiology" },
+      GOOD,
+    );
+    expect(
+      await code(
+        a.updateStaff(
+          "s-bello",
+          { version: before.version, specialty: "Surgery" },
+          GOOD,
+        ),
+      ),
+    ).toBe("409 conflict");
+    expect(await code(a.staffAction("nobody", "deactivate", GOOD))).toBe(
+      "404 not_found",
+    );
+  });
+
+  it("deactivates and reactivates with a code, each recorded in the log", async () => {
+    const a = director();
+    expect(await code(a.staffAction("s-bello", "deactivate", WRONG))).toBe(
+      "403 mfa_invalid",
+    );
+    expect((await a.staffAction("s-bello", "deactivate", GOOD)).status).toBe(
+      "deactivated",
+    );
+    expect(await code(a.staffAction("s-bello", "deactivate", GOOD))).toBe(
+      "409 conflict",
+    );
+    const back = await a.staffAction("s-bello", "reactivate", GOOD);
+    expect(back).toMatchObject({ status: "active", can_review: true });
+    const log = (await a.listActivity({ type: "admin" })).events.map(
+      (e) => e.kind,
+    );
+    expect(log.slice(0, 2)).toEqual(["reactivated", "deactivated"]);
+  });
+
+  it("deactivating ends Analyst: reactivating needs a fresh grant", async () => {
+    const a = director();
+    await a.staffAction("s-kemi", "deactivate", GOOD);
+    const back = await a.staffAction("s-kemi", "reactivate", GOOD);
+    expect(back.roles).toEqual(["clinician"]);
+  });
+
+  it("needs two-step turned on (403 mfa_required)", async () => {
+    const a = mockAdminAs(DEMO_EMAILS.newAdmin);
+    expect(await code(a.staffAction("s-bello", "deactivate", GOOD))).toBe(
+      "403 mfa_required",
+    );
+  });
+
+  it("accepts the demo code, a real authenticator code and a backup code once", async () => {
+    const deact = (a: ReturnType<typeof director>, id: string, c: StepUpAuth) =>
+      code(a.staffAction(id, "deactivate", c));
+    expect(await deact(director(), "s-bello", GOOD)).toBe("ok");
+    const real = await totp(MOCK_TOTP_SECRET, ADMIN_NOW);
+    expect(await deact(director(), "s-bello", { mfaCode: real })).toBe("ok");
+    const c = director();
+    const backup = MOCK_BACKUP_CODES[0]!;
+    expect(await deact(c, "s-bello", { backupCode: backup })).toBe("ok");
+    expect(
+      await deact(c, "s-okafor", { backupCode: backup.toLowerCase() }),
+    ).toBe("403 mfa_invalid"); // already used
+    expect(
+      await deact(c, "s-okafor", { backupCode: MOCK_BACKUP_CODES[1]! }),
+    ).toBe("ok");
+  });
+
+  it("locks after five wrong codes, per admin, for a while (429 mfa_locked)", async () => {
+    let t = ADMIN_NOW;
+    const stepUp = createStepUp(() => t);
+    const as = (email: string) =>
+      createMockAdmin({
+        now: () => t,
+        me: async () => email,
+        delayMs: 0,
+        stepUp,
+      });
+    const d = as(DEMO_EMAILS.director);
+    for (let i = 0; i < 5; i++)
+      expect(await code(d.staffAction("s-bello", "deactivate", WRONG))).toBe(
+        "403 mfa_invalid",
+      );
+    expect(await code(d.staffAction("s-bello", "deactivate", GOOD))).toBe(
+      "429 mfa_locked",
+    );
+    expect(
+      await code(
+        as(DEMO_EMAILS.hospitalAdmin).staffAction(
+          "s-bello",
+          "deactivate",
+          GOOD,
+        ),
+      ),
+    ).toBe("ok");
+    t += 16 * 60_000;
+    expect(await code(d.staffAction("s-okafor", "deactivate", GOOD))).toBe(
+      "ok",
+    );
+  });
+
+  it("shares backup codes with sign-in, and a spent one lowers the signed-in count", async () => {
+    const stepUp = createStepUp(() => ADMIN_NOW);
+    const auth = createMockAuthClient({ now: () => ADMIN_NOW, stepUp });
+    await auth.signIn(DEMO_EMAILS.director, "anything");
+    const left = (await auth.getSession())!.user.backupCodesLeft!;
+    const mk = () =>
+      createMockAdmin({
+        now: () => ADMIN_NOW,
+        me: async () => DEMO_EMAILS.director,
+        delayMs: 0,
+        stepUp,
+      });
+    await mk().staffAction("s-bello", "deactivate", {
+      backupCode: MOCK_BACKUP_CODES[0]!,
+    });
+    expect((await auth.getSession())!.user.backupCodesLeft).toBe(left - 1);
+    stepUp.setBackupCodes(MOCK_NEW_BACKUP_CODES); // regenerated
+    expect(
+      await code(
+        mk().staffAction("s-okafor", "deactivate", {
+          backupCode: MOCK_BACKUP_CODES[1]!,
+        }),
+      ),
+    ).toBe("403 mfa_invalid");
+  });
+});
+
+describe("the Analyst role (migration 00030's rules)", () => {
+  it("grants and removes Analyst with a code, logged as their own kinds", async () => {
     const a = director();
     const okafor = await row(a, "s-okafor");
-    const granted = await a.updateStaff("s-okafor", {
-      version: okafor.version,
-      roles: ["clinician", "analyst"],
-    });
+    const granted = await a.updateStaff(
+      "s-okafor",
+      { version: okafor.version, roles: ["clinician", "analyst"] },
+      GOOD,
+    );
     expect((await a.listActivity({})).events[0]).toMatchObject({
       kind: "analyst_granted",
       target: { display_name: "Dr. Okafor" },
       flag: null,
     });
-    await a.updateStaff("s-okafor", {
-      version: granted.version,
-      roles: ["clinician"],
-    });
+    await a.updateStaff(
+      "s-okafor",
+      { version: granted.version, roles: ["clinician"] },
+      GOOD,
+    );
     expect((await a.listActivity({})).events[0]).toMatchObject({
       kind: "analyst_removed",
     });
+  });
+
+  it("Analyst without Clinician is 422 not_eligible, before any code", async () => {
+    const a = director();
+    const okafor = await row(a, "s-okafor");
+    expect(
+      await code(
+        a.updateStaff(
+          "s-okafor",
+          { version: okafor.version, roles: ["analyst"] },
+          WRONG,
+        ),
+      ),
+    ).toBe("422 not_eligible");
+  });
+
+  it("someone without two-step can't be an analyst (422 not_eligible)", async () => {
+    const a = director();
+    const mensah = await row(a, "s-mensah");
+    expect(
+      await code(
+        a.updateStaff(
+          "s-mensah",
+          { version: mensah.version, roles: ["clinician", "analyst"] },
+          GOOD,
+        ),
+      ),
+    ).toBe("422 not_eligible");
+  });
+
+  it("refuses with Analysis off (409 analysis_off) and past the cap (409 analyst_cap)", async () => {
+    const off = mockAdminAs(DEMO_EMAILS.director, { analysis: "off" });
+    const o = await row(off, "s-okafor");
+    expect(
+      await code(
+        off.updateStaff(
+          "s-okafor",
+          { version: o.version, roles: ["clinician", "analyst"] },
+          GOOD,
+        ),
+      ),
+    ).toBe("409 analysis_off");
+    const cap = mockAdminAs(DEMO_EMAILS.director, { analystCap: 1 });
+    const c = await row(cap, "s-okafor");
+    expect(
+      await code(
+        cap.updateStaff(
+          "s-okafor",
+          { version: c.version, roles: ["clinician", "analyst"] },
+          GOOD,
+        ),
+      ),
+    ).toBe("409 analyst_cap");
+    expect(MOCK_ANALYST_CAP).toBeGreaterThan(1);
+  });
+
+  it("removing Clinician removes Analyst", async () => {
+    const a = director();
+    const kemi = await row(a, "s-kemi");
+    const next = await a.updateStaff(
+      "s-kemi",
+      { version: kemi.version, roles: ["clinician", "hospital_admin"] },
+      GOOD,
+    );
+    expect(next.roles).toEqual(["clinician", "hospital_admin"]);
+    const k2 = await a.updateStaff(
+      "s-kemi",
+      { version: next.version, roles: ["hospital_admin"] },
+      GOOD,
+    );
+    expect(k2.roles).toEqual(["hospital_admin"]);
+  });
+});
+
+describe("hospital settings", () => {
+  it("saves a tightening edit without a code, and refuses a stale save", async () => {
+    const a = director();
+    const s = await a.getSettings();
+    const saved = await a.updateSettings(
+      { version: s.version, allow_trust_device: false },
+      null,
+    );
+    expect(saved).toMatchObject({
+      allow_trust_device: false,
+      version: s.version + 1,
+    });
+    expect(
+      await code(
+        a.updateSettings({ version: s.version, idle_timeout_minutes: 5 }, null),
+      ),
+    ).toBe("409 conflict");
+    expect(
+      await code(
+        a.updateSettings(
+          { version: saved.version, idle_timeout_minutes: 7 },
+          null,
+        ),
+      ),
+    ).toBe("422 validation_failed");
+  });
+
+  it("needs a code for an edit that loosens sign-in", async () => {
+    const a = director();
+    const s = await a.getSettings();
+    for (const p of [
+      { require_mfa_for_clinicians: false },
+      { idle_timeout_minutes: 30 },
+    ])
+      expect(
+        await code(a.updateSettings({ version: s.version, ...p }, null)),
+      ).toBe("403 mfa_required");
+    expect(
+      await code(
+        a.updateSettings(
+          { version: s.version, idle_timeout_minutes: 30 },
+          WRONG,
+        ),
+      ),
+    ).toBe("403 mfa_invalid");
+    const saved = await a.updateSettings(
+      { version: s.version, idle_timeout_minutes: 30 },
+      GOOD,
+    );
+    expect(saved.idle_timeout_minutes).toBe(30);
+    // Trusted devices back on (after switching them off) loosens too.
+    const off = await a.updateSettings(
+      { version: saved.version, allow_trust_device: false },
+      null,
+    );
+    expect(
+      await code(
+        a.updateSettings(
+          { version: off.version, allow_trust_device: true },
+          null,
+        ),
+      ),
+    ).toBe("403 mfa_required");
+  });
+
+  it("refuses reviewers sharing the specialty: core has no reviewing by specialty", async () => {
+    const a = director();
+    const s = await a.getSettings();
+    expect(
+      await code(
+        a.updateSettings(
+          { version: s.version, reviewers_share_specialty: true } as never,
+          null,
+        ),
+      ),
+    ).toBe("422 validation_failed");
+  });
+});
+
+describe("usage and activity", () => {
+  it("gives usage as counts that add up", async () => {
+    const u = await director().getUsage("this_month");
+    const c = u.confidence;
+    expect(c.high + c.caution + c.review + c.failed).toBe(u.consultations);
+    expect(u.by_specialty.reduce((n, s) => n + s.consultations, 0)).toBe(
+      u.consultations,
+    );
+  });
+
+  it("pages the activity log and filters it; core sends no device, count or flag", async () => {
+    const a = director();
+    const first = await a.listActivity({});
+    expect(first.events).toHaveLength(50);
+    expect(first.next_cursor).not.toBeNull();
+    const second = await a.listActivity({ cursor: first.next_cursor! });
+    expect(second.events[0]!.id).not.toBe(first.events[0]!.id);
+    for (const e of first.events)
+      expect(e).toMatchObject({ device: null, count: null, flag: null });
+    expect((await a.listActivity({ flagged: true })).events).toEqual([]);
+    const okafor = (await a.listActivity({ person: "okafor" })).events;
+    expect(okafor.length).toBeGreaterThan(0);
+    expect(
+      okafor.every((e) =>
+        `${e.actor?.display_name} ${e.target?.display_name}`.includes("Okafor"),
+      ),
+    ).toBe(true);
   });
 
   it("audit events appear in Activity, in time order", async () => {
@@ -186,569 +574,24 @@ describe("the sample hospital", () => {
       specialty: null,
       confidence: null,
       device: null,
-      count: 7,
+      count: null,
       flag: null,
     });
     const { events } = await director().listActivity({});
-    const i = events.findIndex((e) => e.kind === "analysis_patients_viewed");
-    expect(i).toBeGreaterThanOrEqual(0);
+    expect(events.some((e) => e.kind === "analysis_patients_viewed")).toBe(
+      true,
+    );
     const times = events.map((e) => Date.parse(e.at));
     expect(times).toEqual([...times].sort((x, y) => y - x));
     resetAudit();
   });
 
-  it("keeps at least one active hospital admin (409 last_admin)", async () => {
-    // An admin who isn't on the list, so "yourself" never applies here.
-    const a = mockAdminAs(null);
-    await a.staffAction("s-nwosu", "deactivate");
-    // Dr. Obi is now the only active hospital admin.
-    expect(await code(a.staffAction("s-obi", "deactivate"))).toBe(
-      "409 last_admin",
-    );
-    expect(await code(a.removeStaff("s-obi", GOOD, KEY))).toBe(
-      "409 last_admin",
-    );
-    const obi = await row(a, "s-obi");
-    expect(
-      await code(
-        a.updateStaff("s-obi", { version: obi.version, roles: ["clinician"] }),
-      ),
-    ).toBe("409 last_admin");
-    expect(await code(a.staffAction("s-nwosu", "reactivate"))).toBe("ok");
-    expect(await code(a.staffAction("s-obi", "deactivate"))).toBe("ok");
-  });
-
-  it("a stale version is refused (409 conflict), and an unknown id is 404", async () => {
-    const a = director();
-    const before = await row(a, "s-bello");
-    await a.updateStaff("s-bello", {
-      version: before.version,
-      specialty: "Cardiology",
-    });
-    expect(
-      await code(
-        a.updateStaff("s-bello", {
-          version: before.version,
-          specialty: "Surgery",
-        }),
-      ),
-    ).toBe("409 conflict");
-    expect(await code(a.staffAction("nobody", "deactivate"))).toBe(
-      "404 not_found",
-    );
-    expect(await code(a.removeStaff("nobody", GOOD, KEY))).toBe(
-      "404 not_found",
-    );
-  });
-
-  it("deactivates, reactivates and removes, each recorded in the log", async () => {
-    const a = director();
-    expect((await a.staffAction("s-bello", "deactivate")).status).toBe(
-      "deactivated",
-    );
-    expect(await code(a.staffAction("s-bello", "deactivate"))).toBe(
-      "409 conflict",
-    );
-    expect((await a.staffAction("s-bello", "reactivate")).status).toBe(
-      "active",
-    );
-    await a.removeStaff("s-eze", GOOD, KEY);
-    expect((await a.listStaff()).some((s) => s.id === "s-eze")).toBe(false);
-    const log = (await a.listActivity({ type: "admin" })).events.map(
-      (e) => e.kind,
-    );
-    expect(log.slice(0, 3)).toEqual(["removed", "reactivated", "deactivated"]);
-  });
-
-  it("resets two-step, reminds, and resends an expired invite for 7 days", async () => {
-    const a = director();
-    expect((await a.staffAction("s-bello", "reset-mfa")).issues).toContain(
-      "mfa_not_set_up",
-    );
-    expect(await code(a.staffAction("s-okafor", "reset-mfa"))).toBe(
-      "409 conflict",
-    ); // hospital account
-    expect(await code(a.staffAction("s-mensah", "remind"))).toBe("ok");
-    expect(await code(a.staffAction("s-okafor", "remind"))).toBe(
-      "409 conflict",
-    );
-    const sani = await a.staffAction("s-sani", "resend-invite");
-    expect(sani.issues).toEqual([]);
-    expect(Date.parse(sani.invite_expires_at!)).toBe(
-      ADMIN_NOW + 7 * 86_400_000,
-    );
-  });
-
-  it("invites new people and skips what it can't invite", async () => {
-    const a = director();
-    const r = await a.inviteStaff({
-      emails: [
-        "n.ade@havanahospital.org",
-        "N.Ade@havanahospital.org",
-        "k.mensah@havanahospital.org",
-        "j.eze@havanahospital.org",
-        "someone@gmail.com",
-        "not-an-email",
-      ],
-      roles: ["clinician"],
-      specialty: "Paediatrics",
-    });
-    expect(r.invited.map((s) => s.email)).toEqual(["n.ade@havanahospital.org"]);
-    expect(r.invited[0]).toMatchObject({
-      status: "invited",
-      specialty: "Paediatrics",
-    });
-    expect(r.skipped).toEqual([
-      { email: "n.ade@havanahospital.org", reason: "duplicate" },
-      { email: "k.mensah@havanahospital.org", reason: "already_staff" },
-      { email: "j.eze@havanahospital.org", reason: "already_staff" },
-      { email: "someone@gmail.com", reason: "domain_not_allowed" },
-      { email: "not-an-email", reason: "invalid_email" },
-    ]);
-  });
-
-  it("saves settings within the limits, and refuses a stale save", async () => {
-    const a = director();
-    const s = await a.getSettings();
-    expect(s.sso).toEqual({
-      status: "connected",
-      domain: "havanahospital.org",
-    });
-    const saved = await a.updateSettings({
-      version: s.version,
-      allow_trust_device: false,
-    });
-    expect(saved).toMatchObject({
-      allow_trust_device: false,
-      version: s.version + 1,
-    });
-    expect(
-      await code(
-        a.updateSettings({ version: s.version, idle_timeout_minutes: 5 }),
-      ),
-    ).toBe("409 conflict");
-    expect(
-      await code(
-        a.updateSettings({ version: saved.version, idle_timeout_minutes: 7 }),
-      ),
-    ).toBe("422 invalid");
-  });
-
-  it("gives usage as counts that add up", async () => {
-    const u = await director().getUsage("this_month");
-    const c = u.confidence;
-    expect(c.high + c.caution + c.review + c.failed).toBe(u.consultations);
-    expect(u.by_specialty.reduce((n, s) => n + s.consultations, 0)).toBe(
-      u.consultations,
-    );
-  });
-
-  it("pages the activity log and filters it", async () => {
-    const a = director();
-    const first = await a.listActivity({});
-    expect(first.events).toHaveLength(50);
-    expect(first.next_cursor).not.toBeNull();
-    const second = await a.listActivity({ cursor: first.next_cursor! });
-    expect(second.events[0]!.id).not.toBe(first.events[0]!.id);
-    const flagged = (await a.listActivity({ flagged: true })).events;
-    expect(flagged.map((e) => e.flag).sort()).toEqual(["alert", "policy"]);
-    const okafor = (await a.listActivity({ person: "okafor" })).events;
-    expect(okafor.length).toBeGreaterThan(0);
-    expect(
-      okafor.every((e) =>
-        `${e.actor?.display_name} ${e.target?.display_name}`.includes("Okafor"),
-      ),
-    ).toBe(true);
-  });
-
-  it("oversees waiting corrections without clinical content", async () => {
-    const a = director();
-    const o = await a.getOversight();
-    expect(
-      o.items.map((i) => [i.ref, i.specialty, i.eligible_reviewers]),
-    ).toEqual([
-      ["C-118", "Paediatrics", 1],
-      ["C-117", "Internal Medicine", 3],
-      ["C-116", "Infectious disease", 2],
-    ]);
-    expect(JSON.stringify(o)).not.toMatch(
-      /question|diagnosis|response|symptom/i,
-    );
-    const reviewers = await a.listEligibleReviewers("c-118");
-    expect(reviewers.map((r) => r.display_name)).toEqual(["Dr. Udo"]);
-    expect(await code(a.assignReviewer("c-118", "s-bello"))).toBe(
-      "422 not_eligible",
-    );
-    await a.assignReviewer("c-118", "s-udo");
-    await a.remindReviewers("c-117");
-    const after = await a.getOversight();
-    expect(after.items[0]!.assigned_to).toEqual({ display_name: "Dr. Udo" });
-    expect(after.items[1]!.reminded_at).not.toBeNull();
-    expect(await code(a.remindReviewers("c-999"))).toBe("404 not_found");
-  });
-});
-
-describe("removing staff needs a two-step code", () => {
-  const rm = (
-    a: ReturnType<typeof director>,
-    c: Parameters<typeof a.removeStaff>[1],
-  ) => code(a.removeStaff("s-eze", c, KEY));
-
-  it("refuses a wrong code and keeps the person (403 mfa_invalid)", async () => {
-    const a = director();
-    expect(await rm(a, { mfaCode: "000000" })).toBe("403 mfa_invalid");
-    expect(await rm(a, { backupCode: "NOPE-0000" })).toBe("403 mfa_invalid");
-    expect((await a.listStaff()).some((s) => s.id === "s-eze")).toBe(true);
-  });
-
-  it("accepts the demo code, a real authenticator code and a backup code once", async () => {
-    const a = director();
-    expect(await rm(a, { mfaCode: MOCK_CODE })).toBe("ok");
-    const b = director();
-    const real = await totp(MOCK_TOTP_SECRET, ADMIN_NOW);
-    expect(await code(b.removeStaff("s-eze", { mfaCode: real }, KEY))).toBe(
-      "ok",
-    );
-    const c = director();
-    const backup = MOCK_BACKUP_CODES[0]!;
-    expect(
-      await code(c.removeStaff("s-eze", { backupCode: backup }, KEY)),
-    ).toBe("ok");
-    expect(
-      await code(
-        c.removeStaff("s-okafor", { backupCode: backup.toLowerCase() }, KEY),
-      ),
-    ).toBe("403 mfa_invalid"); // already used
-    expect(
-      await code(
-        c.removeStaff("s-okafor", { backupCode: MOCK_BACKUP_CODES[1]! }, KEY),
-      ),
-    ).toBe("ok");
-  });
-
-  it("locks after five wrong codes (429 mfa_locked)", async () => {
-    const a = director();
-    for (let i = 0; i < 5; i++)
-      expect(await rm(a, { mfaCode: "000000" })).toBe("403 mfa_invalid");
-    expect(await rm(a, GOOD)).toBe("429 mfa_locked");
-    expect((await a.listStaff()).some((s) => s.id === "s-eze")).toBe(true);
-  });
-
-  it("needs two-step turned on (403 mfa_required)", async () => {
-    const a = mockAdminAs(DEMO_EMAILS.newAdmin);
-    expect(await rm(a, GOOD)).toBe("403 mfa_required");
-    expect((await a.listStaff()).some((s) => s.id === "s-eze")).toBe(true);
-  });
-
-  it("cancelling an invite uses the same rule", async () => {
-    const a = director();
-    expect(
-      await code(a.removeStaff("s-adeyemi", { mfaCode: "111111" }, KEY)),
-    ).toBe("403 mfa_invalid");
-    expect(await code(a.removeStaff("s-adeyemi", GOOD, KEY))).toBe("ok");
-    const log = (await a.listActivity({ type: "admin" })).events;
-    expect(log[0]!.kind).toBe("invite_cancelled");
-  });
-
-  it("works for the hospital admin too", async () => {
-    const a = mockAdminAs(DEMO_EMAILS.hospitalAdmin);
-    expect(await rm(a, GOOD)).toBe("ok");
-  });
-
-  it("a refused request does not spend a backup code (self_change, last_admin)", async () => {
-    const backup = { backupCode: MOCK_BACKUP_CODES[2]! };
-    const a = director();
-    expect(await code(a.removeStaff("s-obi", backup, KEY))).toBe(
-      "403 self_change",
-    );
-    const b = mockAdminAs(null);
-    await b.staffAction("s-nwosu", "deactivate");
-    expect(await code(b.removeStaff("s-obi", backup, KEY))).toBe(
-      "409 last_admin",
-    );
-    expect(await code(b.removeStaff("s-eze", backup, KEY))).toBe("ok");
-  });
-
-  it("shares backup codes with sign-in", async () => {
-    const stepUp = createStepUp(() => ADMIN_NOW);
-    const mk = () =>
-      createMockAdmin({
-        now: () => ADMIN_NOW,
-        me: async () => DEMO_EMAILS.director,
-        delayMs: 0,
-        stepUp,
-      });
-    stepUp.takeBackup(MOCK_BACKUP_CODES[0]!); // spent at sign-in
-    expect(
-      await code(
-        mk().removeStaff("s-eze", { backupCode: MOCK_BACKUP_CODES[0]! }, KEY),
-      ),
-    ).toBe("403 mfa_invalid");
-    stepUp.setBackupCodes(MOCK_NEW_BACKUP_CODES); // regenerated
-    expect(
-      await code(
-        mk().removeStaff("s-eze", { backupCode: MOCK_BACKUP_CODES[1]! }, KEY),
-      ),
-    ).toBe("403 mfa_invalid");
-    expect(
-      await code(
-        mk().removeStaff(
-          "s-eze",
-          { backupCode: MOCK_NEW_BACKUP_CODES[0]! },
-          KEY,
-        ),
-      ),
-    ).toBe("ok");
-  });
-
-  it("a code spent on removal lowers the signed-in backup count", async () => {
-    const stepUp = createStepUp(() => ADMIN_NOW);
-    const auth = createMockAuthClient({ now: () => ADMIN_NOW, stepUp });
-    await auth.signIn(DEMO_EMAILS.director, "anything");
-    const left = (await auth.getSession())!.user.backupCodesLeft!;
-    const a = createMockAdmin({
-      now: () => ADMIN_NOW,
-      me: async () => DEMO_EMAILS.director,
-      delayMs: 0,
-      stepUp,
-    });
-    await a.removeStaff("s-eze", { backupCode: MOCK_BACKUP_CODES[0]! }, KEY);
-    expect((await auth.getSession())!.user.backupCodesLeft).toBe(left - 1);
-  });
-
-  it("accepts a lowercase, dash-less backup code and a code with spaces", async () => {
-    const lower = MOCK_BACKUP_CODES[3]!.replace("-", "").toLowerCase();
-    expect(await rm(director(), { backupCode: lower })).toBe("ok");
-    expect(await rm(director(), { mfaCode: " 123 456 " })).toBe("ok");
-    expect(await rm(director(), { mfaCode: "abc123456" })).toBe(
-      "403 mfa_invalid",
-    );
-  });
-
-  it("the lockout is per admin and ends after a while", async () => {
-    let t = ADMIN_NOW;
-    const stepUp = createStepUp(() => t);
-    const as = (email: string) =>
-      createMockAdmin({
-        now: () => t,
-        me: async () => email,
-        delayMs: 0,
-        stepUp,
-      });
-    const d = as(DEMO_EMAILS.director);
-    for (let i = 0; i < 5; i++) await rm(d, { mfaCode: "000000" });
-    expect(await rm(d, GOOD)).toBe("429 mfa_locked");
-    expect(await rm(as(DEMO_EMAILS.hospitalAdmin), GOOD)).toBe("ok");
-    t += 16 * 60_000;
-    expect(await rm(d, GOOD)).toBe("ok");
-  });
-});
-
-describe("usage alerts (sample, at 16 Oct)", () => {
-  const alertsOf = async (p: (typeof PERIODS)[number]["id"]) =>
-    (await director().getUsage(p)).alerts as UsageAlertsOut;
-  const counts = (a: UsageAlertsOut): GuardedOut[] => [
-    a.total,
-    a.by_severity.critical,
-    a.by_severity.urgent,
-    a.by_severity.info,
-    a.unhandled,
-    ...a.dismiss_reasons.map((r) => r.count),
-    ...a.top_findings.map((f) => f.count),
-    ...a.top_locations.map((l) => l.count),
-  ];
-
-  it("adds up, with a busy day, rising groups and slower Critical handling", async () => {
-    const a = await alertsOf("this_month");
-    const s = a.by_severity;
-    expect(s.critical.value! + s.urgent.value! + s.info.value!).toBe(
-      a.total.value,
-    );
-    expect(a.total).toEqual({
-      value: 128,
-      suppressed: false,
-      change: { direction: "up", amount: 35, previous: 95 },
-    });
-    expect(a.critical_target_minutes).toBe(15);
-    expect(a.series.bucket).toBe("day");
-    expect(a.series.points).toHaveLength(16);
-    expect(a.series.points[0]!.start).toBe("2026-10-01");
-    expect(a.series.points.at(-1)!.start).toBe("2026-10-16");
-    expect(a.series.points.reduce((n, p) => n + p.total, 0)).toBe(128);
-    expect(a.series.points.filter((p) => p.usual_multiple !== null)).toEqual([
-      { start: "2026-10-14", total: 23, usual_multiple: 3.1 },
-    ]);
-    expect(a.rising).toEqual([
-      {
-        kind: "finding",
-        name: "Potassium",
-        flag: "low",
-        count: 31,
-        previous: 9,
-      },
-      {
-        kind: "location",
-        location: { kind: "admitted", ward: "Ward 3", bed: null },
-        count: 34,
-        previous: 12,
-      },
-    ]);
-    expect(a.worsening).toEqual({ value: 0.71, previous: 0.88 });
-  });
-
-  it("never sends a small number: hidden groups come as null (Review Focus 2)", async () => {
-    for (const p of PERIODS) {
-      const a = await alertsOf(p.id);
-      for (const c of counts(a)) {
-        if (c.suppressed) expect(c.value).toBeNull();
-        else
-          expect(
-            c.value === 0 || (c.value !== null && c.value >= SMALL_GROUP_MIN),
-          ).toBe(true);
-      }
-      for (const r of a.rising) {
-        expect(r.count).toBeGreaterThanOrEqual(SMALL_GROUP_MIN);
-        expect(r.previous).toBeGreaterThanOrEqual(SMALL_GROUP_MIN);
-      }
-      for (const l of a.top_locations)
-        if (l.location?.kind === "admitted") expect(l.location.bed).toBeNull();
-      expect(a.top_findings.length).toBeLessThanOrEqual(5);
-      expect(a.top_locations.length).toBeLessThanOrEqual(5);
-    }
-    // Two reasons hidden together, so neither can be worked out from the rest.
-    const a = await alertsOf("this_month");
-    expect(
-      a.dismiss_reasons.filter((r) => r.count.suppressed).map((r) => r.reason),
-    ).toEqual(["wrong_patient", "other"]);
-  });
-
-  it("flags nothing last month, and has no earlier period for the last 90 days", async () => {
-    const last = await alertsOf("last_month");
-    expect(last.has_previous).toBe(true);
-    expect(last.rising).toEqual([]);
-    expect(last.worsening).toBeNull();
-    expect(last.series.points).toHaveLength(30);
-    expect(last.series.points.every((p) => p.usual_multiple === null)).toBe(
-      true,
-    );
-    expect(last.unhandled).toEqual({
-      value: 0,
-      suppressed: false,
-      change: null,
-    });
-
-    const ninety = await alertsOf("last_90_days");
-    expect(ninety.has_previous).toBe(false);
-    expect(ninety.series.bucket).toBe("week");
-    expect(ninety.series.points).toHaveLength(13);
-    expect(ninety.series.points[0]!.start).toBe("2026-07-18");
-    expect(ninety.series.points.reduce((n, p) => n + p.total, 0)).toBe(
-      ninety.total.value,
-    );
-    expect(ninety.rising).toEqual([]);
-    expect(ninety.worsening).toBeNull();
-    expect(
-      [
-        ninety.total,
-        ninety.median_ack_minutes,
-        ninety.critical_within_target,
-      ].map((m) => m.change),
-    ).toEqual([null, null, null]);
-  });
-
-  it("is the same every time (deterministic)", async () => {
-    const a = director();
-    expect(await a.getUsage("this_month")).toEqual(
-      await a.getUsage("this_month"),
-    );
-    expect(await a.getUsage("this_month")).toEqual(
-      await director().getUsage("this_month"),
-    );
-  });
-
-  it("can be switched off, or fail, for tests", async () => {
-    expect(
-      (await mockAdminWith("off").getUsage("this_month")).alerts,
-    ).toBeNull();
-    expect(
-      (await mockAdminWith("unavailable").getUsage("this_month")).alerts,
-    ).toEqual({ unavailable: true });
-  });
-
-  it("has an edge sample: hidden measures, no data yet, a flagged week", async () => {
-    const a = (await mockAdminWith("edge").getUsage("last_90_days"))
-      .alerts as UsageAlertsOut;
-    expect(a.by_severity.critical).toEqual({
-      value: null,
-      suppressed: true,
-      change: null,
-    });
-    expect(a.median_ack_minutes_critical.suppressed).toBe(true);
-    expect(a.median_ack_minutes).toEqual({
-      value: null,
-      suppressed: false,
-      change: null,
-    });
-    expect(a.series.bucket).toBe("week");
-    // A previous period, so the flagged week and its What changed line show.
-    expect(a.has_previous).toBe(true);
-    expect(readAlerts({ alerts: a }).state).toBe("ready");
-    expect(whatChanged(a)).toEqual({
-      kind: "items",
-      items: [
-        {
-          key: "busy-2026-10-03",
-          kind: "busy",
-          text: "Week of 3 Oct: 45 alerts, about 2× the usual",
-        },
-      ],
-    });
-    expect(a.series.points.filter((p) => p.usual_multiple !== null)).toEqual([
-      { start: "2026-10-03", total: 45, usual_multiple: 2.1 },
-    ]);
-    // Nothing computed over the hidden Critical group is shown (G1).
-    for (const p of ["this_month", "last_month", "last_90_days"] as const) {
-      const e = (await mockAdminWith("edge").getUsage(p))
-        .alerts as UsageAlertsOut;
-      expect(e.critical_within_target).toEqual({
-        value: null,
-        suppressed: true,
-        change: null,
-      });
-      expect(e.worsening).toBeNull();
-      expect(readAlerts({ alerts: e }).state).toBe("ready");
-    }
-    for (const m of [a.total, a.by_severity.info, a.unhandled]) {
-      expect(m.value === 0 || m.value! >= SMALL_GROUP_MIN).toBe(true);
-    }
-  });
-});
-
-describe("alert routing and settings in the sample (Plan 13)", () => {
-  it("says how many alerts went to the queue and to named clinicians, guarded", async () => {
-    for (const p of ["this_month", "last_month", "last_90_days"] as const) {
-      const a = (await director().getUsage(p)).alerts as UsageAlertsOut;
-      const r = a.by_route!;
-      for (const m of [r.queue, r.named]) {
-        expect(m.suppressed, p).toBe(false);
-        expect(m.value! >= SMALL_GROUP_MIN, p).toBe(true);
-        expect(m.value! <= a.total.value!, p).toBe(true);
-      }
-      expect(r.queue.change === null, p).toBe(!a.has_previous);
-    }
-    const edge = (await mockAdminWith("edge").getUsage("this_month"))
-      .alerts as UsageAlertsOut;
-    expect(edge.by_route!.named).toEqual({
-      value: null,
-      suppressed: true,
-      change: null,
-    });
-  });
-
   it("lists the three alert settings changes in sample Activity", async () => {
     const { events } = await mockAdminAs(
       DEMO_EMAILS.hospitalAdmin,
-    ).listActivity({ type: "admin" });
+    ).listActivity({
+      type: "admin",
+    });
     const kinds = events.map((e) => e.kind);
     for (const k of [
       "alert_units_changed",
@@ -756,11 +599,81 @@ describe("alert routing and settings in the sample (Plan 13)", () => {
       "alert_recipients_changed",
     ])
       expect(kinds).toContain(k);
-    for (const e of events.filter((x) => String(x.kind).startsWith("alert_")))
-      expect(e).toMatchObject({
-        type: "admin",
-        actor: { display_name: "Grace Nwosu" },
-        target: null,
-      });
+  });
+
+  it("oversees waiting corrections without clinical content, assignment or reminders", async () => {
+    const a = director();
+    const o = await a.getOversight();
+    expect(o.items.map((i) => i.ref)).toEqual(["C-118", "C-117", "C-116"]);
+    for (const i of o.items) {
+      expect(i.assigned_to).toBeNull();
+      expect(i.reminded_at).toBeNull();
+    }
+    // Every active clinician but the suggester.
+    expect(o.items[0]!.eligible_reviewers).toBe(9);
+    expect(JSON.stringify(o)).not.toMatch(
+      /question|diagnosis|response|symptom/i,
+    );
+    const reviewers = await a.listEligibleReviewers("c-118");
+    expect(reviewers.map((r) => r.display_name)).not.toContain("Dr. Reyes");
+    expect(await code(a.listEligibleReviewers("c-999"))).toBe("404 not_found");
+  });
+});
+
+describe("usage alerts: core's block (sample, at 16 Oct)", () => {
+  const alertsOf = async (p: "this_month" | "last_month" | "last_90_days") =>
+    (await director().getUsage(p)).alerts as UsageAlertsOut;
+
+  it("splits the total by severity, category and handling, guarded", async () => {
+    for (const p of ["this_month", "last_month", "last_90_days"] as const) {
+      const a = await alertsOf(p);
+      for (const set of [a.by_severity, a.by_category, a.by_handling]) {
+        const parts = Object.values(set);
+        const shownSum = parts.reduce((n, g) => n + (g.value ?? 0), 0);
+        const hiddenParts = parts.filter((g) => g.suppressed).length;
+        expect(
+          hiddenParts === 0 ? shownSum : shownSum <= a.total.value!,
+          p,
+        ).toBe(hiddenParts === 0 ? a.total.value : true);
+        // Never exactly one hidden part: it could be worked out.
+        expect(hiddenParts, p).not.toBe(1);
+      }
+    }
+  });
+
+  it("never sends a small number: hidden groups come as null", async () => {
+    for (const p of ["this_month", "last_month", "last_90_days"] as const) {
+      const a = await alertsOf(p);
+      const all = [
+        a.total,
+        ...Object.values(a.by_severity),
+        ...Object.values(a.by_category),
+        ...Object.values(a.by_route),
+        ...Object.values(a.by_handling),
+      ];
+      for (const g of all) {
+        if (g.suppressed) expect(g.value).toBeNull();
+        else expect(g.value === 0 || g.value! >= SMALL_GROUP_MIN, p).toBe(true);
+      }
+    }
+  });
+
+  it("can have no record source, fail, or hide a set, for tests", async () => {
+    expect(
+      (await mockAdminWith("off").getUsage("this_month")).alerts,
+    ).toBeNull();
+    expect(
+      (await mockAdminWith("unavailable").getUsage("this_month")).alerts,
+    ).toEqual({
+      unavailable: true,
+    });
+    const edge = (await mockAdminWith("edge").getUsage("this_month"))
+      .alerts as UsageAlertsOut;
+    expect(edge.by_severity.critical).toEqual({
+      value: null,
+      suppressed: true,
+    });
+    expect(edge.by_severity.urgent).toEqual({ value: null, suppressed: true });
+    expect(edge.by_route.named).toEqual({ value: null, suppressed: true });
   });
 });

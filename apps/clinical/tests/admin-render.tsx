@@ -29,3 +29,11 @@ export const HOSPITAL_ADMIN: User = {
 /** An admin screen with a signed-in admin, a fresh query cache and toasts. */
 export const renderAdmin = (ui: ReactElement, user: User = DIRECTOR) =>
   renderWithAuth(<ToastProvider>{ui}</ToastProvider>, user);
+
+/** Types a 6-digit step-up code into a dialog's code boxes (the sixth digit submits). */
+export async function enterCode(dialog: HTMLElement, code: string) {
+  const { within } = await import("@testing-library/react");
+  const userEvent = (await import("@testing-library/user-event")).default;
+  await userEvent.click(within(dialog).getByLabelText("Digit 1 of 6"));
+  await userEvent.keyboard(code);
+}

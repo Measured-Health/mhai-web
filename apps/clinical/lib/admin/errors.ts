@@ -7,13 +7,25 @@ export interface AdminError {
   gone: boolean;
   /** Someone else changed it; the latest is loading (R7). */
   stale: boolean;
+  /** Core doesn't do this yet (501): a calm note, not a failure. */
+  unavailable: boolean;
 }
 
 const E = (
   title: string,
   body: string,
   extra: Partial<AdminError> = {},
-): AdminError => ({ title, body, gone: false, stale: false, ...extra });
+): AdminError => ({
+  title,
+  body,
+  gone: false,
+  stale: false,
+  unavailable: false,
+  ...extra,
+});
+
+/** What the screens say where core answers 501 `not_implemented`. */
+export const NOT_AVAILABLE = "Not available yet";
 
 /** Plain words for every admin refusal; never a backend code (spec §6). */
 export function adminError(e: unknown): AdminError {
@@ -35,12 +47,12 @@ export function adminError(e: unknown): AdminError {
     case "self_change":
       return E(
         "You can't change your own access",
-        "Ask another hospital admin to do this.",
+        "You can remove your own Clinician or Analyst role, but not give yourself a role or remove your own hospital admin role. Ask another hospital admin.",
       );
     case "last_admin":
       return E(
         "The hospital needs a hospital admin",
-        "Make someone else a hospital admin first.",
+        "There must always be one active hospital admin with two-step verification on. Make someone else a hospital admin first.",
       );
     case "already_decided":
       return E(
@@ -48,16 +60,25 @@ export function adminError(e: unknown): AdminError {
         "It has left the list.",
         { gone: true },
       );
+    case "analysis_off":
+      return E(
+        "Analysis isn't switched on for your hospital",
+        "Measured Health switches Analysis on for a hospital. Until then nobody can be given the Analyst role.",
+      );
+    case "analyst_cap":
+      return E(
+        "Your hospital has all the analysts it can have",
+        "Remove the Analyst role from someone else first, or ask Measured Health about the limit.",
+      );
     case "not_eligible":
       return E(
-        "That person can't review this correction",
-        "Pick someone from the list.",
+        "This person can't be an analyst yet",
+        "An analyst needs the Clinician role, an active account and two-step verification turned on.",
       );
-    case "domain_not_allowed":
-      return E(
-        "That email address isn't allowed",
-        "Invites only go to your hospital's email addresses.",
-      );
+    case "not_implemented":
+      return E(NOT_AVAILABLE, "MHAI can't do this yet. Nothing was changed.", {
+        unavailable: true,
+      });
     case "mfa_invalid":
       return E(
         "That code didn't work. Try again.",
@@ -72,6 +93,11 @@ export function adminError(e: unknown): AdminError {
       return E(
         "Too many tries. Wait 15 minutes, then try again.",
         "This keeps the account safe.",
+      );
+    case "validation_failed":
+      return E(
+        "MHAI couldn't accept this change",
+        "Reload the page and try again.",
       );
     case "rate_limited":
       return E("Too many changes at once", "Wait a minute and try again.");

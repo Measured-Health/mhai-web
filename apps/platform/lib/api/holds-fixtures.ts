@@ -1,9 +1,11 @@
-// The platform demo's sample legal holds: one in every state. The references,
-// people and reasons are invented. No patient data: a hold covers a whole
-// hospital's records, or those in a date range.
+// The platform demo's sample legal holds: one in every state, and one the
+// provisioning command line placed. The references, people and reasons are
+// invented. No patient data, and as core (openapi 1.26.0): a hold keeps all
+// of a hospital's records, carries no note and no name of who asked, and a
+// lift lands at once on approval.
 import type { Person } from "./contract";
 import {
-  HOLD_GRACE_DAYS,
+  CLI_ID,
   LAPSE_DAYS,
   REVIEW_MONTHS,
   type HoldEvent,
@@ -68,20 +70,10 @@ export function nextCleanUp(ms: number): string {
   return t.toISOString();
 }
 
-/**
- * Records past their retention period that a lift would make due, per
- * hospital: fixed sample counts (the backend counts them).
- */
-export const RECORDS_DUE: Readonly<Record<string, number>> = {
-  h_havana: 3120,
-  h_northgate: 2875,
-  h_riverside: 1240,
-  h_eastbrook: 0,
-  h_westfield: 410,
-  h_harbour: 1985,
-  h_southpoint: 760,
-  h_lakeside: 85,
-  h_hilltop: 0,
+/** Who core names as the placer of a hold the command line made. */
+export const CLI_PERSON: Person = {
+  id: CLI_ID,
+  name: "Provisioning command line",
 };
 
 const TZ = "Africa/Lagos";
@@ -91,22 +83,24 @@ const HOSPITAL = {
   riverside: { id: "h_riverside", name: "Riverside Children's Hospital" },
   harbour: { id: "h_harbour", name: "Harbour View Hospital" },
   lakeside: { id: "h_lakeside", name: "Lakeside Community Clinic" },
+  ridgeway: { id: "h_ridgeway", name: "Ridgeway General Hospital" },
 } as const;
+const ALL = { from: null, to: null } as const;
 
-/** The five sample holds, newest first, each with its history. */
+/** The six sample holds, newest first, each with its history. */
 export function seedHolds(now: number): LegalHoldDetail[] {
   const placed = (
     id: string,
     hospital: Person,
     at: number,
     by: Person,
-    rest: Pick<
-      LegalHoldDetail,
-      "scope" | "reason" | "reference" | "asked_by" | "note"
-    >,
+    rest: Pick<LegalHoldDetail, "reason" | "reference">,
   ): LegalHoldDetail => ({
     id,
     hospital,
+    scope: ALL,
+    asked_by: null,
+    note: null,
     ...rest,
     placed_by: by,
     placed_at: iso(at),
@@ -119,10 +113,9 @@ export function seedHolds(now: number): LegalHoldDetail[] {
   });
   const lift = (
     id: string,
-    hospitalId: string,
     by: Person,
     at: number,
-    rest: Pick<HoldLift, "reason" | "authority" | "note">,
+    rest: Pick<HoldLift, "reason" | "authority">,
   ): HoldLift => ({
     id,
     kind: "hold_lift",
@@ -130,8 +123,9 @@ export function seedHolds(now: number): LegalHoldDetail[] {
     requested_at: iso(at),
     requested_by_you: false,
     expires_at: iso(at + LAPSE_DAYS * D),
-    records_due: RECORDS_DUE[hospitalId] ?? 0,
-    due_after: nextCleanUp(at),
+    note: null,
+    records_due: null,
+    due_after: null,
     approved_by: null,
     approved_at: null,
     released_on: null,
@@ -146,11 +140,8 @@ export function seedHolds(now: number): LegalHoldDetail[] {
 
   // Harbour View: active, blocking its Removal pending request.
   const hv = placed("hold_hv", HOSPITAL.harbour, now - 40 * D, ADA, {
-    scope: { from: null, to: null },
     reason: "court_case",
-    reference: "HC/2026/0412",
-    asked_by: "Harbour View Hospital's solicitors",
-    note: null,
+    reference: "HC-2026-0412",
   });
 
   // Northgate: its review date was yesterday.
@@ -158,11 +149,8 @@ export function seedHolds(now: number): LegalHoldDetail[] {
   const ngAt = Date.parse(`${addMonths(reviewOn, -REVIEW_MONTHS)}T10:00:00Z`);
   const ng: LegalHoldDetail = {
     ...placed("hold_ng", HOSPITAL.northgate, ngAt, TUNDE, {
-      scope: { from: "2025-01-01", to: "2025-06-30" },
       reason: "regulator",
-      reference: "REG-INSP-2291",
-      asked_by: "The health regulator's inspection team",
-      note: null,
+      reference: "REG-2026-2291",
     }),
     review_on: reviewOn,
     status: "review_due",
@@ -170,17 +158,13 @@ export function seedHolds(now: number): LegalHoldDetail[] {
 
   // Riverside: Tunde asked to lift it 2 days ago; waiting for a second admin.
   const rcAt = now - 60 * D;
-  const rcLift = lift("req_rc", "h_riverside", TUNDE, now - 2 * D, {
+  const rcLift = lift("req_rc", TUNDE, now - 2 * D, {
     reason: "case_closed",
-    authority: "Counsel's letter 14 Oct 2026, ref ABC-123",
-    note: null,
+    authority: "CT-2026-0091",
   });
   const rc0 = placed("hold_rc", HOSPITAL.riverside, rcAt, ADA, {
-    scope: { from: null, to: null },
     reason: "complaint",
-    reference: "CMP-0193",
-    asked_by: "The hospital's complaints office",
-    note: null,
+    reference: "CMP-2026-0193",
   });
   const rc: LegalHoldDetail = {
     ...rc0,
@@ -198,27 +182,23 @@ export function seedHolds(now: number): LegalHoldDetail[] {
     ],
   };
 
-  // Lakeside: lifted 3 days ago; its records are released in 4 days.
+  // Lakeside: lifted 3 days ago, at once on approval (no grace period).
   const lcAt = now - 300 * D;
   const lc0 = placed("hold_lc", HOSPITAL.lakeside, lcAt, TUNDE, {
-    scope: { from: "2024-03-01", to: null },
     reason: "investigation",
-    reference: "INV-77",
-    asked_by: "Lakeside Community Clinic's medical director",
-    note: null,
+    reference: "INV-2024-77",
   });
   const lc: LegalHoldDetail = {
     ...lc0,
     status: "lifted",
     lift: {
-      ...lift("req_lc", "h_lakeside", TUNDE, now - 5 * D, {
+      ...lift("req_lc", TUNDE, now - 5 * D, {
         reason: "withdrawn",
-        authority: "Email from the medical director, 15 Oct 2026",
-        note: null,
+        authority: "ML-2026-0015",
       }),
       approved_by: ADA,
       approved_at: iso(now - 3 * D),
-      released_on: iso(now - 3 * D + HOLD_GRACE_DAYS * D),
+      released_on: iso(now - 3 * D),
     },
     version: 3,
     history: [
@@ -228,33 +208,27 @@ export function seedHolds(now: number): LegalHoldDetail[] {
     ],
   };
 
-  // Havana: lifted 40 days ago, its records long since released.
+  // Havana: lifted 40 days ago.
   const hhAt = now - 250 * D;
   const hh0 = placed("hold_hh", HOSPITAL.havana, hhAt, ADA, {
-    scope: { from: null, to: null },
     reason: "other",
     reference: "BRD-2026-03",
-    asked_by: "Havana Hospital's board",
-    note: "Board request pending legal review",
   });
   const hhApproved = now - 40 * D;
-  const hhReleased = hhApproved + HOLD_GRACE_DAYS * D;
   const hh: LegalHoldDetail = {
     ...hh0,
     status: "lifted",
     lift: {
-      ...lift("req_hh", "h_havana", TUNDE, now - 42 * D, {
+      ...lift("req_hh", TUNDE, now - 42 * D, {
         reason: "case_closed",
-        authority: "Board minutes, 3 Sep 2026",
-        note: null,
+        authority: "BRD-2026-0903",
       }),
       approved_by: ADA,
       approved_at: iso(hhApproved),
-      released_on: iso(hhReleased),
+      released_on: iso(hhApproved),
     },
     version: 3,
     history: [
-      event(hhReleased, ADA, "released"),
       event(hhApproved, ADA, "lifted", LIFT_REASON_WORDS.case_closed),
       event(
         now - 42 * D,
@@ -266,7 +240,17 @@ export function seedHolds(now: number): LegalHoldDetail[] {
     ],
   };
 
-  return [hv, ng, rc, lc, hh].sort(
+  // Ridgeway: placed by the provisioning command line, with no reason, over
+  // a year ago: its review date (six months on) has passed.
+  const sp: LegalHoldDetail = {
+    ...placed("hold_rg", HOSPITAL.ridgeway, now - 400 * D, CLI_PERSON, {
+      reason: null,
+      reference: "LH-2025-0042",
+    }),
+    status: "review_due",
+  };
+
+  return [hv, ng, rc, lc, hh, sp].sort(
     (a, b) => Date.parse(b.placed_at) - Date.parse(a.placed_at),
   );
 }

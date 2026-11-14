@@ -167,36 +167,24 @@ test("a new hospital admin sets a password and two-step, accepts the terms, then
   ).toHaveCount(0);
 });
 
-test("invite one person", async ({ page }) => {
+test("inviting staff says it isn't available yet (core 501)", async ({
+  page,
+}) => {
   await asHospitalAdmin(page);
-  await page.getByRole("button", { name: "Invite staff" }).click();
-  const dialog = page.getByRole("dialog", { name: "Invite staff" });
-  await dialog.getByLabel("Work emails").fill("o.new@havanahospital.org");
-  await dialog.getByRole("button", { name: "Send 1 invite" }).click();
-  await expect(page.getByText("Invite sent", { exact: true })).toBeVisible();
-  await expect(dialog).toHaveCount(0);
-  await expect(manage(page, "o.new@havanahospital.org")).toBeVisible();
-});
-
-test("invite people from a pasted list", async ({ page }) => {
-  await asHospitalAdmin(page);
-  await page.getByRole("button", { name: "Invite staff" }).click();
-  const dialog = page.getByRole("dialog", { name: "Invite staff" });
-  await dialog
-    .getByLabel("Work emails")
-    .fill(
-      "a.new@havanahospital.org, B.New@havanahospital.org\nk.mensah@havanahospital.org",
-    );
+  await expect(page.getByRole("button", { name: "Invite staff" })).toHaveCount(
+    0,
+  );
   await expect(
-    dialog.getByText("k.mensah@havanahospital.org — Already on the staff list"),
+    page.getByText(/Inviting staff: Not available yet/),
   ).toBeVisible();
-  await dialog.getByRole("button", { name: "Send 2 invites" }).click();
-  await expect(page.getByText("2 invites sent")).toBeVisible();
-  await expect(manage(page, "a.new@havanahospital.org")).toBeVisible();
-  await expect(manage(page, "b.new@havanahospital.org")).toBeVisible();
+  await expect(
+    page.getByText("Measured Health creates staff accounts for now."),
+  ).toBeVisible();
 });
 
-test("deactivate after confirming, then reactivate", async ({ page }) => {
+test("deactivate and reactivate, each with your two-step code", async ({
+  page,
+}) => {
   await asHospitalAdmin(page);
   await manage(page, "Dr. Tunde Bello").click();
   const p = panel(page);
@@ -207,68 +195,60 @@ test("deactivate after confirming, then reactivate", async ({ page }) => {
   await expect(
     confirm.getByRole("button", { name: "Keep account" }),
   ).toBeFocused();
-  await confirm
-    .getByRole("button", { name: "Deactivate", exact: true })
-    .click();
-  await expect(page.getByText("Account deactivated")).toBeVisible();
-  await expect(p.getByText("Deactivated", { exact: true })).toBeVisible();
-  await p.getByRole("button", { name: "Reactivate", exact: true }).click();
-  await expect(page.getByText("Account reactivated")).toBeVisible();
-  await expect(p.getByText("Active", { exact: true })).toBeVisible();
-});
-
-test("remove an account with your two-step code, after a wrong one", async ({
-  page,
-}) => {
-  await asHospitalAdmin(page);
-  await manage(page, "Dr. James Eze").click();
-  await panel(page)
-    .getByRole("button", { name: "Remove", exact: true })
-    .click();
-  const confirm = page.getByRole("dialog", { name: "Remove this account?" });
-  await expect(confirm).toContainText(
-    "Dr. James Eze (j.eze@havanahospital.org)",
-  );
-  await expect(
-    confirm.getByRole("button", { name: "Keep account" }),
-  ).toBeFocused();
   // Nothing to confirm until a full code is in.
   await expect(
-    confirm.getByRole("button", { name: "Remove account" }),
+    confirm.getByRole("button", { name: "Deactivate", exact: true }),
   ).toBeDisabled();
-
-  // A wrong code keeps the dialog open and the person on the list.
+  // A wrong code keeps the dialog open and the person active.
   await typeCode(page, "000000", confirm);
   await expect(
     confirm.getByText("That code didn't work. Try again."),
   ).toBeVisible();
-  await expect(confirm).toBeVisible();
-  await expect(manage(page, "Dr. James Eze")).toHaveCount(1);
-
   // The sixth digit of the right code submits on its own.
   await typeCode(page, "123456", confirm);
-  await expect(page.getByText("Account removed")).toBeVisible();
+  await expect(page.getByText("Account deactivated")).toBeVisible();
   await expect(confirm).toHaveCount(0);
-  await expect(panel(page)).toHaveCount(0);
-  await expect(manage(page, "Dr. James Eze")).toHaveCount(0);
+  await expect(p.getByText("Deactivated", { exact: true })).toBeVisible();
+  await p.getByRole("button", { name: "Reactivate", exact: true }).click();
+  const again = page.getByRole("dialog", { name: "Reactivate this account?" });
+  await typeCode(page, "123456", again);
+  await expect(page.getByText("Account reactivated")).toBeVisible();
+  await expect(p.getByText("Active", { exact: true })).toBeVisible();
 });
 
-test("cancel an invite with your two-step code", async ({ page }) => {
+test("change someone's specialty with your two-step code", async ({ page }) => {
   await asHospitalAdmin(page);
-  await manage(page, "Dr. Funmi Adeyemi").click();
-  await panel(page)
-    .getByRole("button", { name: "Cancel invite", exact: true })
-    .click();
-  const confirm = page.getByRole("dialog", { name: "Cancel this invite?" });
-  await expect(
-    confirm.getByRole("button", { name: "Keep invite" }),
-  ).toBeFocused();
+  await manage(page, "Dr. Tunde Bello").click();
+  const p = panel(page);
+  await p.getByLabel("Specialty").selectOption("Cardiology");
+  await p.getByRole("button", { name: "Save changes" }).click();
+  const confirm = page.getByRole("dialog", {
+    name: "Save Dr. Bello's access?",
+  });
+  await expect(confirm).toContainText("Specialty: Cardiology.");
   await typeCode(page, "123456", confirm);
-  await expect(page.getByText("Invite cancelled")).toBeVisible();
-  await expect(manage(page, "Dr. Funmi Adeyemi")).toHaveCount(0);
+  await expect(page.getByText("Changes saved")).toBeVisible();
+  await expect(confirm).toHaveCount(0);
 });
 
-test("can't deactivate or remove yourself", async ({ page }) => {
+test("removing, resets and reminders say they aren't available yet (core 501)", async ({
+  page,
+}) => {
+  await asHospitalAdmin(page);
+  await manage(page, "Dr. Tunde Bello").click();
+  const p = panel(page);
+  const account = p.getByRole("region", { name: "Account" });
+  await expect(account.getByText("Not available yet")).toHaveCount(3);
+  await expect(account.getByText(/Deactivate it instead/)).toBeVisible();
+  for (const name of ["Remove", "Send password reset", "Reset two-step"])
+    await expect(
+      account.getByRole("button", { name, exact: true }),
+    ).toHaveCount(0);
+});
+
+test("you can't deactivate yourself or give yourself a role", async ({
+  page,
+}) => {
   await asHospitalAdmin(page);
   await manage(page, "Grace Nwosu").click();
   const p = panel(page);
@@ -281,26 +261,24 @@ test("can't deactivate or remove yourself", async ({ page }) => {
     "You can't deactivate your own account. Ask another hospital admin.",
   );
   await expect(
-    p.getByText(
-      "You can't deactivate your own account. Ask another hospital admin.",
-    ),
-  ).toBeVisible();
-  const remove = p.getByRole("button", { name: "Remove", exact: true });
-  await expect(remove).toBeDisabled();
-  await expect(remove).toHaveAccessibleDescription(
-    "You can't remove your own account. Ask another hospital admin.",
-  );
-  await expect(
     p.getByRole("checkbox", { name: "Hospital admin" }),
   ).toBeDisabled();
+  // Core refuses any role an admin adds to themselves (403 self_change).
+  const clinician = p.getByRole("checkbox", { name: "Clinician" });
+  await expect(clinician).toBeDisabled();
+  await expect(clinician).not.toBeChecked();
+  await expect(p.getByText(/You can't give yourself a role/)).toBeVisible();
 });
 
-test("change and save hospital settings", async ({ page }) => {
+test("change and save hospital settings; loosening sign-in asks for your code", async ({
+  page,
+}) => {
   await asHospitalAdmin(page);
   await openAdmin(page, "Hospital settings");
   await expect(page).toHaveURL(/\/admin\/settings$/);
   const trust = page.getByRole("switch", { name: 'Allow "trust this device"' });
   await expect(trust).toBeChecked();
+  // Tightening saves at once.
   await trust.click();
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Settings saved")).toBeVisible();
@@ -310,6 +288,17 @@ test("change and save hospital settings", async ({ page }) => {
   await expect(
     page.getByRole("switch", { name: 'Allow "trust this device"' }),
   ).not.toBeChecked();
+  // Loosening needs the code.
+  await page.getByRole("switch", { name: 'Allow "trust this device"' }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  const confirm = page.getByRole("dialog", {
+    name: "Save settings that loosen sign-in?",
+  });
+  await typeCode(page, "123456", confirm);
+  await expect(page.getByText("Settings saved")).toBeVisible();
+  await expect(
+    page.getByRole("switch", { name: 'Allow "trust this device"' }),
+  ).toBeChecked();
 });
 
 test("on a phone, each person is a card with a Manage button", async ({
@@ -363,17 +352,19 @@ test("a medical director sees both sides in one sidebar", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("the activity log flags security events and exports a CSV", async ({
+test("the activity log shows core's events and exports a CSV", async ({
   page,
 }) => {
   await asHospitalAdmin(page);
   await openAdmin(page, "Activity");
   await expect(page).toHaveURL(/\/admin\/activity$/);
   await expect(
-    page.getByText("5 failed sign-ins for Dr. Bello · account locked"),
+    page.getByText("Too many failed sign-ins for Dr. Bello · account locked"),
   ).toBeVisible();
+  // Core flags nothing today.
   await page.getByRole("button", { name: "Flagged only" }).click();
-  await expect(page.getByText("Alert", { exact: true })).toBeVisible();
+  await expect(page.getByText("Nothing matches these filters.")).toBeVisible();
+  await page.getByRole("button", { name: "Flagged only" }).click();
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export CSV" }).click();
   expect((await download).suggestedFilename()).toMatch(
@@ -382,24 +373,20 @@ test("the activity log flags security events and exports a CSV", async ({
   await expect(page.getByText("Activity exported")).toBeVisible();
 });
 
-test("review oversight: remind and assign, without clinical content", async ({
+test("review oversight without clinical content; reminding and assigning aren't available yet", async ({
   page,
 }) => {
   await asHospitalAdmin(page);
   await openAdmin(page, "Activity");
   await page.getByRole("link", { name: /^Review oversight/ }).click();
   await expect(page).toHaveURL(/\/admin\/activity\/oversight$/);
-  await page
-    .getByRole("button", { name: "Remind reviewers about C-117" })
-    .click();
-  await expect(page.getByText("Reviewers reminded")).toBeVisible();
-  await page
-    .getByRole("button", { name: "Assign a reviewer to C-118" })
-    .click();
-  const dialog = page.getByRole("dialog", { name: "Assign a reviewer" });
-  await dialog.getByRole("radio", { name: /Dr. Udo/ }).check();
-  await dialog.getByRole("button", { name: "Assign", exact: true }).click();
-  await expect(page.getByText("Assigned to Dr. Udo")).toBeVisible();
+  await expect(page.getByText("#C-117")).toBeVisible();
+  await expect(
+    page.getByText(/Reminding or assigning reviewers: not available yet/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Remind reviewers|Assign a reviewer/ }),
+  ).toHaveCount(0);
   await expect(
     page.getByText("Only clinicians can approve or reject corrections."),
   ).toBeVisible();
@@ -425,133 +412,33 @@ async function openUsageOnSampleDay(page: Page) {
   return group;
 }
 
-test("usage shows patient alerts, what changed and hidden small groups", async ({
+test("usage shows core's patient alert counts, with small groups hidden", async ({
   page,
 }) => {
   const group = await openUsageOnSampleDay(page);
-  await expect(
-    group.getByRole("region", { name: "What changed" }).getByRole("listitem"),
-  ).toHaveText([
-    "Critical within 15 min: 71%, down from 88%",
-    "14 Oct: 23 alerts, about 3× the usual",
-    "Potassium · low: 31, up from 9",
-    "Ward 3: 34, up from 12",
-  ]);
-  await expect(group.getByText("up 35% vs last month")).toBeVisible();
-  await expect(
-    group.getByText("up 6 min vs last month · worse", { exact: false }),
-  ).toBeVisible();
   await expect(
     group
-      .getByRole("region", { name: "Dismissal reasons" })
+      .getByRole("region", { name: "What happened to them" })
+      .getByRole("listitem"),
+  ).toHaveText([
+    "Not handled yet9",
+    "Acknowledged98",
+    "Dismissed15",
+    "Withdrawn before anyone handled it6",
+  ]);
+  await expect(
+    group
+      .getByRole("region", { name: "By kind of result" })
       .getByRole("listitem")
-      .filter({ hasText: "Wrong patient" }),
-  ).toHaveText("Wrong patientFewer than 5");
-
-  const chart = group.getByRole("region", { name: "Alerts over time" });
-  await expect(chart.getByText("Most alerts on 14 Oct: 23")).toBeVisible();
-  await chart.getByRole("button", { name: "Show as table" }).click();
+      .filter({ hasText: "Blood gases and lactate" }),
+  ).toHaveText("Blood gases and lactateFewer than 5");
   await expect(
-    chart.getByRole("row", { name: "14 Oct 23 about 3× the usual" }),
-  ).toBeVisible();
-  await chart.getByRole("button", { name: "Show as chart" }).click();
-  await expect(
-    chart.getByRole("listitem", {
-      name: "14 Oct: 23 alerts, about 3× the usual",
-    }),
-  ).toBeVisible();
-
-  await page.getByLabel("Period").selectOption("last_month");
-  await expect(group.getByText("Nothing unusual this period")).toBeVisible();
+    group.getByRole("region", { name: "Who received them" }),
+  ).toContainText("Hospital queue97");
   await page.getByLabel("Period").selectOption("last_90_days");
-  await expect(group.getByText("Not enough data to compare")).toBeVisible();
-  await expect(group.getByText(/vs the 90 days before/)).toHaveCount(0);
-});
-
-test("the alerts chart works from the keyboard, with a visible focus ring", async ({
-  page,
-}) => {
-  const group = await openUsageOnSampleDay(page);
-  // The longest series: 30 daily columns.
-  await page.getByLabel("Period").selectOption("last_month");
-  await expect(group.getByText("Nothing unusual this period")).toBeVisible();
-  const chart = group.getByRole("region", { name: "Alerts over time" });
-  const columns = chart.getByRole("listitem");
-  await expect(columns).toHaveCount(30);
-
-  await chart.getByRole("button", { name: "Show as table" }).focus();
-  await page.keyboard.press("Tab");
-  await expect(columns.first()).toBeFocused();
-  await page.keyboard.press("End");
-  const lastColumn = columns.last();
-  await expect(lastColumn).toBeFocused();
-
-  // The ring is drawn, the column is in view, and neither is clipped by
-  // the scroll wrapper (phones) or, where nothing scrolls, the list.
-  const ring = await lastColumn.evaluate((el) => {
-    const cs = getComputedStyle(el);
-    const box = el.getBoundingClientRect();
-    const section = el.closest("section")!;
-    let clip: HTMLElement | null = el.parentElement!.parentElement;
-    while (
-      clip &&
-      clip !== section &&
-      getComputedStyle(clip).overflowX === "visible"
-    )
-      clip = clip.parentElement;
-    const edge = (
-      clip && clip !== section ? clip : el.parentElement!
-    ).getBoundingClientRect();
-    const inset = -parseFloat(cs.outlineOffset) || 0;
-    const w = parseFloat(cs.outlineWidth);
-    return {
-      style: cs.outlineStyle,
-      width: w,
-      width_px: box.width,
-      left: box.left - edge.left + inset - w,
-      right: edge.right - box.right + inset - w,
-      inView:
-        box.left >= edge.left &&
-        box.right <= edge.right &&
-        box.left >= 0 &&
-        box.right <= window.innerWidth,
-    };
-  });
-  expect(ring.style).not.toBe("none");
-  expect(ring.width).toBeGreaterThanOrEqual(2);
-  expect(ring.left).toBeGreaterThanOrEqual(0);
-  expect(ring.right).toBeGreaterThanOrEqual(0);
-  expect(ring.inView).toBe(true);
-  // The axis labels scroll with the columns: same width, same scroller.
-  const axis = await chart
-    .getByText("1 Sep", { exact: true })
-    .evaluate((label) => {
-      const list = label.closest("section")!.querySelector("ol")!;
-      const row = label.parentElement!;
-      return {
-        together: list.parentElement!.contains(row),
-        gap: Math.abs(
-          row.getBoundingClientRect().width -
-            list.getBoundingClientRect().width,
-        ),
-      };
-    });
-  expect(axis.together).toBe(true);
-  expect(axis.gap).toBeLessThanOrEqual(1);
-  // On phones each column is a 44 px target, so the chart scrolls sideways.
-  if (isMobile(page)) expect(ring.width_px).toBeGreaterThanOrEqual(44);
-  await expect(chart.getByText("Most alerts", { exact: false })).toBeVisible();
-  await expect(chart.locator("p[aria-hidden]").first()).toContainText(
-    /^\d+ \w+: \d+ alerts?$/,
-  );
-
-  await page.keyboard.press("Home");
-  await expect(columns.first()).toBeFocused();
-  const firstInView = await columns.first().evaluate((el) => {
-    const b = el.getBoundingClientRect();
-    return b.left >= 0 && b.right <= window.innerWidth;
-  });
-  expect(firstInView).toBe(true);
+  await expect(
+    group.getByRole("region", { name: "Who received them" }),
+  ).toContainText("Hospital queue402");
 });
 
 test("the usage CSV carries the alert numbers, with small groups hidden", async ({
@@ -562,13 +449,9 @@ test("the usage CSV carries the alert numbers, with small groups hidden", async 
   await page.getByRole("button", { name: "Export CSV" }).click();
   const csv = readFileSync((await (await download).path())!, "utf8");
   expect(csv).toContain("Alerts: total,128\r\n");
-  expect(csv).toContain("Alerts: Critical handled within 15 min (%),71\r\n");
-  expect(csv).toContain("Alerts: dismissed as Wrong patient,Fewer than 5\r\n");
-  expect(csv).toContain("Alerts on 2026-10-14,23\r\n");
+  expect(csv).toContain("Alerts: Hospital queue,97\r\n");
+  expect(csv).toContain("Alerts: Blood gases and lactate,Fewer than 5\r\n");
   expect(csv).not.toMatch(/MRN|@|\bBed\b/);
-  // "patient" appears only in the two labels that name a reason or a clinic.
-  expect(
-    csv.replaceAll("Wrong patient", "").replaceAll("Outpatient", ""),
-  ).not.toMatch(/patient/i);
+  expect(csv).not.toMatch(/patient/i);
   await expect(page.getByText("Usage exported")).toBeVisible();
 });

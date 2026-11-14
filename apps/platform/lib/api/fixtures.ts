@@ -68,19 +68,19 @@ const NO_SSO: SsoOut = {
   version: 1,
 };
 
+/** Core keeps no invites: every sample member is active (openapi 1.26.0). */
 export function seedTeam(now: number): TeamMember[] {
   const m = (
     p: Person,
     email: string,
     role: TeamMember["role"],
     lastAgo: number | null,
-    pending = false,
   ): TeamMember => ({
     ...p,
     email,
     role,
-    status: pending ? "invite_pending" : "active",
-    mfa_enabled: !pending,
+    status: "active",
+    mfa_enabled: true,
     last_sign_in_at: lastAgo === null ? null : iso(now - lastAgo),
     is_you: false,
     version: 1,
@@ -94,13 +94,7 @@ export function seedTeam(now: number): TeamMember[] {
       "auditor",
       3 * D,
     ),
-    m(
-      { id: "tm_kemi", name: "Kemi Lawal" },
-      TEAM_EMAILS.kemi,
-      "auditor",
-      null,
-      true,
-    ),
+    m({ id: "tm_kemi", name: "Kemi Lawal" }, TEAM_EMAILS.kemi, "auditor", null),
     // Active but not set up: the demo's first sign-in. The sample team
     // never records the setup, so this admin repeats the welcome flow on
     // every sign-in in a tab, on purpose, so the demo is repeatable.
@@ -535,7 +529,7 @@ export function seedHospitals(now: number): HospitalRecord[] {
     // The hospital's name comes from its own record, so the two can't drift.
     for (const h of holds)
       h.hospital = { id: r.hospital.id, name: r.hospital.name };
-    const kept = holds.filter((h) => keepsRecords(h, now));
+    const kept = holds.filter(keepsRecords);
     const removal = r.hospital.removal;
     return {
       ...r,

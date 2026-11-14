@@ -1,10 +1,13 @@
 // The demo's legal holds (Plan 8a), built on the mock core. Memory only. It
-// refuses what the backend refuses (spec §9), with the same codes.
+// refuses what core refuses (openapi 1.26.0), with the same codes: a hold
+// keeps every record, carries no note and no name, a lift's authority is a
+// document reference, a lift lands at once on approval, and editing a hold
+// or undoing a lift is 501 `not_implemented`.
 import { ApiError } from "@mhai/api-client/errors";
 import type { Hospital, Person, TeamMember } from "./contract";
 import type { HospitalRecord } from "./fixtures";
 import {
-  HOLD_GRACE_DAYS,
+  DOCUMENT_REFERENCE,
   HOLD_REASONS,
   HOLD_STATUSES,
   LAPSE_DAYS,
@@ -20,25 +23,15 @@ import {
   type LegalHoldDetail,
   type LiftReason,
 } from "./holds-contract";
-import {
-  HOLD_REASON_WORDS,
-  LIFT_REASON_WORDS,
-  RECORDS_DUE,
-  dateIn,
-  nextCleanUp,
-} from "./holds-fixtures";
+import { HOLD_REASON_WORDS, LIFT_REASON_WORDS, dateIn } from "./holds-fixtures";
 import type { MockCore } from "./mock";
 
 const D = 24 * 3_600_000;
 const PAGE = 50;
-const REFERENCE_MAX = 100;
-const ASKED_BY_MAX = 200;
-const NOTE_MAX = 500;
-const AUTHORITY_MAX = 200;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const OPEN: readonly HoldStatus[] = ["active", "review_due", "lift_requested"];
-/** What a hold edit may send; anything else is 422. */
-const EDITABLE = new Set(["review_on", "note", "version"]);
+/** A review date at most this many years ahead. */
+const REVIEW_MAX_YEARS = 5;
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const fail = (status: number, code: string): never => {
@@ -47,18 +40,17 @@ const fail = (status: number, code: string): never => {
 const invalid = (): never => fail(422, "invalid");
 const person = (m: TeamMember): Person => ({ id: m.id, name: m.name });
 
-/** Trimmed text of 1 to `max` characters, else 422. */
-function text(v: unknown, max: number): string {
-  if (typeof v !== "string") return invalid();
-  const t = v.trim();
-  return t.length >= 1 && t.length <= max ? t : invalid();
+/** A document reference (`LH-2026-0042`), else 422. */
+function reference(v: unknown): string {
+  return typeof v === "string" && DOCUMENT_REFERENCE.test(v) ? v : invalid();
 }
-/** Optional text: absent, null or blank is null; over `max` is 422. */
-function optText(v: unknown, max: number): string | null {
-  if (v === undefined || v === null) return null;
-  if (typeof v !== "string") return invalid();
-  return v.trim() === "" ? null : text(v, max);
+/** No free text and no names: only absent, null or "" pass, else 422. */
+function nothing(v: unknown) {
+  if (v !== undefined && v !== null && v !== "") invalid();
 }
+/** The words Activity's detail carries for a hold's reason (none for the CLI's). */
+const reasonWords = (r: HoldReason | null) =>
+  r === null ? "" : HOLD_REASON_WORDS[r];
 /** A real calendar date, YYYY-MM-DD, else 422. */
 function day(v: unknown): string {
   if (typeof v !== "string" || !DATE.test(v)) return invalid();
@@ -72,8 +64,6 @@ function versionOf(body: unknown): number {
   const v = (body as { version?: unknown } | null)?.version;
   return typeof v === "number" ? v : invalid();
 }
-const optDay = (v: unknown) =>
-  v === undefined || v === null || v === "" ? null : day(v);
 
 /** Today in the hospital's time zone. */
 const today = (r: HospitalRecord, now: number) =>
@@ -87,18 +77,21 @@ function withoutHistory(h: LegalHoldDetail): LegalHold {
   delete out.history;
   return out as LegalHold;
 }
-const ref = (h: Hospital): Person => ({ id: h.id, name: h.name });
+const hospitalRef = (h: Hospital): Person => ({ id: h.id, name: h.name });
+
+/**
+ * The holds whose lift request lapsed: core ends it with no history line
+ * and no Activity (no person did it), and an approval after it is 409
+ * `expired`.
+ */
+const lapsed = new WeakSet<LegalHoldDetail>();
 
 /**
  * Time-driven changes to a hospital's holds: a review date reached, a lift
- * request lapsed, records released after the grace period. Run with every
- * read of the hospital (the hospitals part's settle), so Activity has them.
+ * request lapsed. Run with every read of the hospital (the hospitals part's
+ * settle). Neither is a person's action, so neither is in Activity.
  */
-export function settleHolds(
-  r: HospitalRecord,
-  now: number,
-  log: MockCore["log"],
-) {
+export function settleHolds(r: HospitalRecord, now: number) {
   for (const h of r.holds) {
     const lift = h.lift;
     if (h.status === "lift_requested" && lift) {
@@ -106,48 +99,19 @@ export function settleHolds(
         h.status = openStatus(r, h, now);
         h.lift = null;
         h.version++;
-        h.history.unshift({
-          at: lift.expires_at,
-          actor: lift.requested_by,
-          action: "lift_lapsed",
-          detail: LIFT_REASON_WORDS[lift.reason],
-        });
-        log(lift.requested_by, "hold_lift_lapsed", {
-          hospital: ref(r.hospital),
-          target: h.reference,
-          detail: LIFT_REASON_WORDS[lift.reason],
-        });
+        lapsed.add(h);
       }
     }
     if (h.status === "active" && today(r, now) >= h.review_on) {
       h.status = "review_due";
       h.version++;
     }
-    if (
-      h.status === "lifted" &&
-      lift?.released_on &&
-      now >= Date.parse(lift.released_on) &&
-      !h.history.some((e) => e.action === "released")
-    ) {
-      const actor = lift.approved_by ?? lift.requested_by;
-      h.history.unshift({
-        at: lift.released_on,
-        actor,
-        action: "released",
-        detail: null,
-      });
-      log(actor, "hold_released", {
-        hospital: ref(r.hospital),
-        target: h.reference,
-        detail: LIFT_REASON_WORDS[lift.reason],
-      });
-    }
   }
 }
 
 /** A hospital's holds that keep its records, in short form. */
-export const keptHolds = (r: HospitalRecord, now: number): HoldShort[] =>
-  r.holds.filter((h) => keepsRecords(h, now)).map(shortHold);
+export const keptHolds = (r: HospitalRecord): HoldShort[] =>
+  r.holds.filter(keepsRecords).map(shortHold);
 
 export type HoldsMockOptions = {
   /** Hospitals whose removal has started deleting: a hold there is 409. */
@@ -158,7 +122,7 @@ export function holdsMock(
   core: MockCore,
   { removalStarted = [] }: HoldsMockOptions = {},
 ): HoldsClient {
-  const { now, log } = core;
+  const { now } = core;
   /** Every hospital brought up to date (which settles their holds). */
   const settled = () =>
     core.hospitals().map((r) => core.findHospital(r.hospital.id));
@@ -193,8 +157,8 @@ export function holdsMock(
     h: LegalHold,
     words: string,
   ) =>
-    log(person(m), action, {
-      hospital: ref(r.hospital),
+    core.log(person(m), action, {
+      hospital: hospitalRef(r.hospital),
       target: h.reference,
       detail: words,
     });
@@ -239,22 +203,36 @@ export function holdsMock(
       core.write(opts, async (m) => {
         const b = (body ?? {}) as Record<string, unknown>;
         if (typeof b.hospital_id !== "string") invalid();
-        const from = optDay(b.from);
-        const to = optDay(b.to);
-        if (to !== null && from === null) invalid();
-        if (from !== null && to !== null && to < from)
+        // A hold keeps every record: no dates.
+        if (
+          (b.from !== undefined && b.from !== null) ||
+          (b.to !== undefined && b.to !== null)
+        )
           fail(422, "invalid_range");
+        nothing(b.note);
+        nothing(b.asked_by);
         const reason = b.reason as HoldReason;
         if (!HOLD_REASONS.includes(reason)) invalid();
-        const reference = text(b.reference, REFERENCE_MAX);
-        const asked_by = text(b.asked_by, ASKED_BY_MAX);
-        const note = optText(b.note, NOTE_MAX);
-        if (reason === "other" && note === null) invalid();
+        const ref = reference(b.reference);
         const review_on = day(b.review_on);
         const r = core.findHospital(b.hospital_id as string);
         const hosp = r.hospital;
+        const today0 = today(r, now());
+        const latest = `${Number(today0.slice(0, 4)) + REVIEW_MAX_YEARS}${today0.slice(4)}`;
+        if (review_on <= today0 || review_on > latest) invalid();
         if (hosp.status === "removed") fail(409, "hospital_removed");
         if (removalStarted.includes(hosp.id)) fail(409, "removal_started");
+        // An open hold with the same reference: before the code is spent.
+        if (
+          core
+            .hospitals()
+            .some((x) =>
+              x.holds.some(
+                (h) => h.reference === ref && OPEN.includes(h.status),
+              ),
+            )
+        )
+          fail(409, "conflict");
         await core.checkCode(m, body);
 
         // A scheduled removal that hasn't started stops: back to pending,
@@ -272,12 +250,12 @@ export function holdsMock(
         const at = iso(now());
         const h: LegalHoldDetail = {
           id: core.newId("hold"),
-          hospital: ref(hosp),
-          scope: { from, to },
+          hospital: hospitalRef(hosp),
+          scope: { from: null, to: null },
           reason,
-          reference,
-          asked_by,
-          note,
+          reference: ref,
+          asked_by: null,
+          note: null,
           placed_by: person(m),
           placed_at: at,
           review_on,
@@ -288,58 +266,29 @@ export function holdsMock(
           history: [{ at, actor: person(m), action: "placed", detail: null }],
         };
         r.holds.unshift(h);
-        audit(m, "hold_placed", r, h, HOLD_REASON_WORDS[reason]);
+        audit(m, "hold_placed", r, h, reasonWords(reason));
         refresh(r);
         return h;
       }),
 
-    editHold: (id, body, opts) =>
-      core.write(opts, (m) => {
-        const b = (body ?? {}) as Record<string, unknown>;
-        if (Object.keys(b).some((k) => !EDITABLE.has(k))) invalid();
-        if (typeof b.version !== "number") invalid();
-        const review_on =
-          b.review_on === undefined ? undefined : day(b.review_on);
-        const note =
-          b.note === undefined ? undefined : optText(b.note, NOTE_MAX);
-        const { r, h } = find(id);
-        if (h.status === "lifted") fail(409, "conflict");
-        if (b.version !== h.version) fail(409, "conflict");
-        // Every check before any change: a refusal leaves the hold as it was.
-        if (note === null && h.reason === "other") invalid();
-        const newDate = review_on !== undefined && review_on !== h.review_on;
-        const newNote = note !== undefined && note !== h.note;
-        // Nothing to change: no new version, no history, no Activity.
-        if (!newDate && !newNote) return h;
-        const changed: string[] = [];
-        if (newDate) {
-          h.review_on = review_on;
-          changed.push("Review date");
-          if (h.status === "review_due" || h.status === "active")
-            h.status = openStatus(r, h, now());
-        }
-        if (newNote) {
-          h.note = note;
-          changed.push("Note");
-        }
-        record(h, m, "edited", changed.join(", ") || null);
-        audit(m, "hold_edited", r, h, HOLD_REASON_WORDS[h.reason]);
-        refresh(r);
-        return h;
-      }),
+    // Not served by core yet.
+    editHold: (_id, _body, opts) =>
+      core.write(opts, () => fail(501, "not_implemented")),
 
     requestLift: (id, body, opts) =>
       core.write(opts, async (m) => {
         const b = (body ?? {}) as Record<string, unknown>;
         const reason = b.reason as LiftReason;
         if (!LIFT_REASONS.includes(reason)) invalid();
-        const note = optText(b.note, NOTE_MAX);
-        const authority = text(b.authority, AUTHORITY_MAX);
-        const { r, h } = find(id);
+        nothing(b.note);
+        // The document that allows it, as a reference: never free text.
+        const authority = reference(b.authority);
+        const { h } = find(id);
         if (h.status !== "active" && h.status !== "review_due")
           fail(409, "conflict");
         await core.checkCode(m, body);
         const at = now();
+        lapsed.delete(h);
         h.status = "lift_requested";
         h.lift = {
           id: core.newId("req"),
@@ -350,17 +299,17 @@ export function holdsMock(
           // Set per caller on the way out.
           requested_by_you: true,
           expires_at: iso(at + LAPSE_DAYS * D),
-          note,
+          note: null,
           authority,
-          records_due: RECORDS_DUE[r.hospital.id] ?? 0,
-          due_after: nextCleanUp(at),
+          records_due: null,
+          due_after: null,
           approved_by: null,
           approved_at: null,
           released_on: null,
         };
         const words = LIFT_REASON_WORDS[reason];
         record(h, m, "lift_requested", words);
-        audit(m, "hold_lift_requested", r, h, words);
+        audit(m, "hold_lift_requested", find(id).r, h, words);
         return h;
       }),
 
@@ -370,10 +319,7 @@ export function holdsMock(
         const { r, h } = find(id);
         const lift = h.lift;
         // Lapsed while the approver looked at it: say so, never a quiet no.
-        if (
-          h.status !== "lift_requested" &&
-          h.history[0]?.action === "lift_lapsed"
-        )
+        if (h.status !== "lift_requested" && lapsed.has(h))
           fail(409, "expired");
         // Only the request the approver saw: not one made since.
         if (version !== h.version || h.status !== "lift_requested" || !lift)
@@ -385,7 +331,8 @@ export function holdsMock(
         h.status = "lifted";
         lift.approved_by = person(m);
         lift.approved_at = iso(at);
-        lift.released_on = iso(at + HOLD_GRACE_DAYS * D);
+        // No grace period: the hold is lifted at once.
+        lift.released_on = iso(at);
         const words = LIFT_REASON_WORDS[lift.reason];
         record(h, m, "lifted", words);
         audit(m, "hold_lifted", r, h, words);
@@ -408,26 +355,8 @@ export function holdsMock(
         return h;
       }),
 
-    undoLift: (id, body, opts) =>
-      core.write(opts, async (m) => {
-        const version = versionOf(body);
-        const { r, h } = find(id);
-        const lift = h.lift;
-        if (
-          version !== h.version ||
-          h.status !== "lifted" ||
-          !lift?.released_on ||
-          now() >= Date.parse(lift.released_on)
-        )
-          return fail(409, "conflict");
-        await core.checkCode(m, body);
-        h.status = openStatus(r, h, now());
-        h.lift = null;
-        const words = LIFT_REASON_WORDS[lift.reason];
-        record(h, m, "lift_undone", words);
-        audit(m, "hold_lift_undone", r, h, words);
-        refresh(r);
-        return h;
-      }),
+    // A lift lands at once: core has nothing to undo (501).
+    undoLift: (_id, _body, opts) =>
+      core.write(opts, () => fail(501, "not_implemented")),
   };
 }

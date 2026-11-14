@@ -50,6 +50,25 @@ describe("the Settings page", () => {
     ]);
   });
 
+  it("core doesn't serve platform settings yet (501): one calm Not available yet, no Try again, no retry", async () => {
+    const get = vi.fn(async () => {
+      throw new ApiError(501, "not_implemented");
+    });
+    install({ getSettings: get });
+    renderWithAuth(<SettingsView />);
+    const note = await screen.findByText("Not available yet");
+    expect(note.closest("[role=status]")).not.toBeNull();
+    expect(
+      screen.getByText(
+        "Measured Health hasn't switched on platform settings yet. Nothing is wrong.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't load/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
   it("a failed read shows each section's own Couldn't load, and Try again reads again", async () => {
     const { m } = install();
     let fail = true;

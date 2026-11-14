@@ -51,7 +51,7 @@ function goOnline() {
 }
 
 describe("ActivityView", () => {
-  it("lists what happened, newest first, consultations by specialty and confidence only", async () => {
+  it("lists what happened, newest first, as core sends it", async () => {
     renderAdmin(<ActivityView />);
     const first = rows(await log())[0]!;
     expect(first).toHaveTextContent("Dr. Obi");
@@ -59,40 +59,38 @@ describe("ActivityView", () => {
     expect(first).toHaveTextContent(
       "Changed Dr. Mensah's specialty to Cardiology",
     );
+    // Core sends a consultation with no specialty or confidence.
     expect(
-      await rowWith(
-        "Ran a consultation · Internal Medicine · Use with caution",
-      ),
-    ).toHaveTextContent("Consultation");
+      (await within(await log()).findAllByText("Ran a consultation"))[0],
+    ).toBeInTheDocument();
+    expect(
+      await rowWith("Too many failed sign-ins for Dr. Bello · account locked"),
+    ).toHaveTextContent("Security");
   });
 
-  it("flags security and policy events with a word and an icon", async () => {
+  it("shows a flag with a word and an icon when core sends one", async () => {
+    vi.spyOn(holder.client, "listActivity").mockResolvedValue({
+      events: [
+        makeEvent({
+          type: "security",
+          kind: "sign_in_locked",
+          actor: null,
+          target: { display_name: "Dr. Bello" },
+          flag: "alert",
+        }),
+        makeEvent({ id: "e-2", kind: "signed_in_without_mfa", flag: "policy" }),
+      ],
+      next_cursor: null,
+    });
     renderAdmin(<ActivityView />);
     const alert = await rowWith(
-      "5 failed sign-ins for Dr. Bello · account locked",
+      "Too many failed sign-ins for Dr. Bello · account locked",
     );
     expect(alert).toHaveTextContent("Alert");
     expect(alert.querySelector("svg")).not.toBeNull();
-    const policy = await rowWith(
-      "Signed in without two-step (setup pending) · Chrome on Windows",
-    );
+    const policy = await rowWith("Signed in without two-step (setup pending)");
     expect(policy).toHaveTextContent("Policy");
     expect(document.body.textContent).not.toMatch(/2-step/i);
-  });
-
-  it("flags an admin giving themselves a role, in plain words", async () => {
-    holder.client = screenAdminAs(DEMO_EMAILS.hospitalAdmin);
-    const me = (await holder.client.listStaff()).find((s) => s.is_you)!;
-    await holder.client.updateStaff(me.id, {
-      version: me.version,
-      roles: ["clinician", "hospital_admin"],
-    });
-    renderAdmin(<ActivityView />);
-    const row = await rowWith("Gave themselves the Clinician role");
-    expect(row).toHaveTextContent("Grace Nwosu");
-    expect(row).toHaveTextContent("Alert");
-    expect(row.querySelector("svg")).not.toBeNull();
-    expect(document.body.textContent).not.toMatch(/self_role_change/);
   });
 
   it("filters by type and by flagged only", async () => {
@@ -101,8 +99,11 @@ describe("ActivityView", () => {
     await userEvent.selectOptions(screen.getByLabelText("Type"), "security");
     await waitFor(async () => expect(rows(await log())).toHaveLength(1));
     await userEvent.selectOptions(screen.getByLabelText("Type"), "");
+    // Core flags nothing today: the flagged page is empty.
     await userEvent.click(screen.getByRole("button", { name: "Flagged only" }));
-    await waitFor(async () => expect(rows(await log())).toHaveLength(2));
+    expect(
+      await screen.findByText("Nothing matches these filters."),
+    ).toBeInTheDocument();
   });
 
   it("filters by person once typing stops", async () => {
@@ -149,7 +150,7 @@ describe("ActivityView", () => {
     expect(
       csv.startsWith("\uFEFFTime (UTC),Who,Type,What happened,Flag\r\n"),
     ).toBe(true);
-    expect(csv.trim().split("\r\n")).toHaveLength(138);
+    expect(csv.trim().split("\r\n")).toHaveLength(136);
     expect(await screen.findByText("Activity exported")).toBeInTheDocument();
   });
 
@@ -289,9 +290,8 @@ describe("ActivityView", () => {
     });
     expect(
       within(cards).getByText(
-        "5 failed sign-ins for Dr. Bello · account locked",
+        "Too many failed sign-ins for Dr. Bello · account locked",
       ),
     ).toBeInTheDocument();
-    expect(within(cards).getAllByText("Alert").length).toBeGreaterThan(0);
   });
 });

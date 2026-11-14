@@ -57,14 +57,15 @@ describe("the team page", () => {
     expect(within(ada).getByText("Platform admin")).toBeInTheDocument();
     expect(within(ada).getByText("Active")).toBeInTheDocument();
     expect(within(ada).getByText("On")).toBeInTheDocument();
+    // Core keeps no invites: every member is active (1.26.0).
     const kemi = rowOf(table, "Kemi Lawal");
     expect(within(kemi).getByText("Auditor")).toBeInTheDocument();
-    expect(within(kemi).getByText("Invite pending")).toBeInTheDocument();
-    expect(within(kemi).getByText("Off")).toBeInTheDocument();
+    expect(within(kemi).getByText("Active")).toBeInTheDocument();
+    expect(within(table).queryByText("Invite pending")).toBeNull();
     expect(within(rowOf(table, "Chidi Nwosu")).getByText("Off")).toBeVisible();
   });
 
-  it("invite adds an Invite pending row", async () => {
+  it("invites aren't served yet: a calm Not available yet, and no row is added", async () => {
     renderWithAuth(<TeamView />);
     await screen.findByRole("table");
     await userEvent.click(
@@ -80,38 +81,16 @@ describe("the team page", () => {
       within(d).getByLabelText("Email"),
       "ngozi@measured-health.example",
     );
-    await userEvent.click(within(d).getByLabelText("Platform admin"));
     await userEvent.click(
       within(d).getByRole("button", { name: "Send invite" }),
     );
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    const row = rowOf(await screen.findByRole("table"), "Ngozi Adeyemi");
-    expect(within(row).getByText("Invite pending")).toBeInTheDocument();
-    expect(within(row).getByText("Platform admin")).toBeInTheDocument();
+    const note = await within(d).findByText("Not available yet");
+    expect(note.closest("[role=status]")).not.toBeNull();
+    expect(within(d).queryByRole("alert")).toBeNull();
     expect(
-      screen.getAllByText("Invite sent to ngozi@measured-health.example")
-        .length,
-    ).toBeGreaterThan(0);
-  });
-
-  it("an email already on the team is refused in words", async () => {
-    renderWithAuth(<TeamView />);
-    await screen.findByRole("table");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Invite team member" }),
-    );
-    const d = screen.getByRole("dialog", { name: "Invite a team member" });
-    await userEvent.type(within(d).getByLabelText("Name"), "Again");
-    await userEvent.type(
-      within(d).getByLabelText("Email"),
-      "amara.eze@measured-health.example",
-    );
-    await userEvent.click(
       within(d).getByRole("button", { name: "Send invite" }),
-    );
-    expect(
-      await within(d).findByText("That email is already on the team."),
-    ).toBeInTheDocument();
+    ).toBeDisabled();
+    expect(screen.queryByText("Ngozi Adeyemi")).toBeNull();
   });
 
   it("your own row has no Change role and no Remove", async () => {
@@ -139,7 +118,9 @@ describe("the team page", () => {
     ).toBeInTheDocument();
   });
 
-  it("changing a role updates the row", async () => {
+  it("changing a role asks for the code (core 1.26.0), says their sessions end, and updates the row", async () => {
+    const api = install();
+    const spy = vi.spyOn(api, "changeRole");
     renderWithAuth(<TeamView />);
     const table = await screen.findByRole("table");
     await userEvent.click(
@@ -149,9 +130,31 @@ describe("the team page", () => {
     );
     const d = screen.getByRole("dialog", { name: "Change role for Amara Eze" });
     expect(within(d).getByLabelText("Auditor")).toBeChecked();
+    expect(
+      within(d).getByText(
+        "Their sessions end at once: they sign in again with the new role.",
+      ),
+    ).toBeInTheDocument();
     await userEvent.click(within(d).getByLabelText("Platform admin"));
-    await userEvent.click(within(d).getByRole("button", { name: "Save role" }));
+    await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
+    const s = await screen.findByRole("dialog", {
+      name: "Make Amara Eze a platform admin?",
+    });
+    await userEvent.click(
+      within(s).getByRole("button", { name: "Change role" }),
+    );
+    expect(within(s).getByText("Enter your 6-digit code.")).toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+    await userEvent.keyboard("123456");
+    await userEvent.click(
+      within(s).getByRole("button", { name: "Change role" }),
+    );
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(spy.mock.calls[0]![1]).toEqual({
+      role: "platform_admin",
+      version: 1,
+      mfa_code: "123456",
+    });
     await waitFor(() =>
       expect(
         within(rowOf(screen.getByRole("table"), "Amara Eze")).getByText(
@@ -171,26 +174,111 @@ describe("the team page", () => {
       }),
     );
     const d = screen.getByRole("dialog", { name: "Change role for Amara Eze" });
+    await userEvent.click(within(d).getByLabelText("Platform admin"));
+    await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
+    const s = await screen.findByRole("dialog", {
+      name: "Make Amara Eze a platform admin?",
+    });
     // Someone else changes her role first.
-    const list = await api.listTeam();
-    const amara = list.members.find((m) => m.name === "Amara Eze")!;
     await api.changeRole(
-      amara.id,
-      { role: "platform_admin", version: 1 },
+      "tm_amara",
+      { role: "platform_admin", version: 1, mfa_code: "123456" },
       { idempotencyKey: "k-other" },
     );
-    await userEvent.click(within(d).getByLabelText("Platform admin"));
-    await userEvent.click(within(d).getByRole("button", { name: "Save role" }));
+    await userEvent.keyboard("123456");
+    await userEvent.click(
+      within(s).getByRole("button", { name: "Change role" }),
+    );
     expect(
-      await within(d).findByText("Changed by someone else"),
+      await within(s).findByText("Changed by someone else"),
     ).toBeInTheDocument();
-    await userEvent.click(within(d).getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
       expect(
         within(rowOf(screen.getByRole("table"), "Amara Eze")).getByText(
           "Platform admin",
         ),
       ).toBeInTheDocument(),
+    );
+  });
+
+  it("own_role and last_admin are said in words, with what to do", async () => {
+    const api = install();
+    for (const [code, title, body] of [
+      [
+        "own_role",
+        "You can't change your own role.",
+        "Ask another platform admin to do it.",
+      ],
+      [
+        "last_admin",
+        "There must always be at least one platform admin.",
+        "Make someone else a platform admin first.",
+      ],
+    ] as const) {
+      vi.spyOn(api, "changeRole").mockRejectedValueOnce(
+        new ApiError(409, code),
+      );
+      const { unmount } = renderWithAuth(<TeamView />);
+      const table = await screen.findByRole("table");
+      await userEvent.click(
+        within(rowOf(table, "Tunde Okafor")).getByRole("button", {
+          name: "Change role for Tunde Okafor",
+        }),
+      );
+      const d = screen.getByRole("dialog", {
+        name: "Change role for Tunde Okafor",
+      });
+      await userEvent.click(within(d).getByLabelText("Auditor"));
+      await userEvent.click(
+        within(d).getByRole("button", { name: "Continue" }),
+      );
+      const s = await screen.findByRole("dialog", {
+        name: "Make Tunde Okafor an auditor?",
+      });
+      await userEvent.keyboard("123456");
+      await userEvent.click(
+        within(s).getByRole("button", { name: "Change role" }),
+      );
+      expect(await within(s).findByText(title)).toBeInTheDocument();
+      expect(within(s).getByText(body)).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("after a wrong code, the mutation cache holds no code", async () => {
+    const { QueryClient } = await import("@tanstack/react-query");
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderWithAuth(<TeamView />, { queryClient: qc });
+    const table = await screen.findByRole("table");
+    await userEvent.click(
+      within(rowOf(table, "Amara Eze")).getByRole("button", {
+        name: "Change role for Amara Eze",
+      }),
+    );
+    const d = screen.getByRole("dialog", { name: "Change role for Amara Eze" });
+    await userEvent.click(within(d).getByLabelText("Platform admin"));
+    await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
+    const s = await screen.findByRole("dialog", {
+      name: "Make Amara Eze a platform admin?",
+    });
+    await userEvent.keyboard("000000");
+    await userEvent.click(
+      within(s).getByRole("button", { name: "Change role" }),
+    );
+    expect(
+      await within(s).findByText("That code didn't work. Try again."),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        JSON.stringify(
+          qc
+            .getMutationCache()
+            .getAll()
+            .map((m) => m.state.variables),
+        ),
+      ).not.toContain("000000"),
     );
   });
 
@@ -301,7 +389,7 @@ describe("the team page", () => {
     const items = within(list).getAllByRole("listitem");
     expect(items).toHaveLength(6);
     const kemi = items.find((i) => within(i).queryByText("Kemi Lawal"))!;
-    expect(within(kemi).getByText("Invite pending")).toBeInTheDocument();
+    expect(within(kemi).getByText("Active")).toBeInTheDocument();
     expect(
       within(kemi).getByRole("button", { name: "Remove Kemi Lawal" }),
     ).toBeInTheDocument();

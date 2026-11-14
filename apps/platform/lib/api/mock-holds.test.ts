@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
+import { readHold, readHolds } from "./admin-schema";
 import { BlockedError } from "./contract";
 import { TEAM_EMAILS } from "./fixtures";
 import {
@@ -7,7 +8,6 @@ import {
   type LegalHold,
   type PlaceHoldIn,
 } from "./holds-contract";
-import { nextCleanUp } from "./holds-fixtures";
 import { createMockPlatform } from "./mock";
 import { MOCK_CODE, createStepUp } from "./step-up";
 
@@ -57,13 +57,15 @@ async function failure(p: Promise<unknown>): Promise<[number, string]> {
 const PLACE: PlaceHoldIn = {
   hospital_id: "h_southpoint",
   reason: "court_case",
-  reference: "HC/2026/0999",
-  asked_by: "The hospital's solicitors",
+  reference: "HC-2026-0999",
   review_on: "2027-04-20",
   ...CODE,
 };
+/** A body with what core refuses, as an old client would send it. */
+const loose = (extra: Record<string, unknown>) =>
+  ({ ...PLACE, ...extra }) as unknown as PlaceHoldIn;
 
-describe("mock legal holds", () => {
+describe("mock legal holds (core openapi 1.26.0)", () => {
   it("open is the default filter: active, review due and lift requested", async () => {
     const { m } = setup();
     const open = await m.listHolds({});
@@ -71,12 +73,20 @@ describe("mock legal holds", () => {
       ["hold_hv", "active"],
       ["hold_rc", "lift_requested"],
       ["hold_ng", "review_due"],
+      ["hold_rg", "review_due"],
     ]);
     expect(open.next_cursor).toBeNull();
     expect(open.holds[0]).not.toHaveProperty("history");
     expect(
       (await m.listHolds({ status: "all" })).holds.map((h) => h.id),
-    ).toEqual(["hold_hv", "hold_rc", "hold_ng", "hold_hh", "hold_lc"]);
+    ).toEqual([
+      "hold_hv",
+      "hold_rc",
+      "hold_ng",
+      "hold_hh",
+      "hold_lc",
+      "hold_rg",
+    ]);
     expect(
       (await m.listHolds({ status: "lifted" })).holds.map((h) => h.id),
     ).toEqual(["hold_hh", "hold_lc"]);
@@ -85,51 +95,61 @@ describe("mock legal holds", () => {
         (h) => h.id,
       ),
     ).toEqual(["hold_lc"]);
-    expect((await m.listHolds({ q: "cmp-01" })).holds.map((h) => h.id)).toEqual(
-      ["hold_rc"],
-    );
+    expect(
+      (await m.listHolds({ q: "cmp-2026" })).holds.map((h) => h.id),
+    ).toEqual(["hold_rc"]);
     expect(await failure(m.listHolds({ status: "gone" as "all" }))).toEqual([
       422,
       "invalid",
     ]);
-
-    const rc = await m.getHold("hold_rc");
-    expect(rc).toMatchObject({
-      hospital: { id: "h_riverside" },
-      reference: "CMP-0193",
-      lift: {
-        kind: "hold_lift",
-        requested_by: { id: "tm_tunde" },
-        authority: "Counsel's letter 14 Oct 2026, ref ABC-123",
-        records_due: 1240,
-        expires_at: iso(START - 2 * D + 7 * D),
-      },
-    });
-    expect(rc.history.map((e) => e.action)).toEqual([
-      "lift_requested",
-      "placed",
-    ]);
-    const hh = await m.getHold("hold_hh");
-    expect(hh.note).toBe("Board request pending legal review");
-    expect(hh.lift?.approved_by).toEqual({ id: "tm_ada", name: "Ada Bakare" });
-    expect(hh.history[0]?.action).toBe("released");
     expect(await failure(m.getHold("hold_nope"))).toEqual([404, "not_found"]);
   });
 
-  it("keepsRecords counts lifted holds until released_on", async () => {
-    const lifted = (released_on: string | null) =>
-      ({ status: "lifted", lift: { released_on } }) as LegalHold;
-    expect(keepsRecords(lifted(iso(START + 1)), START)).toBe(true);
-    expect(keepsRecords(lifted(iso(START)), START)).toBe(false);
-    expect(keepsRecords(lifted(null), START)).toBe(false);
-    for (const status of ["active", "review_due", "lift_requested"] as const)
-      expect(keepsRecords({ status, lift: null } as LegalHold, START)).toBe(
-        true,
-      );
+  it("every sample hold reads through core's strict schema: all records, no note, no name", async () => {
+    const { m } = setup();
+    const all = await m.listHolds({ status: "all" });
+    expect(() => readHolds(all)).not.toThrow();
+    for (const h of all.holds) {
+      expect(h.scope).toEqual({ from: null, to: null });
+      expect(h.note).toBeNull();
+      expect(h.asked_by).toBeNull();
+      expect(readHold(await m.getHold(h.id)).id).toBe(h.id);
+    }
+    const rc = await m.getHold("hold_rc");
+    expect(rc.lift).toMatchObject({
+      kind: "hold_lift",
+      requested_by: { id: "tm_tunde" },
+      authority: "CT-2026-0091",
+      note: null,
+      records_due: null,
+      due_after: null,
+      expires_at: iso(START - 2 * D + 7 * D),
+    });
+    // Lifted at once: released when approved, and no "released" event.
+    const hh = await m.getHold("hold_hh");
+    expect(hh.lift?.released_on).toBe(hh.lift?.approved_at);
+    expect(hh.history.map((e) => e.action)).toEqual([
+      "lifted",
+      "lift_requested",
+      "placed",
+    ]);
+  });
 
-    const { m, advance } = setup();
-    expect((await m.getHospital("h_lakeside")).legal_holds_active).toBe(1);
-    advance(4 * D);
+  it("the command line's hold has no reason and is placed by `cli`", async () => {
+    const { m } = setup();
+    const rg = await m.getHold("hold_rg");
+    expect(rg).toMatchObject({
+      reason: null,
+      placed_by: { id: "cli", name: "Provisioning command line" },
+      status: "review_due",
+    });
+  });
+
+  it("keepsRecords: every hold but a lifted one (no grace period)", async () => {
+    for (const status of ["active", "review_due", "lift_requested"] as const)
+      expect(keepsRecords({ status } as LegalHold)).toBe(true);
+    expect(keepsRecords({ status: "lifted" } as LegalHold)).toBe(false);
+    const { m } = setup();
     expect((await m.getHospital("h_lakeside")).legal_holds_active).toBe(0);
   });
 
@@ -139,13 +159,14 @@ describe("mock legal holds", () => {
       blocking: [],
       checks: { legal_holds: 0 },
     });
-    const h = await m.placeHold({ ...PLACE, note: "Call first." }, KEY());
+    const h = await m.placeHold(PLACE, KEY());
     expect(h).toMatchObject({
       hospital: { id: "h_southpoint", name: "Southpoint Hospital" },
       scope: { from: null, to: null },
       reason: "court_case",
-      reference: "HC/2026/0999",
-      note: "Call first.",
+      reference: "HC-2026-0999",
+      asked_by: null,
+      note: null,
       placed_by: { id: "tm_ada", name: "Ada Bakare" },
       placed_at: iso(START),
       review_on: "2027-04-20",
@@ -154,15 +175,13 @@ describe("mock legal holds", () => {
       stopped_removal: false,
       version: 1,
     });
-    expect(h.id).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(() => readHold(h)).not.toThrow();
     expect(h.history.map((e) => e.action)).toEqual(["placed"]);
     const sp = await m.getHospital("h_southpoint");
-    expect(sp.status).toBe("removal_pending");
     expect(sp.removal).toMatchObject({
       blocking: ["legal_hold"],
       checks: { legal_holds: 1 },
     });
-    // Ada didn't ask for the removal, but the hold now blocks her approval.
     const e = await m
       .approveRemoval("h_southpoint", CODE, KEY())
       .catch((x) => x);
@@ -175,47 +194,26 @@ describe("mock legal holds", () => {
 
   it("placing on a scheduled removal returns it to Removal pending and sets stopped_removal", async () => {
     const { m, advance } = setup();
-    // Tunde asked; Ada approves: the removal is final a minute later.
     expect((await m.approveRemoval("h_southpoint", CODE, KEY())).status).toBe(
       "removal_scheduled",
     );
     advance(30_000);
     const h = await m.placeHold(PLACE, KEY());
     expect(h.stopped_removal).toBe(true);
-    const sp = await m.getHospital("h_southpoint");
-    expect(sp.status).toBe("removal_pending");
-    expect(sp.removal).toMatchObject({
-      status: "requested",
-      requested_by: { id: "tm_tunde" },
-      approved_by: null,
-      approved_at: null,
-      blocking: ["legal_hold"],
-      checks: { legal_holds: 1 },
-    });
-    advance(120_000);
     expect((await m.getHospital("h_southpoint")).status).toBe(
       "removal_pending",
     );
   });
 
-  it("removalStarted refuses with removal_started", async () => {
-    const { m } = setup(TEAM_EMAILS.ada, ["h_southpoint"]);
-    expect(await failure(m.placeHold(PLACE, KEY()))).toEqual([
+  it("removalStarted and a removed hospital refuse; an unknown one is 404", async () => {
+    const started = setup(TEAM_EMAILS.ada, ["h_southpoint"]);
+    expect(await failure(started.m.placeHold(PLACE, KEY()))).toEqual([
       409,
       "removal_started",
     ]);
-    expect((await m.listHolds({ hospital: "h_southpoint" })).holds).toEqual([]);
-    expect(
-      (await m.placeHold({ ...PLACE, hospital_id: "h_havana" }, KEY())).hospital
-        .id,
-    ).toBe("h_havana");
-  });
-
-  it("placing on a removed hospital is hospital_removed", async () => {
     const { m, advance } = setup();
     await m.approveRemoval("h_southpoint", CODE, KEY());
     advance(61_000);
-    expect((await m.getHospital("h_southpoint")).status).toBe("removed");
     expect(await failure(m.placeHold(PLACE, KEY()))).toEqual([
       409,
       "hospital_removed",
@@ -225,361 +223,144 @@ describe("mock legal holds", () => {
     ).toEqual([404, "not_found"]);
   });
 
-  it("to before from is invalid_range", async () => {
+  it("a hold keeps every record: from or to is invalid_range", async () => {
     const { m } = setup();
+    for (const extra of [
+      { from: "2025-01-01" },
+      { to: "2025-06-30" },
+      { from: "2025-01-01", to: "2025-06-30" },
+    ])
+      expect(await failure(m.placeHold(loose(extra), KEY()))).toEqual([
+        422,
+        "invalid_range",
+      ]);
+    // Null dates are the same as none.
     expect(
-      await failure(
-        m.placeHold({ ...PLACE, from: "2025-06-30", to: "2025-01-01" }, KEY()),
-      ),
-    ).toEqual([422, "invalid_range"]);
-    expect(
-      await failure(m.placeHold({ ...PLACE, to: "2025-01-01" }, KEY())),
-    ).toEqual([422, "invalid"]);
-    expect(
-      await failure(m.placeHold({ ...PLACE, from: "2025-02-30" }, KEY())),
-    ).toEqual([422, "invalid"]);
-    const one = await m.placeHold(
-      { ...PLACE, from: "2025-01-01", to: "2025-01-01" },
-      KEY(),
-    );
-    expect(one.scope).toEqual({ from: "2025-01-01", to: "2025-01-01" });
-    const open = await m.placeHold({ ...PLACE, from: "2025-01-01" }, KEY());
-    expect(open.scope).toEqual({ from: "2025-01-01", to: null });
+      (await m.placeHold(loose({ from: null, to: null }), KEY())).scope,
+    ).toEqual({ from: null, to: null });
   });
 
-  it("a reference over 100 characters, or an asked-by over 200, is invalid", async () => {
+  it("no free text and no names: a note or asked_by is refused; null or empty passes", async () => {
     const { m } = setup();
-    const bad: Partial<PlaceHoldIn>[] = [
-      { reference: "R".repeat(101) },
-      { asked_by: "A".repeat(201) },
-      { reference: "  " },
-      { asked_by: "" },
-      { note: "N".repeat(501) },
-      { reason: "other" },
-      { reason: "sometime" as "other", note: "x" },
-      { review_on: "next spring" },
-    ];
-    for (const b of bad)
-      expect(await failure(m.placeHold({ ...PLACE, ...b }, KEY()))).toEqual([
+    for (const extra of [
+      { note: "Call first." },
+      { asked_by: "The hospital's solicitors" },
+    ])
+      expect(await failure(m.placeHold(loose(extra), KEY()))).toEqual([
         422,
         "invalid",
       ]);
-    const noRef = { ...PLACE, reference: undefined } as unknown as PlaceHoldIn;
-    expect(await failure(m.placeHold(noRef, KEY()))).toEqual([422, "invalid"]);
+    const h = await m.placeHold(loose({ note: "", asked_by: null }), KEY());
+    expect(h).toMatchObject({ note: null, asked_by: null });
+  });
+
+  it("the reference is a document reference, and the review date within 5 years", async () => {
+    const { m } = setup();
+    for (const extra of [
+      { reference: "HC/2026/0412" },
+      { reference: "Board request" },
+      { reason: "sometime" },
+      { review_on: "next spring" },
+      { review_on: "2026-10-20" },
+      { review_on: "2031-10-21" },
+    ])
+      expect(await failure(m.placeHold(loose(extra), KEY()))).toEqual([
+        422,
+        "invalid",
+      ]);
+    expect(
+      (await m.placeHold(loose({ review_on: "2031-10-20" }), KEY())).review_on,
+    ).toBe("2031-10-20");
+  });
+
+  it("an open hold with the same reference is conflict, before the code", async () => {
+    const { m } = setup();
+    expect(
+      await failure(
+        m.placeHold(
+          {
+            ...PLACE,
+            hospital_id: "h_havana",
+            reference: "HC-2026-0412",
+            ...WRONG,
+          },
+          KEY(),
+        ),
+      ),
+    ).toEqual([409, "conflict"]);
+    // A lifted hold's reference can be used again.
     expect(
       (
         await m.placeHold(
-          {
-            ...PLACE,
-            reference: "R".repeat(100),
-            asked_by: "A".repeat(200),
-            reason: "other",
-            note: "N".repeat(500),
-          },
+          { ...PLACE, hospital_id: "h_havana", reference: "BRD-2026-03" },
           KEY(),
         )
       ).reference,
-    ).toHaveLength(100);
+    ).toBe("BRD-2026-03");
   });
 
-  it("only review_on and note can be edited; a stale version is conflict", async () => {
+  it("editing a hold and undoing a lift are not served (501), for an admin", async () => {
     const { m } = setup();
-    const hv = await m.getHold("hold_hv");
-    const e = await m.editHold(
-      "hold_hv",
-      {
-        review_on: "2027-06-01",
-        note: "Hearing set for May.",
-        version: hv.version,
-      },
-      KEY(),
-    );
-    expect(e).toMatchObject({
-      review_on: "2027-06-01",
-      note: "Hearing set for May.",
-      reference: "HC/2026/0412",
-      version: hv.version + 1,
-    });
-    expect(e.history[0]).toMatchObject({
-      action: "edited",
-      actor: { id: "tm_ada" },
-      detail: "Review date, Note",
-    });
     expect(
       await failure(
-        m.editHold("hold_hv", { note: "Again", version: hv.version }, KEY()),
+        m.editHold("hold_hv", { review_on: "2027-06-01", version: 1 }, KEY()),
       ),
-    ).toEqual([409, "conflict"]);
-    for (const extra of [
-      { reference: "X" },
-      { reason: "other" },
-      { scope: { from: null, to: null } },
+    ).toEqual([501, "not_implemented"]);
+    expect(
+      await failure(m.undoLift("hold_lc", { version: 3, ...CODE }, KEY())),
+    ).toEqual([501, "not_implemented"]);
+    // Nothing changed.
+    expect((await m.getHold("hold_hv")).review_on).not.toBe("2027-06-01");
+  });
+
+  it("a lift's authority is a document reference, with no note", async () => {
+    const { m } = setup();
+    for (const body of [
+      { reason: "case_closed", authority: "Counsel's letter 14 Oct 2026" },
+      { reason: "case_closed", authority: "CT-2026-0091", note: "Settled." },
+      { reason: "sometime", authority: "CT-2026-0091" },
     ])
       expect(
         await failure(
-          m.editHold(
+          m.requestLift(
             "hold_hv",
-            { version: e.version, ...extra } as { version: number },
+            { ...body, ...CODE } as Parameters<typeof m.requestLift>[1],
             KEY(),
           ),
         ),
       ).toEqual([422, "invalid"]);
-    // A later review date ends Review due.
-    const ng = await m.getHold("hold_ng");
-    expect(ng.status).toBe("review_due");
-    expect(
-      (
-        await m.editHold(
-          "hold_ng",
-          { review_on: "2027-01-31", version: ng.version },
-          KEY(),
-        )
-      ).status,
-    ).toBe("active");
-    // A lifted hold changes no more.
-    const lc = await m.getHold("hold_lc");
-    expect(
-      await failure(
-        m.editHold("hold_lc", { note: "x", version: lc.version }, KEY()),
-      ),
-    ).toEqual([409, "conflict"]);
+    expect((await m.getHold("hold_hv")).status).toBe("active");
   });
 
-  it("a refused edit changes nothing; an edit that changes nothing isn't recorded", async () => {
-    const { m } = setup();
-    const h = await m.placeHold(
-      { ...PLACE, reason: "other", note: "Board asked." },
-      KEY(),
-    );
-    const events = async () =>
-      (await m.listActivity({ hospital: "h_southpoint" })).events.length;
-    const before = await events();
-    // A new date with the required note cleared: 422, and the date stays.
-    expect(
-      await failure(
-        m.editHold(
-          h.id,
-          { review_on: "2027-09-01", note: "", version: h.version },
-          KEY(),
-        ),
-      ),
-    ).toEqual([422, "invalid"]);
-    const after = await m.getHold(h.id);
-    expect(after).toMatchObject({
-      review_on: "2027-04-20",
-      note: "Board asked.",
-      version: h.version,
-    });
-    expect(after.history).toHaveLength(1);
-    // The same values again: no new version, no history, no Activity.
-    const same = await m.editHold(
-      h.id,
-      { review_on: "2027-04-20", note: "Board asked.", version: h.version },
-      KEY(),
-    );
-    expect(same.version).toBe(h.version);
-    expect(same.history).toHaveLength(1);
-    expect(await events()).toBe(before);
-  });
-
-  it("approve, cancel and undo act only on the version seen: approving after a cancel and a new request is conflict", async () => {
-    const { m, as } = setup();
-    // Ada opens Tunde's request.
-    const saw = await seen(m, "hold_rc");
-    // Meanwhile Tunde cancels it and asks again, on a different authority.
-    as(TEAM_EMAILS.tunde);
-    await m.cancelLift("hold_rc", saw, KEY());
-    const again = await m.requestLift(
-      "hold_rc",
-      { reason: "withdrawn", authority: "Phone call", ...CODE },
-      KEY(),
-    );
-    as(TEAM_EMAILS.ada);
-    expect(
-      await failure(m.approveLift("hold_rc", { ...saw, ...CODE }, KEY())),
-    ).toEqual([409, "conflict"]);
-    expect(await failure(m.cancelLift("hold_rc", saw, KEY()))).toEqual([
-      409,
-      "conflict",
-    ]);
-    expect((await m.getHold("hold_rc")).status).toBe("lift_requested");
-    // No version at all is invalid.
-    expect(
-      await failure(
-        m.approveLift(
-          "hold_rc",
-          CODE as { version: number } & typeof CODE,
-          KEY(),
-        ),
-      ),
-    ).toEqual([422, "invalid"]);
-    // On the request she now sees, it goes through.
-    const lifted = await m.approveLift(
-      "hold_rc",
-      { version: again.version, ...CODE },
-      KEY(),
-    );
-    expect(lifted.status).toBe("lifted");
-    // Undo, too, needs the version seen.
-    expect(
-      await failure(
-        m.undoLift("hold_rc", { version: again.version, ...CODE }, KEY()),
-      ),
-    ).toEqual([409, "conflict"]);
-    expect(
-      (await m.undoLift("hold_rc", { version: lifted.version, ...CODE }, KEY()))
-        .status,
-    ).toBe("active");
-  });
-
-  it("an auditor can't place, edit or lift", async () => {
-    const { m } = setup(TEAM_EMAILS.amara);
-    expect((await m.listHolds({})).holds).toHaveLength(3);
-    expect((await m.getHold("hold_rc")).lift?.requested_by_you).toBe(false);
-    const refusals = [
-      () => m.placeHold(PLACE, KEY()),
-      () => m.editHold("hold_hv", { note: "x", version: 1 }, KEY()),
-      () =>
-        m.requestLift(
-          "hold_hv",
-          { reason: "case_closed", authority: "Letter", ...CODE },
-          KEY(),
-        ),
-      () => m.approveLift("hold_rc", { version: 2, ...CODE }, KEY()),
-      () => m.cancelLift("hold_rc", { version: 2 }, KEY()),
-      () => m.undoLift("hold_lc", { version: 3, ...CODE }, KEY()),
-    ];
-    for (const run of refusals)
-      expect(await failure(run())).toEqual([403, "forbidden"]);
-    // Nothing changed.
-    expect((await m.getHold("hold_rc")).status).toBe("lift_requested");
-  });
-
-  it("every step-up action refuses a wrong code with mfa_invalid", async () => {
-    const { m } = setup();
-    expect(await failure(m.placeHold({ ...PLACE, ...WRONG }, KEY()))).toEqual([
-      403,
-      "mfa_invalid",
-    ]);
-    expect(
-      await failure(
-        m.requestLift(
-          "hold_hv",
-          { reason: "case_closed", authority: "Letter", ...WRONG },
-          KEY(),
-        ),
-      ),
-    ).toEqual([403, "mfa_invalid"]);
-    expect(
-      await failure(
-        m.approveLift(
-          "hold_rc",
-          { ...(await seen(m, "hold_rc")), ...WRONG },
-          KEY(),
-        ),
-      ),
-    ).toEqual([403, "mfa_invalid"]);
-    expect(
-      await failure(
-        m.undoLift(
-          "hold_lc",
-          { ...(await seen(m, "hold_lc")), ...WRONG },
-          KEY(),
-        ),
-      ),
-    ).toEqual([403, "mfa_invalid"]);
-    // Nothing changed.
-    expect(
-      (await m.listHolds({ status: "all" })).holds.map((h) => h.status),
-    ).toEqual(["active", "lift_requested", "review_due", "lifted", "lifted"]);
-  });
-
-  it("the requester's approval is same_person", async () => {
-    const { m, as } = setup(TEAM_EMAILS.tunde);
-    // Only the server's record of who asked (requested_by.id) decides.
-    expect((await m.getHold("hold_rc")).lift?.requested_by_you).toBe(true);
-    const v = await seen(m, "hold_rc");
-    expect(
-      await failure(m.approveLift("hold_rc", { ...v, ...CODE }, KEY())),
-    ).toEqual([409, "same_person"]);
-    as(TEAM_EMAILS.ada);
-    expect((await m.getHold("hold_rc")).lift?.requested_by_you).toBe(false);
-    // Either admin may cancel, with no step-up.
-    const c = await m.cancelLift("hold_rc", v, KEY());
-    expect(c).toMatchObject({ status: "active", lift: null });
-    expect(c.history[0]).toMatchObject({
-      action: "lift_cancelled",
-      actor: { id: "tm_ada" },
-    });
-    expect(
-      await failure(m.cancelLift("hold_rc", { version: c.version }, KEY())),
-    ).toEqual([409, "conflict"]);
-  });
-
-  it("an approval after 7 days is expired, and the hold is back to active with lift_lapsed in its history", async () => {
-    const { m, advance } = setup();
-    // The approver opens it; asked 2 days ago, it lapses 5 days later.
-    const v = await seen(m, "hold_rc");
-    advance(5 * D);
-    expect(
-      await failure(m.approveLift("hold_rc", { ...v, ...CODE }, KEY())),
-    ).toEqual([409, "expired"]);
-    const rc = await m.getHold("hold_rc");
-    expect(rc).toMatchObject({ status: "active", lift: null });
-    expect(rc.history[0]).toMatchObject({
-      action: "lift_lapsed",
-      actor: { id: "tm_tunde" },
-    });
-    const lapsed = (await m.listActivity({})).events.filter(
-      (e) => e.action === "hold_lift_lapsed",
-    );
-    expect(lapsed).toHaveLength(1);
-    expect(lapsed[0]).toMatchObject({
-      actor: { id: "tm_tunde" },
-      hospital: { id: "h_riverside" },
-      target: "CMP-0193",
-    });
-    // A second try, even with the new version, still says why.
-    expect(
-      await failure(
-        m.approveLift("hold_rc", { version: rc.version, ...CODE }, KEY()),
-      ),
-    ).toEqual([409, "expired"]);
-  });
-
-  it("approve sets released_on 7 days on; undo before then restores active; after, it's conflict", async () => {
+  it("approve lifts at once: released_on is the approval, and nothing is kept", async () => {
     const { m, as, advance } = setup(TEAM_EMAILS.tunde);
     const asked = await m.requestLift(
       "hold_hv",
-      {
-        reason: "case_closed",
-        authority: "Court order 12 Oct 2026",
-        note: "Settled.",
-        ...CODE,
-      },
+      { reason: "case_closed", authority: "CT-2026-0101", ...CODE },
       KEY(),
     );
     expect(asked).toMatchObject({
       status: "lift_requested",
       lift: {
-        kind: "hold_lift",
         reason: "case_closed",
-        authority: "Court order 12 Oct 2026",
+        authority: "CT-2026-0101",
+        note: null,
         requested_by: { id: "tm_tunde" },
         requested_by_you: true,
         requested_at: iso(START),
         expires_at: iso(START + 7 * D),
-        records_due: 1985,
-        due_after: nextCleanUp(START),
+        records_due: null,
+        due_after: null,
         approved_by: null,
         released_on: null,
       },
     });
+    expect(() => readHold(asked)).not.toThrow();
     expect(
       await failure(
         m.requestLift(
           "hold_hv",
-          { reason: "case_closed", authority: "Again", ...CODE },
+          { reason: "case_closed", authority: "CT-2026-0102", ...CODE },
           KEY(),
         ),
       ),
@@ -601,99 +382,171 @@ describe("mock legal holds", () => {
       lift: {
         approved_by: { id: "tm_ada" },
         approved_at: iso(START + D),
-        released_on: iso(START + 8 * D),
+        released_on: iso(START + D),
       },
     });
-    // Lifted inside the grace period: still kept, still blocking.
-    expect((await m.getHospital("h_harbour")).legal_holds_active).toBe(1);
-
-    advance(3 * D);
-    const undone = await m.undoLift(
-      "hold_hv",
-      { version: lifted.version, ...CODE },
-      KEY(),
-    );
-    expect(undone).toMatchObject({ status: "active", lift: null });
-    expect(undone.history[0]?.action).toBe("lift_undone");
-
-    // Again, and this time the grace period passes.
-    as(TEAM_EMAILS.tunde);
-    await m.requestLift(
-      "hold_hv",
-      { reason: "mistake", authority: "Wrong hospital", ...CODE },
-      KEY(),
-    );
-    as(TEAM_EMAILS.ada);
-    const again = await m.approveLift(
-      "hold_hv",
-      { ...(await seen(m, "hold_hv")), ...CODE },
-      KEY(),
-    );
-    advance(7 * D);
-    expect(
-      await failure(
-        m.undoLift("hold_hv", { version: again.version, ...CODE }, KEY()),
-      ),
-    ).toEqual([409, "conflict"]);
+    expect(() => readHold(lifted)).not.toThrow();
     const hv = await m.getHospital("h_harbour");
     expect(hv.legal_holds_active).toBe(0);
     expect(hv.removal?.blocking).toEqual([]);
   });
 
-  it("passing released_on writes hold_released", async () => {
-    const { m, advance } = setup();
-    advance(4 * D);
-    await m.listHolds({});
-    await m.getHold("hold_lc");
-    const released = (await m.listActivity({})).events.filter(
-      (e) => e.action === "hold_released",
-    );
-    expect(released).toHaveLength(1);
-    expect(released[0]).toMatchObject({
-      actor: { id: "tm_ada" },
-      hospital: { id: "h_lakeside" },
-      target: "INV-77",
-    });
-    const lc = await m.getHold("hold_lc");
-    expect(lc.history[0]).toMatchObject({
-      action: "released",
-      at: iso(START + 4 * D),
-    });
-    expect(lc.history.filter((e) => e.action === "released")).toHaveLength(1);
-  });
-
-  it("Activity carries the reference and never the note", async () => {
+  it("approve and cancel act only on the version seen", async () => {
     const { m, as } = setup();
-    const NOTE = "Ask the ward clerk before 5pm";
-    const h = await m.placeHold({ ...PLACE, note: NOTE }, KEY());
-    await m.editHold(
-      h.id,
-      { note: `${NOTE}, again`, version: h.version },
-      KEY(),
-    );
+    const saw = await seen(m, "hold_rc");
     as(TEAM_EMAILS.tunde);
-    await m.requestLift(
-      h.id,
-      { reason: "other", note: NOTE, authority: "Letter", ...CODE },
+    await m.cancelLift("hold_rc", saw, KEY());
+    const again = await m.requestLift(
+      "hold_rc",
+      { reason: "withdrawn", authority: "ML-2026-0020", ...CODE },
       KEY(),
     );
     as(TEAM_EMAILS.ada);
-    const lifted = await m.approveLift(
-      h.id,
-      { ...(await seen(m, h.id)), ...CODE },
+    expect(
+      await failure(m.approveLift("hold_rc", { ...saw, ...CODE }, KEY())),
+    ).toEqual([409, "conflict"]);
+    expect(await failure(m.cancelLift("hold_rc", saw, KEY()))).toEqual([
+      409,
+      "conflict",
+    ]);
+    expect(
+      (
+        await m.approveLift(
+          "hold_rc",
+          { version: again.version, ...CODE },
+          KEY(),
+        )
+      ).status,
+    ).toBe("lifted");
+  });
+
+  it("an auditor can't place, edit or lift", async () => {
+    const { m } = setup(TEAM_EMAILS.amara);
+    expect((await m.listHolds({})).holds).toHaveLength(4);
+    const refusals = [
+      () => m.placeHold(PLACE, KEY()),
+      () =>
+        m.editHold("hold_hv", { review_on: "2027-06-01", version: 1 }, KEY()),
+      () =>
+        m.requestLift(
+          "hold_hv",
+          { reason: "case_closed", authority: "CT-2026-0091", ...CODE },
+          KEY(),
+        ),
+      () => m.approveLift("hold_rc", { version: 2, ...CODE }, KEY()),
+      () => m.cancelLift("hold_rc", { version: 2 }, KEY()),
+      () => m.undoLift("hold_lc", { version: 3, ...CODE }, KEY()),
+    ];
+    for (const run of refusals)
+      expect(await failure(run())).toEqual([403, "forbidden"]);
+    expect((await m.getHold("hold_rc")).status).toBe("lift_requested");
+  });
+
+  it("every step-up action refuses a wrong code with mfa_invalid", async () => {
+    const { m } = setup();
+    expect(await failure(m.placeHold({ ...PLACE, ...WRONG }, KEY()))).toEqual([
+      403,
+      "mfa_invalid",
+    ]);
+    expect(
+      await failure(
+        m.requestLift(
+          "hold_hv",
+          { reason: "case_closed", authority: "CT-2026-0091", ...WRONG },
+          KEY(),
+        ),
+      ),
+    ).toEqual([403, "mfa_invalid"]);
+    expect(
+      await failure(
+        m.approveLift(
+          "hold_rc",
+          { ...(await seen(m, "hold_rc")), ...WRONG },
+          KEY(),
+        ),
+      ),
+    ).toEqual([403, "mfa_invalid"]);
+    expect(
+      (await m.listHolds({ status: "all" })).holds.map((h) => h.status),
+    ).toEqual([
+      "active",
+      "lift_requested",
+      "review_due",
+      "lifted",
+      "lifted",
+      "review_due",
+    ]);
+  });
+
+  it("the requester's approval is same_person; either admin may cancel", async () => {
+    const { m, as } = setup(TEAM_EMAILS.tunde);
+    expect((await m.getHold("hold_rc")).lift?.requested_by_you).toBe(true);
+    const v = await seen(m, "hold_rc");
+    expect(
+      await failure(m.approveLift("hold_rc", { ...v, ...CODE }, KEY())),
+    ).toEqual([409, "same_person"]);
+    as(TEAM_EMAILS.ada);
+    expect((await m.getHold("hold_rc")).lift?.requested_by_you).toBe(false);
+    const c = await m.cancelLift("hold_rc", v, KEY());
+    expect(c).toMatchObject({ status: "active", lift: null });
+    expect(c.history[0]).toMatchObject({
+      action: "lift_cancelled",
+      actor: { id: "tm_ada" },
+    });
+  });
+
+  it("a lapsed request: approval is expired; no history line and no Activity (no person did it)", async () => {
+    const { m, advance } = setup();
+    const v = await seen(m, "hold_rc");
+    advance(5 * D);
+    expect(
+      await failure(m.approveLift("hold_rc", { ...v, ...CODE }, KEY())),
+    ).toEqual([409, "expired"]);
+    const rc = await m.getHold("hold_rc");
+    expect(rc).toMatchObject({ status: "active", lift: null });
+    expect(rc.history.map((e) => e.action)).toEqual([
+      "lift_requested",
+      "placed",
+    ]);
+    expect(
+      (await m.listActivity({})).events.some((e) =>
+        e.action.includes("lapsed"),
+      ),
+    ).toBe(false);
+    expect(
+      await failure(
+        m.approveLift("hold_rc", { version: rc.version, ...CODE }, KEY()),
+      ),
+    ).toEqual([409, "expired"]);
+    // A new request starts afresh.
+    const again = await m.requestLift(
+      "hold_rc",
+      { reason: "case_closed", authority: "CT-2026-0091", ...CODE },
       KEY(),
     );
-    await m.undoLift(h.id, { version: lifted.version, ...CODE }, KEY());
+    expect(again.status).toBe("lift_requested");
+  });
+
+  it("Activity carries the reference and the reason's words", async () => {
+    const { m, as } = setup();
+    const h = await m.placeHold(PLACE, KEY());
+    as(TEAM_EMAILS.tunde);
+    await m.requestLift(
+      h.id,
+      { reason: "other", authority: "CT-2026-0091", ...CODE },
+      KEY(),
+    );
+    as(TEAM_EMAILS.ada);
+    await m.approveLift(h.id, { ...(await seen(m, h.id)), ...CODE }, KEY());
     const events = (await m.listActivity({ hospital: "h_southpoint" })).events;
     const mine = events.filter((e) => e.action.startsWith("hold_"));
     expect(mine.map((e) => [e.action, e.target, e.detail])).toEqual([
-      ["hold_lift_undone", "HC/2026/0999", "Other"],
-      ["hold_lifted", "HC/2026/0999", "Other"],
-      ["hold_lift_requested", "HC/2026/0999", "Other"],
-      ["hold_edited", "HC/2026/0999", "Court case"],
-      ["hold_placed", "HC/2026/0999", "Court case"],
+      ["hold_lifted", "HC-2026-0999", "Other"],
+      ["hold_lift_requested", "HC-2026-0999", "Other"],
+      ["hold_placed", "HC-2026-0999", "Court case"],
     ]);
-    expect(JSON.stringify(events)).not.toContain("ward clerk");
+    // Every event has a person behind it.
+    for (const e of events) expect(e.actor.id).toMatch(/^tm_/);
   });
 
   it("hospitals carry legal_holds_active and legal_holds", async () => {
@@ -711,34 +564,27 @@ describe("mock legal holds", () => {
       h_westfield: 0,
       h_harbour: 1,
       h_southpoint: 0,
-      h_lakeside: 1,
+      h_lakeside: 0,
       h_hilltop: 0,
-      h_ridgeway: 0,
+      h_ridgeway: 1,
       h_marlow: 0,
       h_fairhaven: 0,
     });
     const hv = await m.getHospital("h_harbour");
-    expect(hv.legal_holds_active).toBe(1);
     expect(hv.legal_holds).toEqual([
       {
         id: "hold_hv",
         scope: { from: null, to: null },
-        reference: "HC/2026/0412",
+        reference: "HC-2026-0412",
         status: "active",
         review_on: (await m.getHold("hold_hv")).review_on,
       },
     ]);
     expect(hv.removal?.checks.legal_holds).toBe(1);
-    // Havana's hold was released: nothing kept.
+    // A lift request is still active in short form.
+    expect((await m.getHospital("h_riverside")).legal_holds[0]?.status).toBe(
+      "active",
+    );
     expect((await m.getHospital("h_havana")).legal_holds).toEqual([]);
-    expect((await m.getHospital("h_northgate")).legal_holds).toEqual([
-      {
-        id: "hold_ng",
-        scope: { from: "2025-01-01", to: "2025-06-30" },
-        reference: "REG-INSP-2291",
-        status: "review_due",
-        review_on: (await m.getHold("hold_ng")).review_on,
-      },
-    ]);
   });
 });

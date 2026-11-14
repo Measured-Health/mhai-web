@@ -1,14 +1,15 @@
 "use client";
 import { CheckCircle2, CircleAlert, Link2Off } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
-import type {
-  HospitalSettingsOut,
-  SettingsEditable,
-  SettingsPatchIn,
-  SsoStatus,
+import {
+  loosensSignIn,
+  type HospitalSettingsOut,
+  type SettingsEditable,
+  type SettingsPatchIn,
+  type SsoStatus,
 } from "@/lib/api/admin-contract";
 import { useHospitalSettings, useUpdateSettings } from "@/lib/admin-queries";
-import { adminError, type AdminError } from "@/lib/admin/errors";
+import { NOT_AVAILABLE, adminError, type AdminError } from "@/lib/admin/errors";
 import { useOnline } from "@mhai/ui/hooks/use-online";
 import { UnsavedGuard } from "../states/unsaved-guard";
 import { Banner } from "@mhai/ui/banner";
@@ -18,11 +19,11 @@ import { Skeleton } from "@mhai/ui/skeleton";
 import { Switch } from "@mhai/ui/switch";
 import { useToast } from "@mhai/ui/toast";
 import { AdminFrame } from "./admin-frame";
+import { StepUpDialog } from "./step-up-fields";
 
 type Changes = Partial<SettingsEditable>;
 const KEYS: readonly (keyof SettingsEditable)[] = [
   "review_overdue_hours",
-  "reviewers_share_specialty",
   "require_mfa_for_clinicians",
   "idle_timeout_minutes",
   "allow_trust_device",
@@ -101,6 +102,7 @@ export function SettingsView() {
   const offlineId = useId();
   const [changes, setChanges] = useState<Changes>({});
   const [error, setError] = useState<AdminError | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   const failed = q.isError ? adminError(q.error) : null;
   const retry = failed && (
@@ -146,32 +148,37 @@ export function SettingsView() {
   const patch = settingsPatch(data, changes);
   const sso = SSO[data.sso.status];
 
+  // Two-step for clinicians off, trusted devices on or a longer timeout:
+  // core asks for the admin's code (step-up).
+  const loosens = patch !== null && loosensSignIn(data, patch);
+  const saved = () => {
+    setChanges({});
+    toast.show({
+      title: "Settings saved",
+      body: "They apply at each person's next sign-in.",
+      tone: "ok",
+    });
+  };
+  const refused = (e: AdminError) =>
+    // Their values load underneath; yours stay on top (R7).
+    setError(
+      e.stale
+        ? {
+            ...e,
+            title: "Someone else saved the settings just now",
+            body: "Another admin changed these settings. We've loaded their latest values; your changes are kept. Check them and save again.",
+          }
+        : e,
+    );
+
   function submit() {
     if (!patch || !online) return;
     setError(null);
-    save.mutate(patch, {
-      onSuccess: () => {
-        setChanges({});
-        toast.show({
-          title: "Settings saved",
-          body: "They apply at each person's next sign-in.",
-          tone: "ok",
-        });
-      },
-      onError: (e) => {
-        const err = adminError(e);
-        // Their values load underneath; yours stay on top (R7).
-        setError(
-          err.stale
-            ? {
-                ...err,
-                title: "Someone else saved the settings just now",
-                body: "Another admin changed these settings. We've loaded their latest values; your changes are kept. Check them and save again.",
-              }
-            : err,
-        );
-      },
-    });
+    if (loosens) return setConfirming(true);
+    save.mutate(
+      { p: patch, auth: null },
+      { onSuccess: saved, onError: (e) => refused(adminError(e)) },
+    );
   }
 
   return (
@@ -181,7 +188,7 @@ export function SettingsView() {
         <Section title="Corrections review">
           <Setting
             title={<label htmlFor={overdueId}>Flag as overdue after</label>}
-            sub="Reviewers get a reminder; it shows red in the queue"
+            sub="It shows red in the review queue"
           >
             <select
               id={overdueId}
@@ -200,24 +207,16 @@ export function SettingsView() {
           </Setting>
           <Setting
             title="Reviewers must share the specialty"
-            sub={
-              value("reviewers_share_specialty")
-                ? "On: only reviewers in the correction's specialty can review it"
-                : "Off: any clinician except the person who suggested it can review"
-            }
+            sub="Off: any clinician except the person who suggested it can review. Reviewing by specialty isn't in MHAI yet."
           >
-            <Switch
-              label="Reviewers must share the specialty"
-              checked={value("reviewers_share_specialty")}
-              onChange={(v) => set("reviewers_share_specialty", v)}
-            />
+            <Chip tone="muted">{NOT_AVAILABLE}</Chip>
           </Setting>
         </Section>
 
         <Section title="Security">
           <Setting
             title="Require two-step verification for clinicians"
-            sub="Hospital admins always need it"
+            sub="Hospital admins always need it. Turning it off needs your two-step code."
           >
             <Switch
               label="Require two-step verification for clinicians"
@@ -227,7 +226,7 @@ export function SettingsView() {
           </Setting>
           <Setting
             title={<label htmlFor={idleId}>Sign out after inactivity</label>}
-            sub="Shared ward computers: keep this short"
+            sub="Shared ward computers: keep this short. A longer time needs your two-step code."
           >
             <select
               id={idleId}
@@ -246,7 +245,7 @@ export function SettingsView() {
           </Setting>
           <Setting
             title='Allow "trust this device"'
-            sub="Skips two-step for 30 days on a personal device"
+            sub="Skips two-step for 30 days on a personal device. Turning it on needs your two-step code."
           >
             <Switch
               label='Allow "trust this device"'
@@ -272,20 +271,17 @@ export function SettingsView() {
               {sso.label}
             </Chip>
           </Setting>
-          <Setting
-            title="Allowed email domains"
-            sub="Invites outside these are blocked"
-          >
-            <span className="flex flex-wrap gap-1.5 font-mono text-[12.5px] [overflow-wrap:anywhere]">
-              {data.allowed_email_domains.length
-                ? data.allowed_email_domains.map((d) => (
-                    <span key={d} className="rounded-lg bg-bg px-2 py-1">
-                      {d}
-                    </span>
-                  ))
-                : "Any"}
-            </span>
-          </Setting>
+          {data.allowed_email_domains.length > 0 && (
+            <Setting title="Allowed email domains" sub="For staff accounts">
+              <span className="flex flex-wrap gap-1.5 font-mono text-[12.5px] [overflow-wrap:anywhere]">
+                {data.allowed_email_domains.map((d) => (
+                  <span key={d} className="rounded-lg bg-bg px-2 py-1">
+                    {d}
+                  </span>
+                ))}
+              </span>
+            </Setting>
+          )}
           <p className="pt-1 text-[12px] text-ink-3">
             Measured Health sets these up. Contact them to change how people
             sign in.
@@ -303,7 +299,7 @@ export function SettingsView() {
             aria-describedby={online ? undefined : offlineId}
             onClick={submit}
           >
-            {save.isPending ? "Saving…" : "Save changes"}
+            {save.isPending && !confirming ? "Saving…" : "Save changes"}
           </Button>
           {patch && (
             <Button
@@ -326,6 +322,32 @@ export function SettingsView() {
           </span>
         </div>
       </div>
+      {confirming && patch && (
+        <StepUpDialog
+          title="Save settings that loosen sign-in?"
+          keepLabel="Cancel"
+          confirmLabel="Save changes"
+          confirmVariant="primary"
+          blockedTitle="Turn on two-step verification in Profile & security to change these settings."
+          offline={!online}
+          send={(auth) => save.mutateAsync({ p: patch, auth })}
+          reset={save.reset}
+          onKeep={() => setConfirming(false)}
+          onDone={() => {
+            setConfirming(false);
+            saved();
+          }}
+          onStale={(e) => {
+            setConfirming(false);
+            refused(e);
+          }}
+        >
+          <p>
+            These changes make signing in easier, so they need your two-step
+            code. They apply at each person&apos;s next sign-in.
+          </p>
+        </StepUpDialog>
+      )}
       <UnsavedGuard
         dirty={patch !== null}
         onDiscard={() => setChanges({})}

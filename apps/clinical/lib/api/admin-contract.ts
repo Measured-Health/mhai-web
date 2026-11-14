@@ -4,18 +4,14 @@
 // patient details: keep it that way. The usage contract carries alert counts
 // only, never patients, MRNs, beds or alert ids.
 
-import type {
-  AlertLocationOut,
-  AlertSeverity,
-  DismissReason,
-  FindingFlag,
-} from "./alerts-contract";
+import type { AlertSeverity } from "./alerts-contract";
 import type { NamedPurpose } from "./analysis-contract";
 
 export type StaffRole = "clinician" | "analyst" | "hospital_admin";
-export type StaffStatus = "active" | "invited" | "deactivated";
+/** Core has no invites: never `invited`. */
+export type StaffStatus = "active" | "deactivated";
 export type SignInMethod = "sso" | "password_mfa" | "password";
-export type StaffIssue = "mfa_not_set_up" | "invite_expired";
+export type StaffIssue = "mfa_not_set_up";
 
 export interface StaffOut {
   id: string;
@@ -24,40 +20,33 @@ export interface StaffOut {
   email: string;
   roles: StaffRole[];
   specialty: string | null;
+  /** Derived by core: an active clinician reviews (core 1.24.0). */
   can_review: boolean;
-  /** Specialties they review in; empty when `can_review` is false. */
+  /** Always empty: core has no reviewing by specialty yet (every specialty). */
   review_specialties: string[];
   status: StaffStatus;
   issues: StaffIssue[];
   sign_in: SignInMethod | null;
   last_active_at: string | null; // ISO 8601
   joined_at: string | null;
-  invited_at: string | null;
-  invite_expires_at: string | null;
+  /** Always null: core has no invites. */
+  invited_at: null;
+  invite_expires_at: null;
   /** The signed-in admin's own row (the API decides, R15). */
   is_you: boolean;
   /** Sent back on edits; a stale one gets 409 `conflict` (R7). */
   version: number;
 }
 
-export interface InviteIn {
-  emails: string[];
-  roles: StaffRole[];
-  specialty: string | null;
-}
-export type InviteSkipReason =
-  "already_staff" | "domain_not_allowed" | "invalid_email" | "duplicate";
-export interface InviteOut {
-  invited: StaffOut[];
-  skipped: { email: string; reason: InviteSkipReason }[];
-}
-
+/**
+ * Roles and specialty. Core derives reviewing (`can_review` follows the
+ * clinician role, `review_specialties` is empty), so the app never sends it.
+ * Sent with the admin's step-up code.
+ */
 export interface StaffPatchIn {
   version: number;
   roles?: StaffRole[];
   specialty?: string | null;
-  can_review?: boolean;
-  review_specialties?: string[];
 }
 
 export type SsoStatus = "connected" | "not_set_up" | "error";
@@ -69,24 +58,45 @@ export interface HospitalSettingsOut {
   require_mfa_for_clinicians: boolean;
   idle_timeout_minutes: number;
   allow_trust_device: boolean;
-  /** Read-only here: Measured Health configures sign-in. */
+  /** Read-only here: Measured Health configures sign-in (core: `not_set_up`). */
   sso: { status: SsoStatus; domain: string | null };
+  /** Core sends none yet (no invites). */
   allowed_email_domains: string[];
-  /** The hospital's specialties, for pickers. */
+  /** The active staff's specialties, for pickers. */
   specialties: string[];
   /** The choices Measured Health allows. */
   limits: { review_overdue_hours: number[]; idle_timeout_minutes: number[] };
   version: number;
 }
+/**
+ * What an admin can change. `reviewers_share_specialty` is always false in
+ * core (no reviewing by specialty), so it's shown, never sent.
+ */
 export type SettingsEditable = Pick<
   HospitalSettingsOut,
   | "review_overdue_hours"
-  | "reviewers_share_specialty"
   | "require_mfa_for_clinicians"
   | "idle_timeout_minutes"
   | "allow_trust_device"
 >;
 export type SettingsPatchIn = Partial<SettingsEditable> & { version: number };
+
+/**
+ * Whether an edit loosens sign-in, as core decides it: two-step for
+ * clinicians off, "trust this device" on, or a longer idle timeout. Such an
+ * edit needs the admin's step-up code.
+ */
+export function loosensSignIn(
+  saved: Pick<HospitalSettingsOut, "idle_timeout_minutes">,
+  p: Partial<SettingsEditable>,
+): boolean {
+  return (
+    p.require_mfa_for_clinicians === false ||
+    p.allow_trust_device === true ||
+    (p.idle_timeout_minutes !== undefined &&
+      p.idle_timeout_minutes > saved.idle_timeout_minutes)
+  );
+}
 
 export type UsagePeriod = "this_month" | "last_month" | "last_90_days";
 export type ConfidenceLevel = "high" | "caution" | "review" | "failed";
@@ -104,128 +114,50 @@ export interface UsageOut {
   confidence: Record<ConfidenceLevel, number>;
   by_specialty: { specialty: string; consultations: number }[];
   /**
-   * Patient alerts (Plan 5b, spec §10 item 21). Null or absent: alerts aren't
-   * switched on (an older backend sends no field). `{ unavailable: true }`:
-   * the rest of usage is fine but the alert numbers couldn't be computed.
+   * Patient alerts (core's `HospitalUsageAlertsOut`, OpenAPI 1.24.0). Null:
+   * the hospital has no record source. `{ unavailable: true }`: the rest of
+   * usage is fine but the alert numbers couldn't be computed.
    */
-  alerts?: UsageAlertsOut | UsageAlertsUnavailableOut | null;
+  alerts: UsageAlertsOut | UsageAlertsUnavailableOut | null;
 }
 
 /**
- * A number under the small-group rule. A hidden value is
- * `{ value: null, suppressed: true }`; `value: null` with `suppressed: false`
- * means there was nothing to measure.
+ * A count under the small-group rule. A hidden value is
+ * `{ value: null, suppressed: true }`; never 1 to 4.
  */
 export interface GuardedOut {
   value: number | null;
   suppressed: boolean;
 }
 
-export type ChangeDirection = "up" | "down" | "same";
+export type AlertCategory =
+  | "blood_chemistry"
+  | "blood_count"
+  | "kidney_function"
+  | "blood_gases_lactate"
+  | "heart_markers"
+  | "blood_sugar"
+  | "vital_signs"
+  | "infection_markers";
+/** On the hospital's queue, or sent to named clinicians. */
+export type AlertRoute = "queue" | "named";
+/**
+ * Still new; acknowledged; dismissed by a clinician; withdrawn (by the
+ * source or an exclusion) before anyone handled it.
+ */
+export type AlertHandling = "open" | "acknowledged" | "dismissed" | "withdrawn";
 
-/** The backend's comparison with the previous period of the same length. */
-export interface ChangeOut {
-  direction: ChangeDirection;
-  /** Whole percent for counts, minutes for times, percentage points for shares. */
-  amount: number;
-  /** The previous period's value, in the measure's unit (0–1 for shares). Never hidden. */
-  previous: number;
-}
-
-/** A number with its change. `change` is null when either period is hidden or missing. */
-export interface MeasureOut extends GuardedOut {
-  change: ChangeOut | null;
-}
-
-export interface FindingGroupOut {
-  /** Display label, e.g. "Potassium"; null for the unmapped findings ("Not standardised"). */
-  name: string | null;
-  flag: FindingFlag | null;
-  count: GuardedOut;
-}
-
-export interface LocationGroupOut {
-  /** Ward level at most (`bed` is null). Null reads "Location not recorded". */
-  location: AlertLocationOut | null;
-  count: GuardedOut;
-}
-
-export interface DismissReasonCountOut {
-  reason: DismissReason;
-  count: GuardedOut;
-}
-
-export interface SeriesBucketOut {
-  /**
-   * The hospital's calendar day, or the week's first day: "YYYY-MM-DD". Weeks
-   * start on the period's first day (not a fixed weekday); the last may be partial.
-   */
-  start: string;
-  /** Hospital-wide; not suppressed. */
-  total: number;
-  /** About how many times the usual level, when flagged as unusual; else null. */
-  usual_multiple: number | null;
-}
-
-export interface AlertSeriesOut {
-  /** Days for this_month and last_month, weeks for last_90_days. */
-  bucket: "day" | "week";
-  /** Oldest first. */
-  points: SeriesBucketOut[];
-}
-
-/** A finding or location well up on the previous period: at least 5 in both. */
-export type RisingOut =
-  | {
-      kind: "finding";
-      name: string | null;
-      flag: FindingFlag | null;
-      count: number;
-      previous: number;
-    }
-  | {
-      kind: "location";
-      location: AlertLocationOut | null;
-      count: number;
-      previous: number;
-    };
-
-/** Critical handled within the target dropped noticeably (shares 0–1). */
-export interface WorseningOut {
-  value: number;
-  previous: number;
-}
-
+/**
+ * The alert block of Usage, exactly as core sends it: the period's alerts by
+ * severity, category, route and handling. Each breakdown is guarded as a set
+ * with the total, so a hidden part can't be worked out from the rest.
+ */
 export interface UsageAlertsOut {
-  /** The hospital's target for handling a Critical alert, in minutes (15 by default). */
-  critical_target_minutes: number;
-  /** False when there's no earlier period of the same length: no changes, no flags. */
-  has_previous: boolean;
-  total: MeasureOut;
-  by_severity: Record<AlertSeverity, MeasureOut>;
-  unhandled: MeasureOut;
-  /** Minutes from raised to acknowledged; value null when none was acknowledged. */
-  median_ack_minutes: MeasureOut;
-  median_ack_minutes_critical: MeasureOut;
-  /** 0–1: Critical alerts acknowledged or dismissed within the target. */
-  critical_within_target: MeasureOut;
-  /** 0–1 of handled alerts. */
-  acknowledged_share: MeasureOut;
-  dismissed_share: MeasureOut;
-  /** All four reasons: not_relevant, already_known, wrong_patient, other. */
-  dismiss_reasons: DismissReasonCountOut[];
-  /** At most 5 each, largest first. */
-  top_findings: FindingGroupOut[];
-  top_locations: LocationGroupOut[];
-  series: AlertSeriesOut;
-  /**
-   * Who received them (Plan 13): alerts on the hospital queue, and alerts
-   * sent to named clinicians. One alert can be both. Absent from an older
-   * backend.
-   */
-  by_route?: { queue: MeasureOut; named: MeasureOut };
-  rising: RisingOut[];
-  worsening: WorseningOut | null;
+  total: GuardedOut;
+  by_severity: Record<AlertSeverity, GuardedOut>;
+  by_category: Record<AlertCategory, GuardedOut>;
+  by_route: Record<AlertRoute, GuardedOut>;
+  by_handling: Record<AlertHandling, GuardedOut>;
 }
 
 export interface UsageAlertsUnavailableOut {
@@ -251,21 +183,11 @@ export type ActivityKind =
   | "correction_approved"
   | "correction_rejected"
   | "correction_withdrawn"
-  | "invite_sent"
-  | "invite_cancelled"
-  | "invite_accepted"
   | "roles_changed"
   | "specialty_changed"
-  | "reviewer_changed"
   | "deactivated"
   | "reactivated"
-  | "removed"
-  | "password_reset_sent"
-  | "mfa_reset"
-  | "mfa_reminder_sent"
   | "settings_changed"
-  | "reviewers_reminded"
-  | "reviewer_assigned"
   | "policy_breach"
   | "analyst_granted"
   | "analyst_removed"
@@ -283,9 +205,7 @@ export type ActivityKind =
   /** Alert settings (Plan 13): one event per section saved. */
   | "alert_units_changed"
   | "alert_rules_changed"
-  | "alert_recipients_changed"
-  /** An admin changed their own roles: allowed, audited, flagged `alert`. */
-  | "self_role_change";
+  | "alert_recipients_changed";
 
 /** One audit event. Structured fields only; never free text (R9). */
 export interface ActivityEventOut {
@@ -299,13 +219,12 @@ export interface ActivityEventOut {
   target: { display_name: string } | null;
   specialty: string | null;
   confidence: ConfidenceLevel | null;
-  /** e.g. "Chrome on Windows". */
-  device: string | null;
-  /** e.g. failed sign-ins before a lock. */
-  count: number | null;
+  /** Always null from core (1.24.0). */
+  device: null;
+  /** Always null from core (1.24.0). */
+  count: null;
+  /** Core flags no event today. */
   flag: "policy" | "alert" | null;
-  /** On a self role change: the roles they gave themselves. */
-  roles_added?: StaffRole[];
   /** On a named view in Analysis: why the person asked for names. */
   purpose?: NamedPurpose;
 }
@@ -354,8 +273,14 @@ export interface ReviewerOut {
 }
 
 /**
- * The admin's current two-step code, sent in the body of a remove
- * (`{ "mfa_code" }` or `{ "backup_code" }`). Errors: 403 `mfa_required`
- * (two-step not set up), 403 `mfa_invalid`, 429 `mfa_locked`.
+ * The admin's current two-step code (step-up), sent in the body of every
+ * staff write and of a settings edit that loosens sign-in, as `{ "mfa_code" }`
+ * or `{ "backup_code" }`. Errors: 403 `mfa_required` (two-step not set up),
+ * 403 `mfa_invalid`, 429 `mfa_locked`. Core checks it last, after every
+ * refusal that needs no code, so a refused request doesn't spend it.
  */
-export type StaffRemoveAuth = { mfaCode: string } | { backupCode: string };
+export type StepUpAuth = { mfaCode: string } | { backupCode: string };
+
+/** The body fields a step-up code is sent as. */
+export const stepUpBody = (a: StepUpAuth) =>
+  "mfaCode" in a ? { mfa_code: a.mfaCode } : { backup_code: a.backupCode };

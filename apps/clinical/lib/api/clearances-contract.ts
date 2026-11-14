@@ -11,10 +11,10 @@ import type {
   RejectReason,
   RevokeReason,
 } from "@mhai/ui/clearances";
-import type { StaffRemoveAuth } from "./admin-contract";
+import type { StepUpAuth } from "./admin-contract";
 
 /** The admin's own two-step code, as the admin client takes it. */
-export type StepUp = StaffRemoveAuth;
+export type StepUp = StepUpAuth;
 
 export type Who = { display_name: string };
 export type CoveredOut = { id: string; display_name: string };

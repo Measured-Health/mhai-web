@@ -33,6 +33,8 @@ describe("shouldRetry / retryDelay", () => {
     expect(shouldRetry(0, new ApiError(503, "unavailable"))).toBe(true);
     expect(shouldRetry(0, new ApiError(409, "result_not_ready"))).toBe(false);
     expect(shouldRetry(0, new ApiError(401, "session_expired"))).toBe(false);
+    // Not built on the server yet: asking again won't help.
+    expect(shouldRetry(0, new ApiError(501, "not_implemented"))).toBe(false);
     expect(shouldRetry(3, new TypeError("offline"))).toBe(false);
   });
   it("backs off exponentially with jitter, capped at 30 s", () => {

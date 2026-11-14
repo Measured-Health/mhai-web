@@ -23,6 +23,16 @@ import type {
   NamedAccessOut,
 } from "./clearances-contract";
 import type { HoldsClient } from "./holds-contract";
+import {
+  readActivity,
+  readEmailPref,
+  readHold,
+  readHolds,
+  readHospital,
+  readHospitals,
+  readTeam,
+  readTeamMember,
+} from "./admin-schema";
 import { readModelPolicy } from "./model-policy-contract";
 import { readGuardrailPeriods } from "../analytics/guardrails";
 import type { SettingsClient } from "./settings-contract";
@@ -62,27 +72,36 @@ export type LiveOk = <T>(
   extraHeaders?: Record<string, string>,
 ) => Promise<T>;
 
-/** Legal holds (Plan 8a): rows `platform/legal-holds…` of the shape table. */
+/**
+ * Legal holds (Plan 8a): rows `platform/legal-holds…` of the shape table.
+ * Every reply read strictly (core openapi 1.26.0): 502 when it doesn't match.
+ * Editing a hold and undoing a lift are 501 `not_implemented` in core.
+ */
 function holdsLive(ok: LiveOk): HoldsClient {
   const hold = (x: string, rest = "") =>
     `/legal-holds/${encodeURIComponent(x)}${rest}`;
   return {
     listHolds: (q) =>
-      ok(
+      ok<unknown>(
         `/legal-holds${query({
           status: q.status,
           hospital: q.hospital,
           q: q.q,
           cursor: q.cursor,
         })}`,
-      ),
-    getHold: (x) => ok(hold(x)),
-    placeHold: (b, o) => ok("/legal-holds", "POST", b, o),
-    editHold: (x, b, o) => ok(hold(x), "PATCH", b, o),
-    requestLift: (x, b, o) => ok(hold(x, "/lift"), "POST", b, o),
-    approveLift: (x, b, o) => ok(hold(x, "/lift/approve"), "POST", b, o),
-    cancelLift: (x, b, o) => ok(hold(x, "/lift/cancel"), "POST", b, o),
-    undoLift: (x, b, o) => ok(hold(x, "/lift/undo"), "POST", b, o),
+      ).then(readHolds),
+    getHold: (x) => ok<unknown>(hold(x)).then(readHold),
+    placeHold: (b, o) =>
+      ok<unknown>("/legal-holds", "POST", b, o).then(readHold),
+    editHold: (x, b, o) => ok<unknown>(hold(x), "PATCH", b, o).then(readHold),
+    requestLift: (x, b, o) =>
+      ok<unknown>(hold(x, "/lift"), "POST", b, o).then(readHold),
+    approveLift: (x, b, o) =>
+      ok<unknown>(hold(x, "/lift/approve"), "POST", b, o).then(readHold),
+    cancelLift: (x, b, o) =>
+      ok<unknown>(hold(x, "/lift/cancel"), "POST", b, o).then(readHold),
+    undoLift: (x, b, o) =>
+      ok<unknown>(hold(x, "/lift/undo"), "POST", b, o).then(readHold),
   };
 }
 
@@ -307,10 +326,13 @@ export function createLivePlatformClient({
     `/hospitals/${id(hospital)}${rest}`;
 
   return {
+    // The list and the page (core 1.25.0), read strictly.
     listHospitals: (q) =>
-      ok(`/hospitals${query({ status: q.status, q: q.q, cursor: q.cursor })}`),
+      ok<unknown>(
+        `/hospitals${query({ status: q.status, q: q.q, cursor: q.cursor })}`,
+      ).then(readHospitals),
     addHospital: (b, o) => ok("/hospitals", "POST", b, o),
-    getHospital: (x) => ok(h(x)),
+    getHospital: (x) => ok<unknown>(h(x)).then(readHospital),
     updateHospital: (x, b, o) => ok(h(x), "PATCH", b, o),
     deactivate: (x, b, o) => ok(h(x, "/deactivate"), "POST", b, o),
     reactivate: (x, b, o) => ok(h(x, "/reactivate"), "POST", b, o),
@@ -328,14 +350,19 @@ export function createLivePlatformClient({
     inviteAdmin: (x, b, o) => ok(h(x, "/invites"), "POST", b, o),
     resendInvite: (x, inv, o) =>
       ok(h(x, `/invites/${id(inv)}/resend`), "POST", undefined, o),
-    listTeam: () => ok("/team"),
-    inviteTeam: (b, o) => ok("/team/invites", "POST", b, o),
-    changeRole: (m, b, o) => ok(`/team/${id(m)}`, "PATCH", b, o),
+    // The team (core 1.26.0), read strictly. Invites are 501 in core.
+    listTeam: () => ok<unknown>("/team").then(readTeam),
+    inviteTeam: (b, o) =>
+      ok<unknown>("/team/invites", "POST", b, o).then(readTeamMember),
+    changeRole: (m, b, o) =>
+      ok<unknown>(`/team/${id(m)}`, "PATCH", b, o).then(readTeamMember),
     async removeMember(m, b, o) {
       await ok(`/team/${id(m)}`, "DELETE", b, o);
     },
     listActivity: (q) =>
-      ok(`/activity${query({ hospital: q.hospital, cursor: q.cursor })}`),
+      ok<unknown>(
+        `/activity${query({ hospital: q.hospital, cursor: q.cursor })}`,
+      ).then(readActivity),
     getAnalytics: (period) => ok(`/analytics${query({ period })}`),
     getChangeSeries: (c, period) =>
       ok(`/analytics/changes/${id(c)}/series${query({ period })}`),
@@ -355,8 +382,9 @@ export function createLivePlatformClient({
     listNotifications: () =>
       ok("/notifications", "GET", undefined, undefined, BACKGROUND),
     markSeen: (b, o) => ok("/notifications/seen", "POST", b, o),
-    getEmailPref: () => ok("/me/analytics-email"),
-    setEmailPref: (b, o) => ok("/me/analytics-email", "PUT", b, o),
+    getEmailPref: () => ok<unknown>("/me/analytics-email").then(readEmailPref),
+    setEmailPref: (b, o) =>
+      ok<unknown>("/me/analytics-email", "PUT", b, o).then(readEmailPref),
     ...liveAudit(ok, blob),
     // The health poll is background too: it must not keep a session alive.
     getHealth: (o) =>

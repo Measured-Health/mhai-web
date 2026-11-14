@@ -4,6 +4,7 @@ import { changeLine } from "@/lib/analytics/changes";
 import { dayMonthLabel } from "@/lib/format";
 import { Button } from "@mhai/ui/button";
 import { CouldntLoad } from "../states/couldnt-load";
+import { NotAvailable } from "../states/not-available";
 
 export const ALL_HOSPITALS = "All hospitals";
 
@@ -21,6 +22,7 @@ export function atLabel(at: string) {
 export function NotificationsList({
   items,
   failed,
+  unavailable = false,
   loading,
   offline = false,
   fresh,
@@ -31,6 +33,8 @@ export function NotificationsList({
 }: {
   items: Notification[];
   failed: boolean;
+  /** Core doesn't serve notifications yet (501). */
+  unavailable?: boolean;
   loading: boolean;
   /** The first read is waiting for a connection. */
   offline?: boolean;
@@ -42,6 +46,7 @@ export function NotificationsList({
   onOpen(n: Notification): void;
   onMarkAll(): void;
 }) {
+  if (unavailable) return <NotAvailable what="notifications" />;
   if (failed) return <CouldntLoad what="notifications" onRetry={onRetry} />;
   if (offline)
     return (

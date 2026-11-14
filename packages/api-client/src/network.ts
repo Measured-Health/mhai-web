@@ -59,9 +59,13 @@ export function pollDelay(
   return n.slow || n.saveData ? Math.max(base, 5_000) : base;
 }
 
-/** Retry network failures and 5xx; a 4xx won't change on retry. */
+/**
+ * Retry network failures and 5xx; a 4xx won't change on retry, nor will a
+ * 501 `not_implemented` (the server doesn't do it yet).
+ */
 export function shouldRetry(failures: number, e: unknown, max = 3): boolean {
   if (e instanceof ApiError && e.status >= 400 && e.status < 500) return false;
+  if (e instanceof ApiError && e.status === 501) return false;
   return failures < max;
 }
 

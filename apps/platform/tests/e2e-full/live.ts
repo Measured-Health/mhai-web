@@ -120,30 +120,31 @@ export function recordApi(page: Page): ApiCall[] {
 }
 
 /**
- * Calls core doesn't serve yet (openapi 1.20.0 has no such route), made by
- * a part of the page that isn't the path under test: printed as GAP, never
- * a failure of the path. Each is listed in docs/live-e2e.md.
+ * Calls core doesn't serve yet, made by a part of the page that isn't the
+ * path under test: printed as GAP, never a failure of the path. A route
+ * core registers but doesn't do yet answers 501 `not_implemented` (core
+ * 1.26.0), which the app shows as a calm Not available yet. Each is listed
+ * in docs/live-e2e.md.
  */
 const KNOWN_GAPS: readonly RegExp[] = [
-  // The platform bell.
+  // The platform bell (501 in core 1.26.0).
   /^\/api\/v1\/platform\/notifications$/,
-  // The sidebar's Analysis across hospitals status (not in core yet; its
-  // timing decides whether the call lands inside a recorded path).
+  // Platform settings (501 in core 1.26.0).
+  /^\/api\/v1\/platform\/settings$/,
+  // Named access (501 in core 1.26.0).
+  /^\/api\/v1\/platform\/named-access$/,
+  // The sidebar's Analysis across hospitals status: core serves it (1.25.0),
+  // but this app's BFF answers 404 while Analysis isn't signed off
+  // (ANALYSIS_SIGNED_OFF), as live-full.sh runs it.
   /^\/api\/v1\/platform\/analysis\/status$/,
-  // The hospital admin's staff list (Alert settings' clinician picker).
-  /^\/api\/v1\/hospital\/staff$/,
-  // The hospital admin's settings, read by the admin pages' frame.
-  /^\/api\/v1\/hospital\/settings$/,
-  // Recent actions (a connection's page) and the hospital names it reads.
-  /^\/api\/v1\/platform\/activity(\?.*)?$/,
-  /^\/api\/v1\/platform\/hospitals$/,
 ];
 
 /** Prints the failed calls (status 400 and up), for the run's log; returns those that count. */
 export function reportApi(title: string, calls: ApiCall[]) {
   const bad = calls.filter((c) => c.status >= 400);
   const gap = (c: ApiCall) =>
-    c.status === 404 && KNOWN_GAPS.some((r) => r.test(c.path));
+    (c.status === 404 || c.status === 501) &&
+    KNOWN_GAPS.some((r) => r.test(c.path));
   for (const c of bad)
     console.log(
       `${gap(c) ? "GAP" : "API"} ${title}: ${c.status} ${c.method} ${c.path}`,

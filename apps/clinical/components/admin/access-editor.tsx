@@ -7,8 +7,8 @@ import type {
   StaffRole,
 } from "@/lib/api/admin-contract";
 import { useUpdateStaff } from "@/lib/admin-queries";
-import { adminError, type AdminError } from "@/lib/admin/errors";
-import { ROLE_LABEL, guardFor } from "@/lib/admin/staff";
+import { NOT_AVAILABLE, type AdminError } from "@/lib/admin/errors";
+import { ROLE_LABEL, SELF_ADD, guardFor, rolesText } from "@/lib/admin/staff";
 import { useAuth } from "@/lib/auth/auth-context";
 import { analysisOn } from "@/lib/auth/types";
 import { ENDS_NAMED } from "@/lib/clearances/summary";
@@ -16,6 +16,7 @@ import { useNetwork } from "@mhai/api-client/network";
 import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { useToast } from "@mhai/ui/toast";
+import { StepUpDialog } from "./step-up-fields";
 
 const ROLES: readonly StaffRole[] = ["clinician", "analyst", "hospital_admin"];
 const ROLE_HINT: Partial<Record<StaffRole, string>> = {
@@ -26,15 +27,11 @@ const ROLE_HINT: Partial<Record<StaffRole, string>> = {
 export interface AccessDraft {
   roles: StaffRole[];
   specialty: string | null;
-  canReview: boolean;
-  reviewIn: string[];
 }
 
 const fromRow = (s: StaffOut): AccessDraft => ({
   roles: [...s.roles],
   specialty: s.specialty,
-  canReview: s.can_review,
-  reviewIn: [...s.review_specialties],
 });
 const same = (a: string[], b: string[]) =>
   a.length === b.length && a.every((x) => b.includes(x));
@@ -48,27 +45,24 @@ const effectiveRoles = (d: AccessDraft): StaffRole[] =>
       d.roles.includes(r) && (r !== "analyst" || d.roles.includes("clinician")),
   );
 
-/** Only what changed, with the row's version (R7); null when nothing did. */
+/**
+ * Only what changed, with the row's version (R7); null when nothing did.
+ * Reviewing is never sent: core derives it from the Clinician role.
+ */
 export function patchFor(row: StaffOut, d: AccessDraft): StaffPatchIn | null {
   const p: StaffPatchIn = { version: row.version };
   const roles = effectiveRoles(d);
   if (!same(roles, row.roles)) p.roles = roles;
   if (d.specialty !== row.specialty) p.specialty = d.specialty;
-  const canReview = d.canReview && d.roles.includes("clinician");
-  if (canReview !== row.can_review) p.can_review = canReview;
-  const reviewIn = canReview ? d.reviewIn : [];
-  if (!same(reviewIn, row.review_specialties)) p.review_specialties = reviewIn;
   return Object.keys(p).length > 1 ? p : null;
 }
 
 function problemOf(d: AccessDraft): string | null {
   if (!effectiveRoles(d).length) return "Choose at least one role.";
-  if (d.canReview && d.roles.includes("clinician") && !d.reviewIn.length)
-    return "Choose at least one specialty they can review in.";
   return null;
 }
 
-/** Roles, specialty and review rights (hospital-admin.html tab 3). */
+/** Roles and specialty (hospital-admin.html tab 3), saved with the admin's code. */
 export function AccessEditor({
   row,
   list,
@@ -92,6 +86,7 @@ export function AccessEditor({
   const endsId = useId();
   const [draft, setDraft] = useState(() => fromRow(row));
   const [seen, setSeen] = useState(row.version);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<AdminError | null>(null);
   // The row changed underneath (this save, or someone else's): start again
   // from it, so nobody saves over a change they haven't seen (R7).
@@ -106,8 +101,6 @@ export function AccessEditor({
   const patch = patchFor(row, draft);
   const problem = problemOf(draft);
   const clinician = draft.roles.includes("clinician");
-  // Your own roles: allowed, but recorded and flagged in the activity log.
-  const selfRoles = row.is_you && !!patch?.roles;
   // A letter covers only analysts and hospital admins: losing both ends
   // their named access. Said above Save, with no new confirm (ruling 8).
   const endsNamed =
@@ -118,23 +111,10 @@ export function AccessEditor({
     row.specialty && !specialties.includes(row.specialty)
       ? [row.specialty, ...specialties]
       : specialties;
-
-  function save() {
-    if (!patch || problem || !online) return;
-    setError(null);
-    update.mutate(
-      { id: row.id, p: patch },
-      {
-        onSuccess: () =>
-          toast.show({
-            title: "Changes saved",
-            body: `${row.display_name}'s access is updated.`,
-            tone: "ok",
-          }),
-        onError: (e) => setError(adminError(e)),
-      },
-    );
-  }
+  const shownRoles = ROLES.filter((r) => r !== "analyst" || analysisOn(user));
+  // You can't give yourself a role (core: 403 self_change, ruling 14 Nov).
+  const selfLocked = (r: StaffRole) => row.is_you && !row.roles.includes(r);
+  const anySelfLocked = shownRoles.some(selfLocked);
 
   return (
     <section aria-labelledby={heading} className="flex flex-col gap-4">
@@ -146,11 +126,16 @@ export function AccessEditor({
           Roles
         </legend>
         <div className="flex flex-wrap gap-x-5">
-          {ROLES.filter((r) => r !== "analyst" || analysisOn(user)).map((r) => {
+          {shownRoles.map((r) => {
             const lockedAdmin =
               r === "hospital_admin" && !lock.ok && draft.roles.includes(r);
             const needsClinician = r === "analyst" && !clinician;
+            const self = selfLocked(r);
             const hintId = `${lockId}-${r}`;
+            const describedBy =
+              [lockedAdmin && lockId, self && selfId, ROLE_HINT[r] && hintId]
+                .filter(Boolean)
+                .join(" ") || undefined;
             return (
               <div key={r} className="flex flex-col">
                 <label className="flex min-h-11 items-center gap-2 text-[14px]">
@@ -158,10 +143,8 @@ export function AccessEditor({
                     type="checkbox"
                     className="size-4 accent-mint"
                     checked={draft.roles.includes(r) && !needsClinician}
-                    disabled={lockedAdmin || needsClinician}
-                    aria-describedby={
-                      lockedAdmin ? lockId : ROLE_HINT[r] ? hintId : undefined
-                    }
+                    disabled={lockedAdmin || needsClinician || self}
+                    aria-describedby={describedBy}
                     onChange={() =>
                       setDraft((d) => ({ ...d, roles: toggle(d.roles, r) }))
                     }
@@ -181,6 +164,11 @@ export function AccessEditor({
         {!lock.ok && (
           <p id={lockId} className="text-[12.5px] text-ink-3">
             {lock.reason}
+          </p>
+        )}
+        {anySelfLocked && (
+          <p id={selfId} className="text-[12.5px] text-ink-3">
+            {SELF_ADD}
           </p>
         )}
       </fieldset>
@@ -203,51 +191,22 @@ export function AccessEditor({
         </select>
       </label>
 
-      <fieldset disabled={!clinician}>
-        <legend className="mb-1 text-[12.5px] font-semibold text-ink-2">
+      <div>
+        <b className="mb-1 block text-[12.5px] font-semibold text-ink-2">
           Reviewing corrections
-        </legend>
-        <label className="flex min-h-11 items-center gap-2 text-[14px]">
-          <input
-            type="checkbox"
-            className="size-4 accent-mint"
-            checked={draft.canReview && clinician}
-            onChange={() =>
-              setDraft((d) => ({ ...d, canReview: !d.canReview }))
-            }
-          />
-          Can review corrections
-        </label>
-        {!clinician && (
-          <p className="text-[12.5px] text-ink-3">
-            Only clinicians can review corrections.
-          </p>
-        )}
-        {clinician && draft.canReview && (
-          <div
-            role="group"
-            aria-label="Specialties they can review in"
-            className="ml-6 flex flex-wrap gap-x-4"
-          >
-            {specialties.map((s) => (
-              <label
-                key={s}
-                className="flex min-h-11 items-center gap-2 text-[13.5px]"
-              >
-                <input
-                  type="checkbox"
-                  className="size-4 accent-mint"
-                  checked={draft.reviewIn.includes(s)}
-                  onChange={() =>
-                    setDraft((d) => ({ ...d, reviewIn: toggle(d.reviewIn, s) }))
-                  }
-                />
-                {s}
-              </label>
-            ))}
-          </div>
-        )}
-      </fieldset>
+        </b>
+        <p className="text-[13.5px]">
+          {row.can_review
+            ? "Reviews corrections in every specialty."
+            : row.status === "active"
+              ? "Doesn't review corrections. Only clinicians review them."
+              : "Doesn't review corrections while deactivated."}
+        </p>
+        <p className="text-[12.5px] text-ink-3">
+          Every active clinician reviews corrections, except their own. Choosing
+          who reviews which specialty: {NOT_AVAILABLE.toLowerCase()}.
+        </p>
+      </div>
 
       {problem && patch && (
         <p role="alert" className="text-[13px] font-semibold text-bad-deep">
@@ -258,12 +217,6 @@ export function AccessEditor({
         <Banner tone="bad" title={error.title}>
           {error.body}
         </Banner>
-      )}
-      {selfRoles && (
-        <p id={selfId} className="text-[13px] text-ink-2">
-          This change is recorded in the activity log and flagged for your
-          hospital&apos;s admins. It takes effect next time you sign in.
-        </p>
       )}
       {endsNamed && (
         <p
@@ -276,15 +229,18 @@ export function AccessEditor({
       )}
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          disabled={!patch || !!problem || !online || update.isPending}
+          disabled={!patch || !!problem || !online}
           aria-describedby={
-            [!online && offlineId, selfRoles && selfId, endsNamed && endsId]
+            [!online && offlineId, endsNamed && endsId]
               .filter(Boolean)
               .join(" ") || undefined
           }
-          onClick={save}
+          onClick={() => {
+            setError(null);
+            setConfirming(true);
+          }}
         >
-          {update.isPending ? "Saving…" : "Save changes"}
+          Save changes
         </Button>
         {patch && (
           <Button
@@ -303,6 +259,43 @@ export function AccessEditor({
           </span>
         )}
       </div>
+      {confirming && patch && (
+        <StepUpDialog
+          title={`Save ${row.display_name}'s access?`}
+          keepLabel="Cancel"
+          confirmLabel="Save changes"
+          confirmVariant="primary"
+          blockedTitle="Turn on two-step verification in Profile & security to change staff access."
+          offline={!online}
+          send={(auth) => update.mutateAsync({ id: row.id, p: patch, auth })}
+          reset={update.reset}
+          onKeep={() => setConfirming(false)}
+          onDone={() => {
+            setConfirming(false);
+            toast.show({
+              title: "Changes saved",
+              body: `${row.display_name}'s access is updated.`,
+              tone: "ok",
+            });
+          }}
+          onGone={() => setConfirming(false)}
+          onStale={(e) => {
+            setConfirming(false);
+            setError(e);
+          }}
+        >
+          <p>
+            {patch.roles
+              ? `Roles: ${rolesText(patch.roles)}.`
+              : `Roles stay ${rolesText(row.roles)}.`}
+            {patch.specialty !== undefined &&
+              ` Specialty: ${patch.specialty ?? "none"}.`}
+          </p>
+          {row.is_you && (
+            <p className="mt-2">It takes effect next time you sign in.</p>
+          )}
+        </StepUpDialog>
+      )}
     </section>
   );
 }

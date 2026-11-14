@@ -41,7 +41,7 @@ export function HoldsTable({ rows }: { rows: LegalHold[] }) {
                   {h.hospital.name}
                 </Link>
               </th>
-              <td className="px-4 py-3">{scopeLabel(h.scope)}</td>
+              <td className="px-4 py-3">{scopeLabel()}</td>
               <td className="px-4 py-3">{holdReasonLabel(h.reason)}</td>
               <td className="px-4 py-3 font-mono text-[12px] [overflow-wrap:anywhere]">
                 {h.reference}

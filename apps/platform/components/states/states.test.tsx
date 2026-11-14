@@ -1,3 +1,4 @@
+import { ApiError } from "@mhai/api-client/errors";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -6,6 +7,21 @@ import { Empty } from "./empty";
 import { Loading } from "./loading";
 
 describe("page states", () => {
+  it("CouldntLoad with a 501 not_implemented is a calm Not available yet, not an error", () => {
+    render(
+      <CouldntLoad
+        what="named access"
+        onRetry={() => {}}
+        error={new ApiError(501, "not_implemented")}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Not available yetMeasured Health hasn't switched on named access yet. Nothing is wrong.",
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
   it("CouldntLoad calls onRetry", async () => {
     const onRetry = vi.fn();
     render(<CouldntLoad what="the hospitals" onRetry={onRetry} />);

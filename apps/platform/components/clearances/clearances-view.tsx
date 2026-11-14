@@ -62,7 +62,11 @@ export function ClearancesView() {
   let body: ReactNode;
   if (named.isError && !named.data)
     body = (
-      <CouldntLoad what="named access" onRetry={() => void named.refetch()} />
+      <CouldntLoad
+        what="named access"
+        error={named.error}
+        onRetry={() => void named.refetch()}
+      />
     );
   else if (!named.data)
     body =

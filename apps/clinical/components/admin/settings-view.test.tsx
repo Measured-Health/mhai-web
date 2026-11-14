@@ -4,9 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/errors";
-import { DEMO_EMAILS } from "@/lib/auth/mock";
+import { DEMO_EMAILS, MOCK_CODE } from "@/lib/auth/mock";
 import { screenAdminAs } from "@/tests/admin";
-import { renderAdmin } from "@/tests/admin-render";
+import { enterCode, renderAdmin } from "@/tests/admin-render";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as AdminClient }));
 vi.mock("@/lib/api/admin", () => ({ getAdminClient: () => holder.client }));
@@ -22,20 +22,17 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 const ready = () =>
-  screen.findByRole("switch", { name: "Reviewers must share the specialty" });
+  screen.findByRole("switch", {
+    name: "Require two-step verification for clinicians",
+  });
 
 describe("SettingsView", () => {
-  it("shows the hospital's rules, with sign-in read-only", async () => {
+  it("shows the hospital's rules, with sign-in and reviewing by specialty read-only", async () => {
     renderAdmin(<SettingsView />);
     expect(await ready()).toBeChecked();
     expect(screen.getByLabelText("Flag as overdue after")).toHaveValue("4");
     expect(
-      screen.getByRole("switch", {
-        name: "Require two-step verification for clinicians",
-      }),
-    ).toBeChecked();
-    expect(
-      screen.getByText("Hospital admins always need it"),
+      screen.getByText(/Hospital admins always need it/),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Sign out after inactivity")).toHaveValue(
       "15",
@@ -43,18 +40,23 @@ describe("SettingsView", () => {
     expect(
       screen.getByRole("switch", { name: 'Allow "trust this device"' }),
     ).toBeChecked();
-    const signIn = screen.getByRole("region", { name: "Sign-in" });
-    expect(within(signIn).getByText("Connected")).toBeInTheDocument();
+    // Core has no reviewing by specialty: said, never offered.
     expect(
-      within(signIn).getByText(/Connected to havanahospital\.org/),
-    ).toBeInTheDocument();
-    expect(within(signIn).getByText("havanahospital.org")).toBeInTheDocument();
+      screen.queryByRole("switch", {
+        name: "Reviewers must share the specialty",
+      }),
+    ).toBeNull();
+    const review = screen.getByRole("region", { name: "Corrections review" });
+    expect(within(review).getByText("Not available yet")).toBeInTheDocument();
+    const signIn = screen.getByRole("region", { name: "Sign-in" });
+    expect(within(signIn).getByText("Not set up")).toBeInTheDocument();
+    expect(within(signIn).queryByText("Allowed email domains")).toBeNull();
     expect(within(signIn).queryByRole("textbox")).toBeNull();
     expect(within(signIn).queryByRole("switch")).toBeNull();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   });
 
-  it("saves only what changed, with the version", async () => {
+  it("saves a tightening edit at once, with no code", async () => {
     const update = vi.spyOn(holder.client, "updateSettings");
     renderAdmin(<SettingsView />);
     await ready();
@@ -69,6 +71,7 @@ describe("SettingsView", () => {
     await waitFor(() =>
       expect(update).toHaveBeenCalledWith(
         { version: 1, allow_trust_device: false, idle_timeout_minutes: 5 },
+        null,
         { idempotencyKey: expect.any(String) },
       ),
     );
@@ -91,7 +94,10 @@ describe("SettingsView", () => {
       "5",
     );
     // Another admin saves a different setting first.
-    await holder.client.updateSettings({ version: 1, review_overdue_hours: 8 });
+    await holder.client.updateSettings(
+      { version: 1, review_overdue_hours: 8 },
+      null,
+    );
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(
       await screen.findByText("Someone else saved the settings just now"),
@@ -105,25 +111,73 @@ describe("SettingsView", () => {
     await waitFor(() =>
       expect(update).toHaveBeenCalledWith(
         { version: 2, idle_timeout_minutes: 5 },
+        null,
         expect.anything(),
       ),
     );
     expect(await screen.findByText("Settings saved")).toBeInTheDocument();
   });
 
-  it("undoes unsaved changes", async () => {
+  it("asks for your code before an edit that loosens sign-in", async () => {
+    const update = vi.spyOn(holder.client, "updateSettings");
     renderAdmin(<SettingsView />);
     await ready();
     await userEvent.click(
       screen.getByRole("switch", {
-        name: "Reviewers must share the specialty",
+        name: "Require two-step verification for clinicians",
       }),
     );
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Save settings that loosen sign-in?",
+    });
+    expect(update).not.toHaveBeenCalled();
+    await enterCode(dialog, "000000");
     expect(
-      screen.getByText(/Off: any clinician except the person who suggested it/),
+      await within(dialog).findByText("That code didn't work. Try again."),
     ).toBeInTheDocument();
+    await enterCode(dialog, MOCK_CODE);
+    expect(await screen.findByText("Settings saved")).toBeInTheDocument();
+    expect(update).toHaveBeenLastCalledWith(
+      { version: 1, require_mfa_for_clinicians: false },
+      { mfaCode: MOCK_CODE },
+      { idempotencyKey: expect.any(String) },
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("a longer idle timeout needs the code; Cancel sends nothing", async () => {
+    const update = vi.spyOn(holder.client, "updateSettings");
+    renderAdmin(<SettingsView />);
+    await ready();
+    await userEvent.selectOptions(
+      screen.getByLabelText("Sign out after inactivity"),
+      "30",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Save settings that loosen sign-in?",
+    });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(update).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Sign out after inactivity")).toHaveValue(
+      "30",
+    );
+  });
+
+  it("undoes unsaved changes", async () => {
+    renderAdmin(<SettingsView />);
+    await ready();
+    await userEvent.click(
+      screen.getByRole("switch", { name: 'Allow "trust this device"' }),
+    );
     await userEvent.click(screen.getByRole("button", { name: "Undo changes" }));
-    expect(await ready()).toBeChecked();
+    expect(
+      screen.getByRole("switch", { name: 'Allow "trust this device"' }),
+    ).toBeChecked();
   });
 
   it("asks before leaving with unsaved changes", async () => {
@@ -222,7 +276,7 @@ describe("SettingsView", () => {
     await ready();
     expect(container.textContent).not.toMatch(/2-step/i);
     expect(
-      screen.getByText("Skips two-step for 30 days on a personal device"),
+      screen.getByText(/Skips two-step for 30 days on a personal device/),
     ).toBeInTheDocument();
   });
 

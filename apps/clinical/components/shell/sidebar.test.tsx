@@ -228,18 +228,16 @@ describe("Sidebar", () => {
     expect(within(group).queryByText(/members/)).toBeNull();
   });
 
-  it("counts staff and pending invites on the admin side, for screen readers too", async () => {
+  it("counts staff on the admin side, for screen readers too", async () => {
     pathname.value = "/admin/staff";
     renderWithAuth(<Sidebar items={[]} />, {
       ...TEST_USER,
       roles: ["clinician", "hospital_admin"],
     });
     const staff = screen.getByRole("link", { name: "Staff" });
-    // One invite is pending; the expired one needs attention instead.
+    // Core has no invites: 11 active or needing attention, one deactivated.
     await waitFor(() =>
-      expect(staff).toHaveAccessibleDescription(
-        "13 members · 1 invite pending",
-      ),
+      expect(staff).toHaveAccessibleDescription("11 members"),
     );
     expect(
       screen.getByRole("link", { name: "Usage" }),

@@ -1,14 +1,20 @@
 "use client";
 import Link from "next/link";
-import { useId, useRef, useState } from "react";
-import type { StaffRemoveAuth } from "@/lib/api/admin-contract";
+import { useId, useRef, useState, type ReactNode } from "react";
+import type { StepUpAuth } from "@/lib/api/admin-contract";
+import { ApiError } from "@/lib/api/errors";
+import { isMfaRequired } from "@/lib/admin-queries";
+import { adminError, type AdminError } from "@/lib/admin/errors";
+import { useAuth } from "@/lib/auth/auth-context";
 import {
+  BACKUP_FAILED_BODY,
   BackupCodeInput,
   BackupCodeToggle,
   useCodeOrBackup,
 } from "@mhai/ui/auth/backup-code-toggle";
 import { CodeInput } from "@mhai/ui/auth/code-input";
 import { Banner } from "@mhai/ui/banner";
+import { ConfirmDialog } from "./confirm-dialog";
 
 /**
  * The admin's own two-step code for a sensitive change: a 6-digit code, or
@@ -23,7 +29,7 @@ export function useStepUp() {
     ...c,
     focusKey,
     backupRef,
-    auth: (): StaffRemoveAuth =>
+    auth: (): StepUpAuth =>
       c.backup ? { backupCode: c.value } : { mfaCode: c.value },
     wrong() {
       c.setCode("");
@@ -109,5 +115,113 @@ export function StepUpFields({
         />
       </p>
     </div>
+  );
+}
+
+/**
+ * A change that needs the admin's own two-step code (core's step-up): the
+ * confirmation, the code boxes, and every answer. A wrong code keeps the
+ * dialog open and clears the boxes; a backup code spent is counted; an
+ * admin without two-step is pointed at Profile & security. `send` is the
+ * mutation's `mutateAsync`; `reset` forgets it (and the code) after every
+ * answer. `onGone` closes the dialog when the person no longer exists.
+ */
+export function StepUpDialog({
+  title,
+  children,
+  keepLabel,
+  confirmLabel,
+  confirmVariant = "danger",
+  blockedTitle,
+  offline,
+  send,
+  reset,
+  onKeep,
+  onDone,
+  onGone,
+  onStale,
+}: {
+  title: string;
+  children: ReactNode;
+  keepLabel: string;
+  confirmLabel: string;
+  confirmVariant?: "danger" | "primary";
+  /** e.g. "Turn on two-step verification in Profile & security to deactivate staff." */
+  blockedTitle: string;
+  offline: boolean;
+  send(auth: StepUpAuth): Promise<unknown>;
+  reset(): void;
+  onKeep(): void;
+  onDone(): void;
+  onGone?(e: AdminError): void;
+  /** Someone else changed it first (409): the latest is loading underneath. */
+  onStale?(e: AdminError): void;
+}) {
+  const { user, updateUser } = useAuth();
+  const step = useStepUp();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<AdminError | null>(null);
+  const [required, setRequired] = useState(false);
+  // One confirmation sends one request, even if a click and the last digit
+  // land before the next render.
+  const sending = useRef(false);
+  // Every admin has two-step (amendment 3), so this is only ever stale state.
+  const blocked = required || user?.mfaEnabled === false;
+
+  async function confirm() {
+    if (!step.ready || blocked || sending.current) return;
+    sending.current = true;
+    setBusy(true);
+    setError(null);
+    const backup = step.backup;
+    try {
+      await send(step.auth());
+      // A backup code works once; Profile & security shows what's left.
+      if (backup && user?.backupCodesLeft != null)
+        updateUser({ backupCodesLeft: Math.max(0, user.backupCodesLeft - 1) });
+      reset();
+      onDone();
+    } catch (e) {
+      reset();
+      const err = adminError(e);
+      if (err.gone && onGone) return onGone(err);
+      if (err.stale && onStale) return onStale(err);
+      if (isMfaRequired(e)) return setRequired(true);
+      const wrong = e instanceof ApiError && e.code === "mfa_invalid";
+      setError(wrong && backup ? { ...err, body: BACKUP_FAILED_BODY } : err);
+      if (wrong) step.wrong();
+    } finally {
+      sending.current = false;
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ConfirmDialog
+      open
+      title={title}
+      keepLabel={keepLabel}
+      confirmLabel={confirmLabel}
+      confirmVariant={confirmVariant}
+      onKeep={() => {
+        reset();
+        onKeep();
+      }}
+      onConfirm={() => void confirm()}
+      busy={busy}
+      error={error}
+      offline={offline}
+      ready={step.ready && !blocked}
+    >
+      <div>{children}</div>
+      <StepUpFields
+        step={step}
+        busy={busy}
+        invalid={error !== null}
+        blocked={blocked}
+        blockedTitle={blockedTitle}
+        onToggle={() => setError(null)}
+      />
+    </ConfirmDialog>
   );
 }

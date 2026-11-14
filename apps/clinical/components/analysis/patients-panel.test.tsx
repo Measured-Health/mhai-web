@@ -513,7 +513,7 @@ describe("PatientsPanel", () => {
     await waitFor(() => expect(patientQueries()).toHaveLength(0));
   });
 
-  it("opening logs an event that Activity shows: opened N de-identified patients in Analysis", async () => {
+  it("opening logs an event that Activity shows: opened de-identified patients in Analysis", async () => {
     const sample = await createMockAnalysis({ delayMs: 0 }).getView(
       "affected",
       F90,
@@ -521,7 +521,6 @@ describe("PatientsPanel", () => {
     // Lists are on location type rows, never a ward (core 1.19.0).
     const n = sample.by_setting.find((r) => r.setting === "emergency")!.patients
       .value!;
-    const rows = Math.min(n, 200);
     renderWith(<AffectedView filters={F90} />);
     const ward = await screen.findByRole("list", {
       name: "Patients by location type",
@@ -545,10 +544,11 @@ describe("PatientsPanel", () => {
     expect(opened[0]).toMatchObject({
       type: "security",
       flag: null,
-      count: rows,
+      // Core sends no count on activity (1.24.0).
+      count: null,
     });
     expect(describeEvent(opened[0]!)).toMatch(
-      new RegExp(`opened ${rows} de-identified patients in Analysis$`),
+      /opened de-identified patients in Analysis$/,
     );
   });
 

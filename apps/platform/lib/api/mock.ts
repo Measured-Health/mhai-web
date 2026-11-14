@@ -344,7 +344,7 @@ export function createMockPlatform({
     const r = hospitals.find((x) => x.hospital === h);
     if (!r) return;
     h.admins = h.status === "active" ? copy(r.admins) : [];
-    h.legal_holds = keptHolds(r, now());
+    h.legal_holds = keptHolds(r);
     h.legal_holds_active = h.legal_holds.length;
     if (h.status === "removal_pending" && h.removal) {
       h.removal.checks.legal_holds = h.legal_holds_active;
@@ -358,7 +358,7 @@ export function createMockPlatform({
    */
   function settle(r: HospitalRecord) {
     const h = r.hospital;
-    settleHolds(r, now(), log);
+    settleHolds(r, now());
     syncShown(h);
     if (
       h.status === "removal_scheduled" &&
@@ -394,7 +394,7 @@ export function createMockPlatform({
 
   function blocksOf(r: HospitalRecord): RemovalBlock[] {
     const b: RemovalBlock[] = [];
-    if (r.holds.some((x) => keepsRecords(x, now()))) b.push("legal_hold");
+    if (r.holds.some(keepsRecords)) b.push("legal_hold");
     if (r.retention_until && Date.parse(r.retention_until) > now())
       b.push("retention");
     if (r.export_required && !r.export_done) b.push("export_required");
@@ -760,7 +760,7 @@ export function createMockPlatform({
           approved_by: null,
           approved_at: null,
           checks: {
-            legal_holds: r.holds.filter((x) => keepsRecords(x, now())).length,
+            legal_holds: r.holds.filter(keepsRecords).length,
             retention_until: r.retention_until,
             export_required: r.export_required,
             export_done: r.export_done,
@@ -923,41 +923,23 @@ export function createMockPlatform({
 
     listTeam: () => read((m) => ({ members: team.map((t) => mark(t, m)) })),
 
-    inviteTeam: (body, opts) =>
-      write(opts, (m) => {
-        const name = text(body?.name, NAME_MAX);
-        const mail = email(body?.email);
+    // Core keeps no invites (openapi 1.26.0): platform accounts are made
+    // with `core users create`, so the demo refuses as core does.
+    inviteTeam: (_body, opts) =>
+      write(opts, () => fail(501, "not_implemented")),
+
+    // Step-up, as core (1.26.0): a demotion is as damaging as a removal.
+    // Every refusal comes before the code is checked.
+    changeRole: (id, body, opts) =>
+      write(opts, async (m) => {
+        const t = member(id);
         const role = body?.role;
         if (!ROLES.includes(role)) invalid();
-        if (team.some((t) => t.email === mail)) fail(409, "duplicate");
-        const t: TeamMember = {
-          id: newId("tm"),
-          name,
-          email: mail,
-          role,
-          status: "invite_pending",
-          mfa_enabled: false,
-          last_sign_in_at: null,
-          is_you: false,
-          version: 1,
-        };
-        team = [...team, t];
-        log(person(m), "team_invited", {
-          target: mail,
-          detail: ROLE_WORDS[role],
-        });
-        return t;
-      }),
-
-    changeRole: (id, body, opts) =>
-      write(opts, (m) => {
-        const t = member(id);
-        if (body?.version !== t.version) fail(409, "conflict");
-        const role = body.role;
-        if (!ROLES.includes(role)) invalid();
+        if (t.id === m.id) fail(409, "own_role");
+        if (body.version !== t.version) fail(409, "conflict");
         if (role === t.role) return mark(t, m);
         if (isLastAdmin(t)) fail(409, "last_admin");
-        if (t.id === m.id) fail(409, "own_role");
+        await checkCode(m, body);
         const next = { ...t, role, version: t.version + 1 };
         team = team.map((x) => (x.id === t.id ? next : x));
         log(person(m), "team_role_changed", {
@@ -1073,8 +1055,10 @@ export function createMockPlatform({
         };
       }),
 
+    // A write rule in core (1.26.0): an auditor is refused.
     markSeen: (body, opts) =>
       own(opts, (m) => {
+        if (m.role !== "platform_admin") fail(403, "forbidden");
         const raw = (body as { ids?: unknown } | null)?.ids;
         if (
           raw !== undefined &&

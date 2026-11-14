@@ -1211,8 +1211,8 @@ export function createMockAnalysis({
         specialty: null,
         confidence: null,
         device: null,
-        // The rows opened (at most 200), not the patients matched.
-        count: patients.length,
+        // Core sends no count on activity (1.24.0).
+        count: null,
         flag: null,
       });
       return { level, count: shown.cell, patients };
@@ -1308,8 +1308,8 @@ export function createMockAnalysis({
         specialty: null,
         confidence: null,
         device: null,
-        // The rows opened, and why: never a name, an MRN or a pid.
-        count: patients.length,
+        // Why, never a name, an MRN or a pid; core sends no count.
+        count: null,
         flag: "alert",
         purpose: why,
       });

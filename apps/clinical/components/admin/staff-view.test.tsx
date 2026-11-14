@@ -6,7 +6,7 @@ import type { AdminClient } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/errors";
 import { DEMO_EMAILS, MOCK_CODE } from "@/lib/auth/mock";
 import { screenAdminAs } from "@/tests/admin";
-import { HOSPITAL_ADMIN, renderAdmin } from "@/tests/admin-render";
+import { HOSPITAL_ADMIN, enterCode, renderAdmin } from "@/tests/admin-render";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as AdminClient }));
 vi.mock("@/lib/api/admin", () => ({ getAdminClient: () => holder.client }));
@@ -38,7 +38,7 @@ describe("StaffView", () => {
       screen.getByRole("heading", { name: "Staff", level: 2 }),
     ).toBeInTheDocument();
     const t = await table();
-    expect(names(t)).toHaveLength(14);
+    expect(names(t)).toHaveLength(12);
     expect(
       within(t)
         .getAllByRole("columnheader")
@@ -86,20 +86,16 @@ describe("StaffView", () => {
         .getAllByRole("button")
         .map((b) => b.textContent),
     ).toEqual([
-      "All · 14",
+      "All · 12",
       "Active · 10",
-      "Invited · 1",
-      "Needs attention · 2",
+      "Needs attention · 1",
       "Deactivated · 1",
     ]);
     await userEvent.click(
-      within(group).getByRole("button", { name: "Needs attention · 2" }),
+      within(group).getByRole("button", { name: "Needs attention · 1" }),
     );
-    expect(names(await table())).toEqual([
-      "Dr. Halima Sani",
-      "Dr. Kofi Mensah",
-    ]);
-    expect(screen.getByRole("status")).toHaveTextContent("2 people shown");
+    expect(names(await table())).toEqual(["Dr. Kofi Mensah"]);
+    expect(screen.getByRole("status")).toHaveTextContent("1 person shown");
   });
 
   it("searches name, email and specialty, ignoring accents and case", async () => {
@@ -109,10 +105,7 @@ describe("StaffView", () => {
       screen.getByRole("searchbox", { name: "Search staff" }),
       "PAED",
     );
-    expect(names(await table())).toEqual([
-      "Dr. Amaka Udo",
-      "Dr. Funmi Adeyemi",
-    ]);
+    expect(names(await table())).toEqual(["Dr. Amaka Udo"]);
   });
 
   it("says when nothing matches, and clears the search", async () => {
@@ -124,7 +117,7 @@ describe("StaffView", () => {
     );
     expect(screen.getByText('No one matches "zzz".')).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Clear search" }));
-    expect(names(await table())).toHaveLength(14);
+    expect(names(await table())).toHaveLength(12);
   });
 
   it("opens the panel from Manage and gives the focus back on close", async () => {
@@ -142,22 +135,16 @@ describe("StaffView", () => {
     expect(manage).toHaveFocus();
   });
 
-  it("invites someone, who appears as Invited", async () => {
+  it("says inviting isn't available yet, with no invite button (core 501)", async () => {
     renderAdmin(<StaffView />);
     await table();
-    await userEvent.click(screen.getByRole("button", { name: "Invite staff" }));
-    const dialog = await screen.findByRole("dialog", { name: "Invite staff" });
-    await userEvent.click(within(dialog).getByLabelText("Work emails"));
-    await userEvent.paste("n.ade@havanahospital.org");
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Send 1 invite" }),
-    );
-    const row = (
-      await within(await table()).findByRole("button", {
-        name: "Manage n.ade@havanahospital.org",
-      })
-    ).closest("tr")!;
-    expect(row).toHaveTextContent("Invited");
+    expect(screen.queryByRole("button", { name: "Invite staff" })).toBeNull();
+    expect(
+      screen.getByText(/Inviting staff: Not available yet/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Measured Health creates staff accounts for now."),
+    ).toBeInTheDocument();
   });
 
   it("shows cards instead of a table on a phone (R13)", async () => {
@@ -229,7 +216,7 @@ describe("StaffView", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the list readable offline and says why Invite is off", async () => {
+  it("keeps the list readable offline", async () => {
     renderAdmin(<StaffView />);
     await table();
     try {
@@ -237,12 +224,7 @@ describe("StaffView", () => {
       act(() => {
         window.dispatchEvent(new Event("offline"));
       });
-      const invite = screen.getByRole("button", { name: "Invite staff" });
-      expect(invite).toBeDisabled();
-      expect(
-        screen.getByText("You're offline. Reconnect to invite people."),
-      ).toBeInTheDocument();
-      expect(names(await table())).toHaveLength(14);
+      expect(names(await table())).toHaveLength(12);
     } finally {
       vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
       act(() => {
@@ -263,7 +245,7 @@ describe("StaffView", () => {
       name: "Staff at the hospital",
     });
     const items = within(cards).getAllByRole("listitem");
-    expect(items).toHaveLength(14);
+    expect(items).toHaveLength(12);
     expect(within(items[0]).getAllByRole("button")).toHaveLength(1);
     expect(within(cards).getByText("Two-step not set up")).toBeInTheDocument();
   });
@@ -303,7 +285,7 @@ describe("StaffView", () => {
       act(() => onlineManager.setOnline(false));
       act(() => onlineManager.setOnline(true));
       expect(await screen.findByRole("alert")).toHaveTextContent("Try again");
-      expect(names(await table())).toHaveLength(14);
+      expect(names(await table())).toHaveLength(12);
       expect(screen.getByRole("searchbox")).toBeInTheDocument();
     } finally {
       onlineManager.setOnline(true);
@@ -324,23 +306,33 @@ describe("StaffView", () => {
     expect(manage).toHaveFocus();
   });
 
-  it("after a removal, focus goes to the search field (the row is gone)", async () => {
+  it("when the person has left the list, focus goes to the search field", async () => {
     renderAdmin(<StaffView />);
     const t = await table();
     await userEvent.click(
       within(t).getByRole("button", { name: "Manage Dr. Tunde Bello" }),
     );
     const panel = await screen.findByRole("dialog", { name: "Staff member" });
-    const account = await within(panel).findByRole("region", {
-      name: "Account",
-    });
-    await userEvent.click(
-      within(account).getByRole("button", { name: "Remove" }),
+    vi.spyOn(holder.client, "updateStaff").mockRejectedValueOnce(
+      new ApiError(404, "not_found"),
     );
-    const dialog = screen.getByRole("dialog", { name: "Remove this account?" });
-    await userEvent.click(within(dialog).getByLabelText("Digit 1 of 6"));
-    await userEvent.keyboard(MOCK_CODE);
-    expect(await screen.findByText("Account removed")).toBeInTheDocument();
+    const others = (await holder.client.listStaff()).filter(
+      (x) => x.id !== "s-bello",
+    );
+    vi.spyOn(holder.client, "listStaff").mockResolvedValue(others);
+    await userEvent.selectOptions(
+      within(panel).getByLabelText("Specialty"),
+      "Surgery",
+    );
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "Save changes" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Save Dr. Bello's access?",
+    });
+    await enterCode(dialog, MOCK_CODE);
+    const back = await screen.findByRole("button", { name: "Back to staff" });
+    await userEvent.click(back);
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "Staff member" })).toBeNull(),
     );

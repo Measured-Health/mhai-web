@@ -9,11 +9,10 @@ import { getAdminClient, type StaffAction } from "./api/admin";
 import type {
   ActivityEventOut,
   ActivityQuery,
-  InviteIn,
   SettingsPatchIn,
   StaffOut,
   StaffPatchIn,
-  StaffRemoveAuth,
+  StepUpAuth,
   UsagePeriod,
 } from "./api/admin-contract";
 import { ApiError } from "./api/errors";
@@ -160,21 +159,6 @@ export async function refreshStaff(qc: QueryClient) {
   ]);
 }
 
-export function useInviteStaff() {
-  const qc = useQueryClient();
-  return useKeyedMutation(
-    (i: InviteIn, key) =>
-      getAdminClient().inviteStaff(i, { idempotencyKey: key }),
-    {
-      onSuccess: (r) =>
-        qc.setQueryData<StaffOut[]>(ADMIN_KEYS.staff, (l) =>
-          l ? [...l, ...r.invited] : l,
-        ),
-      onSettled: () => void refreshStaff(qc),
-    },
-  );
-}
-
 /** Gone: drop it now. Stale (409): the refresh loads the latest (R7). */
 function staffRowCallbacks(qc: QueryClient) {
   return {
@@ -185,48 +169,45 @@ function staffRowCallbacks(qc: QueryClient) {
   };
 }
 
+/**
+ * Every staff write carries the admin's step-up code (core 1.24.0). A wrong
+ * or missing code (mfa_invalid, mfa_required, mfa_locked) is a 4xx: not
+ * retried, and the row stays. The code is in the variables, so the cache
+ * forgets the call as soon as nobody is watching it (`gcTime: 0`), and the
+ * screens `reset()` it after every answer.
+ */
 export function useUpdateStaff() {
   const qc = useQueryClient();
   return useKeyedMutation(
-    (v: { id: string; p: StaffPatchIn }, key) =>
-      getAdminClient().updateStaff(v.id, v.p, { idempotencyKey: key }),
+    (v: { id: string; p: StaffPatchIn; auth: StepUpAuth }, key) =>
+      getAdminClient().updateStaff(v.id, v.p, v.auth, { idempotencyKey: key }),
     { ...staffRowCallbacks(qc), onSuccess: (row) => putStaff(qc, row) },
-  );
-}
-
-export function useStaffAction() {
-  const qc = useQueryClient();
-  return useKeyedMutation(
-    (v: { id: string; action: StaffAction }, key) =>
-      getAdminClient().staffAction(v.id, v.action, { idempotencyKey: key }),
-    { ...staffRowCallbacks(qc), onSuccess: (row) => putStaff(qc, row) },
-  );
-}
-
-/**
- * Needs the admin's two-step code. A wrong or missing code (mfa_invalid,
- * mfa_required, mfa_locked) is a 4xx: not retried, and the row stays. The
- * code is in the variables, so the cache forgets the call as soon as nobody
- * is watching it (`gcTime: 0`).
- */
-export function useRemoveStaff() {
-  const qc = useQueryClient();
-  return useKeyedMutation(
-    (v: { id: string; auth: StaffRemoveAuth }, key) =>
-      getAdminClient().removeStaff(v.id, v.auth, { idempotencyKey: key }),
-    {
-      ...staffRowCallbacks(qc),
-      onSuccess: (_d, v) => dropStaff(qc, v.id),
-    },
     { gcTime: 0 },
   );
 }
 
+/** Deactivate or reactivate, with the step-up code (as `useUpdateStaff`). */
+export function useStaffAction() {
+  const qc = useQueryClient();
+  return useKeyedMutation(
+    (v: { id: string; action: StaffAction; auth: StepUpAuth }, key) =>
+      getAdminClient().staffAction(v.id, v.action, v.auth, {
+        idempotencyKey: key,
+      }),
+    { ...staffRowCallbacks(qc), onSuccess: (row) => putStaff(qc, row) },
+    { gcTime: 0 },
+  );
+}
+
+/**
+ * The code only goes with an edit that loosens sign-in; the cache forgets
+ * the call at once (`gcTime: 0`).
+ */
 export function useUpdateSettings() {
   const qc = useQueryClient();
   return useKeyedMutation(
-    (p: SettingsPatchIn, key) =>
-      getAdminClient().updateSettings(p, { idempotencyKey: key }),
+    (v: { p: SettingsPatchIn; auth: StepUpAuth | null }, key) =>
+      getAdminClient().updateSettings(v.p, v.auth, { idempotencyKey: key }),
     {
       onSuccess: (s) => qc.setQueryData(ADMIN_KEYS.settings, s),
       onError: (e) => {
@@ -238,25 +219,6 @@ export function useUpdateSettings() {
         void qc.invalidateQueries({ queryKey: ADMIN_KEYS.oversight });
       },
     },
+    { gcTime: 0 },
   );
 }
-
-function useOversightWrite<V>(send: (v: V, key: string) => Promise<void>) {
-  const qc = useQueryClient();
-  return useKeyedMutation(send, {
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ADMIN_KEYS.oversight });
-      void qc.invalidateQueries({ queryKey: ADMIN_KEYS.activityAll });
-    },
-  });
-}
-
-export const useRemindReviewers = () =>
-  useOversightWrite<{ id: string }>((v, key) =>
-    getAdminClient().remindReviewers(v.id, { idempotencyKey: key }),
-  );
-
-export const useAssignReviewer = () =>
-  useOversightWrite<{ id: string; staffId: string }>((v, key) =>
-    getAdminClient().assignReviewer(v.id, v.staffId, { idempotencyKey: key }),
-  );

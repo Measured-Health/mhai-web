@@ -1,330 +1,111 @@
 "use client";
-import {
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
-  CalendarDays,
-  CheckCircle2,
-  CircleHelp,
-  TrendingUp,
-  TriangleAlert,
-} from "lucide-react";
 import { useId } from "react";
 import type {
-  ChangeOut,
   GuardedOut,
-  MeasureOut,
   UsageAlertsOut,
   UsageOut,
-  UsagePeriod,
 } from "@/lib/api/admin-contract";
 import {
   ALERTS_FAILED,
   ALERTS_INTRO,
-  NOT_ENOUGH_TO_COMPARE,
-  NOTHING_UNUSUAL,
+  CATEGORY_LABEL,
+  CATEGORY_ORDER,
+  HANDLING_LABEL,
+  HANDLING_ORDER,
+  ROUTE_LABEL,
+  ROUTE_ORDER,
   SEVERITY_ORDER,
-  TOP_MAX,
-  UNUSUALLY_BUSY,
-  alertCount,
-  changeFor,
-  changeText,
-  columnsOf,
-  criticalTargetLabel,
-  findingLabel,
-  placeLabel,
   readAlerts,
-  seriesSummary,
   shown,
-  shownDirection,
   valueText,
-  verdict,
-  whatChanged,
-  type Better,
-  type ChangeItem,
-  type MeasureKind,
 } from "@/lib/admin/alert-usage";
-import { DISMISS_REASONS, SEVERITY } from "@/lib/notifications/alert-view";
+import { SEVERITY } from "@/lib/notifications/alert-view";
 import { SEVERITY_ICON } from "../notifications/chips";
 import type { BarItem } from "@mhai/ui/charts/types";
 import { BarList } from "@mhai/ui/charts/bar-list";
-import { ColumnChart } from "@mhai/ui/charts/column-chart";
-import { cn } from "@mhai/ui/cn";
 import { Card, RetryBanner, Tile } from "./usage-parts";
-
-type Icon = typeof ArrowUp;
-
-/** "up 6 min vs last month · worse", with its arrow; the word carries it, not the colour. */
-function ChangeLine({
-  c,
-  kind,
-  better = null,
-  period,
-}: {
-  c: ChangeOut;
-  kind: MeasureKind;
-  better?: Better;
-  period: UsagePeriod;
-}) {
-  // One shown direction for the arrow, the words and the verdict.
-  const d = shownDirection(c);
-  const v = verdict(c, better);
-  const Arrow = d === "up" ? ArrowUp : d === "down" ? ArrowDown : ArrowRight;
-  return (
-    <span
-      className={cn(
-        "mt-1.5 flex items-center gap-1 text-[12px] [overflow-wrap:anywhere]",
-        v === "worse"
-          ? "text-bad-deep"
-          : v === "better"
-            ? "text-ok-deep"
-            : "text-ink-2",
-      )}
-    >
-      <Arrow aria-hidden className="size-3.5 shrink-0" />
-      {changeText(c, kind, period)}
-      {v && ` · ${v}`}
-    </span>
-  );
-}
 
 function AlertTile({
   label,
   icon: TileIcon,
-  m,
-  kind,
-  better = null,
-  period,
-  hasPrevious,
+  g,
 }: {
   label: string;
-  icon?: Icon;
-  m: MeasureOut;
-  kind: MeasureKind;
-  better?: Better;
-  period: UsagePeriod;
-  hasPrevious: boolean;
+  icon?: (typeof SEVERITY_ICON)[keyof typeof SEVERITY_ICON];
+  g: GuardedOut;
 }) {
-  const s = shown(m, kind);
-  const c = changeFor(m, kind, hasPrevious);
+  const s = shown(g);
   return (
     <Tile
       label={label}
-      value={valueText(s, kind)}
+      value={valueText(s)}
       muted={s.kind !== "value"}
       icon={TileIcon && <TileIcon aria-hidden className="size-3.5 shrink-0" />}
-      footer={
-        c && <ChangeLine c={c} kind={kind} better={better} period={period} />
-      }
     />
   );
 }
 
-const barItem = (
-  key: string,
-  label: string,
-  g: GuardedOut | undefined,
-  kind: MeasureKind,
-  note?: string | null,
-): BarItem => {
-  const s = shown(g, kind);
+/** A hidden count is the words "Fewer than 5", never a bar or a zero. */
+const barItem = (key: string, label: string, g: GuardedOut): BarItem => {
+  const s = shown(g);
   return {
     key,
     label,
     value: s.kind === "value" ? s.value : null,
-    text: valueText(s, kind),
+    text: valueText(s),
     hidden: s.kind === "hidden",
-    note,
   };
 };
 
-const CHANGE_ICON: Record<ChangeItem["kind"], { Icon: Icon; tone: string }> = {
-  worse: { Icon: TriangleAlert, tone: "text-bad-deep" },
-  busy: { Icon: CalendarDays, tone: "text-warn-deep" },
-  rising: { Icon: TrendingUp, tone: "text-ink-2" },
-};
-
-function WhatChangedCard({ a }: { a: UsageAlertsOut }) {
-  const w = whatChanged(a);
-  return (
-    <Card title="What changed" level={4}>
-      {w.kind === "items" ? (
-        <ul className="flex flex-col gap-2">
-          {w.items.map((i) => {
-            const { Icon, tone } = CHANGE_ICON[i.kind];
-            return (
-              <li key={i.key} className="flex items-start gap-2 text-[13px]">
-                <Icon
-                  aria-hidden
-                  className={cn("mt-0.5 size-4 shrink-0", tone)}
-                />
-                <span className="[overflow-wrap:anywhere]">{i.text}</span>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="flex items-center gap-2 text-[13px] text-ink-2">
-          {w.kind === "nothing" ? (
-            <CheckCircle2 aria-hidden className="size-4 text-ok-deep" />
-          ) : (
-            <CircleHelp aria-hidden className="size-4" />
-          )}
-          {w.kind === "nothing" ? NOTHING_UNUSUAL : NOT_ENOUGH_TO_COMPARE}
-        </p>
-      )}
-    </Card>
-  );
-}
-
-function WhoReceivedCard({
-  r,
-  common,
-}: {
-  r: NonNullable<UsageAlertsOut["by_route"]>;
-  common: { period: UsagePeriod; hasPrevious: boolean };
-}) {
-  return (
-    <Card title="Who received them" level={4}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <AlertTile
-          label="Hospital queue"
-          m={r.queue}
-          kind="count"
-          {...common}
-        />
-        <AlertTile
-          label="Named clinicians"
-          m={r.named}
-          kind="count"
-          {...common}
-        />
-      </div>
-    </Card>
-  );
-}
-
-function AlertsBody({ a, period }: { a: UsageAlertsOut; period: UsagePeriod }) {
-  const common = { period, hasPrevious: a.has_previous };
-  const outcome = (m: MeasureOut) => {
-    const c = changeFor(m, "share", a.has_previous);
-    return c ? changeText(c, "share", period) : null;
-  };
+function AlertsBody({ a }: { a: UsageAlertsOut }) {
   return (
     <>
-      <WhatChangedCard a={a} />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <AlertTile label="Alerts" m={a.total} kind="count" {...common} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <AlertTile label="Alerts" g={a.total} />
         {SEVERITY_ORDER.map((k) => (
           <AlertTile
             key={k}
             label={SEVERITY[k].label}
             icon={SEVERITY_ICON[k]}
-            m={a.by_severity[k]}
-            kind="count"
-            {...common}
+            g={a.by_severity[k]}
           />
         ))}
-        <AlertTile
-          label="Still unhandled"
-          m={a.unhandled}
-          kind="count"
-          {...common}
-        />
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <AlertTile
-          label="Median time to acknowledge"
-          m={a.median_ack_minutes}
-          kind="minutes"
-          better="lower"
-          {...common}
-        />
-        <AlertTile
-          label="Median for Critical alerts"
-          m={a.median_ack_minutes_critical}
-          kind="minutes"
-          better="lower"
-          {...common}
-        />
-        <AlertTile
-          label={criticalTargetLabel(a.critical_target_minutes)}
-          m={a.critical_within_target}
-          kind="share"
-          better="higher"
-          {...common}
-        />
-      </div>
-      <ColumnChart
-        title="Alerts over time"
-        level={4}
-        columns={columnsOf(a)}
-        summary={seriesSummary(a.series)}
-        valueText={alertCount}
-        headers={[a.series.bucket === "week" ? "Week" : "Day", "Alerts"]}
-        markLegend={UNUSUALLY_BUSY}
-      />
-      {a.by_route && <WhoReceivedCard r={a.by_route} common={common} />}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card title="Outcomes" level={4}>
+        <Card title="What happened to them" level={4}>
           <BarList
-            max={1}
-            items={[
-              barItem(
-                "ack",
-                "Acknowledged",
-                a.acknowledged_share,
-                "share",
-                outcome(a.acknowledged_share),
-              ),
-              barItem(
-                "dismissed",
-                "Dismissed",
-                a.dismissed_share,
-                "share",
-                outcome(a.dismissed_share),
-              ),
-            ]}
-          />
-        </Card>
-        <Card title="Dismissal reasons" level={4}>
-          <BarList
-            items={DISMISS_REASONS.map((r) =>
-              barItem(
-                r.code,
-                r.label,
-                a.dismiss_reasons.find((x) => x.reason === r.code)?.count,
-                "count",
-              ),
+            items={HANDLING_ORDER.map((k) =>
+              barItem(k, HANDLING_LABEL[k], a.by_handling[k]),
             )}
           />
         </Card>
-        <Card title="Top findings" level={4}>
+        <Card title="Who received them" level={4}>
           <BarList
-            items={a.top_findings
-              .slice(0, TOP_MAX)
-              .map((f, i) =>
-                barItem(`f${i}`, findingLabel(f), f.count, "count"),
-              )}
+            items={ROUTE_ORDER.map((k) =>
+              barItem(k, ROUTE_LABEL[k], a.by_route[k]),
+            )}
           />
-        </Card>
-        <Card title="Top locations" level={4}>
-          <BarList
-            items={a.top_locations
-              .slice(0, TOP_MAX)
-              .map((l, i) =>
-                barItem(`l${i}`, placeLabel(l.location), l.count, "count"),
-              )}
-          />
+          <p className="mt-2 text-[12px] text-ink-3">
+            One alert can go to both, so these can add up to more than the
+            total.
+          </p>
         </Card>
       </div>
+      <Card title="By kind of result" level={4}>
+        <BarList
+          items={CATEGORY_ORDER.map((k) =>
+            barItem(k, CATEGORY_LABEL[k], a.by_category[k]),
+          )}
+        />
+      </Card>
     </>
   );
 }
 
 /**
- * The Patient alerts group on Usage (Plan 5b). Hidden when alerts are off;
- * says so, never zeros or "Nothing unusual", when they couldn't load (R1, R2).
+ * The Patient alerts group on Usage, as core sends it (1.24.0). Hidden when
+ * the hospital has no record source; says so, never zeros, when the
+ * numbers couldn't load or could give a hidden group away (R1, R2).
  */
 export function UsageAlerts({
   usage,
@@ -352,7 +133,7 @@ export function UsageAlerts({
           The other usage numbers are up to date. Try again in a moment.
         </RetryBanner>
       ) : (
-        <AlertsBody a={s.alerts} period={usage.period} />
+        <AlertsBody a={s.alerts} />
       )}
     </section>
   );
