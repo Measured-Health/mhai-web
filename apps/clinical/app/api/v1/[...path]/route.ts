@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { LETTER_MAX_BYTES } from "@mhai/ui/clearances";
 import { handledFields } from "@/lib/api/alert-handled";
+import { LOOKUP_IN, readLookup } from "@/lib/api/lookup-schema";
 import { QUERY_CREATE_SCHEMA } from "@/lib/api/query-schema";
 import {
   NO_DRILL_FILTERS,
@@ -30,6 +31,7 @@ const ALLOWED = new Set([
   "alerts",
   "me",
   "analysis",
+  "patients",
 ]);
 // Anything else (HEAD, PUT, OPTIONS...) never reaches a read or write branch.
 const METHODS = new Set(["GET", "POST", "PATCH", "DELETE"]);
@@ -455,6 +457,7 @@ function shapeAllowed(method: string, path: string[]): boolean {
   if (path[0] === "hospital") return hospitalShape(method, path);
   if (path[0] === "analysis") return analysisShape(method, path);
   if (path[0] === "alerts" || path[0] === "me") return alertShape(method, path);
+  if (path[0] === "patients") return isLookup(method, path);
   // Clinical calls only read and post (Plans 1–3).
   if (method !== "GET" && method !== "POST") return false;
   const [first, second, third] = path;
@@ -476,6 +479,14 @@ function shapeAllowed(method: string, path: string[]): boolean {
 /** `POST queries`: a new question. */
 const isAsk = (method: string, path: string[]) =>
   method === "POST" && path.length === 1 && path[0] === "queries";
+
+/**
+ * `POST patients/lookup`: a clinician finds one patient of their hospital by
+ * MRN (core 1.29.0). The MRN is only ever in the body; nothing else under
+ * `patients` is forwarded.
+ */
+const isLookup = (method: string, path: string[]) =>
+  method === "POST" && path.length === 2 && path[1] === "lookup";
 
 /** The body as JSON, or undefined (which no schema accepts). */
 function parseJson(text: string): unknown {
@@ -528,6 +539,14 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   if (!namedGateHolds(path, s.user))
     return json(403, { code: "named_access_off" });
   if (!alertQueryOk(req, path)) return json(400, { code: "invalid" });
+  const lookup = isLookup(req.method, path) && path[0] === "patients";
+  if (lookup) {
+    // Core takes a lookup on a two-step session only, and never an MRN in
+    // the address: both refused here first.
+    if (s.user.mfaEnabled !== true) return json(403, { code: "mfa_required" });
+    if (new URL(req.url).search)
+      return json(422, { code: "validation_failed" });
+  }
   // An aggregate read's query, checked before anything goes upstream.
   const queryProblem = analysisQueryProblem(req, path);
   if (queryProblem) return json(422, { code: queryProblem });
@@ -543,6 +562,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
 
   let body: string | Uint8Array<ArrayBuffer> | undefined;
   let type: string | undefined;
+  let lookedUp: string | undefined;
   if (isUpload(req.method, path)) {
     // A letter: forwarded as bytes, with its own boundary.
     const multipart = multipartType(req.headers.get("content-type"));
@@ -561,6 +581,13 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
       const q = QUERY_CREATE_SCHEMA.safeParse(parseJson(text));
       if (!q.success) return json(422, { code: "validation_failed" });
       body = JSON.stringify(q.data);
+      type = "application/json";
+    } else if (lookup) {
+      // `{mrn}` only, trimmed, of a safe length and characters (core 1.29.0).
+      const l = LOOKUP_IN.safeParse(parseJson(text));
+      if (!l.success) return json(422, { code: "validation_failed" });
+      lookedUp = l.data.mrn;
+      body = JSON.stringify(l.data);
       type = "application/json";
     } else if (text) {
       body = text;
@@ -625,6 +652,26 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
         "Content-Type": got,
         "Cache-Control": "no-store",
         "Content-Disposition": "inline",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
+  if (lookedUp !== undefined) {
+    // The one patient, read strictly, for the MRN asked about; anything
+    // else is 502 and never reaches the browser.
+    const found =
+      res.status === 200
+        ? readLookup(await res.json().catch(() => undefined), lookedUp)
+        : null;
+    if (!found) {
+      await res.body?.cancel().catch(() => {});
+      return json(502, { code: "bad_gateway" });
+    }
+    return new Response(JSON.stringify(found), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
       },
     });

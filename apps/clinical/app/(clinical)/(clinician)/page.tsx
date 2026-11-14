@@ -70,6 +70,8 @@ function Home({
   const [patient, setPatient] = useState<PatientLink | null>(() =>
     editing ? (editing.patient ?? null) : readPrefillPatient(prefillToken),
   );
+  // The patient was found by MRN, not brought from the alert.
+  const [found, setFound] = useState(false);
   // Offline with a patient linked: the question can't wait on this device.
   const [linkedOffline, setLinkedOffline] = useState(false);
   // Says so to screen readers when the patient is removed.
@@ -95,6 +97,7 @@ function Home({
     // Sent, discarded or replaced: the alert's prefill is done with.
     setFromAlert(false);
     setPatient(null);
+    setFound(false);
     setLinkedOffline(false);
     setRemoved(false);
     clearPrefill();
@@ -114,6 +117,7 @@ function Home({
         setStarted(true);
         setFromAlert(true);
         setPatient(link);
+        setFound(false);
         setLinkedOffline(false);
         setRemoved(false);
       }
@@ -156,6 +160,7 @@ function Home({
     restart(asking.values);
     setFromAlert(true);
     setPatient(asking.patient);
+    setFound(false);
     setAsking(null);
   };
 
@@ -176,6 +181,7 @@ function Home({
 
   const clearPatient = () => {
     setPatient(null);
+    setFound(false);
     setLinkedOffline(false);
     setRemoved(true);
     if (unavailable) submit.reset();
@@ -263,13 +269,17 @@ function Home({
               </p>
               {fromAlert && (
                 <p className="mb-4 rounded-xl bg-mint-wash px-3.5 py-2.5 text-[13px] text-mint-deep">
-                  {patient
+                  {patient && !found
                     ? "Filled in from a patient alert and linked to the patient. Their name and record number weren't copied into the question. Check the details before you analyse."
                     : "Filled in from a patient alert. The patient's name and record number weren't copied. Check the details before you analyse."}
                 </p>
               )}
               <p role="status" className="sr-only">
-                {removed ? "The patient was removed from this question." : ""}
+                {removed
+                  ? "The patient was removed from this question."
+                  : found && patient
+                    ? "The patient was found and linked to this question."
+                    : ""}
               </p>
               {unavailable && (
                 <div className="mb-4">
@@ -323,6 +333,15 @@ function Home({
                 initial={initial}
                 patient={patient}
                 onClearPatient={clearPatient}
+                onFindPatient={(link) => {
+                  // Found by MRN (core 1.29.0): memory only, like a link
+                  // from an alert.
+                  setPatient(link);
+                  setFound(true);
+                  setRemoved(false);
+                  setLinkedOffline(false);
+                  if (unavailable) submit.reset();
+                }}
                 onDirtyChange={setDirty}
                 onSubmit={async (q) => {
                   if (submit.isPending || saving.current) return;

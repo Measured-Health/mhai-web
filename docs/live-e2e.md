@@ -82,6 +82,7 @@ checked first (`services/emr/scripts/image-check.sh`, mhai-multiagent
 | clinical `06-hospital-admin`        | staff and a person's panel, a settings edit with step-up, usage, activity, oversight                                                                                |
 | clinical `07-analyst-role`          | the hospital admin removes and gives back the synthetic analyst's role, with step-up                                                                                |
 | clinical `08-patients`              | patient matches and exclusions: the explanations, an unknown MRN refused with step-up                                                                               |
+| clinical `09-patient-lookup`        | Find patient by MRN: an alert's patient found, a miss (404), the 6th lookup in a minute (429), bad MRNs 422 in the BFF                                              |
 | both `00-tour`                      | every page: it renders and no call to the BFF fails                                                                                                                 |
 
 A call that fails is printed as `API <path>: <status> <method> <url>`: the

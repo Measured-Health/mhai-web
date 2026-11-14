@@ -416,6 +416,27 @@ export const MOCK_ACTIVE_PATIENT_IDS: ReadonlySet<string> = new Set(
     .filter((id) => id !== MOCK_MERGED_PATIENT_ID),
 );
 
+/**
+ * The demo hospital's patients as the MRN lookup sees them (core 1.29.0):
+ * every sample alert's patient, with `active` false for the merged one.
+ * Synthetic names and MRNs only.
+ */
+export const MOCK_HOSPITAL_PATIENTS: readonly {
+  id: string;
+  full_name: string;
+  mrn: string;
+  age: number | null;
+  sex: Sex;
+  active: boolean;
+}[] = [...SEEDS, ...ARRIVALS].map((s) => ({
+  id: s.patientId,
+  full_name: s.name,
+  mrn: s.mrn,
+  age: s.age,
+  sex: s.sex ?? "unknown",
+  active: s.patientId !== MOCK_MERGED_PATIENT_ID,
+}));
+
 const iso = (ms: number) => new Date(ms).toISOString();
 
 function build(
