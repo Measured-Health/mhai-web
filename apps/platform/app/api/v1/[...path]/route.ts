@@ -250,6 +250,23 @@ const BODIES: ReadonlyMap<string, z.ZodType> = new Map<string, z.ZodType>([
   ],
 ]);
 
+/**
+ * The recorded reveal (`getAuditEventPatients`, core openapi 1.19.0): the
+ * pids a drill-down entry's list sent. For auditors only, here: a platform
+ * admin is refused before anything goes upstream. Its id is core's decimal
+ * event id and it takes no query (anything else is 404, as core answers).
+ */
+const REVEAL = "GET platform/audit/{id}/patients";
+const EVENT_ID = /^[1-9][0-9]{0,18}$/;
+/** Its reply, exactly: at most 200 pseudonyms, nothing else. */
+const REVEAL_REPLY = z.strictObject({
+  pseudonyms: z.array(z.string().regex(/^P-[A-Z0-9]{4,12}$/)).max(200),
+});
+/** The replies read strictly before they reach the browser; anything else is 502. */
+const REPLIES: ReadonlyMap<string, z.ZodType> = new Map<string, z.ZodType>([
+  [REVEAL, REVEAL_REPLY],
+]);
+
 /** The query string as one value per key; a repeated key is refused. */
 function queryOf(url: string): Record<string, string> | null {
   const out: Record<string, string> = {};
@@ -353,6 +370,12 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
   // 6b. Analysis is for platform admins: an auditor never reaches upstream.
   if (ADMIN_ONLY_READS.has(shape) && !roles.includes("platform_admin"))
     return forbidden();
+  // 6c. The reveal: an auditor's, for one decimal entry id, with no query.
+  if (shape === REVEAL) {
+    if (!EVENT_ID.test(path[2] ?? "") || new URL(req.url).search !== "")
+      return json(404, { code: "not_found" });
+    if (!roles.includes("auditor")) return forbidden();
+  }
   // 7. Auditors only read, except their own read state (AUDITOR_WRITES).
   if (
     method !== "GET" &&
@@ -418,6 +441,18 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
       unknown
     > | null;
     return json(res.status, problem(res.status, p));
+  }
+  const reply = REPLIES.get(shape);
+  if (reply) {
+    const parsed = reply.safeParse(await res.json().catch(() => undefined));
+    if (!parsed.success) return json(502, { code: "bad_gateway" });
+    return new Response(JSON.stringify(parsed.data), {
+      status: res.status,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      },
+    });
   }
   const type = res.headers.get("Content-Type") ?? "application/json";
   // A file is passed through only as a type its shape allows.

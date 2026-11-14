@@ -270,6 +270,12 @@ export type Undisplayable = {
   ok: false;
   id: string | null;
   seq: number | null;
+  /**
+   * Only on a detail: a drill-down entry core sends bare (its facts not
+   * agreed yet, core 1.19.0) still says how many rows its list sent, so the
+   * recorded reveal can be offered on it.
+   */
+  patients?: { count: number };
 };
 export type Row<T> = { ok: true; event: T } | Undisplayable;
 export type AuditRow = Row<AuditEvent>;
@@ -337,11 +343,30 @@ const isLetter = exact({
   verified_by: orNull(isPerson),
 });
 
+/** A drill-down list's rows: 1 to 200 (core 1.19.0). */
+const isListRows = (v: unknown): v is number =>
+  isCount(v) && v >= 1 && v <= 200;
+
+/**
+ * A detail: the entry with its `patients` and `letter`. A bare entry (core's
+ * `security`/`unknown`, nothing else said) is undisplayable; when it is a
+ * drill-down's, core still sends `patients: {count}`, which is kept so the
+ * recorded reveal can be offered. Nothing else of a bare entry is read.
+ */
 export function readDetail(raw: unknown): Row<AuditDetail> {
-  return readWith<AuditDetail>(raw, {
+  const row = readWith<AuditDetail>(raw, {
     patients: orNull(exact({ count: isCount })),
     letter: orNull(isLetter),
   });
+  if (row.ok || !isObj(raw) || row.id === null) return row;
+  const p = raw.patients;
+  if (
+    raw.kind === "unknown" &&
+    raw.type === "security" &&
+    exact({ count: isListRows })(p)
+  )
+    return { ...row, patients: { count: (p as { count: number }).count } };
+  return row;
 }
 
 export type NamedRow = Row<AuditEvent & { letter: Letter }>;

@@ -79,7 +79,7 @@ test("Refused + Flagged only shows the locked sign-in; the URL stays /audit", as
   expect(new URL(page.url()).search).toBe("");
 });
 
-test("searching a Northgate pseudonym finds the named drill-downs; opening one, Show patient ids lists them; the Audit filter then shows the read entries", async ({
+test("searching a Northgate pseudonym finds the named drill-downs; opening one, Reveal patients lists them; the Audit filter then shows the read entries", async ({
   page,
 }) => {
   await openAudit(page, AMARA);
@@ -96,7 +96,11 @@ test("searching a Northgate pseudonym finds the named drill-downs; opening one, 
   await expect(page.getByText(PSEUDONYM)).toHaveCount(0);
 
   await named.first().getByRole("button").first().click();
-  await page.getByRole("button", { name: "Show patient ids" }).click();
+  await page.getByRole("button", { name: "Reveal patients" }).click();
+  await page
+    .getByRole("dialog", { name: "Reveal these patients?" })
+    .getByRole("button", { name: "Reveal patients" })
+    .click();
   const ids = page.getByRole("list", { name: "Patient ids" });
   await expect(ids.getByText(PSEUDONYM)).toBeVisible();
   await expect(page.getByText("Shown to you and recorded.")).toBeVisible();
@@ -111,7 +115,7 @@ test("searching a Northgate pseudonym finds the named drill-downs; opening one, 
   await page.getByRole("button", { name: "Done" }).click();
   await expect(
     entries(page)
-      .filter({ hasText: "Showed patient ids for an entry" })
+      .filter({ hasText: "Revealed the patients of an entry" })
       .first(),
   ).toBeVisible();
   await expect(
@@ -119,6 +123,76 @@ test("searching a Northgate pseudonym finds the named drill-downs; opening one, 
       .filter({ hasText: "Searched the audit log by patient id" })
       .first(),
   ).toBeVisible();
+});
+
+test("Amara (auditor) reveals a de-identified list's patients after a confirmation saying the reveal is recorded; Ada can't", async ({
+  page,
+}) => {
+  await openAudit(page, AMARA);
+  await page.getByRole("button", { name: /^Action type/ }).click();
+  await page.getByRole("checkbox", { name: "Analysis", exact: true }).check();
+  await page.getByRole("button", { name: "Done" }).click();
+  const lists = entries(page).filter({
+    hasText: "Opened a de-identified patient list",
+  });
+  await expect(lists.first()).toBeVisible();
+  await lists.first().getByRole("button").first().click();
+  await expect(page.getByText(/^Patients: \d+$/)).toBeVisible();
+  await expect(page.getByText(/^P-[A-Z0-9]{4,12}$/)).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Reveal patients" }).click();
+  const confirm = page.getByRole("dialog", { name: "Reveal these patients?" });
+  await expect(
+    confirm.getByText(
+      "Revealing these patients is itself recorded in the audit log, under your name.",
+    ),
+  ).toBeVisible();
+  // Cancel asks for nothing.
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Patient ids" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Reveal patients" }).click();
+  await confirm.getByRole("button", { name: "Reveal patients" }).click();
+  const ids = page.getByRole("list", { name: "Patient ids" });
+  await expect(ids.getByRole("listitem").first()).toHaveText(
+    /^P-[A-Z0-9]{4,12}$/,
+  );
+  await expect(page.getByText("Shown to you and recorded.")).toBeVisible();
+  // Nothing in the address or storage (afterEach checks storage).
+  expect(new URL(page.url()).search).toBe("");
+
+  if (isMobile(page)) await page.getByRole("button", { name: "Back" }).click();
+  else await page.keyboard.press("Escape");
+  await expect(ids).toHaveCount(0);
+  await page.getByRole("button", { name: /^Action type/ }).click();
+  await page.getByRole("checkbox", { name: "Analysis", exact: true }).uncheck();
+  await page.getByRole("checkbox", { name: "Audit", exact: true }).check();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(
+    entries(page)
+      .filter({ hasText: "Revealed the patients of an entry" })
+      .first(),
+  ).toBeVisible();
+});
+
+test("Ada (platform admin) sees how many patients a list showed, but no Reveal", async ({
+  page,
+}) => {
+  await openAudit(page, ADA);
+  await page.getByRole("button", { name: /^Action type/ }).click();
+  await page.getByRole("checkbox", { name: "Analysis", exact: true }).check();
+  await page.getByRole("button", { name: "Done" }).click();
+  const lists = entries(page).filter({
+    hasText: "Opened a de-identified patient list",
+  });
+  await lists.first().getByRole("button").first().click();
+  await expect(page.getByText(/^Patients: \d+$/)).toBeVisible();
+  await expect(
+    page.getByText("Only an auditor can reveal these patients."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Reveal patients" }),
+  ).toHaveCount(0);
 });
 
 test("Ada exports with Legal request and code 123456: the export id and checksum show, the download is a CSV whose first line says Demo, the Exports tab lists it, and Download file is then spent", async ({

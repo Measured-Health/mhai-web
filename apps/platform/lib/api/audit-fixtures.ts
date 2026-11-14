@@ -436,6 +436,15 @@ export function seedAudit(
               patient_count: 6 + ((i * 7) % 50),
               location_type: LOCATIONS[i % LOCATIONS.length],
             },
+      // A de-identified list's pids, behind the recorded reveal (at most
+      // 200 rows, so here every patient matched).
+      ...(i % 4 === 3
+        ? {}
+        : {
+            pseudonyms: Array.from({ length: 6 + ((i * 7) % 50) }, (_, n) =>
+              pseudonym(`dd-${i}`, n),
+            ),
+          }),
     });
   }
 

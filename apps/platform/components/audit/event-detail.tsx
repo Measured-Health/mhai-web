@@ -35,6 +35,7 @@ function hasPatients(e: AuditDetail): e is AuditDetail & {
   if (e.patients === null) return false;
   return (
     e.kind === "drilldown_deidentified" ||
+    e.kind === "analysis_patients_viewed" ||
     e.kind === "drilldown_named" ||
     (e.kind === "audit_searched" && e.facts.searched_kind === "pseudonym")
   );
@@ -252,9 +253,19 @@ function Body({
   if (!row) return <Loading label="Loading the entry" />;
   if (!row.ok)
     return (
-      <p className="font-mono text-[13px] [overflow-wrap:anywhere]">
-        {undisplayableLine({ ...row, id: row.id ?? id })}
-      </p>
+      <>
+        <p className="font-mono text-[13px] [overflow-wrap:anywhere]">
+          {undisplayableLine({ ...row, id: row.id ?? id })}
+        </p>
+        {/* A drill-down entry sent bare: its list can still be revealed. */}
+        {row.patients && row.id && (
+          <dl className="mt-3">
+            <Field term="Patient list">
+              <PatientIds key={row.id} id={row.id} count={row.patients.count} />
+            </Field>
+          </dl>
+        )}
+      </>
     );
   return <Fields e={row.event} onOpenNamed={onOpenNamed} />;
 }
