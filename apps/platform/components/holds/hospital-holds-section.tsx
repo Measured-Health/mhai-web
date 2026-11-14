@@ -67,7 +67,7 @@ export function HospitalHoldsSection({
                 <span className="font-mono font-semibold text-bloom [overflow-wrap:anywhere]">
                   {x.reference}
                 </span>
-                <span className="text-ink-2">{scopeLabel(x.scope)}</span>
+                <span className="text-ink-2">{scopeLabel()}</span>
                 <span className="font-semibold">
                   {holdStatusLabel(x.status)}
                 </span>

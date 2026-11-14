@@ -5,9 +5,8 @@ import { readState, recordApi, reportApi, signIn } from "./live";
 test("hospitals: the list, the live hospital, its model policy", async ({
   page,
 }) => {
-  // Expected to fail until core serves GET /platform/hospitals and
-  // /platform/hospitals/{id} (docs/live-e2e.md): when it passes, remove this.
-  test.fail(true, "core 1.20.0 serves no hospitals list or hospital page");
+  // Core serves the list and the page since 1.25.0 (mhai-multiagent #164),
+  // read strictly by the app.
   test.setTimeout(120_000);
   await signIn(page, "padmin");
   const calls = recordApi(page);
@@ -19,7 +18,6 @@ test("hospitals: the list, the live hospital, its model policy", async ({
     path: test.info().outputPath("hospitals.png"),
     fullPage: true,
   });
-  // Fails here (an assertion, not a time-out) while core has no list.
   await expect(page.getByText("Couldn't load hospitals.")).toHaveCount(0, {
     timeout: 10_000,
   });

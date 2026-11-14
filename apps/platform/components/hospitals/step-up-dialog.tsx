@@ -56,6 +56,8 @@ export type StepUpDialogProps = {
   freeReason?: boolean;
   /** The reason code that needs a note (e.g. "other"). */
   noteFor?: string;
+  /** No note at all with the reasons (core keeps no free text there). */
+  noNote?: boolean;
   /** The longest note or free reason, in characters (default 500). */
   noteMax?: number;
   /**
@@ -63,7 +65,15 @@ export type StepUpDialogProps = {
    * Required unless `required` is false; its own `hint` shows first, then
    * `hint` (what not to write applies to every free-text field).
    */
-  extra?: { label: string; max: number; hint?: string; required?: boolean };
+  extra?: {
+    label: string;
+    max: number;
+    hint?: string;
+    required?: boolean;
+    /** The shape the text must have, and what to say when it doesn't. */
+    pattern?: RegExp;
+    patternError?: string;
+  };
   /** Shown under every free-text field (e.g. what not to write there). */
   hint?: string;
   /** The safe button's label (default "Cancel"). */
@@ -141,6 +151,7 @@ function StepUpForm({
   initialReason = "",
   freeReason,
   noteFor,
+  noNote = false,
   noteMax = NOTE_MAX,
   extra,
   hint,
@@ -195,7 +206,7 @@ function StepUpForm({
   }, [focusKey, c.backup]);
 
   const words = error ? platformError(error) : null;
-  const needsNote = !!noteFor && reason === noteFor;
+  const needsNote = !noNote && !!noteFor && reason === noteFor;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -208,6 +219,8 @@ function StepUpForm({
       m.reason = reasons ? "Choose a reason." : "Enter a reason.";
     if (needsNote && !n) m.note = "Add a note.";
     if (extra && extra.required !== false && !x) m.extra = enter(extra.label);
+    else if (extra?.pattern && x && !extra.pattern.test(x))
+      m.extra = extra.patternError ?? enter(extra.label);
     if (!c.ready)
       m.code = c.backup ? "Enter a backup code." : "Enter your 6-digit code.";
     setMissing(m);
@@ -222,7 +235,7 @@ function StepUpForm({
       : { mfa_code: c.value };
     onConfirm({
       ...(r ? { reason: r } : {}),
-      ...(reasons && n ? { note: n } : {}),
+      ...(reasons && !noNote && n ? { note: n } : {}),
       ...(extra && x ? { extra: x } : {}),
       ...code,
     });
@@ -298,7 +311,7 @@ function StepUpForm({
           {err("reason")}
         </fieldset>
       )}
-      {reasons && (
+      {reasons && !noNote && (
         <div className="mt-3">
           <label
             htmlFor={`${id}-note`}
@@ -430,7 +443,7 @@ function StepUpForm({
       </div>
       {words && (
         <div className="mt-3">
-          <Banner tone="bad" title={words.title}>
+          <Banner tone={words.unavailable ? "info" : "bad"} title={words.title}>
             {wrong && usedBackup ? BACKUP_FAILED_BODY : words.body}
           </Banner>
         </div>

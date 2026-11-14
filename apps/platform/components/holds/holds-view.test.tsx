@@ -67,7 +67,7 @@ const hospitalsIn = (t: HTMLElement) =>
   rowsOf(t).map((r) => within(r).getAllByRole("link")[0]!.textContent);
 
 describe("the legal holds list", () => {
-  it("opens on Open: Harbour View, Northgate and Riverside, not Lakeside or Havana", async () => {
+  it("opens on Open: Harbour View, Northgate, Riverside and Ridgeway, not Lakeside or Havana", async () => {
     renderWithAuth(<HoldsView />);
     const table = await screen.findByRole("table");
     for (const h of [
@@ -85,36 +85,33 @@ describe("the legal holds list", () => {
     expect(hospitalsIn(table).sort()).toEqual([
       "Harbour View Hospital",
       "Northgate General Hospital",
+      "Ridgeway General Hospital",
       "Riverside Children's Hospital",
     ]);
     expect(
       within(table).getByRole("link", { name: "Harbour View Hospital" }),
     ).toHaveAttribute("href", "/legal-holds/hold_hv");
-    expect(within(table).getAllByText("All records")).toHaveLength(2);
-    expect(
-      within(table).getByText("Records from 1 Jan 2025 to 30 Jun 2025"),
-    ).toBeInTheDocument();
-    expect(within(table).getByText("HC/2026/0412")).toBeInTheDocument();
+    // Every hold keeps all records (core 1.26.0).
+    expect(within(table).getAllByText("All records")).toHaveLength(4);
+    expect(within(table).getByText("HC-2026-0412")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Legal holds",
     );
   });
 
-  it("Lifted shows Lakeside's release line and Havana's 'Lifted by Ada Bakare'", async () => {
+  it("Lifted shows who lifted Lakeside and Havana: no grace period", async () => {
     renderWithAuth(<HoldsView />);
     await screen.findByRole("table");
     await userEvent.selectOptions(screen.getByLabelText("Status"), "Lifted");
     await waitFor(() =>
-      expect(screen.getByText(/^Lifted by Ada Bakare · /)).toBeInTheDocument(),
+      expect(screen.getAllByText(/^Lifted by Ada Bakare · /)).toHaveLength(2),
     );
     const table = screen.getByRole("table");
     expect(hospitalsIn(table).sort()).toEqual([
       "Havana Hospital",
       "Lakeside Community Clinic",
     ]);
-    expect(
-      within(table).getByText(/^Lifted · records released on \d+ \w+ \d{4}$/),
-    ).toBeInTheDocument();
+    expect(within(table).queryByText(/records released on/)).toBeNull();
     expect(url.get()).toBe("status=lifted");
   });
 
@@ -134,27 +131,27 @@ describe("the legal holds list", () => {
     await userEvent.selectOptions(screen.getByLabelText("Hospital"), "");
     await userEvent.type(
       screen.getByRole("searchbox", { name: "Search by reference" }),
-      "cmp-0",
+      "cmp-",
     );
     await waitFor(() =>
       expect(hospitalsIn(screen.getByRole("table"))).toEqual([
         "Riverside Children's Hospital",
       ]),
     );
-    expect(url.get()).toBe("q=cmp-0");
+    expect(url.get()).toBe("q=cmp-");
   });
 
   it("the search box follows the URL on Back", async () => {
     renderWithAuth(<HoldsView />);
     await screen.findByRole("table");
     const box = screen.getByRole("searchbox", { name: "Search by reference" });
-    await userEvent.type(box, "cmp-0");
-    await waitFor(() => expect(url.get()).toBe("q=cmp-0"));
+    await userEvent.type(box, "cmp-");
+    await waitFor(() => expect(url.get()).toBe("q=cmp-"));
     await userEvent.tab();
     act(() => url.set(""));
     await waitFor(() => expect(box).toHaveValue(""));
     await waitFor(() =>
-      expect(hospitalsIn(screen.getByRole("table"))).toHaveLength(3),
+      expect(hospitalsIn(screen.getByRole("table"))).toHaveLength(4),
     );
   });
 
@@ -162,8 +159,8 @@ describe("the legal holds list", () => {
     renderWithAuth(<HoldsView />);
     await screen.findByRole("table");
     const box = screen.getByRole("searchbox", { name: "Search by reference" });
-    await userEvent.type(box, "cmp-0");
-    await waitFor(() => expect(url.get()).toBe("q=cmp-0"));
+    await userEvent.type(box, "cmp-");
+    await waitFor(() => expect(url.get()).toBe("q=cmp-"));
     await userEvent.type(box, "1"); // a pending write, box still focused
     expect(box).toHaveFocus();
     act(() => url.set(""));
@@ -186,8 +183,8 @@ describe("the legal holds list", () => {
   it("Review due shows the word and an icon", async () => {
     renderWithAuth(<HoldsView />);
     const table = await screen.findByRole("table");
-    const word = within(table).getByText("Review due");
-    expect(word.querySelector("svg")).not.toBeNull();
+    for (const word of within(table).getAllByText("Review due"))
+      expect(word.querySelector("svg")).not.toBeNull();
   });
 
   it("shows Place a hold to a platform admin and not to an auditor", async () => {
@@ -251,7 +248,7 @@ describe("the legal holds list", () => {
     renderWithAuth(<HoldsView />);
     const list = await screen.findByRole("list", { name: "Legal holds" });
     expect(screen.queryByRole("table")).toBeNull();
-    expect(within(list).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(4);
     expect(
       within(list).getByRole("link", { name: "Harbour View Hospital" }),
     ).toHaveAttribute("href", "/legal-holds/hold_hv");
@@ -272,8 +269,10 @@ describe("the legal holds list", () => {
       await within(d).findByRole("button", { name: /Eastbrook/ }),
     );
     await userEvent.click(within(d).getByLabelText("Complaint"));
-    await userEvent.type(within(d).getByLabelText(/^Reference/), "CMP-77");
-    await userEvent.type(within(d).getByLabelText(/^Asked for by/), "Office");
+    await userEvent.type(
+      within(d).getByLabelText(/^Reference/),
+      "CMP-2026-0077",
+    );
     await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
     const s = await screen.findByRole("dialog", {
       name: /Place a legal hold on/,

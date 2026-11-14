@@ -239,14 +239,14 @@ describe("mock platform API", () => {
     const amara = team.find((x) => x.id === "tm_amara")!;
     await m.changeRole(
       amara.id,
-      { role: "platform_admin", version: amara.version },
+      { role: "platform_admin", version: amara.version, ...CODE },
       KEY(),
     );
     expect(
       await failure(
         m.changeRole(
           amara.id,
-          { role: "auditor", version: amara.version },
+          { role: "auditor", version: amara.version, ...CODE },
           KEY(),
         ),
       ),
@@ -459,14 +459,18 @@ describe("mock platform API", () => {
       ["tm_ada", "platform_admin", "active", true],
       ["tm_tunde", "platform_admin", "active", false],
       ["tm_amara", "auditor", "active", false],
-      ["tm_kemi", "auditor", "invite_pending", false],
+      ["tm_kemi", "auditor", "active", false],
       ["tm_new", "platform_admin", "active", false],
       ["tm_bola", "platform_admin", "active", false],
     ]);
     const ada = team[0]!;
     expect(
       await failure(
-        m.changeRole(ada.id, { role: "auditor", version: ada.version }, KEY()),
+        m.changeRole(
+          ada.id,
+          { role: "auditor", version: ada.version, ...CODE },
+          KEY(),
+        ),
       ),
     ).toEqual([409, "own_role"]);
     await m.removeMember("tm_tunde", CODE, KEY());
@@ -476,15 +480,92 @@ describe("mock platform API", () => {
       409,
       "last_admin",
     ]);
-    expect(
-      await failure(
-        m.changeRole(ada.id, { role: "auditor", version: ada.version }, KEY()),
-      ),
-    ).toEqual([409, "last_admin"]);
+    // Demoting the last other admin is refused before the code is spent.
+    await m.changeRole(
+      "tm_amara",
+      { role: "platform_admin", version: 1, ...CODE },
+      KEY(),
+    );
+    await m.removeMember("tm_amara", CODE, KEY());
+    expect(await failure(m.removeMember("tm_ada", CODE, KEY()))).toEqual([
+      409,
+      "last_admin",
+    ]);
     expect(await failure(m.removeMember("tm_nobody", CODE, KEY()))).toEqual([
       404,
       "not_found",
     ]);
+  });
+
+  it("a role change needs step-up (core 1.26.0); refusals come before the code", async () => {
+    const { m } = setup();
+    const amara = (await m.listTeam()).members.find(
+      (x) => x.id === "tm_amara",
+    )!;
+    expect(
+      await failure(
+        m.changeRole(
+          amara.id,
+          { role: "platform_admin", version: amara.version } as Parameters<
+            typeof m.changeRole
+          >[1],
+          KEY(),
+        ),
+      ),
+    ).toEqual([422, "invalid"]);
+    expect(
+      await failure(
+        m.changeRole(
+          amara.id,
+          {
+            role: "platform_admin",
+            version: amara.version,
+            mfa_code: "000000",
+          },
+          KEY(),
+        ),
+      ),
+    ).toEqual([403, "mfa_invalid"]);
+    // A stale version is refused before a wrong code is noticed.
+    expect(
+      await failure(
+        m.changeRole(
+          amara.id,
+          { role: "platform_admin", version: 99, mfa_code: "000000" },
+          KEY(),
+        ),
+      ),
+    ).toEqual([409, "conflict"]);
+    const done = await m.changeRole(
+      amara.id,
+      { role: "platform_admin", version: amara.version, ...CODE },
+      KEY(),
+    );
+    expect(done).toMatchObject({ role: "platform_admin", status: "active" });
+  });
+
+  it("team invites are not served (501): core keeps no invites", async () => {
+    const { m } = setup();
+    expect(
+      await failure(
+        m.inviteTeam(
+          {
+            name: "Sade Uche",
+            email: "sade.uche@measured-health.example",
+            role: "auditor",
+          },
+          KEY(),
+        ),
+      ),
+    ).toEqual([501, "not_implemented"]);
+    expect(
+      (await m.listTeam()).members.every((x) => x.status === "active"),
+    ).toBe(true);
+  });
+
+  it("an auditor can't mark notifications seen (a write rule in core 1.26.0)", async () => {
+    const { m } = setup(TEAM_EMAILS.amara);
+    expect(await failure(m.markSeen({}, KEY()))).toEqual([403, "forbidden"]);
   });
 
   it("an auditor's write is forbidden", async () => {
@@ -587,18 +668,6 @@ describe("mock platform API", () => {
       ["removal_cancelled", () => m.cancelRemoval("h_westfield", KEY())],
       ["removal_approved", () => m.approveRemoval("h_southpoint", CODE, KEY())],
       [
-        "team_invited",
-        () =>
-          m.inviteTeam(
-            {
-              name: "Sade Uche",
-              email: "sade.uche@measured-health.example",
-              role: "auditor",
-            },
-            KEY(),
-          ),
-      ],
-      [
         "team_role_changed",
         async () =>
           m.changeRole(
@@ -608,6 +677,7 @@ describe("mock platform API", () => {
               version: (await m.listTeam()).members.find(
                 (x) => x.id === "tm_amara",
               )!.version,
+              ...CODE,
             },
             KEY(),
           ),

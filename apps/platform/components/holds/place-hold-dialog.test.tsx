@@ -11,6 +11,7 @@ import type { PlatformClient } from "@/lib/api/contract";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp, MOCK_CODE } from "@/lib/api/step-up";
 import { HOLD_HINT } from "@/lib/holds/labels";
+import { REFERENCE_HINT } from "@/lib/holds/rules";
 import { ADA, renderWithAuth } from "@/tests/render";
 import { PlaceHoldDialog } from "./place-hold-dialog";
 
@@ -55,11 +56,7 @@ const form = () => screen.getByRole("dialog", { name: "Place a legal hold" });
 
 async function fill(d: HTMLElement) {
   await userEvent.click(within(d).getByLabelText("Complaint"));
-  await userEvent.type(within(d).getByLabelText(/^Reference/), "CMP-9");
-  await userEvent.type(
-    within(d).getByLabelText(/^Asked for by/),
-    "The complaints office",
-  );
+  await userEvent.type(within(d).getByLabelText(/^Reference/), "CMP-2026-0009");
 }
 async function typeCode(d: HTMLElement, code = MOCK_CODE) {
   await userEvent.click(within(d).getByLabelText("Digit 1 of 6"));
@@ -67,9 +64,16 @@ async function typeCode(d: HTMLElement, code = MOCK_CODE) {
 }
 
 describe("Place a hold: the form", () => {
-  it("every free-text field shows the hint", () => {
+  it("a hold keeps all records and asks for no dates, note or name (core 1.26.0)", () => {
     open();
-    expect(within(form()).getAllByText(HOLD_HINT)).toHaveLength(3);
+    const d = form();
+    expect(within(d).getByText("All records")).toBeInTheDocument();
+    expect(within(d).getByText(HOLD_HINT)).toBeInTheDocument();
+    for (const gone of [/^From/, /^To/, /^Note/, /^Asked for by/])
+      expect(within(d).queryByLabelText(gone)).toBeNull();
+    expect(within(d).getByLabelText(/^Reference/)).toHaveAccessibleDescription(
+      REFERENCE_HINT,
+    );
   });
 
   it("Continue with empty fields shows each message and sends nothing", async () => {
@@ -84,7 +88,6 @@ describe("Place a hold: the form", () => {
       "Choose a hospital.",
       "Choose a reason.",
       "Enter the reference.",
-      "Enter who asked for it.",
     ])
       expect(within(d).getByText(m)).toBeInTheDocument();
     expect(spy).not.toHaveBeenCalled();
@@ -93,17 +96,18 @@ describe("Place a hold: the form", () => {
     ).toBeNull();
   });
 
-  it("dates out of order show the range message", async () => {
+  it("a reference that isn't a document reference is refused before the code", async () => {
     open();
     const d = form();
-    await fill(d);
-    await userEvent.click(within(d).getByLabelText("From – To"));
-    await userEvent.type(within(d).getByLabelText("From"), "2025-06-30");
-    await userEvent.type(within(d).getByLabelText(/^To/), "2025-01-01");
+    await userEvent.click(within(d).getByLabelText("Complaint"));
+    await userEvent.type(within(d).getByLabelText(/^Reference/), "HC/2026/1");
     await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
     expect(
-      within(d).getByText("The end date must be on or after the start date."),
+      within(d).getByText("Use a document reference, like LH-2026-0042."),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: /Place a legal hold on/ }),
+    ).toBeNull();
   });
 
   it("the picker leaves out Removed hospitals", async () => {
@@ -161,10 +165,12 @@ describe("Place a hold: confirming", () => {
     const s = await screen.findByRole("dialog", {
       name: "Place a legal hold on Havana Hospital?",
     });
-    expect(within(s).getByText("All records.")).toBeInTheDocument();
+    expect(
+      within(s).getByText("All of the hospital's records."),
+    ).toBeInTheDocument();
     expect(
       within(s).getByText(
-        "Records it covers are kept until the hold is lifted.",
+        "They are kept until two platform admins lift the hold.",
       ),
     ).toBeInTheDocument();
     await typeCode(s);
@@ -174,18 +180,20 @@ describe("Place a hold: confirming", () => {
     await waitFor(() => expect(onPlaced).toHaveBeenCalledTimes(1));
     expect(onPlaced.mock.calls[0]![0]).toMatchObject({
       hospital: HAVANA,
-      reference: "CMP-9",
+      reference: "CMP-2026-0009",
       reason: "complaint",
       status: "active",
+      note: null,
+      asked_by: null,
     });
     expect(onClose).toHaveBeenCalled();
-    expect(spy.mock.calls[0]![0]).toMatchObject({
+    expect(spy.mock.calls[0]![0]).toEqual({
       hospital_id: "h_havana",
       reason: "complaint",
-      asked_by: "The complaints office",
+      reference: "CMP-2026-0009",
+      review_on: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       mfa_code: MOCK_CODE,
     });
-    expect(spy.mock.calls[0]![0]).not.toHaveProperty("from");
   });
 
   it("a wrong code shows That code didn't work", async () => {
@@ -264,6 +272,30 @@ describe("Place a hold: confirming", () => {
       within(form()).getByRole("button", { name: "Continue" }),
     ).toBeVisible();
     expect(onPlaced).not.toHaveBeenCalled();
+  });
+
+  it("a reference an open hold already has is said on the form", async () => {
+    install({
+      placeHold: async () => {
+        throw new ApiError(409, "conflict");
+      },
+    });
+    open();
+    const d = form();
+    await fill(d);
+    await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
+    const s = await screen.findByRole("dialog", {
+      name: /Place a legal hold on/,
+    });
+    await typeCode(s);
+    await userEvent.click(
+      within(s).getByRole("button", { name: "Place hold" }),
+    );
+    expect(
+      await screen.findByText(
+        "An open legal hold already has this reference. Use another.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("hospital_removed shows its words on the form, closes the code step and refreshes hospitals", async () => {

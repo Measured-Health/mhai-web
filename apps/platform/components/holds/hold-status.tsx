@@ -1,5 +1,4 @@
 "use client";
-import { useState } from "react";
 import {
   CalendarClock,
   Hourglass,
@@ -28,13 +27,12 @@ const LOOK: Record<
  */
 export function HoldStatus({ hold, text }: { hold: LegalHold; text?: string }) {
   const { tone, Icon } = LOOK[hold.status];
-  const [now] = useState(() => Date.now());
   return (
     <Chip tone={tone} className="text-left">
       <Icon aria-hidden className="size-3.5 shrink-0" />
       {text ??
         (hold.status === "lifted"
-          ? liftedLine(hold, now)
+          ? liftedLine(hold)
           : holdStatusLabel(hold.status))}
     </Chip>
   );

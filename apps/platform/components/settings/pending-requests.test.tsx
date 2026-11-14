@@ -208,7 +208,7 @@ describe("changes waiting for approval", () => {
     expect(preview).not.toHaveBeenCalled();
   });
 
-  it("expired shows This request lapsed after 7 days. Make a new request. and reloads", async () => {
+  it("expired shows This request lapsed after 7 days. and reloads", async () => {
     await tundeShortens();
     await open();
     await userEvent.click(btn("Approve"));
@@ -220,9 +220,7 @@ describe("changes waiting for approval", () => {
       within(d).getByRole("button", { name: "Approve change" }),
     );
     expect(
-      await within(region()).findByText(
-        "This request lapsed after 7 days. Make a new request.",
-      ),
+      await within(region()).findByText("This request lapsed after 7 days."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(

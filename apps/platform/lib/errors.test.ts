@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
-import { platformError } from "./errors";
+import { isNotImplemented, platformError } from "./errors";
 
 const e = (status: number, code: string) =>
   platformError(new ApiError(status, code));
@@ -12,6 +12,7 @@ describe("platformError", () => {
       body: "Reload to see the latest.",
       stale: true,
       gone: false,
+      unavailable: false,
     });
     expect(e(404, "not_found")).toMatchObject({
       title: "This was removed or no longer exists.",
@@ -40,8 +41,8 @@ describe("platformError", () => {
         "This hospital has been removed. There is nothing left to hold.",
       removal_started:
         "This hospital's removal has already started. Act outside the app now.",
-      invalid_range: "The end date must be on or after the start date.",
-      expired: "This request lapsed after 7 days. Make a new request.",
+      invalid_range: "A legal hold keeps all of a hospital's records.",
+      expired: "This request lapsed after 7 days.",
       not_ready: "No longer ready to switch on.",
       below_minimum: "That's shorter than the minimum allowed.",
     };
@@ -67,12 +68,14 @@ describe("platformError", () => {
       body: "",
       stale: true,
       gone: false,
+      unavailable: false,
     });
     expect(e(422, "no_type")).toEqual({
       title: "Choose a connection type.",
       body: "",
       stale: false,
       gone: false,
+      unavailable: false,
     });
   });
 
@@ -82,6 +85,38 @@ describe("platformError", () => {
     expect(e(502, "bad_gateway").title).toBe(down);
     expect(e(500, "whatever").title).toBe(down);
     expect(platformError(new Error("boom")).title).toBe(down);
+  });
+
+  it("not_implemented (501) is a calm Not available yet, never unreachable or retried", () => {
+    const w = e(501, "not_implemented");
+    expect(w).toMatchObject({
+      title: "Not available yet",
+      unavailable: true,
+      stale: false,
+      gone: false,
+    });
+    // A screen's own wording never turns it into an error.
+    expect(
+      platformError(new ApiError(501, "not_implemented"), {
+        not_implemented: "Boom",
+      }).title,
+    ).toBe("Not available yet");
+    expect(isNotImplemented(new ApiError(501, "not_implemented"))).toBe(true);
+    expect(isNotImplemented(new ApiError(500, "internal_error"))).toBe(false);
+    expect(isNotImplemented(new Error("x"))).toBe(false);
+  });
+
+  it("the team and hold codes say what to do next", () => {
+    expect(e(409, "own_role").body).toBe(
+      "Ask another platform admin to do it.",
+    );
+    expect(e(409, "last_admin").body).toBe(
+      "Make someone else a platform admin first.",
+    );
+    expect(e(409, "same_person").body).toBe(
+      "The person who asked can't approve their own request.",
+    );
+    expect(e(422, "invalid_range").body).toBe("It can't be limited to dates.");
   });
 
   it("an unlisted 4xx is not called unreachable", () => {

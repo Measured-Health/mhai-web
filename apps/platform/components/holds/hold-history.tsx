@@ -1,5 +1,5 @@
 "use client";
-import type { HoldEvent } from "@/lib/api/holds-contract";
+import { CLI_ID, type HoldEvent } from "@/lib/api/holds-contract";
 import { dateLabel } from "@/lib/format";
 import { holdEventIsKnown, holdEventLabel } from "@/lib/holds/labels";
 import { Section } from "../hospitals/section";
@@ -30,7 +30,8 @@ export function HoldHistory({
             <li key={`${e.at}-${e.action}-${i}`} className="text-[13.5px]">
               <b className="block font-semibold">{holdEventLabel(e.action)}</b>
               <span className="text-ink-2 [overflow-wrap:anywhere]">
-                {e.actor.name} · {dateLabel(e.at)}
+                {e.actor.id === CLI_ID ? "The system" : e.actor.name} ·{" "}
+                {dateLabel(e.at)}
                 {e.detail ? ` · ${e.detail}` : ""}
               </span>
             </li>

@@ -1,8 +1,9 @@
-// Legal holds as the platform client sees them (spec §4 and §9, Plan 8a).
-// A hold keeps one hospital's records, all of them or those in a date
-// range, past their retention period and through any removal, until it is
-// lifted by two platform admins. Hold dates are calendar dates (YYYY-MM-DD);
-// every other time is a full timestamp.
+// Legal holds as the platform client sees them (spec §4 and §9, Plan 8a),
+// on core's contract (openapi 1.26.0). A hold keeps every record of one
+// hospital past its retention period and through any removal, until it is
+// lifted by two platform admins. It carries no free text and no names: a
+// note and who asked read back null. Hold dates are calendar dates
+// (YYYY-MM-DD); every other time is a full timestamp.
 import type { Person, StepUp, TwoPersonRequest, WriteOpts } from "./contract";
 
 export type HoldReason =
@@ -32,8 +33,6 @@ export const LIFT_REASONS: readonly LiftReason[] = [
   "other",
 ];
 
-/** A lifted hold keeps its records this many more days. */
-export const HOLD_GRACE_DAYS = 7;
 /** A lift request lapses this many days after it was made. */
 export const LAPSE_DAYS = 7;
 /** The review date's default: this many months after placing. */
@@ -43,28 +42,33 @@ export const REVIEW_MONTHS = 6;
 export type HoldLift = TwoPersonRequest & {
   kind: "hold_lift";
   reason: LiftReason;
-  note: string | null;
-  /** Who or what allows the lift, e.g. "Counsel's letter 14 Oct 2026". */
+  /** Always null: no free text. */
+  note: null;
+  /** The document that allows the lift, as a reference (`CT-2026-0091`). */
   authority: string;
-  /** Records already past their retention period that only this hold keeps. */
-  records_due: number;
-  /** The clean-up after which they would be deleted. */
-  due_after: string;
+  /** Always null: core doesn't count the records a lift makes due. */
+  records_due: null;
+  due_after: null;
   approved_by: Person | null;
   approved_at: string | null;
-  /** Approval + 7 days: until then the records stay kept and it can be undone. */
+  /** The approval itself: a lift lands at once, with no grace period. */
   released_on: string | null;
 };
 
 export type LegalHold = {
   id: string;
   hospital: Person;
-  /** Both null: all records. `to` null: from `from` until lifted. Inclusive. */
-  scope: { from: string | null; to: string | null };
-  reason: HoldReason;
+  /** Always both null: a hold keeps every record. */
+  scope: { from: null; to: null };
+  /** Null for a hold the provisioning command line placed. */
+  reason: HoldReason | null;
+  /** A document reference, e.g. `LH-2026-0042`. */
   reference: string;
-  asked_by: string;
-  note: string | null;
+  /** Always null: no names. */
+  asked_by: null;
+  /** Always null: no free text. */
+  note: null;
+  /** `id` "cli" for a hold the provisioning command line placed. */
   placed_by: Person;
   placed_at: string;
   review_on: string;
@@ -78,24 +82,16 @@ export type LegalHold = {
 export type HoldEvent = {
   at: string;
   actor: Person;
-  action:
-    | "placed"
-    | "edited"
-    | "lift_requested"
-    | "lift_cancelled"
-    | "lift_lapsed"
-    | "lifted"
-    | "lift_undone"
-    | "released";
+  action: "placed" | "lift_requested" | "lift_cancelled" | "lifted";
   detail: string | null;
 };
 /** A hold with its history, newest first. */
 export type LegalHoldDetail = LegalHold & { history: HoldEvent[] };
-/** A hold as a hospital lists it. */
-export type HoldShort = Pick<
-  LegalHold,
-  "id" | "scope" | "reference" | "status" | "review_on"
->;
+/** A hold as a hospital lists it: only an open one that keeps records. */
+export type HoldShort = Pick<LegalHold, "id" | "scope" | "reference"> & {
+  status: "active" | "review_due";
+  review_on: string;
+};
 
 export type HoldQuery = {
   status?: HoldStatusFilter;
@@ -104,16 +100,18 @@ export type HoldQuery = {
   q?: string;
   cursor?: string;
 };
+/** No `from`, `to`, `note` or `asked_by`: core refuses them (422). */
 export type PlaceHoldIn = {
   hospital_id: string;
-  from?: string;
-  to?: string;
   reason: HoldReason;
-  note?: string;
   reference: string;
-  asked_by: string;
   review_on: string;
 } & StepUp;
+
+/** A hold's reference, and a lift's authority: a document reference. */
+export const DOCUMENT_REFERENCE = /^[A-Z]{2,8}-[0-9]{4}-[0-9]{2,8}$/;
+/** The id core gives the provisioning command line as a hold's placer. */
+export const CLI_ID = "cli";
 
 export interface HoldsClient {
   /** Newest first; `status` defaults to `open`. */
@@ -121,17 +119,17 @@ export interface HoldsClient {
     q: HoldQuery,
   ): Promise<{ holds: LegalHold[]; next_cursor: string | null }>;
   getHold(id: string): Promise<LegalHoldDetail>;
-  /** 409 `hospital_removed` or `removal_started`; 422 `invalid_range`. */
+  /** 409 `hospital_removed`, `conflict` (an open hold has the reference). */
   placeHold(body: PlaceHoldIn, opts: WriteOpts): Promise<LegalHoldDetail>;
-  /** The review date and the note only; no step-up. */
+  /** Not served by core yet: 501 `not_implemented`. */
   editHold(
     id: string,
-    body: { review_on?: string; note?: string | null; version: number },
+    body: { review_on?: string; version: number },
     opts: WriteOpts,
   ): Promise<LegalHoldDetail>;
   requestLift(
     id: string,
-    body: { reason: LiftReason; note?: string; authority: string } & StepUp,
+    body: { reason: LiftReason; authority: string } & StepUp,
     opts: WriteOpts,
   ): Promise<LegalHoldDetail>;
   /**
@@ -151,7 +149,7 @@ export interface HoldsClient {
     body: { version: number },
     opts: WriteOpts,
   ): Promise<LegalHoldDetail>;
-  /** Only before `released_on`; 409 `conflict` after. */
+  /** Not served by core: a lift lands at once (501 `not_implemented`). */
   undoLift(
     id: string,
     body: { version: number } & StepUp,
@@ -159,18 +157,18 @@ export interface HoldsClient {
   ): Promise<LegalHoldDetail>;
 }
 
-/** A hold as a hospital lists it. */
+/** A hold as a hospital lists it (a lift requested is still active). */
 export const shortHold = (h: LegalHold): HoldShort => ({
   id: h.id,
   scope: h.scope,
   reference: h.reference,
-  status: h.status,
+  status: h.status === "review_due" ? "review_due" : "active",
   review_on: h.review_on,
 });
 
-/** Active, review due, lift requested, or lifted before released_on. */
-export function keepsRecords(h: LegalHold, now: number): boolean {
-  if (h.status !== "lifted") return true;
-  const until = h.lift?.released_on;
-  return !!until && now < Date.parse(until);
-}
+/** Every hold keeps records until it is lifted: a lift lands at once. */
+export const keepsRecords = (h: LegalHold): boolean => h.status !== "lifted";
+
+/** Placed by the provisioning command line, not a person in the app. */
+export const placedBySystem = (h: Pick<LegalHold, "placed_by">) =>
+  h.placed_by.id === CLI_ID;

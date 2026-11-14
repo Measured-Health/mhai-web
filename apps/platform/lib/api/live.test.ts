@@ -97,6 +97,119 @@ const coreConnection = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const CONNECTION = () => Response.json(coreConnection());
+
+// The platform admin replies exactly as core 1.25.0 and 1.26.0 send them
+// (synthetic).
+const U1 = "0b8a3c1e-5d2f-4a6b-9c7d-1e2f3a4b5c6d";
+const U2 = "7f6e5d4c-3b2a-4109-8f7e-6d5c4b3a2918";
+const coreSummary = (over: Record<string, unknown> = {}) => ({
+  id: U1,
+  name: "Synthetic North Hospital",
+  short_code: "SNH",
+  status: "active",
+  staff_count: 12,
+  sso_enabled: false,
+  created_at: "2026-01-02T09:00:00Z",
+  last_activity_at: null,
+  legal_holds_active: 1,
+  ...over,
+});
+const coreHospital = (over: Record<string, unknown> = {}) => ({
+  ...coreSummary(),
+  country: "",
+  time_zone: "Africa/Lagos",
+  email_domains: [],
+  version: 1,
+  deactivation: null,
+  first_admin: null,
+  removal: null,
+  admins: [{ name: "Synthetic Admin", email: "admin@north.example" }],
+  legal_holds: [
+    {
+      id: U2,
+      scope: { from: null, to: null },
+      reference: "LH-2026-0042",
+      status: "active",
+      review_on: "2027-05-01",
+    },
+  ],
+  ...over,
+});
+const coreMember = (over: Record<string, unknown> = {}) => ({
+  id: U1,
+  name: "Synthetic Auditor",
+  email: "auditor@mh.example",
+  role: "auditor",
+  status: "active",
+  mfa_enabled: true,
+  last_sign_in_at: null,
+  is_you: false,
+  version: 2,
+  ...over,
+});
+const coreEvent = (over: Record<string, unknown> = {}) => ({
+  id: "41",
+  at: "2026-11-14T09:00:00Z",
+  actor: { id: U1, name: "Synthetic Admin" },
+  action: "hold_placed",
+  hospital: { id: U2, name: "Synthetic North Hospital" },
+  target: "LH-2026-0042",
+  detail: "court_case",
+  ...over,
+});
+const coreHold = (over: Record<string, unknown> = {}) => ({
+  id: U2,
+  hospital: { id: U1, name: "Synthetic North Hospital" },
+  scope: { from: null, to: null },
+  reason: "court_case",
+  reference: "LH-2026-0042",
+  asked_by: null,
+  note: null,
+  placed_by: { id: "cli", name: "Provisioning command line" },
+  placed_at: "2026-11-01T09:00:00Z",
+  review_on: "2027-05-01",
+  status: "lift_requested",
+  lift: {
+    id: U1,
+    kind: "hold_lift",
+    requested_by: { id: U1, name: "Synthetic Admin" },
+    requested_at: "2026-11-10T09:00:00Z",
+    reason: "case_closed",
+    requested_by_you: false,
+    expires_at: "2026-11-17T09:00:00Z",
+    note: null,
+    authority: "CT-2026-0091",
+    records_due: null,
+    due_after: null,
+    approved_by: null,
+    approved_at: null,
+    released_on: null,
+  },
+  stopped_removal: false,
+  version: 2,
+  ...over,
+});
+const coreHoldDetail = (over: Record<string, unknown> = {}) => ({
+  ...coreHold(),
+  history: [
+    {
+      at: "2026-11-01T09:00:00Z",
+      actor: { id: "cli", name: "Provisioning command line" },
+      action: "placed",
+      detail: null,
+    },
+  ],
+  ...over,
+});
+const json = (v: unknown) => () => Response.json(v);
+const HOSPITALS = json({ hospitals: [coreSummary()], next_cursor: null });
+const HOSPITAL = json(coreHospital());
+const TEAM = json({ members: [coreMember()] });
+const MEMBER = json(coreMember());
+const ACTIVITY = json({ events: [coreEvent()], next_cursor: "40" });
+const HOLDS = json({ holds: [coreHold()], next_cursor: null });
+const HOLD = json(coreHoldDetail());
+const PREF = json({ mode: "off", version: 1 });
 const CONNECTIONS = () =>
   Response.json({
     connections: [
@@ -165,6 +278,7 @@ const ROWS: Row[] = [
     "GET",
     "/api/v1/platform/hospitals?status=active&q=north+gate&cursor=25",
     undefined,
+    HOSPITALS,
   ],
   [
     "addHospital",
@@ -197,6 +311,7 @@ const ROWS: Row[] = [
     "GET",
     "/api/v1/platform/hospitals/h_north",
     undefined,
+    HOSPITAL,
   ],
   [
     "updateHospital",
@@ -326,7 +441,14 @@ const ROWS: Row[] = [
     "/api/v1/platform/hospitals/h_north/invites/inv_1/resend",
     undefined,
   ],
-  ["listTeam", (c) => c.listTeam(), "GET", "/api/v1/platform/team", undefined],
+  [
+    "listTeam",
+    (c) => c.listTeam(),
+    "GET",
+    "/api/v1/platform/team",
+    undefined,
+    TEAM,
+  ],
   [
     "inviteTeam",
     (c) =>
@@ -334,13 +456,16 @@ const ROWS: Row[] = [
     "POST",
     "/api/v1/platform/team/invites",
     { name: "S", email: "s@m.example", role: "auditor" },
+    MEMBER,
   ],
   [
     "changeRole",
-    (c) => c.changeRole("tm_amara", { role: "auditor", version: 2 }, K),
+    (c) =>
+      c.changeRole("tm_amara", { role: "auditor", version: 2, ...CODE }, K),
     "PATCH",
     "/api/v1/platform/team/tm_amara",
-    { role: "auditor", version: 2 },
+    { role: "auditor", version: 2, mfa_code: "123456" },
+    MEMBER,
   ],
   [
     "removeMember",
@@ -355,6 +480,7 @@ const ROWS: Row[] = [
     "GET",
     "/api/v1/platform/activity?hospital=h_north&cursor=50",
     undefined,
+    ACTIVITY,
   ],
   [
     "getAnalytics",
@@ -419,6 +545,7 @@ const ROWS: Row[] = [
     "GET",
     "/api/v1/platform/me/analytics-email",
     undefined,
+    PREF,
   ],
   [
     "setEmailPref",
@@ -426,6 +553,7 @@ const ROWS: Row[] = [
     "PUT",
     "/api/v1/platform/me/analytics-email",
     { mode: "critical", version: 2 },
+    PREF,
   ],
   [
     "listAudit",
@@ -601,12 +729,13 @@ const ROWS: Row[] = [
       c.listHolds({
         status: "lifted",
         hospital: "h_north",
-        q: "HC/2026",
+        q: "LH-2026",
         cursor: "50",
       }),
     "GET",
-    "/api/v1/platform/legal-holds?status=lifted&hospital=h_north&q=HC%2F2026&cursor=50",
+    "/api/v1/platform/legal-holds?status=lifted&hospital=h_north&q=LH-2026&cursor=50",
     undefined,
+    HOLDS,
   ],
   [
     "placeHold",
@@ -614,10 +743,8 @@ const ROWS: Row[] = [
       c.placeHold(
         {
           hospital_id: "h_north",
-          from: "2025-01-01",
           reason: "court_case",
-          reference: "HC/1",
-          asked_by: "Solicitors",
+          reference: "LH-2026-0042",
           review_on: "2027-04-22",
           ...CODE,
         },
@@ -627,13 +754,12 @@ const ROWS: Row[] = [
     "/api/v1/platform/legal-holds",
     {
       hospital_id: "h_north",
-      from: "2025-01-01",
       reason: "court_case",
-      reference: "HC/1",
-      asked_by: "Solicitors",
+      reference: "LH-2026-0042",
       review_on: "2027-04-22",
       mfa_code: "123456",
     },
+    HOLD,
   ],
   [
     "getHold",
@@ -641,25 +767,28 @@ const ROWS: Row[] = [
     "GET",
     "/api/v1/platform/legal-holds/hold_hv",
     undefined,
+    HOLD,
   ],
   [
     "editHold",
-    (c) => c.editHold("hold_hv", { note: null, version: 2 }, K),
+    (c) => c.editHold("hold_hv", { review_on: "2027-06-01", version: 2 }, K),
     "PATCH",
     "/api/v1/platform/legal-holds/hold_hv",
-    { note: null, version: 2 },
+    { review_on: "2027-06-01", version: 2 },
+    HOLD,
   ],
   [
     "requestLift",
     (c) =>
       c.requestLift(
         "hold_hv",
-        { reason: "case_closed", authority: "Letter", ...CODE },
+        { reason: "case_closed", authority: "CT-2026-0091", ...CODE },
         K,
       ),
     "POST",
     "/api/v1/platform/legal-holds/hold_hv/lift",
-    { reason: "case_closed", authority: "Letter", mfa_code: "123456" },
+    { reason: "case_closed", authority: "CT-2026-0091", mfa_code: "123456" },
+    HOLD,
   ],
   [
     "approveLift",
@@ -667,6 +796,7 @@ const ROWS: Row[] = [
     "POST",
     "/api/v1/platform/legal-holds/hold_hv/lift/approve",
     { version: 3, mfa_code: "123456" },
+    HOLD,
   ],
   [
     "cancelLift",
@@ -674,6 +804,7 @@ const ROWS: Row[] = [
     "POST",
     "/api/v1/platform/legal-holds/hold_hv/lift/cancel",
     { version: 3 },
+    HOLD,
   ],
   [
     "undoLift",
@@ -681,6 +812,7 @@ const ROWS: Row[] = [
     "POST",
     "/api/v1/platform/legal-holds/hold_hv/lift/undo",
     { version: 4, backup_code: "AAAA-BBBB" },
+    HOLD,
   ],
   [
     "getSettings",
@@ -1065,7 +1197,11 @@ describe("live platform client", () => {
   );
 
   it("the live client uses the paths and an Idempotency-Key", async () => {
-    reply(() => Response.json({ items: [], unseen: 0 }));
+    fetchImpl.mockImplementation(async (u) =>
+      String(u).includes("analytics-email")
+        ? Response.json({ mode: "off", version: 1 })
+        : Response.json({ items: [], unseen: 0 }),
+    );
     await client().listNotifications();
     await client().markSeen({}, { idempotencyKey: "seen-1" });
     await client().getEmailPref();
@@ -1097,6 +1233,117 @@ describe("live platform client", () => {
         { mode: "critical_and_digest", version: 1 },
       ],
     ]);
+  });
+
+  it("reads core's admin replies strictly (1.25.0, 1.26.0): its shape passes, anything else is 502", async () => {
+    const cases: [
+      (c: PlatformClient) => Promise<unknown>,
+      unknown,
+      unknown[],
+    ][] = [
+      [
+        (c) => c.listHospitals({}),
+        { hospitals: [coreSummary()], next_cursor: null },
+        [
+          {
+            hospitals: [coreSummary({ sso_enabled: true })],
+            next_cursor: null,
+          },
+          { hospitals: [coreSummary({ extra: 1 })], next_cursor: null },
+        ],
+      ],
+      [
+        (c) => c.getHospital(U1),
+        coreHospital(),
+        [
+          coreHospital({ country: "NG" }),
+          coreHospital({ email_domains: ["north.example"] }),
+          coreHospital({ removal: { status: "requested" } }),
+          coreHospital({
+            legal_holds: [
+              {
+                id: U2,
+                scope: { from: "2025-01-01", to: null },
+                reference: "LH-2026-0042",
+                status: "active",
+                review_on: "2027-05-01",
+              },
+            ],
+          }),
+        ],
+      ],
+      [
+        (c) => c.listTeam(),
+        { members: [coreMember()] },
+        [
+          { members: [coreMember({ role: "owner" })] },
+          { members: [coreMember({ password: "x" })] },
+        ],
+      ],
+      [
+        (c) => c.listActivity({}),
+        { events: [coreEvent({ action: "a_new_action" })], next_cursor: null },
+        [
+          // Only actions a person took: never a null actor.
+          { events: [coreEvent({ actor: null })], next_cursor: null },
+          { events: [coreEvent({ reason: "same_side" })], next_cursor: null },
+        ],
+      ],
+      [
+        (c) => c.listHolds({}),
+        { holds: [coreHold()], next_cursor: null },
+        [
+          { holds: [coreHold({ note: "Call first" })], next_cursor: null },
+          { holds: [coreHold({ asked_by: "Dr Obi" })], next_cursor: null },
+          {
+            holds: [coreHold({ scope: { from: "2025-01-01", to: null } })],
+            next_cursor: null,
+          },
+          {
+            holds: [coreHold({ reference: "HC/2026/0412" })],
+            next_cursor: null,
+          },
+        ],
+      ],
+      [
+        (c) => c.getHold(U2),
+        coreHoldDetail({ reason: null, status: "active", lift: null }),
+        [
+          coreHoldDetail({
+            lift: { ...coreHold().lift, records_due: 120 },
+          }),
+          coreHoldDetail({
+            lift: { ...coreHold().lift, authority: "Counsel's letter" },
+          }),
+          coreHoldDetail({
+            history: [
+              {
+                at: "2026-11-01T09:00:00Z",
+                actor: { id: U1, name: "A" },
+                action: "released",
+                detail: null,
+              },
+            ],
+          }),
+        ],
+      ],
+      [
+        (c) => c.getEmailPref(),
+        { mode: "critical", version: 3 },
+        [{ mode: "weekly", version: 3 }, { mode: "off" }],
+      ],
+    ];
+    for (const [run, good, bads] of cases) {
+      reply(() => Response.json(good));
+      await expect(run(client())).resolves.toEqual(good);
+      for (const bad of bads) {
+        reply(() => Response.json(bad));
+        await expect(run(client())).rejects.toMatchObject({
+          status: 502,
+          code: "bad_gateway",
+        });
+      }
+    }
   });
 
   it("only getHealth({background: true}) is marked as background", async () => {
@@ -1175,13 +1422,23 @@ describe("live platform client", () => {
   });
 
   it("leaves out unset filters and escapes ids", async () => {
-    await client().listHospitals({});
-    await client().listActivity({});
-    await client().getHospital("a b/c");
+    await client()
+      .listHospitals({})
+      .catch(() => {});
+    await client()
+      .listActivity({})
+      .catch(() => {});
+    await client()
+      .getHospital("a b/c")
+      .catch(() => {});
     await client().getChangeSeries("a/b", "month");
     await client().followUp("a/b", { version: 1 }, K);
-    await client().listHolds({});
-    await client().approveLift("a/b", { version: 1, ...CODE }, K);
+    await client()
+      .listHolds({})
+      .catch(() => {});
+    await client()
+      .approveLift("a/b", { version: 1, ...CODE }, K)
+      .catch(() => {});
     await client().approveRequest("a/b", { version: 1, ...CODE }, K);
     expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
       "/api/v1/platform/hospitals",

@@ -74,10 +74,10 @@ describe("the hospitals list", () => {
     expect(within(north).getByText(/^(On|Off)$/)).toBeInTheDocument();
   });
 
-  it("Harbour View, Northgate, Riverside and Lakeside show Hold; Havana, Southpoint and the rest don't", async () => {
+  it("Harbour View, Northgate, Riverside and Ridgeway show Hold; Lakeside (lifted at once), Havana and the rest don't", async () => {
     renderWithAuth(<HospitalsView />);
     const table = await screen.findByRole("table");
-    const held = ["Harbour View", "Northgate", "Riverside", "Lakeside"];
+    const held = ["Harbour View", "Northgate", "Riverside", "Ridgeway"];
     for (const row of within(table).getAllByRole("row").slice(1)) {
       const has = held.some((n) => row.textContent?.startsWith(n));
       const tag = within(row).queryByText("Hold");
@@ -215,7 +215,7 @@ describe("the hospitals list", () => {
       .filter((li) => within(li).queryByText("Hold"))
       .map((li) => within(li).getAllByRole("link")[0]!.textContent);
     expect(held).toHaveLength(4);
-    for (const n of ["Harbour View", "Northgate", "Riverside", "Lakeside"])
+    for (const n of ["Harbour View", "Northgate", "Riverside", "Ridgeway"])
       expect(held.some((t) => t?.startsWith(n))).toBe(true);
   });
 

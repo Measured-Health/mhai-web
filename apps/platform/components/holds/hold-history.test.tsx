@@ -9,7 +9,7 @@ const now = Date.parse("2026-10-22T09:00:00Z");
 const havana = seedHolds(now).find((h) => h.id === "hold_hh")!;
 
 describe("HoldHistory", () => {
-  it("events newest first, and the note never appears", () => {
+  it("events newest first: placed, asked, lifted (no released step: a lift lands at once)", () => {
     // Given oldest first: shown newest first all the same.
     render(
       <HoldHistory events={[...havana.history].reverse()} onRetry={() => {}} />,
@@ -17,19 +17,17 @@ describe("HoldHistory", () => {
     const list = screen.getByRole("list", { name: "History" });
     const items = within(list).getAllByRole("listitem");
     expect(items.map((li) => li.querySelector("b")!.textContent)).toEqual([
-      "Records released",
-      "Approved the lift",
+      "Approved the lift: the hold was lifted",
       "Asked to lift the hold",
       "Placed the hold",
     ]);
-    const lifted = havana.history[1]!;
-    expect(items[1]).toHaveTextContent(
+    const lifted = havana.history[0]!;
+    expect(items[0]).toHaveTextContent(
       `Ada Bakare · ${dateLabel(lifted.at)} · Case closed`,
     );
-    expect(items[3]).toHaveTextContent(/^Placed the holdAda Bakare · /);
-    // The hold has a note; history never shows it.
-    expect(havana.note).toBe("Board request pending legal review");
-    expect(screen.queryByText(/Board request pending/)).toBeNull();
+    expect(items[2]).toHaveTextContent(/^Placed the holdAda Bakare · /);
+    // Core keeps no note on a hold.
+    expect(havana.note).toBeNull();
   });
 
   it("an event this app doesn't know fails the block closed", () => {

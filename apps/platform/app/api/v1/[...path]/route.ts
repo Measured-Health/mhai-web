@@ -149,13 +149,12 @@ const FILES: ReadonlyMap<
 
 /**
  * The only writes an auditor may make, as `METHOD shape` rows of the table
- * above: marking notifications seen is their own read state, and the audit
- * writes (reporting an entry, exporting, running a check, noting its outcome)
- * are the auditor's job. None of them is an admin action. Every other
- * write needs a platform admin.
+ * above: the audit writes (reporting an entry, exporting, running a check,
+ * noting its outcome) are the auditor's job. None of them is an admin
+ * action. Every other write needs a platform admin, marking notifications
+ * seen included (core 1.26.0 makes it a write rule).
  */
 const AUDITOR_WRITES: ReadonlySet<string> = new Set([
-  "POST platform/notifications/seen",
   "POST platform/audit/undisplayable",
   "POST platform/audit/exports",
   "POST platform/audit/verify",
@@ -238,8 +237,46 @@ const MODEL_POLICY_IN = z.strictObject({
   mfa_code: z.string().optional(),
   backup_code: z.string().optional(),
 });
+/** A hold's reference and a lift's authority: a document reference. */
+const DOCUMENT_REFERENCE = z.string().regex(/^[A-Z]{2,8}-[0-9]{4}-[0-9]{2,8}$/);
+const STEP_UP = {
+  mfa_code: z.string().max(64).optional(),
+  backup_code: z.string().max(64).optional(),
+};
+/**
+ * The team and legal hold writes (core 1.26.0): a role change with step-up;
+ * a hold that keeps every record, with no free text and no names (no
+ * `from`, `to`, `note` or `asked_by`); a lift whose authority is a document
+ * reference, with no note.
+ */
+const TEAM_ROLE_IN = z.strictObject({
+  role: z.enum(["platform_admin", "auditor"]),
+  version: VERSION,
+  ...STEP_UP,
+});
+const PLACE_HOLD_IN = z.strictObject({
+  hospital_id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  reason: z.enum([
+    "court_case",
+    "regulator",
+    "complaint",
+    "investigation",
+    "other",
+  ]),
+  reference: DOCUMENT_REFERENCE,
+  review_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ...STEP_UP,
+});
+const LIFT_IN = z.strictObject({
+  reason: z.enum(["case_closed", "withdrawn", "mistake", "other"]),
+  authority: DOCUMENT_REFERENCE,
+  ...STEP_UP,
+});
 const BODIES: ReadonlyMap<string, z.ZodType> = new Map<string, z.ZodType>([
   ["PUT platform/hospitals/{id}/model-policy", MODEL_POLICY_IN],
+  ["PATCH platform/team/{id}", TEAM_ROLE_IN],
+  ["POST platform/legal-holds", PLACE_HOLD_IN],
+  ["POST platform/legal-holds/{id}/lift", LIFT_IN],
   [
     "PUT platform/analytics/changes/{id}/follow-up",
     z.strictObject({ note: NOTE.nullable().optional(), version: VERSION }),

@@ -4,6 +4,8 @@ import type { SettingsOut } from "@/lib/api/settings-contract";
 import { useSettings } from "@/lib/queries/settings";
 import { TopBar } from "../shell/top-bar";
 import { Loading } from "../states/loading";
+import { NotAvailable } from "../states/not-available";
+import { isNotImplemented } from "@/lib/errors";
 import {
   PENDING_TITLE,
   PENDING_WHAT,
@@ -71,6 +73,9 @@ export function SettingsView() {
         <div className="mx-auto flex max-w-[1100px] flex-col gap-4">
           {q.isPending ? (
             <Loading label="Loading settings" />
+          ) : isNotImplemented(q.error) ? (
+            // Core doesn't serve platform settings yet: one calm note.
+            <NotAvailable what="platform settings" />
           ) : (
             PARTS.map((p) =>
               q.data ? (

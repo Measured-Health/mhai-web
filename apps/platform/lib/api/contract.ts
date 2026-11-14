@@ -42,9 +42,9 @@ export type HospitalSummary = {
   created_at: string;
   last_activity_at: string | null;
   /**
-   * Despite the name, the holds that keep records: active, review due, lift
-   * requested, or lifted within the grace period (`keepsRecords`), the same
-   * set as `removal.checks.legal_holds`.
+   * The open holds, which keep records: active, review due or lift
+   * requested (a lift lands at once). The same set as
+   * `removal.checks.legal_holds`.
    */
   legal_holds_active: number;
 };
@@ -138,6 +138,7 @@ export type SsoIn = {
 };
 
 export type TeamRole = "platform_admin" | "auditor";
+/** Core keeps no invites: a member is always `active` (openapi 1.26.0). */
 export type TeamMember = {
   id: string;
   name: string;
@@ -218,11 +219,16 @@ export type ActivityAction =
   // The AI model (Plan 14): `target` is the new provider ("anthropic",
   // "openai", "xai", "gemini" or "none"), `detail` the one before.
   | "model_policy_changed";
+/**
+ * One action a person took: core lists only rows with an actor (the command
+ * line's and the workers' rows stay in the audit log). An action this app has
+ * no words for yet is shown as it is.
+ */
 export type ActivityEvent = {
   id: string;
   at: string;
   actor: Person;
-  action: ActivityAction;
+  action: ActivityAction | (string & {});
   hospital: Person | null;
   target: string | null;
   detail: string | null;
@@ -330,13 +336,19 @@ export interface PlatformClient
     opts: WriteOpts,
   ): Promise<Hospital>;
   listTeam(): Promise<{ members: TeamMember[] }>;
+  /** Not served by core yet: 501 `not_implemented`. */
   inviteTeam(
     body: { name: string; email: string; role: TeamRole },
     opts: WriteOpts,
   ): Promise<TeamMember>;
+  /**
+   * Step-up: a demotion does as much damage as a removal. 409 `own_role`,
+   * `last_admin` or `conflict` come before the code is checked. The member's
+   * sessions end; they sign in again with the new role.
+   */
   changeRole(
     id: string,
-    body: { role: TeamRole; version: number },
+    body: { role: TeamRole; version: number } & StepUp,
     opts: WriteOpts,
   ): Promise<TeamMember>;
   removeMember(id: string, body: StepUp, opts: WriteOpts): Promise<void>;
@@ -364,11 +376,15 @@ export interface PlatformClient
   ): Promise<Change>;
   /** Guardrail statistics for the latest finished period (503 `not_ready` before the first). */
   getGuardrailPeriods(period: Period): Promise<GuardrailPeriodsOut>;
-  /** The signed-in person's notifications, newest first, at most 20. */
+  /**
+   * The signed-in person's notifications, newest first, at most 20. Not
+   * served by core yet: 501 `not_implemented`.
+   */
   listNotifications(): Promise<NotificationsOut>;
   /**
    * Marks the given ones seen for the signed-in person, or all of them when
-   * no ids are given. Auditors may too: it is their own read state.
+   * no ids are given. Platform admins only: core makes it a write, so an
+   * auditor gets 403.
    */
   markSeen(
     body: { ids?: string[] },
