@@ -16,6 +16,7 @@ import type { EmrClient } from "./emr-contract";
 import type { ClearancesClient } from "./clearances-contract";
 import type { HoldShort, HoldsClient } from "./holds-contract";
 import type { ModelPolicyClient } from "./model-policy-contract";
+import type { EmrRuleSetClient } from "./emr-rule-set-contract";
 import type { EmailPref, NotificationsOut } from "./notifications-contract";
 import type { OpsClient } from "./ops-contract";
 import type { SettingsClient } from "./settings-contract";
@@ -293,7 +294,8 @@ export interface PlatformClient
     EmrClient,
     ClearancesClient,
     AnalysisClient,
-    ModelPolicyClient {
+    ModelPolicyClient,
+    EmrRuleSetClient {
   listHospitals(
     q: HospitalQuery,
   ): Promise<{ hospitals: HospitalSummary[]; next_cursor: string | null }>;

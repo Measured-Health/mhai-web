@@ -105,6 +105,12 @@ the end:
   counted on the bell. It hasn't been given yet, so alerts run on sample
   data only. Any change to how alerts handle patient identifiers needs
   `clinical-review` and that sign-off.
+- **Patient matches show names and MRNs to hospital admins** (core's
+  `/hospital/patient-matches`). Like alerts they are in memory only: the
+  list is held with `gcTime: 0` and never refetched on focus or reconnect
+  (core audits every read), and the MRN typed to exclude a patient stays in
+  the form's state and is cleared once it's done. Never in storage, the
+  URL, the title or logs; no print, export or copy.
 - **Analysis shows hospital-wide counts and de-identified patient rows**
   (Plan 6). Clinical, privacy and legal sign-off is required before live
   use, and it hasn't been given, so Analysis runs on sample data only and

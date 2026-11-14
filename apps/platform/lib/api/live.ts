@@ -34,6 +34,7 @@ import {
   readTeamMember,
 } from "./admin-schema";
 import { readModelPolicy } from "./model-policy-contract";
+import { readEmrRuleSet } from "./emr-rule-set-contract";
 import { readGuardrailPeriods } from "../analytics/guardrails";
 import type { SettingsClient } from "./settings-contract";
 
@@ -347,6 +348,11 @@ export function createLivePlatformClient({
       ok(h(x, "/model-policy")).then((r) => readModelPolicy(r, x)),
     setModelPolicy: (x, b, o) =>
       ok(h(x, "/model-policy"), "PUT", b, o).then((r) => readModelPolicy(r, x)),
+    // The EMR rule set (core 1.20.0): read through the reader, which fails closed.
+    getEmrRuleSet: (x) =>
+      ok(h(x, "/emr-rule-set")).then((r) => readEmrRuleSet(r, x)),
+    setEmrRuleSet: (x, b, o) =>
+      ok(h(x, "/emr-rule-set"), "PUT", b, o).then((r) => readEmrRuleSet(r, x)),
     inviteAdmin: (x, b, o) => ok(h(x, "/invites"), "POST", b, o),
     resendInvite: (x, inv, o) =>
       ok(h(x, `/invites/${id(inv)}/resend`), "POST", undefined, o),

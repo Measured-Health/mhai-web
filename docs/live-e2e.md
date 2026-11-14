@@ -77,8 +77,11 @@ checked first (`services/emr/scripts/image-check.sh`, mhai-multiagent
 | platform `03-ops`                   | System health and jobs, Usage (analytics)                                                            |
 | platform `04-audit`                 | the audit log and one entry                                                                          |
 | platform `05-admin`                 | team, activity and legal holds on core 1.26.0; invites, notifications and settings Not available yet |
+| platform `06-rule-set`              | the hospital page's Patient alerts section: the warning, the active rule set written back            |
 | platform `90-reveal`                | the auditor reveal of the analyst's drill-down                                                       |
 | clinical `06-hospital-admin`        | staff and a person's panel, a settings edit with step-up, usage, activity, oversight                 |
+| clinical `07-analyst-role`          | the hospital admin removes and gives back the synthetic analyst's role, with step-up                 |
+| clinical `08-patients`              | patient matches and exclusions: the explanations, an unknown MRN refused with step-up                |
 | both `00-tour`                      | every page: it renders and no call to the BFF fails                                                  |
 
 A call that fails is printed as `API <path>: <status> <method> <url>`: the
@@ -107,7 +110,10 @@ work live:
   (`06-hospital-admin`). Invites, removing a person, resets, reminders
   and reviewer assignment answer 501 and say "Not available yet".
 
-And these have a route in core but no screen yet: patient matches and
-exclusions (`/hospital/patient-matches`, `/hospital/patient-exclusions`),
-the EMR rule set (`/platform/hospitals/{id}/emr-rule-set`) and granting the
-analyst role (`core users roles` only).
+Patient matches and exclusions (`/hospital/patient-matches`,
+`/hospital/patient-exclusions`) and the EMR rule set
+(`/platform/hospitals/{id}/emr-rule-set`) have screens now: Hospital admin →
+Patient matches and Patient exclusions, and the hospital page's Patient
+alerts section. The live specs `08-patients` (clinical) and
+`06-rule-set` (platform) read them; the seed still activates the rule set
+directly in the database.

@@ -290,11 +290,99 @@ describe("StaffPanel", () => {
     return screen.findByRole("dialog", { name: "Staff member" });
   };
 
-  it("the Analyst box shows only with the feature on", async () => {
+  it("with Analysis off for the hospital, the Analyst box says why it's off", async () => {
     const off = await open("s-okafor");
-    await within(off).findByRole("checkbox", { name: "Clinician" });
-    expect(within(off).queryByRole("checkbox", { name: "Analyst" })).toBeNull();
+    const analyst = await within(off).findByRole("checkbox", {
+      name: "Analyst",
+    });
+    expect(analyst).toBeDisabled();
+    expect(analyst).toHaveAccessibleDescription(
+      /Analysis isn't switched on for your hospital\. Measured Health switches it on\./,
+    );
   });
+
+  it("someone deactivated or without two-step can't be given Analyst, and the box says why", async () => {
+    const mensah = await openWithAnalysis("s-mensah");
+    const box = await within(mensah).findByRole("checkbox", {
+      name: "Analyst",
+    });
+    expect(box).toBeDisabled();
+    expect(box).toHaveAccessibleDescription(
+      /They need two-step verification turned on before they can be an analyst\./,
+    );
+    cleanup();
+    const eze = await openWithAnalysis("s-eze");
+    expect(
+      await within(eze).findByRole("checkbox", { name: "Analyst" }),
+    ).toHaveAccessibleDescription(/Reactivate them first/);
+  });
+
+  it("granting Analyst says what it gives in the confirmation, with your code", async () => {
+    const panel = await openWithAnalysis("s-okafor");
+    await userEvent.click(
+      await within(panel).findByRole("checkbox", { name: "Analyst" }),
+    );
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "Save changes" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Save Dr. Okafor's access?",
+    });
+    expect(dialog).toHaveTextContent(
+      "Dr. Okafor will see Analysis for this hospital: counts and de-identified patients.",
+    );
+    await enterCode(dialog, MOCK_CODE);
+    expect(await screen.findByText("Changes saved")).toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "analyst_cap",
+      { analystCap: 1 },
+      "Your hospital has all the analysts it can have",
+    ],
+    [
+      "analysis_off",
+      { analysis: "off" as const },
+      "Analysis isn't switched on for your hospital",
+    ],
+  ])(
+    "a %s refusal is explained in the dialog, and nothing changes",
+    async (_code, opts, title) => {
+      holder.client = screenAdminAs(DEMO_EMAILS.director, opts);
+      const panel = await openWithAnalysis("s-okafor");
+      await userEvent.click(
+        await within(panel).findByRole("checkbox", { name: "Analyst" }),
+      );
+      const dialog = await saveWithCode(panel);
+      expect(await within(dialog).findByText(title)).toBeInTheDocument();
+      expect(
+        within(dialog).getByText(/Nothing was changed\./),
+      ).toBeInTheDocument();
+      expect(
+        (await holder.client.listStaff()).find((x) => x.id === "s-okafor")!
+          .roles,
+      ).toEqual(["clinician"]);
+    },
+  );
+
+  it.each([
+    [422, "not_eligible", "Dr. Okafor can't be an analyst yet"],
+    [403, "forbidden", "You can't change the Analyst role"],
+  ])(
+    "a %i %s answer from core is explained for this person",
+    async (status, code, title) => {
+      vi.spyOn(holder.client, "updateStaff").mockRejectedValueOnce(
+        new ApiError(status, code),
+      );
+      const panel = await openWithAnalysis("s-okafor");
+      await userEvent.click(
+        await within(panel).findByRole("checkbox", { name: "Analyst" }),
+      );
+      const dialog = await saveWithCode(panel);
+      expect(await within(dialog).findByText(title)).toBeInTheDocument();
+    },
+  );
 
   it("Analyst is disabled without Clinician and dropped from the patch when Clinician is unticked", async () => {
     const update = vi.spyOn(holder.client, "updateStaff");

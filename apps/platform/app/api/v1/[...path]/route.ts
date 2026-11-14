@@ -40,6 +40,8 @@ const SHAPES: readonly (readonly [string, string])[] = [
   ["POST", "platform/hospitals/{id}/sso/test"],
   ["GET", "platform/hospitals/{id}/model-policy"],
   ["PUT", "platform/hospitals/{id}/model-policy"],
+  ["GET", "platform/hospitals/{id}/emr-rule-set"],
+  ["PUT", "platform/hospitals/{id}/emr-rule-set"],
   ["POST", "platform/hospitals/{id}/invites"],
   ["POST", "platform/hospitals/{id}/invites/{id}/resend"],
   ["GET", "platform/team"],
@@ -272,7 +274,26 @@ const LIFT_IN = z.strictObject({
   authority: DOCUMENT_REFERENCE,
   ...STEP_UP,
 });
+/**
+ * The EMR rule set's write (core 1.20.0, `setHospitalEMRRuleSet`): both keys,
+ * a version and its SHA-256 or both null (shadow), and the step-up code.
+ */
+const EMR_RULE_SET_IN = z
+  .strictObject({
+    version: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]{0,62}$/)
+      .nullable(),
+    sha256: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .nullable(),
+    mfa_code: z.string().optional(),
+    backup_code: z.string().optional(),
+  })
+  .refine((b) => (b.version === null) === (b.sha256 === null));
 const BODIES: ReadonlyMap<string, z.ZodType> = new Map<string, z.ZodType>([
+  ["PUT platform/hospitals/{id}/emr-rule-set", EMR_RULE_SET_IN],
   ["PUT platform/hospitals/{id}/model-policy", MODEL_POLICY_IN],
   ["PATCH platform/team/{id}", TEAM_ROLE_IN],
   ["POST platform/legal-holds", PLACE_HOLD_IN],

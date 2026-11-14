@@ -178,6 +178,8 @@ const SHAPES: [Method, string][] = [
   ["POST", "platform/hospitals/{id}/sso/test"],
   ["GET", "platform/hospitals/{id}/model-policy"],
   ["PUT", "platform/hospitals/{id}/model-policy"],
+  ["GET", "platform/hospitals/{id}/emr-rule-set"],
+  ["PUT", "platform/hospitals/{id}/emr-rule-set"],
   ["POST", "platform/hospitals/{id}/invites"],
   ["POST", "platform/hospitals/{id}/invites/{id}/resend"],
   ["GET", "platform/team"],
@@ -251,6 +253,9 @@ const concrete = (shape: string) =>
 const VALID: Record<string, { query?: string; body?: string }> = {
   "PUT platform/hospitals/{id}/model-policy": {
     body: '{"cloud_provider":"gemini","agreement_ref":"DPA-2026-0107","monthly_token_budget":5,"mfa_code":"123456"}',
+  },
+  "PUT platform/hospitals/{id}/emr-rule-set": {
+    body: '{"version":"0-synthetic","sha256":"5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e","mfa_code":"123456"}',
   },
   "GET platform/analytics": { query: "?period=month" },
   "GET platform/guardrails/periods": { query: "?period=week" },
@@ -651,6 +656,63 @@ describe("platform API proxy", () => {
       expect(res.status).toBe(422);
       expect(await res.json()).toEqual({ code: "validation_failed" });
     }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("the EMR rule set: the write is checked strictly before it goes upstream", async () => {
+    await session();
+    const put = (body: string) =>
+      call("PUT", ["platform", "hospitals", "h1", "emr-rule-set"], { body });
+    fetchMock.mockImplementation(async () => Response.json({}));
+    const on = await put(
+      '{"version":"0-synthetic","sha256":"5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e","mfa_code":"123456"}',
+    );
+    expect(on.status).toBe(200);
+    const shadow = await put(
+      '{"version":null,"sha256":null,"backup_code":"abcd-efgh"}',
+    );
+    expect(shadow.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(calls()[0][0]).toBe(
+      "http://api.test/api/v1/platform/hospitals/h1/emr-rule-set",
+    );
+    fetchMock.mockClear();
+    for (const bad of [
+      '{"version":"0-synthetic","sha256":null,"mfa_code":"1"}',
+      '{"version":null,"sha256":"5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e","mfa_code":"1"}',
+      '{"version":"0-Synthetic","sha256":"5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e","mfa_code":"1"}',
+      '{"version":"0-synthetic","sha256":"5A1E5A1E5A1E5A1E5A1E5A1E5A1E5A1E5A1E5A1E5A1E5A1E5A1E5A1E5A1E5A1E","mfa_code":"1"}',
+      '{"version":"0-synthetic","sha256":"abc","mfa_code":"1"}',
+      '{"sha256":null,"mfa_code":"1"}',
+      '{"version":null,"sha256":null,"hospital_id":"h2"}',
+      "not json",
+    ]) {
+      const res = await put(bad);
+      expect(res.status).toBe(422);
+      expect(await res.json()).toEqual({ code: "validation_failed" });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("the EMR rule set: an auditor reads it, but a PUT never goes upstream", async () => {
+    await session({ roles: ["auditor"] });
+    fetchMock.mockResolvedValueOnce(Response.json({ ok: true }));
+    const read = await call("GET", [
+      "platform",
+      "hospitals",
+      "h1",
+      "emr-rule-set",
+    ]);
+    expect(read.status).toBe(200);
+    fetchMock.mockClear();
+    const write = await call(
+      "PUT",
+      ["platform", "hospitals", "h1", "emr-rule-set"],
+      {
+        body: '{"version":"0-synthetic","sha256":"5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e5a1e","mfa_code":"123456"}',
+      },
+    );
+    expect(write.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

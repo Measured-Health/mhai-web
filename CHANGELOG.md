@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Granting and removing the Analyst role from Staff** (core 1.24.0,
+  `PATCH /hospital/staff/{id}` with step-up, mhai-multiagent #163):
+  - The Analyst box says what the role gives and what it needs (the
+    Clinician role, an active account and two-step verification), and is
+    off, with the reason, for someone deactivated or without two-step,
+    for yourself, and while Analysis isn't switched on for the hospital.
+  - The confirmation says what the change does (Analysis for this
+    hospital, or that access ends at once), and takes your two-step code.
+  - Each of core's refusals in plain words for this person:
+    `analysis_off`, `analyst_cap`, `not_eligible`, `self_change` and
+    `forbidden`.
+  - A live check (`tests/e2e-full/07-analyst-role.spec.ts`).
+
 ### Changed
 
 - **Hospital admin screens follow core's hospital admin routes** (core
@@ -69,6 +84,32 @@ All notable changes to this project are documented here. The format follows
   - The demo follows the same rules.
 
 ### Added
+
+- **Patient matches and exclusions for hospital admins** (core openapi
+  1.21.0, `/hospital/patient-matches`, `/hospital/patient-exclusions`).
+  - Patient matches lists the possible duplicate patients side by side
+    (name, MRN, age, sex, record systems, record count) with why they were
+    paired, in plain words. Nothing merges by itself: "Same patient: merge"
+    asks which patient to keep and says the other's records, findings and
+    alerts move to them; "Not the same patient" keeps them apart. Both take
+    the admin's two-step code.
+  - Patient exclusions excludes a patient by MRN with a reason and the
+    two-step code, and explains first what happens: MHAI stops using their
+    records, their open alerts are withdrawn at once, and the record data
+    MHAI holds for them is deleted, unless a legal hold is open on the
+    hospital, when it is kept until the hold is lifted and then deleted
+    within 24 hours. The result follows core's `purge_held`.
+  - Replies read strictly (502 on anything else); the match list is held in
+    memory only (`gcTime: 0`, no refetch on focus or reconnect, since core
+    audits every read); the BFF forwards exactly these shapes.
+- **Patient alerts switch on a hospital's page (platform admin app)**
+  (core openapi 1.20.0, `/platform/hospitals/{id}/emr-rule-set`). Shows
+  whether the hospital is on a trial run (findings stored for review, no
+  alert sent) or sends alerts with a named rule set (version and SHA-256).
+  Switching it on warns that it sends patient alerts to the hospital's
+  clinicians, needs an explicit "I understand" and the two-step code;
+  switching off says alerts stop. Auditors read it. The BFF checks the body
+  strictly; the reply is read strictly.
 
 - **Analysis drill-down on core's live route** (core openapi 1.19.0,
   mhai-multiagent #149): See patients opens `GET /analysis/patients`

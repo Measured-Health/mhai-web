@@ -140,6 +140,7 @@ export function StepUpDialog({
   onDone,
   onGone,
   onStale,
+  explain = adminError,
 }: {
   title: string;
   children: ReactNode;
@@ -156,6 +157,8 @@ export function StepUpDialog({
   onGone?(e: AdminError): void;
   /** Someone else changed it first (409): the latest is loading underneath. */
   onStale?(e: AdminError): void;
+  /** The refusal in plain words (default: any staff refusal's). */
+  explain?(e: unknown): AdminError;
 }) {
   const { user, updateUser } = useAuth();
   const step = useStepUp();
@@ -183,7 +186,7 @@ export function StepUpDialog({
       onDone();
     } catch (e) {
       reset();
-      const err = adminError(e);
+      const err = explain(e);
       if (err.gone && onGone) return onGone(err);
       if (err.stale && onStale) return onStale(err);
       if (isMfaRequired(e)) return setRequired(true);
