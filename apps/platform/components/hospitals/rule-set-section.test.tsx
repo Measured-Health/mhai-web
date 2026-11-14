@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "@mhai/api-client/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,6 +33,7 @@ const start = (emrEnabled = true) => {
 };
 beforeEach(() => start());
 afterEach(() => {
+  vi.useRealTimers();
   __resetPlatformClientForTests();
   vi.restoreAllMocks();
 });
@@ -187,26 +188,23 @@ describe("a hospital's patient alerts (EMR rule set)", () => {
     expect(await within(r).findByText(SHADOW_TEXT)).toBeVisible();
   });
 
-  // A 503 is retried twice (WRITE_RETRY) before it is shown.
-  it(
-    "with patient records off on the deployment it says so, and nothing was saved",
-    { timeout: 20_000 },
-    async () => {
-      start(false);
-      const r = await switchOnForm();
-      await saveForm(r);
-      const d = await screen.findByRole("dialog");
-      await typeCode(d);
-      await userEvent.click(
-        within(d).getByRole("button", { name: "Send alerts" }),
-      );
-      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull(), {
-        timeout: 15_000,
-      });
-      expect(await within(r).findByText(NOT_READY)).toBeVisible();
-      expect(within(r).getByText("Nothing was saved.")).toBeVisible();
-    },
-  );
+  // A 503 is retried twice (WRITE_RETRY) before it is shown: fake timers
+  // let the back-off run out without waiting for it.
+  it("with patient records off on the deployment it says so, and nothing was saved", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    start(false);
+    const r = await switchOnForm();
+    await saveForm(r);
+    const d = await screen.findByRole("dialog");
+    await typeCode(d);
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Send alerts" }),
+    );
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(await within(r).findByText(NOT_READY)).toBeVisible();
+    expect(within(r).getByText("Nothing was saved.")).toBeVisible();
+  });
 
   it("a wrong code stays in the dialog, and doesn't linger in the cache", async () => {
     const queryClient = new QueryClient({

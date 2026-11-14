@@ -1,7 +1,7 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, useQueryClient } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/errors";
 import { createMockPatients } from "@/lib/api/mock-patients";
 import type { PatientsClient } from "@/lib/api/patients-contract";
@@ -20,6 +20,10 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/patient-matches",
 }));
 import { MatchesView } from "./matches-view";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 beforeEach(() => {
   const step = createStepUp();
@@ -158,13 +162,12 @@ describe("MatchesView", () => {
     vi.spyOn(holder.client, "listMatches").mockRejectedValue(
       new ApiError(502, "bad_gateway"),
     );
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     show();
+    // A 5xx is retried with back-off (READ_RETRY): let the retries run out.
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
     expect(
-      await screen.findByText(
-        "Couldn't load patient matches",
-        {},
-        { timeout: 5000 },
-      ),
+      await screen.findByText("Couldn't load patient matches"),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("bad_gateway");
   });
