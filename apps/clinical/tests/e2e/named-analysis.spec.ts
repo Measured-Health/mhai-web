@@ -220,9 +220,8 @@ test("Activity shows 'viewed N patients by name in Analysis', flagged", async ({
   await expect(page).toHaveURL(/\/admin\/activity$/);
   const line = page
     .getByText(
-      new RegExp(
-        `viewed ${emergencyCount.get(page)} patients by name in Analysis`,
-      ),
+      // Core sends no count (1.24.0): the line names no number.
+      /viewed patients by name in Analysis/,
     )
     .filter({ visible: true })
     .first();
