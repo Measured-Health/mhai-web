@@ -6,6 +6,7 @@ import {
   isMobile,
   openAdmin,
   signIn,
+  typeCode,
 } from "./helpers";
 
 // A console and page-error check (the CSP header itself is checked in
@@ -375,7 +376,7 @@ test("See patients opens the de-identified list; Activity shows the event", asyn
   await openAdmin(page, "Activity");
   await expect(page).toHaveURL(/\/admin\/activity$/);
   await expect(
-    page.getByText(/opened \d+ de-identified patients in Analysis/).first(),
+    page.getByText(/opened de-identified patients in Analysis/).first(),
   ).toBeVisible();
 });
 
@@ -463,6 +464,11 @@ test("the admin grants Analyst to a clinician and Activity shows it", async ({
   await expect(analyst).not.toBeChecked();
   await analyst.check();
   await panel.getByRole("button", { name: "Save changes" }).click();
+  // Every staff write takes the admin's own two-step code (core 1.24.0).
+  const confirm = page.getByRole("dialog", {
+    name: "Save Dr. Bello's access?",
+  });
+  await typeCode(page, "123456", confirm);
   await expect(page.getByText("Changes saved")).toBeVisible();
   await expect(analyst).toBeChecked();
   await panel.getByRole("button", { name: "Close" }).click();
