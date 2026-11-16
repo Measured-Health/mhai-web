@@ -1,6 +1,7 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { LIVE_DEMO_PASSWORD } from "@/lib/auth/live-demo";
 import { createMockAuthClient } from "@/lib/auth/mock";
 import { AuthError, type AuthClient } from "@/lib/auth/types";
 import { renderWithAuth } from "@/tests/auth-wrapper";
@@ -172,5 +173,24 @@ describe("SignInForm", () => {
       "new.bello@havanahospital.org",
     );
     expect(screen.getByLabelText("Password")).toHaveValue("demo-password");
+  });
+
+  it("fills a seeded account and the published demo password in the live demo", async () => {
+    vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "false");
+    vi.stubEnv("NEXT_PUBLIC_DEMO", "true");
+    try {
+      page();
+      await userEvent.click(
+        screen.getByRole("button", {
+          name: /Use Medical director \(director\.obi@demo-hospital\.example\)/,
+        }),
+      );
+      expect(screen.getByLabelText("Work email")).toHaveValue(
+        "director.obi@demo-hospital.example",
+      );
+      expect(screen.getByLabelText("Password")).toHaveValue(LIVE_DEMO_PASSWORD);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

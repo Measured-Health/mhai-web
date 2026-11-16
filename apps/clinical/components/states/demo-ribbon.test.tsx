@@ -36,10 +36,27 @@ describe("DemoRibbon", () => {
     ).toBeInTheDocument();
   });
 
-  it("is absent outside mock mode", () => {
+  it("is absent outside the demo", () => {
     vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "false");
+    vi.stubEnv("NEXT_PUBLIC_DEMO", "false");
     const { container } = render(<DemoRibbon />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("labels the live demo too", () => {
+    vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "false");
+    vi.stubEnv("NEXT_PUBLIC_DEMO", "true");
+    render(
+      <ToastProvider>
+        <DemoRibbon />
+      </ToastProvider>,
+    );
+    expect(
+      screen.getByText("Demo · sample data, not for clinical use"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Give feedback/ }),
+    ).toBeInTheDocument();
   });
 
   it("sends the message, masked page and screen size, then thanks", async () => {

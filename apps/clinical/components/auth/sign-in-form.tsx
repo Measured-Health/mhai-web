@@ -176,9 +176,9 @@ export function SignInForm() {
         <b className="font-semibold text-mint-deep">Ask your hospital admin</b>
       </p>
       <DemoHint
-        onPick={(e) => {
+        onPick={(e, pw) => {
           setLogin(e);
-          setPassword("demo-password");
+          setPassword(pw);
           setMissing({ login: false, password: false });
         }}
       />

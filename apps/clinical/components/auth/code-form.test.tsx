@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -88,5 +88,21 @@ describe("CodeForm", () => {
     );
     expect(auth.mfaPending).toBe(false);
     expect(replace).toHaveBeenCalledWith("/sign-in");
+  });
+
+  it("shows the live demo's two-step code in the live demo only", async () => {
+    await pending();
+    expect(screen.queryByLabelText("Demo two-step code")).toBeNull();
+    cleanup();
+    vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "false");
+    vi.stubEnv("NEXT_PUBLIC_DEMO", "true");
+    try {
+      await pending();
+      expect(
+        await screen.findByLabelText("Demo two-step code"),
+      ).toHaveTextContent(/\d{6}/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
