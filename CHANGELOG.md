@@ -8,6 +8,24 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The public demo runs live** (deploy/README.md, "Public demo in live
+  mode"): demo.measured-health.org signs in and asks through its BFF, over
+  NATS, to the backend demo's core and its sample AI (synthetic data,
+  seeded demo accounts), instead of canned answers.
+  - A build flag, `NEXT_PUBLIC_DEMO=true` (Dockerfile `DEMO`), marks the
+    public demo: the ribbon ("Demo · sample data, not for clinical use")
+    and the printed demo line show for it as for the mock demo.
+  - The sign-in helper lists the seeded demo accounts and fills the email
+    and the published demo password (a wrong one for the locked account);
+    the code page shows the current demo two-step code, made in the browser
+    from the published demo secret, with the 30-second reuse note. Neither
+    exists in a build without the demo flags.
+  - The deploy builds a `live-demo` image on every green main run and runs
+    the public `web` service with `deploy/compose.demo-live.yml` when the
+    backend has seeded the demo; otherwise, or if the live app isn't
+    healthy, it runs the sample-data demo as before. `DEMO_MODE=mock`
+    (a repository variable) is the one-line fallback.
+
 - **References with the answer** (core 1.30.0, `cited_sources`,
   mhai-multiagent reference library PR 3): the evidence panel lists each
   cited reference source (an FDA drug label or a MedlinePlus health topic)

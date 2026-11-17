@@ -1,0 +1,62 @@
+# The public demo (demo.measured-health.org) in live mode: an override for
+# the `web` service of deploy/compose.yml (project mhai-web), used as
+#   docker compose -f compose.yml -f compose.demo-live.yml up -d web
+# The deploy workflow ships this file to /srv/mhai-web and uses it unless
+# the repository variable DEMO_MODE is `mock` (deploy/README.md, "Public
+# demo in live mode"). Without it, `docker compose -f compose.yml up -d web`
+# is the sample-data demo exactly as before: that is the fallback.
+#
+# The image is the clinical app built with USE_MOCK=false and DEMO=true
+# (tag live-demo): the demo ribbon and the seeded demo accounts' sign-in
+# helper. It reaches core over NATS as bff_clinical, on the backend's
+# internal network mhai-bff, against the backend demo's synthetic hospital
+# and its sample AI (mhai-multiagent deploy/README.md).
+#
+# Self-contained: it defines its own secret and network, so it works with
+# whichever version of compose.yml is on the host.
+
+services:
+  web:
+    image: ${WEB_DEMO_LIVE_IMAGE:-ghcr.io/measured-health/mhai-web:live-demo}
+    environment:
+      BACKEND_TRANSPORT: nats
+      # As core on the demo: one host, no NATS TLS (the backend's deploy/README).
+      MHAI_DEPLOY_ENV: development
+      NATS_URL: nats://mhai-nats:4222
+      # A file, mounted below; the seed is never in the environment.
+      NATS_NKEY_SEED_FILE: /run/secrets/nats-bff-clinical.nk
+      # The client IP core needs for sign-in (and its per-IP counters). The
+      # host's nginx (deploy/nginx/mhai-demo.conf) overwrites X-Real-IP with
+      # $remote_addr on every request, and this container's only port is on
+      # 127.0.0.1, so only the host's own processes (nginx) can reach it:
+      # no browser can choose its own X-Real-IP.
+      TRUSTED_CLIENT_IP_HEADER: x-real-ip
+      # Made on the host by the deploy workflow if missing (never printed).
+      SESSION_SECRET: ${DEMO_LIVE_SESSION_SECRET:?set in /srv/mhai-web/.env (the deploy workflow makes it)}
+    secrets: [nats-bff-clinical.nk]
+    networks: [default, mhai-bff]
+    # The port (127.0.0.1:8090 only), the feedback folder and the 384 MiB
+    # cap come from compose.yml, unchanged.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+secrets:
+  # Written by the backend's setup-host.sh: mode 400, owned by uid 1001 (the
+  # image's nextjs user). Rotate with its --rotate-bff clinical.
+  nats-bff-clinical.nk:
+    file: /srv/mhai-backend/secrets/bff/nats-bff-clinical.nk
+
+networks:
+  # The backend's internal network to NATS (mhai-nats:4222).
+  mhai-bff:
+    external: true

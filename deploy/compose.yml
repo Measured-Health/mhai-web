@@ -29,9 +29,9 @@ services:
   # (image tag `live`, USE_MOCK=false), reaching core over NATS as
   # bff_clinical. Under the profile `live`, so `docker compose up -d web`
   # never starts it. Loopback only and no nginx site: reached by SSH tunnel
-  # (deploy/README.md, "Live preview over NATS"). The only container here on
-  # mhai-bff and the only one holding a NATS seed; the public `web` above is
-  # unchanged.
+  # (deploy/README.md, "Live preview over NATS"). With the public demo in
+  # live mode (compose.demo-live.yml), the public `web` is on mhai-bff and
+  # holds the bff_clinical seed too; otherwise it is unchanged.
   web-live:
     profiles: ["live"]
     image: ${WEB_LIVE_IMAGE:-ghcr.io/measured-health/mhai-web:live}

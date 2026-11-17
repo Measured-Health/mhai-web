@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { darker, jetbrains, outfit } from "@mhai/tokens/fonts";
 import "./globals.css";
 import { DemoRibbon } from "@/components/states/demo-ribbon";
+import { isDemoBuild } from "@/lib/demo";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
@@ -23,7 +24,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         className="min-h-full"
         // An attribute, not an inline style: the CSP blocks style attributes
         // in the server's HTML. globals.css sets --demo-h from it.
-        data-demo={process.env.NEXT_PUBLIC_USE_MOCK === "true" ? "" : undefined}
+        data-demo={isDemoBuild() ? "" : undefined}
       >
         <Providers>
           <DemoRibbon />

@@ -5,6 +5,7 @@ import {
   type ResultKind,
   type SourceStatus,
 } from "./labels";
+import { isLiveDemoBuild } from "@/lib/demo";
 
 export type { ResultKind };
 
@@ -99,6 +100,9 @@ const PROVIDER_NAME: Record<string, string> = {
 /** A provider code's shape: a short lower-case word (core 1.16.0). */
 const PROVIDER_CODE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 export const LOCAL_DRAFT = "Drafted by MHAI's own model";
+/** The public demo's local route: the backend's labelled sample answers. */
+export const DEMO_DRAFT =
+  "Drafted by the demo's sample answers (no trained model yet)";
 export const MASKED_NOTICE =
   "Identifying patient details were masked where detected before the question was sent.";
 
@@ -124,7 +128,10 @@ export function generatedByView(g: unknown): ResultView["generatedBy"] {
     provider_code?: unknown;
   };
   if (route === "local" && provider === null && provider_code == null)
-    return { label: LOCAL_DRAFT, notice: null };
+    return {
+      label: isLiveDemoBuild() ? DEMO_DRAFT : LOCAL_DRAFT,
+      notice: null,
+    };
   if (route !== "cloud") return null;
   const name =
     providerName(provider_code, true) ?? providerName(provider, false);

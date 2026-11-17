@@ -16,6 +16,7 @@ import {
 import { CodeInput } from "@mhai/ui/auth/code-input";
 import { AuthErrorBanner } from "./auth-error-banner";
 import { errorCode } from "./auth-error-copy";
+import { DemoCode } from "./demo-code";
 
 const BACKUP_FAILED = {
   title: "That backup code didn't work.",
@@ -145,6 +146,7 @@ export function CodeForm() {
           Back to sign in
         </button>
       </p>
+      <DemoCode />
     </form>
   );
 }

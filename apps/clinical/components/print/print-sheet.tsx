@@ -3,6 +3,7 @@ import type { QueryCreateIn } from "@/lib/api/contract";
 import type { ResultView } from "@/lib/result-view";
 import { SOURCE_STATUS_TEXT, toExportModel } from "../feedback/export-model";
 import type { parseBody } from "../result/parse-body";
+import { isDemoBuild } from "@/lib/demo";
 
 export function PrintSheet({
   view,
@@ -22,7 +23,7 @@ export function PrintSheet({
   printedAt: string;
 }) {
   const m = toExportModel(view, parsed);
-  const demo = process.env.NEXT_PUBLIC_USE_MOCK === "true";
+  const demo = isDemoBuild();
   return (
     <article className="mx-auto min-h-[297mm] w-[210mm] bg-white p-[14mm] text-[12.5px] leading-relaxed text-black print:p-0">
       <header className="flex items-center justify-between border-b-2 border-black pb-3">

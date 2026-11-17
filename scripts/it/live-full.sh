@@ -283,9 +283,46 @@ seed() {
   echo "seeded: hospital $hospital, users clinician analyst hadmin padmin auditor, rule set 0-synthetic"
 }
 
-# Both apps built once for live mode, in the CI image.
+# The public demo's backend on this stack (LIVE_SAMPLE_AI=1, the backend's
+# deploy/README.md "Public demo: sample answers"): core demo seed (the
+# synthetic demo hospital DEM and its published demo accounts, as the
+# database owner), then the pipeline worker restarted with the labelled
+# sample answers for LIV and DEM instead of the stub. Needs a backend with
+# `core demo seed` and INTELLIGENCE_MODEL_CLIENT=sample.
+sample_ai() {
+  [ "${LIVE_SAMPLE_AI:-0}" = 1 ] || return 0
+  local ids
+  # The owner and the MFA key from the generated env file, into this
+  # environment only (never printed, never an argument).
+  DATABASE_URL="postgres://mhai:$(sed -n 's/^POSTGRES_PASSWORD=//p' "$state/env")@postgres:5432/mhai?sslmode=disable" \
+  MFA_ENCRYPTION_KEY="$(sed -n 's/^MFA_ENCRYPTION_KEY=//p' "$state/env")" \
+    compose run --rm --no-deps -T -e DATABASE_URL -e MFA_ENCRYPTION_KEY -e MHAI_DEMO_SEED=on -e APP_ENV=demo \
+    core-cli demo seed
+  ids=$(psql_q "SELECT string_agg(id::text, ',' ORDER BY id) FROM hospitals WHERE is_demo")
+  cat > "$state/sample.yml" <<YML
+services:
+  pipeline:
+    environment:
+      INTELLIGENCE_MODEL_CLIENT: sample
+      INTELLIGENCE_SAMPLE_HOSPITALS: "$ids"
+YML
+  docker compose -p "$project" --env-file "$state/env" \
+    -f "$backend/docker-compose.yml" -f "$backend/docker-compose.smoke.yml" \
+    -f "$state/live.yml" -f "$state/sample.yml" --profile emr up -d --no-deps --force-recreate pipeline >/dev/null
+  for _ in $(seq 1 60); do
+    compose logs --no-log-prefix pipeline 2>/dev/null | grep -q 'model client is sample' && break
+    sleep 2
+  done
+  compose logs --no-log-prefix pipeline 2>/dev/null | grep -q 'model client is sample' ||
+    { echo "pipeline did not start with the sample client" >&2; compose logs --tail=40 pipeline >&2; return 1; }
+  echo "sample answers: demo seed done, pipeline on the sample client for $(tr ',' '\n' <<<"$ids" | wc -l) demo hospital(s)"
+}
+
+# Both apps built once for live mode, in the CI image. LIVE_DEMO=true builds
+# them as the public demo (the ribbon and the demo accounts' sign-in helper).
 build_apps() {
   docker run --rm --init -e CI=1 -e NEXT_TELEMETRY_DISABLED=1 -e NEXT_PUBLIC_USE_MOCK=false \
+    -e NEXT_PUBLIC_DEMO="${LIVE_DEMO:-false}" \
     -v "$repo:/work" -v "$nm_volume:/work/node_modules" -v "${prefix}npm-cache:/root/.npm" \
     -w /work "$ci_image" bash -c 'npm ci --no-audit --no-fund >/dev/null && npm run build >/dev/null'
 }
@@ -380,17 +417,17 @@ down() {
 }
 
 case "${1:-}" in
-  up) images; backend_up; seed; apps_up ;;
+  up) images; backend_up; seed; sample_ai; apps_up ;;
   backend) images; backend_up; seed ;;
   apps) apps_up ;;
-  seed) seed ;;
+  seed) seed; sample_ai ;;
   test) shift; run_tests "$@" ;;
   down) down ;;
   # The smoke subset: every path spec; the page tour (00-tour) only with
   # LIVE_TOUR=1, since it also lists the pages core can't serve yet.
   all)
     trap down EXIT
-    images; backend_up; seed; apps_up
+    images; backend_up; seed; sample_ai; apps_up
     if [ "${LIVE_TOUR:-0}" = 1 ]; then run_tests; else run_tests --grep-invert "tour|debug"; fi ;;
   compose) shift; compose "$@" ;;
   *) echo "usage: $0 up|backend|apps|seed|test|down|all|compose ..." >&2; exit 2 ;;

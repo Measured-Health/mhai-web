@@ -38,12 +38,17 @@ describe("PrintSheet", () => {
     const { container } = sheet(FIXTURES.high, 1_700_000_000_000);
     expect(container.textContent).toContain("Clinician agreed ·");
   });
-  it("shows the demo line only while mock mode is on", () => {
+  it("shows the demo line only in a demo build", () => {
     vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "true");
     expect(sheet(FIXTURES.high).container.textContent).toContain(
       "Demo · sample data, not for clinical use",
     );
     vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "false");
+    vi.stubEnv("NEXT_PUBLIC_DEMO", "true");
+    expect(sheet(FIXTURES.high).container.textContent).toContain(
+      "Demo · sample data, not for clinical use",
+    );
+    vi.stubEnv("NEXT_PUBLIC_DEMO", "false");
     expect(sheet(FIXTURES.high).container.textContent).not.toContain("Demo ·");
   });
   it("prints the screen's banner copy: neutral for degraded results", () => {

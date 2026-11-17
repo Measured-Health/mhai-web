@@ -1,6 +1,6 @@
 # Demo deployment
 
-The sample-data demo runs on the shared preview instance, next to the EMR
+The demo runs on the shared preview instance, next to the EMR
 stack, behind the host's nginx:
 
 ```
@@ -198,9 +198,151 @@ Logs: `cd /srv/mhai-web-platform && docker compose -f compose.platform.yml logs 
 To change who can reach it, edit the allow file, then
 `sudo nginx -t && sudo systemctl reload nginx`.
 
+## Public demo in live mode
+
+Since 16 Nov 2026 the public demo (`demo.measured-health.org`) runs **live**:
+the clinical app, built with `USE_MOCK=false` and `DEMO=true` (image tag
+`live-demo`), signs in and asks questions through its BFF, over NATS, to the
+backend demo's core service on the same host, and the backend's **sample AI**
+answers (mhai-multiagent `deploy/README.md`: a demo-only worker with stub
+models, labelled sample output, synthetic data only, no cloud call). The
+ribbon still says "Demo · sample data, not for clinical use".
+
+```
+browser ──https──> nginx (host) ──> 127.0.0.1:8090 ──> web (live-demo image) ──mhai-bff──> mhai-nats ──> core ──> sample AI worker
+```
+
+`deploy/compose.demo-live.yml` is an override of the public `web` service
+(image, NATS settings, the clinical NATS seed as a secret, the session
+secret, the network `mhai-bff`); the port, cap and feedback folder stay as
+in `compose.yml`. The deploy workflow builds the `live-demo` image on every
+green main run, copies the override to `/srv/mhai-web`, and runs
+`docker compose -f compose.yml -f compose.demo-live.yml up -d web` when all
+of these hold; otherwise it runs the sample-data demo exactly as before and
+prints why:
+
+- the repository variable `DEMO_MODE` is not `mock`;
+- the `live-demo` image was built on this run;
+- the backend's clinical NATS seed `/srv/mhai-backend/secrets/bff/nats-bff-clinical.nk`
+  and the network `mhai-bff` exist (the backend's `setup-host.sh`);
+- the backend has seeded the demo: `/srv/mhai-backend/demo/seeded` exists
+  (mhai-multiagent's "Deploy backend demo" writes it after `core demo seed`).
+
+It makes `DEMO_LIVE_SESSION_SECRET` (`openssl rand -base64 48`) in
+`/srv/mhai-web/.env` (mode 600) once, if missing, and never prints it. The
+health check is `/sign-in` 200 and `/api/health` 200 (connected to NATS) on
+127.0.0.1:8090. If the live app isn't healthy, the workflow prints its logs
+and **falls back to the sample-data demo on its own**, then checks that, so
+the public demo never stays down.
+
+**The client IP.** Core needs the visitor's IP for sign-in and its per-IP
+counters. The app reads it from `X-Real-IP` (`TRUSTED_CLIENT_IP_HEADER`).
+That is safe here only because the host's nginx (`nginx/mhai-demo.conf`)
+overwrites `X-Real-IP` with `$remote_addr` on every request, and the
+container's only port is on 127.0.0.1, so only the host's own processes
+(nginx) can reach it. Never publish 8090 on another address, and keep the
+`proxy_set_header X-Real-IP $remote_addr;` line in the site. Two caveats:
+containers on `mhai-web_default` and `mhai-bff` (ours: core, nats, the
+tunnel previews) can reach `web:8080` with any `X-Real-IP`; and a CDN or
+proxy put in front of nginx would make every visitor one `$remote_addr`, so
+one person could trip the per-address lock for all. The public `web` now
+holds the `bff_clinical` NATS seed: code running in the app could use that
+user's permissions (`api.v1.clinical` only).
+
+### Back to sample data (the fallback)
+
+One line, from any machine with the GitHub CLI:
+
+```bash
+gh variable set DEMO_MODE --repo Measured-Health/mhai-web --body mock && gh workflow run deploy.yml --repo Measured-Health/mhai-web --ref main
+```
+
+And back to live: `gh variable delete DEMO_MODE --repo Measured-Health/mhai-web && gh workflow run deploy.yml --repo Measured-Health/mhai-web --ref main`.
+On the instance, without GitHub: `cd /srv/mhai-web && docker compose up -d web`
+(the next deploy goes live again unless `DEMO_MODE=mock`).
+
+### The demo accounts (demo values, published on purpose)
+
+Seeded by the backend (`core demo seed`, mhai-multiagent) in the synthetic
+hospital **Demo General Hospital** (`DEM`) and reset on every backend deploy.
+The password and the two-step secret below are **demo values, not
+secrets**: the sign-in page shows them, and they open only this synthetic
+hospital. Never reuse them anywhere.
+
+- Demo password: `Sample-demo-only-2026`
+- Demo authenticator secret (base32): `MHAIDEMOSAMPLEONLYNOTASECRET2345`.
+  The code page shows the current code, made in the browser from it.
+
+| Account                 | Email                                     | Roles                     | What it shows                                                                            |
+| ----------------------- | ----------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------- |
+| Clinician               | `a.reyes@demo-hospital.example`           | clinician                 | two-step, demo code (the app asks every account for two-step)                            |
+| Clinician with two-step | `mfa.okafor@demo-hospital.example`        | clinician                 | the code step (demo code)                                                                |
+| New account             | `new.bello@demo-hospital.example`         | clinician                 | first sign-in steps (new password, terms)                                                |
+| New hospital admin      | `newadmin.okoro@demo-hospital.example`    | hospital admin            | first sign-in steps, two-step set-up                                                     |
+| Hospital admin          | `admin.nwosu@demo-hospital.example`       | hospital admin            | staff, settings, usage (two-step, demo code)                                             |
+| Medical director        | `director.obi@demo-hospital.example`      | clinician, hospital admin | both sides (two-step, demo code)                                                         |
+| Analyst                 | `analyst.adeyemi@demo-hospital.example`   | clinician, analyst        | two-step, demo code (Analysis is off, below)                                             |
+| Platform admin          | `platform.bakare@measured-health.example` | platform admin            | not in the helper: its password and two-step secret are random and never published       |
+| Locked account          | `locked.eze@demo-hospital.example`        | clinician                 | nobody knows its password: every try fails, the fifth locks it for the visitor's address |
+
+The sign-in helper fills the email and the demo password (a wrong password
+for the locked account). It exists only in builds with `DEMO=true` (or the
+mock demo); production builds have neither flag, so it never renders there.
+The constants are published demo values (they open only the synthetic demo
+accounts); whether the minifier drops them from a production bundle has not
+been checked.
+
+**Analysis and named access stay off in the public demo.**
+`ANALYSIS_SIGNED_OFF` and `NAMED_ACCESS_SIGNED_OFF` are the clinical,
+privacy and legal sign-off gates for live use (README, "Analysis"), and
+those sign-offs haven't been given; the demo hospital's backend switch alone
+isn't that sign-off. So the live demo sets neither: the analyst signs in as
+a clinician and sees no Analysis page (Analysis still shows on the
+sample-data demo). Turn it on only with the sign-off.
+
+### Shared accounts: known limits
+
+- **Visitors share accounts.** Everyone signed in as the demo clinician
+  sees the same consultation history, including other visitors' questions.
+  The ribbon and the helper say so; never type patient details. The
+  backend keeps them until it is reset.
+- **A visitor can change a shared account** (its password on the Account
+  page, or a "new" account's first password and two-step) until the next
+  backend deploy reseeds it. If an account stops working, rerun the
+  backend's deploy (mhai-multiagent: Actions, Deploy backend demo).
+- **Two visitors in the same 30 seconds.** Core refuses a two-step code an
+  account has already used, so the second visitor waits for the next code.
+- **Lock-out.** Core's per-login sign-in ceiling counts failures across
+  every address for an hour: someone who keeps failing on a shared account
+  can lock it for everyone for up to an hour. The per-address lock (five
+  tries, 15 minutes) is what the locked account shows.
+
+### Screens in the live demo
+
+From the live readers, the full live check (`docs/live-e2e.md`) and the
+demo backend's settings (EMR off, no pipeline but the sample AI). To be
+confirmed by the live Playwright run after each deploy.
+
+| Screen                                                                                           | Live demo                                                                                                               |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Sign in, two-step code, first sign-in (password, two-step set-up, backup codes, terms), sign out | live                                                                                                                    |
+| Ask (home), the answer with sources and safety checks                                            | live (the sample AI's labelled answer)                                                                                  |
+| A consultation (`/c/<id>`), print                                                                | live                                                                                                                    |
+| Review queue (`/review`), corrections, My feedback                                               | live (empty until someone corrects or flags an answer)                                                                  |
+| Notifications, notification settings                                                             | live                                                                                                                    |
+| Account (devices, password, two-step, backup codes)                                              | live                                                                                                                    |
+| Help                                                                                             | static                                                                                                                  |
+| Hospital admin: overview, staff, settings, activity, usage, review oversight                     | live; invites, removing a person, resets, reminders and reviewer assignment show "Not available yet" (core answers 501) |
+| Hospital admin: alert settings                                                                   | live (records status shows no connection: EMR is off)                                                                   |
+| Alerts (bell, inbox)                                                                             | live, empty: the EMR is off on the demo host, so no alert is raised                                                     |
+| Hospital admin: patient matches, patient exclusions                                              | live, empty (no record connection: the EMR is off)                                                                      |
+| Find patient by MRN (question form)                                                              | not available: core serves the lookup only with the EMR on (404), which the demo host doesn't run                       |
+| Analysis, named access, clearance letters                                                        | off (sign-off gates above); no page                                                                                     |
+| Hospital sign-on                                                                                 | unavailable over NATS                                                                                                   |
+
 ## Live preview over NATS
 
-The public demo and the platform app stay on sample data. Two more
+The platform app stays on sample data; the public demo runs live (above). Two more
 containers, `web-live` and `platform-live`, run the same apps built for live
 mode (image tag `live`, `USE_MOCK=false`) and reach core over NATS
 (`BACKEND_TRANSPORT=nats`, docs/adr/0005). They are under the compose

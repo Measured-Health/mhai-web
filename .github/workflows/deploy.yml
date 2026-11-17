@@ -115,6 +115,58 @@ jobs:
           cache-from: type=gha,scope=platform
           cache-to: type=gha,mode=max,scope=platform
 
+  # The public demo in live mode (deploy/README.md, "Public demo in live
+  # mode"): the clinical app built with USE_MOCK=false and DEMO=true (the
+  # demo ribbon and the seeded demo accounts' sign-in helper), tagged
+  # `live-demo` and `live-demo-sha-<commit>`. Every green main run, like the
+  # public images; the deploy falls back to the sample-data image when it
+  # can't use it. Same trust check as build-web.
+  build-web-live-demo:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=live-demo
+            type=sha,format=long,prefix=live-demo-sha-
+
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/clinical/Dockerfile
+          platforms: linux/arm64
+          build-args: |
+            USE_MOCK=false
+            DEMO=true
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=web-live-demo
+          cache-to: type=gha,mode=max,scope=web-live-demo
+
   # The live preview images (docs/adr/0005): the same apps built with
   # USE_MOCK=false, tagged `live` and `live-sha-<commit>`. Only on a manual
   # run from main: the public demo's images and steps above never change.
@@ -197,7 +249,14 @@ jobs:
           cache-to: type=gha,mode=max,scope=platform-live
 
   deploy:
-    needs: [build-web, build-platform, build-web-live, build-platform-live]
+    needs:
+      [
+        build-web,
+        build-platform,
+        build-web-live-demo,
+        build-web-live,
+        build-platform-live,
+      ]
     runs-on: ubuntu-latest
     environment: preview
     # Set the repo variable DEPLOY_ENABLED=true once the instance is set up
@@ -220,19 +279,39 @@ jobs:
             *) echo "::error::Secret DEPLOY_HOST_FINGERPRINT is missing or not SHA256:... (deploy/README.md)"; exit 1 ;;
           esac
 
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+
+      # The live-mode override of this commit goes to the instance with the
+      # deploy (it holds no secret), so the host never runs a stale one.
+      - name: Bundle the demo's live-mode override
+        id: bundle
+        run: |
+          set -euo pipefail
+          b=$(base64 -w0 deploy/compose.demo-live.yml)
+          echo "value=$b" >> "$GITHUB_OUTPUT"
+
       - name: Pull and restart on the instance
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         env:
           # Short-lived and scoped to this repo's package; expires with the job.
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
+          # "success" only when the live-demo image was built on this run.
+          LIVE_DEMO_BUILD: ${{ needs.build-web-live-demo.result }}
+          # `mock` keeps the public demo on sample data (the fallback);
+          # anything else, or unset, runs it live when it can.
+          DEMO_MODE: ${{ vars.DEMO_MODE }}
+          DEMO_LIVE_BUNDLE: ${{ steps.bundle.outputs.value }}
           # "success" only when the platform image was built and pushed.
           PLATFORM_BUILD: ${{ needs.build-platform.result }}
           # "success" only on a manual run that built the live images.
           WEB_LIVE_BUILD: ${{ needs.build-web-live.result }}
           PLATFORM_LIVE_BUILD: ${{ needs.build-platform-live.result }}
         with:
-          envs: GHCR_TOKEN,GHCR_USER,PLATFORM_BUILD,WEB_LIVE_BUILD,PLATFORM_LIVE_BUILD
+          envs: GHCR_TOKEN,GHCR_USER,PLATFORM_BUILD,WEB_LIVE_BUILD,PLATFORM_LIVE_BUILD,LIVE_DEMO_BUILD,DEMO_MODE,DEMO_LIVE_BUNDLE
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -245,24 +324,80 @@ jobs:
 
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
-            docker compose pull web
-            docker compose up -d web
-
-            # Straight to the container, not through nginx: the home page
-            # must load, and a dead consultation link must be a real 404.
-            ok=0
-            for _ in $(seq 1 24); do
-              home=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/ || echo 000)
-              gone=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/c/x || echo 000)
-              if [ "$home" = 200 ] && [ "$gone" = 404 ]; then ok=1; break; fi
-              sleep 5
-            done
-            if [ "$ok" != 1 ]; then
-              echo "Demo unhealthy (home=$home, /c/x=$gone). Recent logs:"
-              docker compose logs --tail=120 web
-              exit 1
+            # The public demo: live mode (compose.demo-live.yml: the seeded
+            # demo backend over NATS) when it can, else sample data exactly
+            # as before. deploy/README.md, "Public demo in live mode".
+            printf '%s' "$DEMO_LIVE_BUNDLE" | base64 -d > compose.demo-live.yml.new
+            mv -f compose.demo-live.yml.new compose.demo-live.yml
+            mode=live
+            why=""
+            if [ "$(printf '%s' "${DEMO_MODE:-}" | tr '[:upper:]' '[:lower:]')" = mock ]; then why="repository variable DEMO_MODE=mock"
+            elif [ "$LIVE_DEMO_BUILD" != success ]; then why="no live-demo image on this run ($LIVE_DEMO_BUILD)"
+            elif ! [ -e /srv/mhai-backend/secrets/bff/nats-bff-clinical.nk ]; then why="no clinical NATS seed file from the backend"
+            elif ! docker network inspect mhai-bff >/dev/null 2>&1; then why="no mhai-bff network"
+            elif ! [ -f /srv/mhai-backend/demo/seeded ]; then why="the backend has not seeded the demo yet (/srv/mhai-backend/demo/seeded)"
             fi
-            echo "Demo healthy."
+            [ -z "$why" ] || mode=mock
+
+            mock_up() {
+              docker compose pull web
+              docker compose up -d web
+              # Straight to the container, not through nginx: the home page
+              # must load, and a dead consultation link must be a real 404.
+              ok=0
+              for _ in $(seq 1 24); do
+                home=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/ || echo 000)
+                gone=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/c/x || echo 000)
+                if [ "$home" = 200 ] && [ "$gone" = 404 ]; then ok=1; break; fi
+                sleep 5
+              done
+              if [ "$ok" != 1 ]; then
+                echo "Demo unhealthy (home=$home, /c/x=$gone). Recent logs:"
+                docker compose logs --tail=120 web
+                exit 1
+              fi
+              echo "Demo healthy (sample data)."
+            }
+
+            if [ "$mode" = live ]; then
+              # The live app's own session secret, made here once and kept;
+              # never printed. A new one would only sign everyone out.
+              if ! grep -q '^DEMO_LIVE_SESSION_SECRET=.' .env 2>/dev/null; then
+                ( umask 077; touch .env
+                  secret=$(openssl rand -base64 48 | tr -d '\n')
+                  [ "${#secret}" -ge 32 ] || { echo "::warning::could not make DEMO_LIVE_SESSION_SECRET"; exit 1; }
+                  printf 'DEMO_LIVE_SESSION_SECRET=%s\n' "$secret" >> .env ) \
+                  && echo "DEMO_LIVE_SESSION_SECRET generated"
+              fi
+              chmod 600 .env
+              live=(-f compose.yml -f compose.demo-live.yml)
+              # A config, pull or start that fails falls back too (below).
+              ok=0
+              signin=000 health=000
+              if ! { docker compose "${live[@]}" config --quiet &&
+                     docker compose "${live[@]}" pull web &&
+                     docker compose "${live[@]}" up -d web; }; then
+                echo "::warning::Live demo didn't start."
+              else
+              # The sign-in page loads, and the app is connected to NATS.
+              for _ in $(seq 1 24); do
+                signin=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/sign-in || echo 000)
+                health=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/api/health || echo 000)
+                if [ "$signin" = 200 ] && [ "$health" = 200 ]; then ok=1; break; fi
+                sleep 5
+              done
+              fi
+              if [ "$ok" = 1 ]; then
+                echo "Demo healthy (live mode: the seeded demo backend over NATS)."
+              else
+                echo "::warning::Live demo unhealthy (/sign-in=$signin, /api/health=$health); falling back to sample data. Recent logs:"
+                docker compose "${live[@]}" logs --tail=120 web || true
+                mock_up
+              fi
+            else
+              echo "Public demo on sample data: $why"
+              mock_up
+            fi
 
             # The platform app has its own folder and secret. Until that is
             # set up (deploy/README.md), or when its image didn't build, skip
