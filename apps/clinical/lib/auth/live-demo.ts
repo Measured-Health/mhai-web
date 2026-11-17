@@ -33,7 +33,11 @@ const account = (
  * so the live demo can't show the clinical app's refusal of it.
  */
 export const LIVE_DEMO_ACCOUNTS: readonly LiveDemoAccount[] = [
-  account("a.reyes@demo-hospital.example", "Clinician", "Signs straight in"),
+  account(
+    "a.reyes@demo-hospital.example",
+    "Clinician",
+    "Demo code shown on the next page",
+  ),
   account(
     "mfa.okafor@demo-hospital.example",
     "Clinician with two-step",

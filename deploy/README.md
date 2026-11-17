@@ -275,7 +275,7 @@ hospital. Never reuse them anywhere.
 
 | Account                 | Email                                     | Roles                     | What it shows                                                                            |
 | ----------------------- | ----------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------- |
-| Clinician               | `a.reyes@demo-hospital.example`           | clinician                 | signs straight in                                                                        |
+| Clinician               | `a.reyes@demo-hospital.example`           | clinician                 | two-step, demo code (the app asks every account for two-step)                            |
 | Clinician with two-step | `mfa.okafor@demo-hospital.example`        | clinician                 | the code step (demo code)                                                                |
 | New account             | `new.bello@demo-hospital.example`         | clinician                 | first sign-in steps (new password, terms)                                                |
 | New hospital admin      | `newadmin.okoro@demo-hospital.example`    | hospital admin            | first sign-in steps, two-step set-up                                                     |

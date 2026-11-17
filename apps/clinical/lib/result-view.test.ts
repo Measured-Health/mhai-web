@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ClinicalResultOut, Citation } from "./api/contract";
 import { FORBIDDEN_TERMS } from "./labels";
 import { FIXTURES } from "./api/fixtures";
 import {
+  DEMO_DRAFT,
   LOCAL_DRAFT,
   MASKED_NOTICE,
   resultKind,
@@ -364,6 +365,23 @@ describe("who drafted the answer (generated_by, core 1.10.0)", () => {
     expect(
       view({ route: "local", provider: null, provider_code: null }),
     ).toEqual({ label: LOCAL_DRAFT, notice: null });
+  });
+
+  describe("in the public demo's live build", () => {
+    afterEach(() => vi.unstubAllEnvs());
+    it("names the sample answers, not the own model", () => {
+      vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "false");
+      vi.stubEnv("NEXT_PUBLIC_DEMO", "true");
+      expect(view({ route: "local", provider: null })).toEqual({
+        label: DEMO_DRAFT,
+        notice: null,
+      });
+    });
+    it("keeps the own model's label in any other build", () => {
+      vi.stubEnv("NEXT_PUBLIC_USE_MOCK", "true");
+      vi.stubEnv("NEXT_PUBLIC_DEMO", "true");
+      expect(view({ route: "local", provider: null })?.label).toBe(LOCAL_DRAFT);
+    });
   });
 
   it("says local only when the reply says local, with no notice", () => {
