@@ -88,6 +88,8 @@ describe("DemoHint", () => {
       expect(screen.getByText(/Shared demo accounts/)).toBeVisible();
       expect(screen.getByText(/published on purpose/)).toBeVisible();
       expect(screen.getByText(/never type patient details/)).toBeVisible();
+      expect(screen.getByText(/The demo resets every few hours/)).toBeVisible();
+      expect(screen.getByText(/everyone is signed out/)).toBeVisible();
       expect(screen.queryByText(/Any email and password works/)).toBeNull();
     });
 

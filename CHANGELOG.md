@@ -45,6 +45,11 @@ All notable changes to this project are documented here. The format follows
     same-app link).
   - /reset-password reads for both a reset and an invite ("Choose your
     password").
+- **The live demo's sign-in helper says the demo resets every few hours**
+  (questions, corrections, passwords and two-step go back to how they
+  started, and everyone is signed out), to match the backend's scheduled
+  reset (mhai-multiagent deploy/README.md, "Public demo: the scheduled
+  reset").
 
 - **The public demo runs live** (deploy/README.md, "Public demo in live
   mode"): demo.measured-health.org signs in and asks through its BFF, over
