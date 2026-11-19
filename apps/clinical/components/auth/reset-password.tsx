@@ -89,7 +89,7 @@ export function ResetPassword() {
     error?.code === "link_expired"
       ? {
           title: "This link has expired or was already used.",
-          body: "Reset links work once, for 30 minutes. Invite links work for 7 days: ask your hospital admin for a new invite.",
+          body: "Reset links work once, for 30 minutes. Invite links work for 3 days: ask your hospital admin for a new invite.",
         }
       : error?.code === "weak_password"
         ? WEAK_COPY

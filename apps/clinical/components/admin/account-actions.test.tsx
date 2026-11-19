@@ -414,7 +414,7 @@ describe("AccountActions (core 1.24.0: step-up on every staff write)", () => {
     const { account, panel } = await open(id);
     expect(within(panel).getByText("Invited")).toBeInTheDocument();
     expect(
-      within(panel).getByText("Invite expires in 7 days"),
+      within(panel).getByText("Invite expires in 3 days"),
     ).toBeInTheDocument();
     expect(
       within(account).queryByRole("button", { name: "Send password reset" }),

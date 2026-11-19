@@ -740,13 +740,13 @@ describe("invites, resets, removal and reminders (core 1.33.0)", () => {
       can_review: false,
       sign_in: null,
       invited_at: new Date(ADMIN_NOW).toISOString(),
-      invite_expires_at: new Date(ADMIN_NOW + 7 * D).toISOString(),
+      invite_expires_at: new Date(ADMIN_NOW + 3 * D).toISOString(),
     });
     expect(link?.url).toBe("/reset-password?token=demo");
     expect((await a.listStaff()).map((s) => s.id)).toContain(row.id);
   });
 
-  it("an invite expires after 7 days and a new one starts again", async () => {
+  it("an invite expires after 3 days and a new one starts again", async () => {
     let t = ADMIN_NOW;
     const a = createMockAdmin({
       now: () => t,
@@ -780,7 +780,7 @@ describe("invites, resets, removal and reminders (core 1.33.0)", () => {
         .success,
     ).toBe(true);
     expect(again.staff.invite_expires_at).toBe(
-      new Date(t + 7 * D).toISOString(),
+      new Date(t + 3 * D).toISOString(),
     );
     // Removing an invited person cancels the invite.
     await a.removeStaff(id, GOOD);

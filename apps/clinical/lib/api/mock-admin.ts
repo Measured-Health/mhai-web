@@ -28,6 +28,7 @@ import {
   type UsagePeriod,
 } from "./admin-contract";
 import { ApiError } from "./errors";
+import { INVITE_DAYS } from "../admin/invite";
 import { auditEvents } from "./mock-audit";
 
 export const MOCK_HOSPITAL = "Havana Hospital";
@@ -36,7 +37,7 @@ const MIN = 60_000;
 const H = 60 * MIN;
 const D = 24 * H;
 /** Core's link lives (1.33.0). */
-const INVITE_MS = 7 * D;
+const INVITE_MS = INVITE_DAYS * D;
 /**
  * Addresses in use outside this hospital (a platform account, another
  * hospital's staff): core skips them as `not_available`.

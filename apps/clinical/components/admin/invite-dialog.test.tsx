@@ -36,7 +36,7 @@ async function openDialog(probe?: (qc: QueryClient) => void) {
     </>,
   );
   const dialog = await screen.findByRole("dialog", { name: "Invite staff" });
-  await within(dialog).findByText(/email invite that expires in 7 days/);
+  await within(dialog).findByText(/email invite that expires in 3 days/);
   return dialog;
 }
 async function paste(dialog: HTMLElement, text: string) {

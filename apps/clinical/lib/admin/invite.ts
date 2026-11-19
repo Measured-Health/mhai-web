@@ -4,7 +4,7 @@ import { EMAIL_RE } from "../email";
 /** At most this many people in one send (R8). */
 export const INVITE_MAX = 200;
 /** An invite link's life (core 1.33.0). */
-export const INVITE_DAYS = 7;
+export const INVITE_DAYS = 3;
 
 export type InviteLineStatus =
   "ok" | "invalid" | "duplicate" | "already_staff" | "domain_not_allowed";
