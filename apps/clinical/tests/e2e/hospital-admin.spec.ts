@@ -167,19 +167,26 @@ test("a new hospital admin sets a password and two-step, accepts the terms, then
   ).toHaveCount(0);
 });
 
-test("inviting staff says it isn't available yet (core 501)", async ({
+test("invite staff with your two-step code; the demo's link shows once", async ({
   page,
 }) => {
   await asHospitalAdmin(page);
-  await expect(page.getByRole("button", { name: "Invite staff" })).toHaveCount(
-    0,
-  );
-  await expect(
-    page.getByText(/Inviting staff: Not available yet/),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Measured Health creates staff accounts for now."),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Invite staff" }).click();
+  const invite = page.getByRole("dialog", { name: "Invite staff" });
+  await expect(invite.getByLabel("Work emails")).toBeFocused();
+  await invite.getByLabel("Work emails").fill("n.ade@havanahospital.org");
+  await invite.getByRole("button", { name: "Continue" }).click();
+  const confirm = page.getByRole("dialog", { name: "Send 1 invite?" });
+  await typeCode(page, "123456", confirm);
+  const result = page.getByRole("dialog", { name: "Invites sent" });
+  await expect(result.getByText(/shown only now/)).toBeVisible();
+  await expect(result.getByText(/\/reset-password\?token=/)).toBeVisible();
+  await result.getByRole("button", { name: "Done" }).click();
+  await expect(result).toHaveCount(0);
+  await expect(page.getByText(/token=/)).toHaveCount(0);
+  await expect(page).not.toHaveURL(/token=/);
+  await page.getByRole("button", { name: /^Invited · 1$/ }).click();
+  await expect(manage(page, "n.ade@havanahospital.org")).toBeVisible();
 });
 
 test("deactivate and reactivate, each with your two-step code", async ({
@@ -231,19 +238,34 @@ test("change someone's specialty with your two-step code", async ({ page }) => {
   await expect(confirm).toHaveCount(0);
 });
 
-test("removing, resets and reminders say they aren't available yet (core 501)", async ({
+test("password reset, then remove, each with your two-step code", async ({
   page,
 }) => {
   await asHospitalAdmin(page);
   await manage(page, "Dr. Tunde Bello").click();
   const p = panel(page);
   const account = p.getByRole("region", { name: "Account" });
-  await expect(account.getByText("Not available yet")).toHaveCount(3);
-  await expect(account.getByText(/Deactivate it instead/)).toBeVisible();
-  for (const name of ["Remove", "Send password reset", "Reset two-step"])
-    await expect(
-      account.getByRole("button", { name, exact: true }),
-    ).toHaveCount(0);
+  await expect(account.getByText("Not available yet")).toHaveCount(0);
+  await account
+    .getByRole("button", { name: "Send password reset", exact: true })
+    .click();
+  await typeCode(
+    page,
+    "123456",
+    page.getByRole("dialog", { name: "Send a password reset?" }),
+  );
+  const shared = page.getByRole("dialog", { name: "Reset link ready" });
+  await expect(shared.getByText(/shown only now/)).toBeVisible();
+  await shared.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByText(/token=/)).toHaveCount(0);
+  await account.getByRole("button", { name: "Remove", exact: true }).click();
+  const confirm = page.getByRole("dialog", { name: "Remove this account?" });
+  await expect(
+    confirm.getByRole("button", { name: "Keep account" }),
+  ).toBeFocused();
+  await typeCode(page, "123456", confirm);
+  await expect(page.getByText("Account removed")).toBeVisible();
+  await expect(manage(page, "Dr. Tunde Bello")).toHaveCount(0);
 });
 
 test("you can't deactivate yourself or give yourself a role", async ({
@@ -373,7 +395,7 @@ test("the activity log shows core's events and exports a CSV", async ({
   await expect(page.getByText("Activity exported")).toBeVisible();
 });
 
-test("review oversight without clinical content; reminding and assigning aren't available yet", async ({
+test("review oversight without clinical content; remind and assign reviewers", async ({
   page,
 }) => {
   await asHospitalAdmin(page);
@@ -381,12 +403,18 @@ test("review oversight without clinical content; reminding and assigning aren't 
   await page.getByRole("link", { name: /^Review oversight/ }).click();
   await expect(page).toHaveURL(/\/admin\/activity\/oversight$/);
   await expect(page.getByText("#C-117")).toBeVisible();
-  await expect(
-    page.getByText(/Reminding or assigning reviewers: not available yet/),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /Remind reviewers|Assign a reviewer/ }),
-  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: /^Remind reviewers about C-117/ })
+    .click();
+  await expect(page.getByText("Reviewers reminded")).toBeVisible();
+  await page
+    .getByRole("button", { name: /^Assign a reviewer to C-118/ })
+    .click();
+  const assign = page.getByRole("dialog", { name: "Assign a reviewer" });
+  await assign.getByRole("radio", { name: /Dr. Udo/ }).check();
+  await assign.getByRole("button", { name: "Assign" }).click();
+  await expect(page.getByText("Reviewer assigned")).toBeVisible();
+  await expect(page.getByText("Assigned to Dr. Udo")).toBeVisible();
   await expect(
     page.getByText("Only clinicians can approve or reject corrections."),
   ).toBeVisible();

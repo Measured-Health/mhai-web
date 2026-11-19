@@ -8,7 +8,12 @@ import {
   attentionLabel,
   filterStaff,
   guardFor,
+  inviteExpired,
+  inviteNote,
+  isActiveAdmin,
+  isInvited,
   lastActiveLabel,
+  nameOf,
   policyBroken,
   rolesText,
   staffCounts,
@@ -20,24 +25,76 @@ const D = 86_400_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 describe("staffState", () => {
-  it("reads status and problems as the three states (core has no invites)", () => {
-    expect(staffState(makeStaff())).toBe("active");
-    expect(staffState(makeStaff({ issues: ["mfa_not_set_up"] }))).toBe(
+  it("reads an invite from invited_at, needing attention once its link has expired or was revoked (core 1.33.0)", () => {
+    const invited = makeStaff({
+      sign_in: null,
+      invited_at: iso(NOW - D),
+      invite_expires_at: iso(NOW + 6 * D),
+    });
+    expect(staffState(invited, NOW)).toBe("invited");
+    expect(statusText(invited, NOW)).toBe("Invited");
+    expect(inviteNote(invited, NOW)).toBe("Invite expires in 6 days");
+    expect(
+      inviteNote({ ...invited, invite_expires_at: iso(NOW + 3_600_000) }, NOW),
+    ).toBe("Invite expires in 1 day");
+    // Expired: a past expiry; revoked: no expiry at all.
+    for (const at of [iso(NOW - 1), null]) {
+      const expired = { ...invited, invite_expires_at: at };
+      expect(inviteExpired(expired, NOW)).toBe(true);
+      expect(staffState(expired, NOW)).toBe("attention");
+      expect(attentionLabel(expired, NOW)).toBe("Invite expired");
+      expect(inviteNote(expired, NOW)).toBe("Invite expired. Send a new one.");
+    }
+    expect(inviteExpired(invited, NOW)).toBe(false);
+    // Core sends no invited status: an invite is `active` with `invited_at`.
+    expect(isInvited(invited)).toBe(true);
+    expect(isInvited(makeStaff())).toBe(false);
+    expect(isInvited({ ...invited, status: "deactivated" })).toBe(false);
+    // An invited admin isn't counted as an active admin.
+    const invitedAdmin = { ...invited, roles: ["hospital_admin" as const] };
+    expect(isActiveAdmin(invitedAdmin)).toBe(false);
+    expect(inviteNote(makeStaff(), NOW)).toBeNull();
+  });
+
+  it("falls back to the email when core has no name yet", () => {
+    expect(nameOf(makeStaff({ full_name: " ", email: "a@x.org" }))).toBe(
+      "a@x.org",
+    );
+    expect(nameOf(makeStaff())).toBe("Dr. Test Person");
+  });
+
+  it("guards removing and resetting your own account", () => {
+    const you = makeStaff({ is_you: true });
+    for (const a of ["remove", "password-reset", "reset-mfa"] as const)
+      expect(guardFor(a, you, [you]).ok).toBe(false);
+    const admin = makeStaff({ roles: ["hospital_admin"] });
+    expect(guardFor("remove", admin, [admin])).toEqual({
+      ok: false,
+      reason: LAST_ADMIN,
+    });
+    // A reset never leaves the hospital without an admin.
+    expect(guardFor("password-reset", admin, [admin]).ok).toBe(true);
+  });
+
+  it("reads status and problems as the states", () => {
+    expect(staffState(makeStaff(), NOW)).toBe("active");
+    expect(staffState(makeStaff({ issues: ["mfa_not_set_up"] }), NOW)).toBe(
       "attention",
     );
     expect(
       staffState(
         makeStaff({ status: "deactivated", issues: ["mfa_not_set_up"] }),
+        NOW,
       ),
     ).toBe("deactivated");
   });
 
   it("says what needs attention in words", () => {
-    expect(attentionLabel(makeStaff({ issues: ["mfa_not_set_up"] }))).toBe(
+    expect(attentionLabel(makeStaff({ issues: ["mfa_not_set_up"] }), NOW)).toBe(
       "Two-step not set up",
     );
-    expect(statusText(makeStaff())).toBe("Active");
-    expect(statusText(makeStaff({ status: "deactivated" }))).toBe(
+    expect(statusText(makeStaff(), NOW)).toBe("Active");
+    expect(statusText(makeStaff({ status: "deactivated" }), NOW)).toBe(
       "Deactivated",
     );
   });
@@ -62,37 +119,51 @@ describe("filters and search", () => {
       issues: ["mfa_not_set_up"],
     }),
     makeStaff({ id: "d", full_name: "Dr. James Eze", status: "deactivated" }),
+    makeStaff({
+      id: "e",
+      full_name: "e.new@x.org",
+      sign_in: null,
+      invited_at: iso(NOW - D),
+      invite_expires_at: iso(NOW + 6 * D),
+    }),
   ];
 
   it("counts each filter", () => {
-    expect(staffCounts(list)).toEqual({
-      all: 4,
+    expect(staffCounts(list, NOW)).toEqual({
+      all: 5,
       active: 2,
+      invited: 1,
       attention: 1,
       deactivated: 1,
     });
-    expect(STAFF_FILTERS.map((f) => f.id)).not.toContain("invited");
+    expect(STAFF_FILTERS.map((f) => f.id)).toContain("invited");
   });
 
   it("filters, sorts by name without the title, and ignores accents and case", () => {
-    expect(filterStaff(list, "all", "").map((s) => s.id)).toEqual([
+    expect(filterStaff(list, "all", "", NOW).map((s) => s.id)).toEqual([
+      "e",
       "b",
       "d",
       "c",
       "a",
     ]);
-    expect(filterStaff(list, "active", "").map((s) => s.id)).toEqual([
+    expect(filterStaff(list, "invited", "", NOW).map((s) => s.id)).toEqual([
+      "e",
+    ]);
+    expect(filterStaff(list, "active", "", NOW).map((s) => s.id)).toEqual([
       "b",
       "a",
     ]);
-    expect(filterStaff(list, "all", "zoe abaro").map((s) => s.id)).toEqual([
+    expect(filterStaff(list, "all", "zoe abaro", NOW).map((s) => s.id)).toEqual(
+      ["a"],
+    );
+    expect(filterStaff(list, "all", "PAEDI", NOW).map((s) => s.id)).toEqual([
       "a",
     ]);
-    expect(filterStaff(list, "all", "PAEDI").map((s) => s.id)).toEqual(["a"]);
-    expect(filterStaff(list, "all", "admin.nwosu").map((s) => s.id)).toEqual([
-      "b",
-    ]);
-    expect(filterStaff(list, "attention", "zoe")).toEqual([]);
+    expect(
+      filterStaff(list, "all", "admin.nwosu", NOW).map((s) => s.id),
+    ).toEqual(["b"]);
+    expect(filterStaff(list, "attention", "zoe", NOW)).toEqual([]);
   });
 });
 

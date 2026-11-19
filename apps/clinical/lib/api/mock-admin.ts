@@ -3,16 +3,20 @@ import {
   createStepUp,
   DEMO_EMAILS,
   getDemoStepUp,
+  MOCK_RESET_TOKEN,
   type StepUp,
 } from "../auth/mock";
-import type { AdminClient, StaffAction } from "./admin";
+import { EMAIL_RE } from "../email";
+import type { AdminClient, LinkAction, StaffAction } from "./admin";
 import {
   loosensSignIn,
   type ActivityEventOut,
   type ActivityType,
   type GuardedOut,
   type HospitalSettingsOut,
+  type InviteOut,
   type OversightItemOut,
+  type ShareLinkOut,
   type SignInMethod,
   type StaffIssue,
   type StaffOut,
@@ -24,6 +28,7 @@ import {
   type UsagePeriod,
 } from "./admin-contract";
 import { ApiError } from "./errors";
+import { INVITE_DAYS } from "../admin/invite";
 import { auditEvents } from "./mock-audit";
 
 export const MOCK_HOSPITAL = "Havana Hospital";
@@ -31,6 +36,17 @@ export const ACTIVITY_PAGE_SIZE = 50;
 const MIN = 60_000;
 const H = 60 * MIN;
 const D = 24 * H;
+/** Core's link lives (1.33.0). */
+const INVITE_MS = INVITE_DAYS * D;
+/**
+ * Addresses in use outside this hospital (a platform account, another
+ * hospital's staff): core skips them as `not_available`.
+ */
+export const IN_USE_ELSEWHERE: ReadonlySet<string> = new Set([
+  DEMO_EMAILS.platformAdmin,
+  "f.ade@another-hospital.example",
+]);
+const RESET_MS = 30 * MIN;
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const copy = <T>(v: T): T => structuredClone(v);
@@ -52,11 +68,15 @@ type Seed = {
 
 /**
  * Reviewing as core derives it (1.24.0): an active clinician reviews every
- * specialty; there is no reviewer assignment.
+ * specialty (an admin can assign one reviewer to a correction, 1.33.0).
  */
 const derived = (s: StaffOut): StaffOut => ({
   ...s,
-  can_review: s.status === "active" && s.roles.includes("clinician"),
+  // Someone still invited hasn't joined: no reviewing yet.
+  can_review:
+    s.status === "active" &&
+    s.invited_at === null &&
+    s.roles.includes("clinician"),
   review_specialties: [],
 });
 
@@ -77,7 +97,6 @@ function person(now: number, p: Seed): StaffOut {
     sign_in: p.signIn !== undefined ? p.signIn : "sso",
     last_active_at: ago === null ? null : iso(now - ago),
     joined_at: iso(now - 200 * D),
-    // Core has no invites.
     invited_at: null,
     invite_expires_at: null,
     is_you: false,
@@ -85,7 +104,7 @@ function person(now: number, p: Seed): StaffOut {
   });
 }
 
-/** 12 synthetic people at Havana Hospital (core has no invites). Names are invented. */
+/** 12 synthetic people at Havana Hospital; an invite adds more. Names are invented. */
 function seedStaff(now: number): StaffOut[] {
   return [
     {
@@ -643,20 +662,37 @@ export function createMockAdmin({
       is_you: email !== null && s.email.toLowerCase() === email,
     }));
   };
+  /**
+   * The demo deployment's link: core hands it back because no email goes
+   * out. Relative, like core's when it has no base address.
+   */
+  const demoLink = (ms: number): ShareLinkOut => ({
+    url: `/reset-password?token=${MOCK_RESET_TOKEN}`,
+    expires_at: iso(now() + ms),
+  });
+  // Core's limits: one two-step reminder per person a day, one reviewer
+  // reminder per correction an hour.
+  const remindedStaff = new Map<string, number>();
+  const remindedCorrection = new Map<string, number>();
   const find = (id: string) =>
     staff.find((s) => s.id === id) ?? fail(404, "not_found");
   const isYou = async (s: StaffOut) =>
     s.email.toLowerCase() === (await youEmail());
-  /** Core counts only active admins with two-step on. */
+  /** An invited person is `active` with `invited_at` set (core 1.33.0). */
+  const invited = (s: StaffOut) =>
+    s.status === "active" && s.invited_at !== null;
+  /** Core counts only active admins with two-step on, never an invite. */
   const activeAdmins = () =>
     staff.filter(
       (s) =>
         s.status === "active" &&
+        !invited(s) &&
         s.roles.includes("hospital_admin") &&
         !s.issues.includes("mfa_not_set_up"),
     ).length;
   const isLastAdmin = (s: StaffOut) =>
     s.status === "active" &&
+    !invited(s) &&
     s.roles.includes("hospital_admin") &&
     !s.issues.includes("mfa_not_set_up") &&
     activeAdmins() <= 1;
@@ -795,10 +831,132 @@ export function createMockAdmin({
           }),
         );
       }
+      if (action === "reset-mfa") {
+        // Only an active password account with two-step set up.
+        if (
+          s.status !== "active" ||
+          invited(s) ||
+          s.sign_in === "sso" ||
+          s.issues.includes("mfa_not_set_up")
+        )
+          fail(409, "conflict");
+        await checkCode(auth);
+        return reply(
+          save({
+            ...s,
+            sign_in: "password",
+            issues: [...s.issues, "mfa_not_set_up"],
+          }),
+        );
+      }
       if (s.status !== "deactivated") fail(409, "conflict");
       await checkCode(auth);
       await log("admin", "reactivated", { target });
       return reply(save({ ...s, status: "active" }));
+    },
+
+    async sendLink(id, action: LinkAction, auth) {
+      await wait();
+      const s = find(id);
+      if (action === "password-reset") {
+        if (await isYou(s)) fail(403, "self_change");
+        if (s.status !== "active" || invited(s)) fail(409, "conflict");
+        await checkCode(auth);
+        return { staff: await reply(s), link: demoLink(RESET_MS) };
+      }
+      if (!invited(s)) fail(409, "conflict");
+      await checkCode(auth);
+      const next = save({
+        ...s,
+        invite_expires_at: iso(now() + INVITE_MS),
+      });
+      return { staff: await reply(next), link: demoLink(INVITE_MS) };
+    },
+
+    async remindStaff(id) {
+      await wait();
+      const s = find(id);
+      if (
+        s.status !== "active" ||
+        invited(s) ||
+        !s.issues.includes("mfa_not_set_up")
+      )
+        fail(409, "conflict");
+      const last = remindedStaff.get(id);
+      if (last !== undefined && now() - last < D) fail(429, "rate_limited");
+      remindedStaff.set(id, now());
+      return reply(s);
+    },
+
+    async removeStaff(id, auth) {
+      await wait();
+      const s = find(id);
+      if (await isYou(s)) fail(403, "self_change");
+      if (isLastAdmin(s)) fail(409, "last_admin");
+      await checkCode(auth);
+      staff = staff.filter((x) => x.id !== id);
+    },
+
+    async inviteStaff(p, auth) {
+      await wait();
+      const roles = p.roles as string[];
+      if (
+        !Array.isArray(p.emails) ||
+        p.emails.length < 1 ||
+        p.emails.length > 200 ||
+        roles.length < 1 ||
+        roles.length > 2 ||
+        new Set(roles).size !== roles.length
+      )
+        fail(422, "validation_failed");
+      // Analyst is granted after they join.
+      if (roles.includes("analyst")) fail(422, "not_eligible");
+      if (roles.some((r) => r !== "clinician" && r !== "hospital_admin"))
+        fail(422, "validation_failed");
+      await checkCode(auth);
+      const out: InviteOut = { invited: [], skipped: [] };
+      const seen = new Set<string>();
+      for (const raw of p.emails) {
+        const email = raw.trim().toLowerCase();
+        if (!EMAIL_RE.test(email))
+          out.skipped.push({ email: raw, reason: "invalid_email" });
+        else if (seen.has(email))
+          out.skipped.push({ email, reason: "duplicate" });
+        else if (staff.some((s) => s.email.toLowerCase() === email))
+          out.skipped.push({ email, reason: "already_staff" });
+        else if (IN_USE_ELSEWHERE.has(email))
+          out.skipped.push({ email, reason: "not_available" });
+        else {
+          seen.add(email);
+          const row = derived({
+            id: `s-invite-${nextId++}`,
+            // Core knows only the address until they join.
+            full_name: email,
+            display_name: email,
+            email,
+            roles: [...p.roles],
+            specialty: p.specialty ?? null,
+            can_review: false,
+            review_specialties: [],
+            // Core: active, with `invited_at` set and no sign-in yet.
+            status: "active",
+            issues: [],
+            sign_in: null,
+            last_active_at: null,
+            joined_at: null,
+            invited_at: iso(now()),
+            invite_expires_at: iso(now() + INVITE_MS),
+            is_you: false,
+            version: 1,
+          });
+          staff = [...staff, row];
+          out.invited.push({
+            staff: await reply(row),
+            link: demoLink(INVITE_MS),
+          });
+        }
+      }
+      return out;
     },
 
     async getSettings() {
@@ -879,15 +1037,14 @@ export function createMockAdmin({
 
     async getOversight() {
       await wait();
-      // Core has no reviewer assignment or reminders.
       const items: OversightItemOut[] = corrections.map((c) => ({
         id: c.id,
         ref: c.ref,
         suggested_by: copy(c.suggested_by),
         specialty: c.specialty,
         submitted_at: c.submitted_at,
-        assigned_to: null,
-        reminded_at: null,
+        assigned_to: c.assigned_to ? copy(c.assigned_to) : null,
+        reminded_at: c.reminded_at,
         eligible_reviewers: reviewersFor(c).length,
       }));
       const reviewers = settings.specialties
@@ -918,6 +1075,29 @@ export function createMockAdmin({
         display_name: s.display_name,
         specialty: s.specialty,
       }));
+    },
+
+    async remindReviewers(id) {
+      await wait();
+      const c = findCorrection(id);
+      if (!c.assigned_to && reviewersFor(c).length === 0)
+        fail(422, "no_recipients");
+      const last = remindedCorrection.get(id);
+      if (last !== undefined && now() - last < H) fail(429, "rate_limited");
+      remindedCorrection.set(id, now());
+      c.reminded_at = iso(now());
+    },
+
+    async assignReviewer(id, staffId) {
+      await wait();
+      const c = findCorrection(id);
+      if (staffId === null) {
+        c.assigned_to = null;
+        return;
+      }
+      const r = reviewersFor(c).find((s) => s.id === staffId);
+      if (!r) fail(422, "not_eligible");
+      c.assigned_to = who(r!.display_name);
     },
   };
 }

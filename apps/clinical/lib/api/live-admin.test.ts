@@ -24,7 +24,7 @@ const sample = mockAdminAs(DEMO_EMAILS.director);
 const staff = makeStaff();
 const usage = () => sample.getUsage("this_month");
 
-describe("live admin client (core 1.24.0)", () => {
+describe("live admin client (core 1.33.0)", () => {
   it("reads through the hospital routes", async () => {
     json([]);
     await client().listStaff();
@@ -60,12 +60,29 @@ describe("live admin client (core 1.24.0)", () => {
     await expect(client().listActivity({})).resolves.toEqual(page);
   });
 
+  it("reads an invited person as core sends one: active, with invite dates", async () => {
+    const invited = {
+      ...staff,
+      status: "active",
+      sign_in: null,
+      joined_at: null,
+      invited_at: "2026-10-09T10:00:00Z",
+      invite_expires_at: "2026-10-16T10:00:00Z",
+    };
+    json([invited, { ...invited, id: "s-revoked", invite_expires_at: null }]);
+    await expect(client().listStaff()).resolves.toHaveLength(2);
+  });
+
   it.each([
     ["an unknown key", [{ ...staff, nickname: "x" }]],
-    ["an invited person", [{ ...staff, status: "invited" }]],
-    ["an invite date", [{ ...staff, invited_at: "2026-10-16T10:00:00Z" }]],
+    ["an unknown status", [{ ...staff, status: "pending" }]],
+    // Core adds no status or issue for invites (core 1.33.0).
+    ["an invited status", [{ ...staff, status: "invited" }]],
+    ["an expired-invite issue", [{ ...staff, issues: ["invite_expired"] }]],
+    ["an unknown issue", [{ ...staff, issues: ["locked"] }]],
+    ["an invite date that isn't a date", [{ ...staff, invited_at: "soon" }]],
+    ["a link in the list", [{ ...staff, link: null }]],
     ["reviewing by specialty", [{ ...staff, review_specialties: ["Surgery"] }]],
-    ["an expired invite", [{ ...staff, issues: ["invite_expired"] }]],
     ["a missing field", [{ ...staff, version: undefined }]],
     ["no list at all", { staff: [] }],
   ])("refuses a staff list with %s (502)", async (_n, body) => {
@@ -165,6 +182,190 @@ describe("live admin client (core 1.24.0)", () => {
     await client().staffAction("s-1", "reactivate", CODE);
     expect(call(2)[0]).toBe("/api/v1/hospital/staff/s-1/reactivate");
     expect(call(2)[1].body).toBe(JSON.stringify({ mfa_code: CODE.mfaCode }));
+  });
+
+  it("sends a reset or a new invite with the code, and keeps the link apart from the row", async () => {
+    const link = {
+      url: "/reset-password?token=abc",
+      expires_at: "2026-10-16T10:30:00Z",
+    };
+    json({ ...staff, link });
+    const r = await client().sendLink("s 1", "password-reset", CODE, {
+      idempotencyKey: "k-1",
+    });
+    expect(r).toEqual({ staff, link });
+    expect(r.staff).not.toHaveProperty("link");
+    expect(call()).toEqual([
+      "/api/v1/hospital/staff/s%201/password-reset",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ mfa_code: CODE.mfaCode }),
+        headers: expect.objectContaining({ "Idempotency-Key": "k-1" }),
+      }),
+    ]);
+    json({ ...staff, link: null });
+    expect(await client().sendLink("s-1", "resend-invite", CODE)).toEqual({
+      staff,
+      link: null,
+    });
+    expect(call(1)[0]).toBe("/api/v1/hospital/staff/s-1/resend-invite");
+    json(staff);
+    await client().staffAction("s-1", "reset-mfa", CODE);
+    expect(call(2)[0]).toBe("/api/v1/hospital/staff/s-1/reset-mfa");
+    expect(call(2)[1].body).toBe(JSON.stringify({ mfa_code: CODE.mfaCode }));
+  });
+
+  it.each([
+    ["no link", { ...staff }],
+    [
+      "a link to another site's path",
+      {
+        ...staff,
+        link: { url: "//evil.test/x", expires_at: "2026-10-16T10:30:00Z" },
+      },
+    ],
+    [
+      "a script link",
+      {
+        ...staff,
+        link: {
+          url: "javascript:alert(1)",
+          expires_at: "2026-10-16T10:30:00Z",
+        },
+      },
+    ],
+    [
+      "a link with an extra key",
+      {
+        ...staff,
+        link: {
+          url: "/reset-password?token=a",
+          expires_at: "2026-10-16T10:30:00Z",
+          token: "a",
+        },
+      },
+    ],
+    [
+      "a link without an end",
+      { ...staff, link: { url: "/reset-password?token=a" } },
+    ],
+  ])("refuses a reply with %s (502)", async (_n, body) => {
+    json(body);
+    await expect(
+      client().sendLink("s-1", "password-reset", CODE),
+    ).rejects.toEqual(bad);
+  });
+
+  it("accepts a full https link", async () => {
+    const link = {
+      url: "https://clinical.example.org/reset-password?token=abc",
+      expires_at: "2026-10-16T10:30:00Z",
+    };
+    json({ ...staff, link });
+    expect(
+      (await client().sendLink("s-1", "password-reset", CODE)).link,
+    ).toEqual(link);
+  });
+
+  it("sends the two-step reminder without a code", async () => {
+    json(staff);
+    await client().remindStaff("s-1", { idempotencyKey: "k" });
+    expect(call()[0]).toBe("/api/v1/hospital/staff/s-1/remind");
+    expect(call()[1]).toMatchObject({ method: "POST", body: "{}" });
+  });
+
+  it("removes with a DELETE that carries the code, and takes a 204", async () => {
+    reply(() => new Response(null, { status: 204 }));
+    await expect(
+      client().removeStaff("s 1", CODE, { idempotencyKey: "k" }),
+    ).resolves.toBeUndefined();
+    expect(call()).toEqual([
+      "/api/v1/hospital/staff/s%201",
+      expect.objectContaining({
+        method: "DELETE",
+        body: JSON.stringify({ mfa_code: CODE.mfaCode }),
+      }),
+    ]);
+  });
+
+  it("invites with the code and splits each invited person from their link", async () => {
+    const invitedRow = {
+      ...staff,
+      status: "active",
+      sign_in: null,
+      joined_at: null,
+      invited_at: "2026-10-16T10:00:00Z",
+      invite_expires_at: "2026-10-23T10:00:00Z",
+    };
+    const link = {
+      url: "/reset-password?token=abc",
+      expires_at: "2026-10-23T10:00:00Z",
+    };
+    json({
+      invited: [{ ...invitedRow, link }],
+      skipped: [{ email: "b@x.org", reason: "already_staff" }],
+    });
+    const r = await client().inviteStaff(
+      { emails: ["a@x.org", "b@x.org"], roles: ["clinician"], specialty: null },
+      CODE,
+      { idempotencyKey: "k" },
+    );
+    expect(r).toEqual({
+      invited: [{ staff: invitedRow, link }],
+      skipped: [{ email: "b@x.org", reason: "already_staff" }],
+    });
+    expect(call()).toEqual([
+      "/api/v1/hospital/staff/invites",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          emails: ["a@x.org", "b@x.org"],
+          roles: ["clinician"],
+          specialty: null,
+          mfa_code: CODE.mfaCode,
+        }),
+      }),
+    ]);
+    const elsewhere = {
+      invited: [],
+      skipped: [{ email: "c@x.org", reason: "not_available" }],
+    };
+    json(elsewhere);
+    await expect(
+      client().inviteStaff({ emails: ["c@x.org"], roles: ["clinician"] }, CODE),
+    ).resolves.toEqual(elsewhere);
+    json({
+      invited: [],
+      skipped: [{ email: "x", reason: "domain_not_allowed" }],
+    });
+    await expect(
+      client().inviteStaff({ emails: ["x"], roles: ["clinician"] }, CODE),
+    ).rejects.toEqual(bad);
+  });
+
+  it("reminds a correction's reviewers and assigns or clears one", async () => {
+    reply(() => new Response(null, { status: 204 }));
+    await client().remindReviewers("c 1", { idempotencyKey: "k" });
+    await client().assignReviewer("c-1", "s-2");
+    await client().assignReviewer("c-1", null);
+    expect(fetchImpl.mock.calls.map((c) => [c[0], c[1]?.body])).toEqual([
+      ["/api/v1/hospital/corrections/c%201/remind", "{}"],
+      ["/api/v1/hospital/corrections/c-1/assign", '{"staff_id":"s-2"}'],
+      ["/api/v1/hospital/corrections/c-1/assign", '{"staff_id":null}'],
+    ]);
+  });
+
+  it.each([
+    [503, "no_delivery"],
+    [410, "invalid_token"],
+    [501, "not_implemented"],
+    [409, "conflict"],
+    [429, "rate_limited"],
+  ])("passes a new refusal through as %i %s", async (status, code) => {
+    reply(() => Response.json({ code }, { status }));
+    await expect(
+      client().sendLink("s-1", "resend-invite", CODE),
+    ).rejects.toMatchObject({ status, code });
   });
 
   it("sends the code with a settings edit only when it is given", async () => {

@@ -227,24 +227,6 @@ describe("AccountActions (core 1.24.0: step-up on every staff write)", () => {
     expect(await screen.findByText("Backup codes left: 7")).toBeInTheDocument();
   });
 
-  it("says password and two-step resets and removing aren't available yet, and what to do instead (core 501)", async () => {
-    const { account } = await open("s-bello");
-    for (const name of [
-      "Send password reset",
-      "Reset two-step",
-      "Remove",
-      "Send a new invite",
-    ])
-      expect(within(account).queryByRole("button", { name })).toBeNull();
-    expect(within(account).getAllByText("Not available yet")).toHaveLength(3);
-    expect(
-      within(account).getByText(/Deactivate it instead/),
-    ).toBeInTheDocument();
-    expect(
-      within(account).getByText(/Measured Health support can reset a password/),
-    ).toBeInTheDocument();
-  });
-
   it("explains why a hospital-account person has no password actions", async () => {
     const { account } = await open("s-okafor");
     expect(within(account).queryByText("Password reset")).toBeNull();
@@ -255,14 +237,202 @@ describe("AccountActions (core 1.24.0: step-up on every staff write)", () => {
     ).toBeInTheDocument();
   });
 
-  it("the policy warning offers no reminder: core can't send one yet", async () => {
-    const { panel } = await open("s-mensah");
+  it("sends a password reset with your code and shows the demo's link once, then forgets it", async () => {
+    let qc!: QueryClient;
+    function Probe() {
+      qc = useQueryClient();
+      return null;
+    }
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const send = vi.spyOn(holder.client, "sendLink");
+    renderAdmin(
+      <>
+        <StaffPanel staffId="s-bello" onClose={onClose} />
+        <Probe />
+      </>,
+    );
+    const panel = await screen.findByRole("dialog", { name: "Staff member" });
+    await userEvent.click(
+      await within(panel).findByRole("button", { name: "Send password reset" }),
+    );
+    const dialog = confirmIn("Send a password reset?");
     expect(
-      await within(panel).findByText("Two-step verification isn't set up"),
+      within(dialog).getByText(/valid for 30 minutes/),
+    ).toBeInTheDocument();
+    await enterCode(dialog, MOCK_CODE);
+    const shared = await screen.findByRole("dialog", {
+      name: "Reset link ready",
+    });
+    expect(send).toHaveBeenCalledWith(
+      "s-bello",
+      "password-reset",
+      { mfaCode: MOCK_CODE },
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+    // A relative link is shown and copied as a full address.
+    const link = within(shared).getByText(/\/reset-password\?token=demo$/);
+    expect(link.textContent).toMatch(/^https?:\/\//);
+    expect(within(shared).getByText(/shown only now/)).toBeInTheDocument();
+    await userEvent.click(
+      within(shared).getByRole("button", {
+        name: "Copy the link for t.bello@havanahospital.org",
+      }),
+    );
+    expect(writeText).toHaveBeenCalledWith(link.textContent);
+    expect(await within(shared).findByText("Copied")).toBeInTheDocument();
+    // Never in the caches, the address or storage.
+    const cached = () =>
+      JSON.stringify([
+        qc
+          .getQueryCache()
+          .getAll()
+          .map((q) => q.state.data),
+        qc
+          .getMutationCache()
+          .getAll()
+          .map((m) => m.state.data),
+      ]);
+    await waitFor(() => expect(cached()).not.toMatch(/token=/));
+    expect(window.location.href).not.toMatch(/token=/);
+    expect(JSON.stringify({ ...localStorage, ...sessionStorage })).not.toMatch(
+      /token=/,
+    );
+    await userEvent.click(within(shared).getByRole("button", { name: "Done" }));
+    expect(screen.queryByText(/token=demo/)).toBeNull();
+  });
+
+  it("says the reset link was sent when core emails it (no link back)", async () => {
+    const real = holder.client.sendLink.bind(holder.client);
+    vi.spyOn(holder.client, "sendLink").mockImplementation(async (...a) => ({
+      ...(await real(...a)),
+      link: null,
+    }));
+    const { account } = await open("s-bello");
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Send password reset" }),
+    );
+    await enterCode(confirmIn("Send a password reset?"), MOCK_CODE);
+    expect(await screen.findByText("Reset link sent")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Reset link ready" }),
+    ).toBeNull();
+  });
+
+  it.each([
+    [new ApiError(503, "no_delivery"), "MHAI can't send emails yet"],
+    [new ApiError(501, "not_implemented"), "Not available yet"],
+    [new ApiError(429, "rate_limited"), "Too many tries for this person"],
+  ])("says plainly when a reset can't be sent (%s)", async (err, title) => {
+    vi.spyOn(holder.client, "sendLink").mockRejectedValue(err);
+    const { account } = await open("s-bello");
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Send password reset" }),
+    );
+    const dialog = confirmIn("Send a password reset?");
+    await enterCode(dialog, MOCK_CODE);
+    expect(await within(dialog).findByText(title)).toBeInTheDocument();
+    expect(dialog.textContent).not.toMatch(
+      /no_delivery|not_implemented|503|501/,
+    );
+  });
+
+  it("resets two-step with your code; they then need to set it up", async () => {
+    const { account, panel } = await open("s-bello");
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Reset two-step" }),
+    );
+    await enterCode(confirmIn("Reset two-step verification?"), MOCK_CODE);
+    expect(await screen.findByText("Two-step reset")).toBeInTheDocument();
+    expect(
+      await within(panel).findByText("Two-step not set up"),
+    ).toBeInTheDocument();
+    // Nothing to reset now: a reminder instead.
+    expect(
+      within(account).queryByRole("button", { name: "Reset two-step" }),
+    ).toBeNull();
+  });
+
+  it("sends a two-step reminder without a code, once a day", async () => {
+    const remind = vi.spyOn(holder.client, "remindStaff");
+    const { account } = await open("s-mensah");
+    const button = within(account).getByRole("button", {
+      name: "Send a reminder",
+    });
+    await userEvent.click(button);
+    expect(await screen.findByText("Reminder sent")).toBeInTheDocument();
+    expect(remind).toHaveBeenCalledWith(
+      "s-mensah",
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+    await waitFor(() => expect(button).toBeEnabled());
+    await userEvent.click(button);
+    expect(
+      await within(account).findByText("A reminder was already sent today"),
+    ).toBeInTheDocument();
+  });
+
+  it("removes someone for good with your code and closes the panel", async () => {
+    const remove = vi.spyOn(holder.client, "removeStaff");
+    const { account } = await open("s-bello");
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Remove" }),
+    );
+    const dialog = confirmIn("Remove this account?");
+    expect(
+      within(dialog).getByRole("button", { name: "Keep account" }),
+    ).toHaveFocus();
+    await enterCode(dialog, MOCK_CODE);
+    expect(await screen.findByText("Account removed")).toBeInTheDocument();
+    expect(remove).toHaveBeenCalledWith(
+      "s-bello",
+      { mfaCode: MOCK_CODE },
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+    expect(onClose).toHaveBeenCalled();
+    expect(await statusOf("s-bello")).toBeUndefined();
+  });
+
+  it("never offers to remove or reset your own account, and says why", async () => {
+    const { account } = await open("s-obi");
+    const remove = within(account).getByRole("button", { name: "Remove" });
+    expect(remove).toBeDisabled();
+    expect(
+      within(account).getByText(/You can't remove your own account/),
+    ).toBeInTheDocument();
+  });
+
+  it("an invited person gets a new invite or has it cancelled", async () => {
+    const r = await holder.client.inviteStaff(
+      { emails: ["new.person@havanahospital.org"], roles: ["clinician"] },
+      CODE,
+    );
+    const id = r.invited[0]!.staff.id;
+    const { account, panel } = await open(id);
+    expect(within(panel).getByText("Invited")).toBeInTheDocument();
+    expect(
+      within(panel).getByText("Invite expires in 3 days"),
     ).toBeInTheDocument();
     expect(
-      within(panel).queryByRole("button", { name: "Send a reminder" }),
+      within(account).queryByRole("button", { name: "Send password reset" }),
     ).toBeNull();
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Send a new invite" }),
+    );
+    await enterCode(confirmIn("Send a new invite?"), MOCK_CODE);
+    const shared = await screen.findByRole("dialog", {
+      name: "New invite ready",
+    });
+    await userEvent.click(within(shared).getByRole("button", { name: "Done" }));
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Cancel invite" }),
+    );
+    await enterCode(confirmIn("Cancel this invite?"), MOCK_CODE);
+    expect(await screen.findByText("Invite cancelled")).toBeInTheDocument();
+    expect(await statusOf(id)).toBeUndefined();
   });
 
   it("Esc closes the confirmation first, then the panel", async () => {

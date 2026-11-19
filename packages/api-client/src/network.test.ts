@@ -35,6 +35,8 @@ describe("shouldRetry / retryDelay", () => {
     expect(shouldRetry(0, new ApiError(401, "session_expired"))).toBe(false);
     // Not built on the server yet: asking again won't help.
     expect(shouldRetry(0, new ApiError(501, "not_implemented"))).toBe(false);
+    // No way to send the email: the action did nothing, and won't on a retry.
+    expect(shouldRetry(0, new ApiError(503, "no_delivery"))).toBe(false);
     expect(shouldRetry(3, new TypeError("offline"))).toBe(false);
   });
   it("backs off exponentially with jitter, capped at 30 s", () => {

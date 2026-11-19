@@ -92,9 +92,9 @@ describe("ResetPassword", () => {
       "tram-lantern-okra",
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Save new password" }),
+      screen.getByRole("button", { name: "Save password" }),
     );
-    expect(await screen.findByText("Password updated")).toBeInTheDocument();
+    expect(await screen.findByText("Password saved")).toBeInTheDocument();
   });
 
   it("explains an expired link", async () => {
@@ -109,7 +109,7 @@ describe("ResetPassword", () => {
       "tram-lantern-okra",
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Save new password" }),
+      screen.getByRole("button", { name: "Save password" }),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "This link has expired or was already used.",

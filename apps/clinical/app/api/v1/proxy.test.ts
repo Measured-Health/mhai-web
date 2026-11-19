@@ -658,6 +658,53 @@ describe("hospital admin routes", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("forwards a remove's DELETE with its code in the body, and core's 204", async () => {
+    await as(["hospital_admin"]);
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const res = await DELETE(
+      send("DELETE", CODE),
+      ctx("hospital", "staff", "s-1"),
+    );
+    expect(res.status).toBe(204);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.body).toBe(CODE);
+    expect(init.headers).toMatchObject({ "Content-Type": "application/json" });
+  });
+
+  it("forwards an assignment's body, and core's 204", async () => {
+    await as(["hospital_admin"]);
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const body = JSON.stringify({ staff_id: null });
+    const res = await POST(
+      send("POST", body),
+      ctx("hospital", "corrections", "c-1", "assign"),
+    );
+    expect(res.status).toBe(204);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://api.test/api/v1/hospital/corrections/c-1/assign");
+    expect(init.body).toBe(body);
+  });
+
+  it.each([
+    [503, "no_delivery"],
+    [501, "not_implemented"],
+    [429, "rate_limited"],
+  ])("passes core's %i %s through as its code only", async (status, code) => {
+    await as(["hospital_admin"]);
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { code, detail: "smtp relay down at mail.internal" },
+        { status },
+      ),
+    );
+    const res = await POST(
+      send("POST", CODE),
+      ctx("hospital", "staff", "s-1", "password-reset"),
+    );
+    expect(res.status).toBe(status);
+    expect(await res.json()).toEqual({ code });
+  });
+
   it("refuses PATCH and DELETE on clinical routes", async () => {
     await session();
     for (const res of [

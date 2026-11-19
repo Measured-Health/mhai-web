@@ -1,7 +1,12 @@
 "use client";
 import { Ellipsis } from "lucide-react";
 import type { StaffOut } from "@/lib/api/admin-contract";
-import { SIGN_IN_LABEL, lastActiveLabel, sortName } from "@/lib/admin/staff";
+import {
+  SIGN_IN_LABEL,
+  lastActiveLabel,
+  nameOf,
+  sortName,
+} from "@/lib/admin/staff";
 import { Avatar } from "../shell/account-menu";
 import { RoleChips, StaffStatusChip } from "./chips";
 
@@ -26,9 +31,9 @@ function Missing({ label }: { label: string }) {
 function Who({ s }: { s: StaffOut }) {
   return (
     <span className="flex items-start gap-2.5">
-      <Avatar name={sortName(s.full_name)} />
+      <Avatar name={sortName(nameOf(s))} />
       <span className="min-w-0 [overflow-wrap:anywhere]">
-        <b className="block font-semibold">{s.full_name}</b>
+        <b className="block font-semibold">{nameOf(s)}</b>
         {s.is_you && <span className="text-[12px] text-ink-3">(you)</span>}
         <small className="block text-[12px] text-ink-3">{s.email}</small>
       </span>
@@ -92,7 +97,7 @@ export function StaffTable({ rows, now, onOpen }: ListProps) {
                   {s.specialty ?? <Missing label="None" />}
                 </td>
                 <td className="px-4 py-3">
-                  <StaffStatusChip staff={s} />
+                  <StaffStatusChip staff={s} now={now} />
                 </td>
                 <td className="px-4 py-3">
                   {s.sign_in ? (
@@ -107,7 +112,7 @@ export function StaffTable({ rows, now, onOpen }: ListProps) {
                 <td className="px-2 py-2">
                   <button
                     type="button"
-                    aria-label={`Manage ${s.full_name}`}
+                    aria-label={`Manage ${nameOf(s)}`}
                     data-staff-id={s.id}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -145,7 +150,7 @@ export function StaffCards({ rows, now, onOpen }: ListProps) {
           >
             <Who s={s} />
             <span className="flex flex-wrap items-center gap-1.5">
-              <StaffStatusChip staff={s} />
+              <StaffStatusChip staff={s} now={now} />
               <RoleChips roles={s.roles} />
             </span>
             {meta.length > 0 && (
@@ -153,7 +158,7 @@ export function StaffCards({ rows, now, onOpen }: ListProps) {
             )}
             <button
               type="button"
-              aria-label={`Manage ${s.full_name}`}
+              aria-label={`Manage ${nameOf(s)}`}
               data-staff-id={s.id}
               onClick={() => onOpen(s.id)}
               className="inline-flex min-h-11 items-center justify-center self-start rounded-full border border-line bg-white px-5 text-[13px] font-semibold text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint-deep"

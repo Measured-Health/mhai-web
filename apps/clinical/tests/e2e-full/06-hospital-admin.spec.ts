@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { freshCode, recordApi, reportApi, signIn, typeCode } from "./live";
 
 /**
- * The hospital admin pages on core's routes (OpenAPI 1.24.0), live: every
+ * The hospital admin pages on core's routes (OpenAPI 1.33.0), live: every
  * reply passes the strict readers (a mismatch would be a 502), the staff
  * list and its panel open, and a settings edit that loosens sign-in goes
  * through with a fresh two-step code (step-up), then is put back.
@@ -17,7 +17,7 @@ test("hospital admin: staff, settings with step-up, usage and activity", async (
   const manage = page.getByRole("button", { name: /^Manage Synthetic / });
   await expect(manage.first()).toBeVisible();
   await expect(
-    page.getByText(/Inviting staff: Not available yet/),
+    page.getByRole("button", { name: "Invite staff" }),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "Manage Synthetic clinician", exact: true })
@@ -86,7 +86,7 @@ test("hospital admin: staff, settings with step-up, usage and activity", async (
 
   await page.goto("/admin/activity/oversight");
   await expect(
-    page.getByText(/Reminding or assigning reviewers: not available yet/),
+    page.getByText(/A reminder goes to the assigned reviewer/),
   ).toBeVisible();
 
   await expect(

@@ -1,4 +1,4 @@
-// The hospital admin replies as core OpenAPI 1.24.0 sends them (`StaffOut`,
+// The hospital admin replies as core OpenAPI 1.33.0 sends them (`StaffOut`,
 // `HospitalSettingsOut`, `HospitalUsageOut`, `HospitalActivityPage`), read
 // strictly: every field core sends, of the type and in the range it says,
 // and nothing else. A reply that doesn't match is a failed read, never a
@@ -29,19 +29,63 @@ export const STAFF_SCHEMA = z.strictObject({
   can_review: z.boolean(),
   // Core has no reviewing by specialty yet: always empty.
   review_specialties: z.array(text(100)).max(0),
-  // Core has no invites: never `invited`.
+  // An invite adds no status or issue: it is `invited_at` (core 1.33.0).
   status: z.enum(["active", "deactivated"]),
   issues: z.array(z.enum(["mfa_not_set_up"])).max(1),
   sign_in: z.enum(["sso", "password_mfa", "password"]).nullable(),
   last_active_at: instant.nullable(),
   joined_at: instant.nullable(),
-  invited_at: z.null(),
-  invite_expires_at: z.null(),
+  invited_at: instant.nullable(),
+  invite_expires_at: instant.nullable(),
   is_you: z.boolean(),
   version: z.number().int().min(1),
 });
 
 export const STAFF_LIST_SCHEMA = z.array(STAFF_SCHEMA).max(5000);
+
+/**
+ * A link to this app's own address, absolute (http or https) or relative to
+ * it ("/reset-password?token=..."). Never `//host`, `javascript:` or a
+ * backslash trick.
+ */
+const LINK_URL = z
+  .string()
+  .min(2)
+  .max(2048)
+  .refine((u) =>
+    u.startsWith("/")
+      ? !u.startsWith("//") && !u.includes("\\")
+      : /^https?:\/\/[^\s/\\]+(\/[^\s\\]*)?$/.test(u),
+  )
+  .refine((u) => !/\s/.test(u));
+
+export const LINK_SCHEMA = z.strictObject({
+  url: LINK_URL,
+  expires_at: instant,
+});
+
+/** Core's `StaffWithLinkOut`: a person, and the demo's link or null. */
+export const STAFF_WITH_LINK_SCHEMA = z.strictObject({
+  ...STAFF_SCHEMA.shape,
+  link: LINK_SCHEMA.nullable(),
+});
+
+export const INVITE_OUT_SCHEMA = z.strictObject({
+  invited: z.array(STAFF_WITH_LINK_SCHEMA).max(200),
+  skipped: z
+    .array(
+      z.strictObject({
+        email: text(320),
+        reason: z.enum([
+          "already_staff",
+          "not_available",
+          "invalid_email",
+          "duplicate",
+        ]),
+      }),
+    )
+    .max(200),
+});
 
 export const SETTINGS_SCHEMA = z.strictObject({
   hospital_name: label,

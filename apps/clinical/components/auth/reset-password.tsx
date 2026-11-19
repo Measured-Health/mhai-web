@@ -58,8 +58,8 @@ export function ResetPassword() {
           <CheckCircle2 className="size-6" />
         </div>
         <AuthHeading
-          title="Password updated"
-          sub="You've been signed out everywhere else. Sign in with your new password. You'll still need your authenticator app."
+          title="Password saved"
+          sub="Sign in with your new password. If you were invited, you'll set up two-step verification next; otherwise you'll still need your authenticator app."
         />
         <Link
           href="/sign-in"
@@ -89,7 +89,7 @@ export function ResetPassword() {
     error?.code === "link_expired"
       ? {
           title: "This link has expired or was already used.",
-          body: "Reset links work once, for 30 minutes.",
+          body: "Reset links work once, for 30 minutes. Invite links work for 3 days: ask your hospital admin for a new invite.",
         }
       : error?.code === "weak_password"
         ? WEAK_COPY
@@ -97,7 +97,10 @@ export function ResetPassword() {
 
   return (
     <form onSubmit={submit} noValidate>
-      <AuthHeading title="Choose a new password" />
+      <AuthHeading
+        title="Choose your password"
+        sub="For a password reset, or to finish joining when you were invited."
+      />
       {error && (
         <AuthErrorBanner error={error} copy={copy}>
           {error.code === "link_expired" && (
@@ -119,10 +122,10 @@ export function ResetPassword() {
         showErrors={showErrors}
       />
       <Button type="submit" className="mt-4 w-full" disabled={busy}>
-        Save new password
+        Save password
       </Button>
       <p className="mt-3 text-center text-[13px] text-ink-3">
-        You&apos;ll be signed out of all other devices.
+        You&apos;ll be signed out of any other devices.
       </p>
     </form>
   );

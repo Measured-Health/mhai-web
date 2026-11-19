@@ -135,15 +135,27 @@ describe("StaffView", () => {
     expect(manage).toHaveFocus();
   });
 
-  it("says inviting isn't available yet, with no invite button (core 501)", async () => {
+  it("invites from the Invite staff button, and lists the invited person", async () => {
     renderAdmin(<StaffView />);
     await table();
-    expect(screen.queryByRole("button", { name: "Invite staff" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Invite staff" }));
+    const dialog = await screen.findByRole("dialog", { name: "Invite staff" });
+    await within(dialog).findByText(/email invite/);
+    await userEvent.click(within(dialog).getByLabelText("Work emails"));
+    await userEvent.paste("n.ade@havanahospital.org");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Continue" }),
+    );
+    await enterCode(
+      await screen.findByRole("dialog", { name: "Send 1 invite?" }),
+      MOCK_CODE,
+    );
+    const result = await screen.findByRole("dialog", { name: "Invites sent" });
+    await userEvent.click(within(result).getByRole("button", { name: "Done" }));
+    const t = await table();
+    await waitFor(() => expect(names(t)).toContain("n.ade@havanahospital.org"));
     expect(
-      screen.getByText(/Inviting staff: Not available yet/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Measured Health creates staff accounts for now."),
+      screen.getByRole("button", { name: /^Invited · 1$/ }),
     ).toBeInTheDocument();
   });
 

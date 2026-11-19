@@ -1,4 +1,5 @@
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { onlineManager } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
@@ -97,12 +98,231 @@ describe("OversightView", () => {
     ).toHaveAttribute("href", "/admin/staff");
   });
 
-  it("says reminding and assigning reviewers isn't available yet, with no buttons (core 501)", async () => {
+  it("reminds the reviewers", async () => {
+    const remind = vi.spyOn(holder.client, "remindReviewers");
     renderAdmin(<OversightView />);
-    const t = await table();
-    expect(within(t).queryByRole("button")).toBeNull();
+    const row = await rowFor("C-117");
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Remind reviewers about C-117" }),
+    );
+    expect(remind).toHaveBeenCalledWith("c-117", {
+      idempotencyKey: expect.any(String),
+    });
+    expect(await screen.findByText("Reviewers reminded")).toBeInTheDocument();
+    await waitFor(async () =>
+      expect(await rowFor("C-117")).toHaveTextContent("Reminded"),
+    );
+  });
+
+  it("assigns a reviewer from the eligible list", async () => {
+    renderAdmin(<OversightView />);
+    const row = await rowFor("C-118");
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Assign a reviewer to C-118" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Assign a reviewer",
+    });
+    expect(within(dialog).getAllByRole("button")[0]).toHaveTextContent(
+      "Cancel",
+    );
+    await userEvent.click(
+      await within(dialog).findByRole("radio", { name: /Dr. Udo/ }),
+    );
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Assign" }),
+    );
+    expect(await screen.findByText("Reviewer assigned")).toBeInTheDocument();
+    await waitFor(async () =>
+      expect(await rowFor("C-118")).toHaveTextContent("Assigned to Dr. Udo"),
+    );
+  });
+
+  it("drops a correction decided meanwhile, with a notice", async () => {
+    vi.spyOn(holder.client, "remindReviewers").mockRejectedValueOnce(
+      new ApiError(409, "already_decided"),
+    );
+    renderAdmin(<OversightView />);
+    const row = await rowFor("C-116");
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Remind reviewers about C-116" }),
+    );
     expect(
-      screen.getByText(/Reminding or assigning reviewers: not available yet/),
+      await screen.findByText("This correction has already been decided"),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("table")).queryByText(/#C-116/),
+      ).toBeNull(),
+    );
+    expect(within(screen.getByRole("table")).getByText(/#C-117/)).toBeTruthy();
+    expect(
+      screen.getByText("Waiting", { selector: "span" }).closest("div"),
+    ).toHaveTextContent("2");
+  });
+
+  it("can't remind or assign offline, and says why", async () => {
+    renderAdmin(<OversightView />);
+    const row = await rowFor("C-118");
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    act(() => {
+      window.dispatchEvent(new Event("offline"));
+    });
+    const note = screen.getByText(
+      "You're offline. Reminders and assignments need a connection.",
+    );
+    for (const b of within(row).getAllByRole("button")) {
+      expect(b).toBeDisabled();
+      expect(b.getAttribute("aria-describedby")).toBe(note.id);
+    }
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    act(() => {
+      window.dispatchEvent(new Event("online"));
+    });
+  });
+
+  it("says when the reviewers can't load, with Try again, not 'Nobody can review'", async () => {
+    const list = vi
+      .spyOn(holder.client, "listEligibleReviewers")
+      .mockRejectedValueOnce(new ApiError(403, "forbidden"));
+    renderAdmin(<OversightView />);
+    const row = await rowFor("C-118");
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Assign a reviewer to C-118" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Assign a reviewer",
+    });
+    expect(
+      await within(dialog).findByText("You can't do this"),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Nobody can review this yet/)).toBeNull();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Try again" }),
+    );
+    expect(
+      await within(dialog).findByRole("radio", { name: /Dr. Udo/ }),
+    ).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it("the Waiting tile counts what the API says is waiting, less what was decided here", async () => {
+    const real = await holder.client.getOversight();
+    vi.spyOn(holder.client, "getOversight").mockResolvedValue({
+      ...real,
+      waiting: real.items.length + 10,
+    });
+    vi.spyOn(holder.client, "remindReviewers").mockRejectedValueOnce(
+      new ApiError(409, "already_decided"),
+    );
+    renderAdmin(<OversightView />);
+    const waiting = () =>
+      screen.getByText("Waiting", { selector: "span" }).closest("div");
+    await table();
+    expect(waiting()).toHaveTextContent(String(real.items.length + 10));
+    await userEvent.click(
+      within(await rowFor("C-116")).getByRole("button", {
+        name: "Remind reviewers about C-116",
+      }),
+    );
+    await waitFor(() =>
+      expect(waiting()).toHaveTextContent(String(real.items.length + 9)),
+    );
+  });
+
+  it("the Waiting tile never goes below 0", async () => {
+    const real = await holder.client.getOversight();
+    vi.spyOn(holder.client, "getOversight").mockResolvedValue({
+      ...real,
+      waiting: 0,
+    });
+    vi.spyOn(holder.client, "remindReviewers").mockRejectedValueOnce(
+      new ApiError(409, "already_decided"),
+    );
+    renderAdmin(<OversightView />);
+    await userEvent.click(
+      within(await rowFor("C-116")).getByRole("button", {
+        name: "Remind reviewers about C-116",
+      }),
+    );
+    await screen.findByText("This correction has already been decided");
+    expect(
+      screen.getByText("Waiting", { selector: "span" }).closest("div"),
+    ).toHaveTextContent(/^0Waiting$/);
+  });
+
+  it("clears an assignment", async () => {
+    await holder.client.assignReviewer("c-118", "s-udo");
+    const assign = vi.spyOn(holder.client, "assignReviewer");
+    renderAdmin(<OversightView />);
+    const row = await rowFor("C-118");
+    expect(row).toHaveTextContent("Assigned to Dr. Udo");
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Assign a reviewer to C-118" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Assign a reviewer",
+    });
+    await userEvent.click(
+      await within(dialog).findByRole("radio", { name: /Nobody/ }),
+    );
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Assign" }),
+    );
+    expect(await screen.findByText("Assignment cleared")).toBeInTheDocument();
+    expect(assign).toHaveBeenCalledWith("c-118", null, {
+      idempotencyKey: expect.any(String),
+    });
+    await waitFor(async () =>
+      expect(await rowFor("C-118")).not.toHaveTextContent("Assigned to"),
+    );
+  });
+
+  it.each([
+    ["rate_limited", 429, "Reviewers were reminded in the last hour"],
+    ["no_delivery", 503, "MHAI can't send emails yet"],
+    ["no_recipients", 422, "Nobody can review this correction yet"],
+    ["not_implemented", 501, "Not available yet"],
+  ])(
+    "says plainly when a reminder can't go (%s)",
+    async (code, status, title) => {
+      vi.spyOn(holder.client, "remindReviewers").mockRejectedValue(
+        new ApiError(status, code),
+      );
+      renderAdmin(<OversightView />);
+      await userEvent.click(
+        within(await rowFor("C-117")).getByRole("button", {
+          name: "Remind reviewers about C-117",
+        }),
+      );
+      expect(await screen.findByText(title)).toBeInTheDocument();
+      expect(await rowFor("C-117")).toBeInTheDocument();
+    },
+  );
+
+  it("says when the person picked can't review it", async () => {
+    vi.spyOn(holder.client, "assignReviewer").mockRejectedValue(
+      new ApiError(422, "not_eligible"),
+    );
+    renderAdmin(<OversightView />);
+    await userEvent.click(
+      within(await rowFor("C-118")).getByRole("button", {
+        name: "Assign a reviewer to C-118",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Assign a reviewer",
+    });
+    await userEvent.click(
+      await within(dialog).findByRole("radio", { name: /Dr. Udo/ }),
+    );
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Assign" }),
+    );
+    expect(
+      await within(dialog).findByText(
+        "This person can't review this correction",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -127,7 +347,7 @@ describe("OversightView", () => {
     ).toBeNull();
   });
 
-  it("shows cards on a phone", async () => {
+  it("shows cards on a phone, each with its own 44 px buttons", async () => {
     phone();
     renderAdmin(<OversightView />);
     const list = await screen.findByRole("list", {
@@ -141,7 +361,18 @@ describe("OversightView", () => {
     expect(card).toHaveTextContent("suggested by Dr. Reyes");
     expect(card).toHaveTextContent("Paediatrics");
     expect(card).toHaveTextContent("Over 4 h");
-    expect(within(card).queryByRole("button")).toBeNull();
+    const remind = within(card).getByRole("button", {
+      name: /Remind reviewers about C-118/,
+    });
+    const assign = within(card).getByRole("button", {
+      name: /Assign a reviewer to C-118/,
+    });
+    expect(remind.getAttribute("aria-label")).toMatch(/Paediatrics/);
+    expect(assign.getAttribute("aria-label")).toMatch(/Paediatrics/);
+    expect(remind.className).toMatch(/min-h-11/);
+    expect(assign.className).toMatch(/min-h-11/);
+    await userEvent.click(remind);
+    expect(await screen.findByText("Reviewers reminded")).toBeInTheDocument();
   });
 
   it("says two-step, never 2-step", async () => {

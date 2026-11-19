@@ -24,8 +24,15 @@ const E = (
   ...extra,
 });
 
-/** What the screens say where core answers 501 `not_implemented`. */
+/**
+ * What the screens say where MHAI doesn't do something yet (reviewing by
+ * specialty, hospital sign-on), and what a 501 `not_implemented` reads as
+ * until core 1.33.0 is deployed.
+ */
 export const NOT_AVAILABLE = "Not available yet";
+
+/** Core has no way to send this email (503 `no_delivery`); nothing happened. */
+export const NO_DELIVERY = "MHAI can't send emails yet";
 
 /** Plain words for every admin refusal; never a backend code (spec §6). */
 export function adminError(e: unknown): AdminError {
@@ -101,6 +108,13 @@ export function adminError(e: unknown): AdminError {
       );
     case "rate_limited":
       return E("Too many changes at once", "Wait a minute and try again.");
+    case "no_delivery":
+      return E(NO_DELIVERY, "Nothing was changed. Try again later.");
+    case "invalid_token":
+      return E(
+        "This link no longer works",
+        "It has expired, was already used or was replaced by a newer one.",
+      );
   }
   if (e.status === 403)
     return E(
@@ -114,3 +128,80 @@ export function adminError(e: unknown): AdminError {
     "Try again. If it keeps happening, contact Measured Health support.",
   );
 }
+
+type Override = Partial<Record<string, [title: string, body: string]>>;
+const withCopy =
+  (o: Override) =>
+  (e: unknown): AdminError => {
+    const base = adminError(e);
+    const hit = e instanceof ApiError ? o[e.code] : undefined;
+    return hit ? { ...base, title: hit[0], body: hit[1] } : base;
+  };
+
+/** Inviting staff: the hospital's daily limit, and roles only. */
+export const inviteError = withCopy({
+  rate_limited: [
+    "Your hospital has sent all the invites it can today",
+    "Try again tomorrow.",
+  ],
+  not_eligible: [
+    "Analyst can't be given in an invite",
+    "Invite them as a clinician. You can make them an analyst after they join.",
+  ],
+  validation_failed: [
+    "MHAI couldn't accept these invites",
+    "Check the email addresses and roles, then try again.",
+  ],
+});
+
+/** Password reset, two-step reset, a new invite and removing someone. */
+export const accountError = withCopy({
+  self_change: [
+    "You can't do this to your own account",
+    "Use Profile & security for your own password and two-step. Ask another hospital admin for anything else.",
+  ],
+  conflict: [
+    "This account has changed",
+    "We've loaded the latest details. Check them and try again.",
+  ],
+  rate_limited: [
+    "Too many tries for this person",
+    "Wait a while, then try again.",
+  ],
+});
+
+/** The two-step setup reminder: once a day per person. */
+export const staffReminderError = withCopy({
+  rate_limited: [
+    "A reminder was already sent today",
+    "You can send another one tomorrow.",
+  ],
+  conflict: [
+    "They don't need a reminder now",
+    "Their two-step may already be set up. The list has been refreshed.",
+  ],
+});
+
+/** Reminding a correction's reviewers: once an hour per correction. */
+export const reviewerReminderError = withCopy({
+  rate_limited: [
+    "Reviewers were reminded in the last hour",
+    "You can remind them again later.",
+  ],
+  no_recipients: [
+    "Nobody can review this correction yet",
+    "Make another clinician active in Staff, then try again.",
+  ],
+});
+
+/** Assigning a reviewer. */
+export const assignError = withCopy({
+  not_eligible: [
+    "This person can't review this correction",
+    "Pick someone from the list. The person who suggested it can't review it.",
+  ],
+  validation_failed: [
+    "MHAI couldn't accept this change",
+    "Pick someone from the list and try again.",
+  ],
+});

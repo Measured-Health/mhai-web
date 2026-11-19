@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { GuestGate } from "@/components/auth/guest-gate";
 import { ResetPassword } from "@/components/auth/reset-password";
 
-export const metadata: Metadata = { title: "Choose a new password · MHAI" };
+export const metadata: Metadata = { title: "Choose your password · MHAI" };
 
 export default function ResetPasswordPage() {
   return (

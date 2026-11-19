@@ -16,6 +16,8 @@ import { useId } from "react";
 import type { StaffOut } from "@/lib/api/admin-contract";
 import { ANALYSIS_HREF } from "@/lib/analysis-queries";
 import { useStaff } from "@/lib/admin-queries";
+import { inviteExpired, isInvited } from "@/lib/admin/staff";
+import { useNow } from "@mhai/ui/hooks/use-now";
 import { cn } from "@mhai/ui/cn";
 
 export const ADMIN_LINKS = [
@@ -61,11 +63,22 @@ export const ADMIN_LINKS = [
 /** The Named access page: clearance letters for named drill-down (Plan 11). */
 export const NAMED_ACCESS_HREF = "/admin/named-access";
 
-/** "12 members". Core has no invites, so none are ever pending. */
-function staffLine(list: StaffOut[] | undefined): string | null {
+/**
+ * "12 members", and "· 1 invite pending" while someone hasn't joined yet.
+ * An expired invite isn't pending: it needs a new one.
+ */
+function staffLine(list: StaffOut[] | undefined, now: number): string | null {
   if (!list) return null;
-  const members = list.filter((s) => s.status !== "deactivated").length;
-  return `${members} ${members === 1 ? "member" : "members"}`;
+  const members = list.filter(
+    (s) => s.status === "active" && !isInvited(s),
+  ).length;
+  const invites = list.filter(
+    (s) => isInvited(s) && !inviteExpired(s, now),
+  ).length;
+  const line = `${members} ${members === 1 ? "member" : "members"}`;
+  return invites
+    ? `${line} · ${invites} ${invites === 1 ? "invite" : "invites"} pending`
+    : line;
 }
 
 /** The sidebar's "Hospital admin" group (spec §5.6, R3). */
@@ -85,6 +98,7 @@ export function AdminNav({
   // pages never load the staff list just for a count.
   const adminSide = path === "/admin" || path.startsWith("/admin/");
   const staff = useStaff({ enabled: adminSide });
+  const now = useNow(60_000);
   const heading = useId();
   const lineId = useId();
   const links: readonly {
@@ -132,7 +146,7 @@ export function AdminNav({
           const line =
             href === "/admin/staff"
               ? adminSide
-                ? staffLine(staff.data)
+                ? staffLine(staff.data, now)
                 : null
               : sub;
           const describedBy = line ? `${lineId}-${i}` : undefined;
