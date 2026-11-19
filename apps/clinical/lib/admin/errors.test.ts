@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../api/errors";
 import { FORBIDDEN_TERMS } from "../labels";
-import { adminError } from "./errors";
+import {
+  accountError,
+  adminError,
+  assignError,
+  inviteError,
+  reviewerReminderError,
+  staffReminderError,
+} from "./errors";
 
 describe("adminError", () => {
   it("maps each refusal to plain words", () => {
@@ -93,13 +100,70 @@ describe("adminError", () => {
       "mfa_invalid",
       "mfa_locked",
       "invalid",
+      "no_delivery",
+      "invalid_token",
+      "no_recipients",
       "weird_new_code",
     ];
-    for (const c of codes) {
-      const { title, body } = adminError(new ApiError(409, c));
-      for (const t of FORBIDDEN_TERMS)
-        expect(`${title} ${body}`).not.toContain(t);
-      expect(`${title} ${body}`).not.toContain("_");
-    }
+    for (const read of [
+      adminError,
+      inviteError,
+      accountError,
+      staffReminderError,
+      reviewerReminderError,
+      assignError,
+    ])
+      for (const c of codes) {
+        const { title, body } = read(new ApiError(409, c));
+        for (const t of FORBIDDEN_TERMS)
+          expect(`${title} ${body}`).not.toContain(t);
+        expect(`${title} ${body}`).not.toContain("_");
+        expect(`${title} ${body}`).not.toMatch(/email provider|token|503|410/i);
+      }
+  });
+
+  it("says plainly when MHAI can't send an email, or a link no longer works", () => {
+    expect(adminError(new ApiError(503, "no_delivery"))).toMatchObject({
+      title: "MHAI can't send emails yet",
+      body: "Nothing was changed. Try again later.",
+      stale: false,
+      gone: false,
+    });
+    expect(adminError(new ApiError(410, "invalid_token")).title).toBe(
+      "This link no longer works",
+    );
+  });
+
+  it("words each action's own limits and refusals", () => {
+    expect(inviteError(new ApiError(429, "rate_limited")).title).toBe(
+      "Your hospital has sent all the invites it can today",
+    );
+    expect(inviteError(new ApiError(422, "not_eligible")).title).toBe(
+      "Analyst can't be given in an invite",
+    );
+    expect(staffReminderError(new ApiError(429, "rate_limited")).title).toBe(
+      "A reminder was already sent today",
+    );
+    expect(reviewerReminderError(new ApiError(429, "rate_limited")).title).toBe(
+      "Reviewers were reminded in the last hour",
+    );
+    expect(
+      reviewerReminderError(new ApiError(422, "no_recipients")).title,
+    ).toBe("Nobody can review this correction yet");
+    expect(assignError(new ApiError(422, "not_eligible")).title).toBe(
+      "This person can't review this correction",
+    );
+    expect(accountError(new ApiError(403, "self_change")).title).toBe(
+      "You can't do this to your own account",
+    );
+    // The flags come from the shared reading.
+    expect(accountError(new ApiError(409, "conflict")).stale).toBe(true);
+    expect(
+      reviewerReminderError(new ApiError(409, "already_decided")).gone,
+    ).toBe(true);
+    expect(inviteError(new ApiError(501, "not_implemented"))).toMatchObject({
+      title: "Not available yet",
+      unavailable: true,
+    });
   });
 });

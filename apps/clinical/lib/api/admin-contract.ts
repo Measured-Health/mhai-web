@@ -8,10 +8,11 @@ import type { AlertSeverity } from "./alerts-contract";
 import type { NamedPurpose } from "./analysis-contract";
 
 export type StaffRole = "clinician" | "analyst" | "hospital_admin";
-/** Core has no invites: never `invited`. */
-export type StaffStatus = "active" | "deactivated";
+/** `invited`: created by an invite, no password chosen yet (core 1.33.0). */
+export type StaffStatus = "active" | "invited" | "deactivated";
 export type SignInMethod = "sso" | "password_mfa" | "password";
-export type StaffIssue = "mfa_not_set_up";
+/** `invite_expired`: invited, and the invite link has expired. */
+export type StaffIssue = "mfa_not_set_up" | "invite_expired";
 
 export interface StaffOut {
   id: string;
@@ -29,13 +30,48 @@ export interface StaffOut {
   sign_in: SignInMethod | null;
   last_active_at: string | null; // ISO 8601
   joined_at: string | null;
-  /** Always null: core has no invites. */
-  invited_at: null;
-  invite_expires_at: null;
+  /** For an invited person only (ISO 8601); null otherwise. */
+  invited_at: string | null;
+  invite_expires_at: string | null;
   /** The signed-in admin's own row (the API decides, R15). */
   is_you: boolean;
   /** Sent back on edits; a stale one gets 409 `conflict` (R7). */
   version: number;
+}
+
+/**
+ * A sign-in link core made for a person (an invite or a password reset).
+ * Core sends one only on the demo deployment, where no email goes out; in
+ * production it is always null. `url` may be relative to this app. Shown
+ * once, then forgotten: never stored, cached, logged or put in a URL.
+ */
+export interface ShareLinkOut {
+  url: string;
+  expires_at: string;
+}
+
+/** Core's `StaffWithLinkOut`, split so the link never travels with the row. */
+export interface StaffWithLink {
+  staff: StaffOut;
+  link: ShareLinkOut | null;
+}
+
+/** Who an invite may make someone; Analyst is granted after they join. */
+export type InviteRole = "clinician" | "hospital_admin";
+
+/** `POST /hospital/staff/invites` (with the admin's step-up code). */
+export interface InviteIn {
+  /** 1 to 200 addresses. */
+  emails: string[];
+  roles: InviteRole[];
+  specialty?: string | null;
+}
+
+export type InviteSkipReason = "already_staff" | "invalid_email" | "duplicate";
+
+export interface InviteOut {
+  invited: StaffWithLink[];
+  skipped: { email: string; reason: InviteSkipReason }[];
 }
 
 /**
@@ -60,7 +96,7 @@ export interface HospitalSettingsOut {
   allow_trust_device: boolean;
   /** Read-only here: Measured Health configures sign-in (core: `not_set_up`). */
   sso: { status: SsoStatus; domain: string | null };
-  /** Core sends none yet (no invites). */
+  /** Invites only to these domains when set (core sends none yet). */
   allowed_email_domains: string[];
   /** The active staff's specialties, for pickers. */
   specialties: string[];

@@ -16,7 +16,7 @@ import { safeDayLabel } from "@/lib/clearances/status";
 import { namedAccessFor } from "@/lib/clearances/summary";
 import { eventClock } from "@/lib/time";
 import { adminError } from "@/lib/admin/errors";
-import { policyBroken, sortName } from "@/lib/admin/staff";
+import { inviteNote, nameOf, policyBroken, sortName } from "@/lib/admin/staff";
 import { useNow } from "@mhai/ui/hooks/use-now";
 import { Avatar } from "../shell/account-menu";
 import { Banner } from "@mhai/ui/banner";
@@ -114,7 +114,13 @@ export function StaffPanel({
   return (
     <SidePanel open={staffId !== null} onClose={onClose} title="Staff member">
       {row ? (
-        <Member row={row} list={list} settings={settings.data} now={now} />
+        <Member
+          row={row}
+          list={list}
+          settings={settings.data}
+          now={now}
+          onClose={onClose}
+        />
       ) : staff.isSuccess ? (
         <div role="status">
           <b className="block text-[15px]">
@@ -152,21 +158,24 @@ function Member({
   list,
   settings,
   now,
+  onClose,
 }: {
   row: StaffOut;
   list: StaffOut[];
   settings: HospitalSettingsOut | undefined;
   now: number;
+  onClose(): void;
 }) {
   const activity = useStaffActivity(row.id);
   const recentId = useId();
+  const note = inviteNote(row, now);
   const { access: named, retry: retryNamed } = useNamedAccessOf(row);
   return (
     <div className="flex flex-col gap-5">
       <header className="flex items-start gap-3">
-        <Avatar name={sortName(row.full_name)} className="size-11 text-sm" />
+        <Avatar name={sortName(nameOf(row))} className="size-11 text-sm" />
         <div className="min-w-0 [overflow-wrap:anywhere]">
-          <b className="block text-[16px]">{row.full_name}</b>
+          <b className="block text-[16px]">{nameOf(row)}</b>
           {row.is_you && <span className="text-[13px] text-ink-3">(you)</span>}
           <small className="block text-[12.5px] text-ink-3">
             {[row.email, joined(row)].filter(Boolean).join(" · ")}
@@ -185,6 +194,7 @@ function Member({
           sign-in.
         </Banner>
       )}
+      {note && <p className="text-[13px] text-ink-2">{note}</p>}
 
       {settings ? (
         <AccessEditor
@@ -198,7 +208,12 @@ function Member({
         <Skeleton className="h-48" />
       )}
 
-      <AccountActions row={row} list={list} named={!!named} />
+      <AccountActions
+        row={row}
+        list={list}
+        named={!!named}
+        onRemoved={onClose}
+      />
 
       <section aria-labelledby={recentId}>
         <h3 id={recentId} className="mb-2 text-[13px] font-semibold">

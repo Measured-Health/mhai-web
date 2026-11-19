@@ -109,7 +109,8 @@ work live:
 - hospital admin: staff, hospital settings, activity, usage and review
   oversight need core 1.24.0 (mhai-multiagent #163); the screens follow it
   (`06-hospital-admin`). Invites, removing a person, resets, reminders
-  and reviewer assignment answer 501 and say "Not available yet".
+  and reviewer assignment need core 1.33.0; on an older core they answer
+  501 and the dialogs say "Not available yet".
 
 Patient matches and exclusions (`/hospital/patient-matches`,
 `/hospital/patient-exclusions`) and the EMR rule set

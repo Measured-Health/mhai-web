@@ -1,5 +1,5 @@
 "use client";
-import { Search } from "lucide-react";
+import { Search, UserPlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { StaffOut } from "@/lib/api/admin-contract";
@@ -10,7 +10,7 @@ import {
   staffCounts,
   type StaffFilter,
 } from "@/lib/admin/staff";
-import { NOT_AVAILABLE, adminError } from "@/lib/admin/errors";
+import { adminError } from "@/lib/admin/errors";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useIsDesktop } from "@mhai/ui/hooks/use-media";
 import { useNow } from "@mhai/ui/hooks/use-now";
@@ -19,6 +19,7 @@ import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { Skeleton } from "@mhai/ui/skeleton";
 import { AdminFrame } from "./admin-frame";
+import { InviteDialog } from "./invite-dialog";
 import { StaffPanel } from "./staff-panel";
 import { StaffCards, StaffTable } from "./staff-list";
 
@@ -32,6 +33,7 @@ export function StaffView() {
   const [filter, setFilter] = useState<StaffFilter>("all");
   const [search, setSearch] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [inviting, setInviting] = useState(false);
   const lastOpened = useRef<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -69,13 +71,10 @@ export function StaffView() {
     <AdminFrame
       title="Staff"
       actions={
-        <p
-          id="invite-not-yet"
-          className="max-w-72 text-right text-[12.5px] text-ink-3"
-        >
-          <b className="block text-ink-2">Inviting staff: {NOT_AVAILABLE}</b>
-          Measured Health creates staff accounts for now.
-        </p>
+        <Button onClick={() => setInviting(true)}>
+          <UserPlus aria-hidden className="size-4" />
+          Invite staff
+        </Button>
       }
     >
       {showControls && (
@@ -170,6 +169,7 @@ export function StaffView() {
       </p>
 
       <StaffPanel staffId={openId} onClose={() => setOpenId(null)} />
+      {inviting && <InviteDialog onClose={() => setInviting(false)} />}
     </AdminFrame>
   );
 }

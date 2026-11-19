@@ -61,11 +61,20 @@ export const ADMIN_LINKS = [
 /** The Named access page: clearance letters for named drill-down (Plan 11). */
 export const NAMED_ACCESS_HREF = "/admin/named-access";
 
-/** "12 members". Core has no invites, so none are ever pending. */
+/**
+ * "12 members", and "· 1 invite pending" while someone hasn't joined yet.
+ * An expired invite isn't pending: it needs a new one.
+ */
 function staffLine(list: StaffOut[] | undefined): string | null {
   if (!list) return null;
-  const members = list.filter((s) => s.status !== "deactivated").length;
-  return `${members} ${members === 1 ? "member" : "members"}`;
+  const members = list.filter((s) => s.status === "active").length;
+  const invites = list.filter(
+    (s) => s.status === "invited" && !s.issues.includes("invite_expired"),
+  ).length;
+  const line = `${members} ${members === 1 ? "member" : "members"}`;
+  return invites
+    ? `${line} · ${invites} ${invites === 1 ? "invite" : "invites"} pending`
+    : line;
 }
 
 /** The sidebar's "Hospital admin" group (spec §5.6, R3). */

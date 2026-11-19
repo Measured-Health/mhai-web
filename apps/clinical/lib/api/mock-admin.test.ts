@@ -15,12 +15,14 @@ import { totp } from "@mhai/api-client/totp";
 import { ADMIN_NOW, mockAdminAs, mockAdminWith } from "@/tests/admin";
 import { ApiError } from "./errors";
 import { recordAudit, resetAudit } from "./mock-audit";
-import type { StepUpAuth, UsageAlertsOut } from "./admin-contract";
+import type { InviteIn, StepUpAuth, UsageAlertsOut } from "./admin-contract";
 import {
   ACTIVITY_PAGE_SCHEMA,
   SETTINGS_SCHEMA,
+  INVITE_OUT_SCHEMA,
   STAFF_LIST_SCHEMA,
   STAFF_SCHEMA,
+  STAFF_WITH_LINK_SCHEMA,
   USAGE_SCHEMA,
 } from "./admin-schema";
 import { SMALL_GROUP_MIN } from "@mhai/ui/small-groups";
@@ -56,7 +58,7 @@ describe("the sample hospital follows core's contract (1.24.0)", () => {
     );
   });
 
-  it("sends exactly what core sends: no invites, reviewing derived", async () => {
+  it("sends exactly what core sends: nobody invited until an invite, reviewing derived", async () => {
     const a = director();
     const staff = await a.listStaff();
     expect(STAFF_LIST_SCHEMA.safeParse(staff).success).toBe(true);
@@ -601,7 +603,7 @@ describe("usage and activity", () => {
       expect(kinds).toContain(k);
   });
 
-  it("oversees waiting corrections without clinical content, assignment or reminders", async () => {
+  it("oversees waiting corrections without clinical content; none assigned or reminded yet", async () => {
     const a = director();
     const o = await a.getOversight();
     expect(o.items.map((i) => i.ref)).toEqual(["C-118", "C-117", "C-116"]);
@@ -675,5 +677,182 @@ describe("usage alerts: core's block (sample, at 16 Oct)", () => {
     });
     expect(edge.by_severity.urgent).toEqual({ value: null, suppressed: true });
     expect(edge.by_route.named).toEqual({ value: null, suppressed: true });
+  });
+});
+
+describe("invites, resets, removal and reminders (core 1.33.0)", () => {
+  const D = 86_400_000;
+
+  it("invites in core's order: roles, then the code, then each address", async () => {
+    const a = director();
+    const ok: InviteIn = {
+      emails: ["n.ade@havanahospital.org"],
+      roles: ["clinician"],
+    };
+    const analyst = ["clinician", "analyst"] as unknown as InviteIn["roles"];
+    expect(await code(a.inviteStaff({ ...ok, roles: analyst }, WRONG))).toBe(
+      "422 not_eligible",
+    );
+    expect(await code(a.inviteStaff({ ...ok, roles: [] }, GOOD))).toBe(
+      "422 validation_failed",
+    );
+    expect(await code(a.inviteStaff({ ...ok, emails: [] }, GOOD))).toBe(
+      "422 validation_failed",
+    );
+    expect(await code(a.inviteStaff(ok, WRONG))).toBe("403 mfa_invalid");
+    const r = await a.inviteStaff(
+      {
+        emails: [
+          "N.Ade@havanahospital.org",
+          "n.ade@havanahospital.org",
+          "k.mensah@havanahospital.org",
+          "oops",
+        ],
+        roles: ["clinician", "hospital_admin"],
+        specialty: "Paediatrics",
+      },
+      GOOD,
+    );
+    expect(r.skipped).toEqual([
+      { email: "n.ade@havanahospital.org", reason: "duplicate" },
+      { email: "k.mensah@havanahospital.org", reason: "already_staff" },
+      { email: "oops", reason: "invalid_email" },
+    ]);
+    expect(r.invited).toHaveLength(1);
+    const { staff: row, link } = r.invited[0]!;
+    // Core's own shape, link and all.
+    expect(
+      INVITE_OUT_SCHEMA.safeParse({
+        invited: r.invited.map((i) => ({ ...i.staff, link: i.link })),
+        skipped: r.skipped,
+      }).success,
+    ).toBe(true);
+    expect(row).toMatchObject({
+      email: "n.ade@havanahospital.org",
+      status: "invited",
+      roles: ["clinician", "hospital_admin"],
+      specialty: "Paediatrics",
+      can_review: false,
+      sign_in: null,
+      invited_at: new Date(ADMIN_NOW).toISOString(),
+      invite_expires_at: new Date(ADMIN_NOW + 7 * D).toISOString(),
+    });
+    expect(link?.url).toBe("/reset-password?token=demo");
+    expect((await a.listStaff()).map((s) => s.id)).toContain(row.id);
+  });
+
+  it("an invite expires after 7 days and a new one starts again", async () => {
+    let t = ADMIN_NOW;
+    const a = createMockAdmin({
+      now: () => t,
+      me: async () => DEMO_EMAILS.director,
+      delayMs: 0,
+    });
+    const r = await a.inviteStaff(
+      { emails: ["n.ade@havanahospital.org"], roles: ["clinician"] },
+      GOOD,
+    );
+    const id = r.invited[0]!.staff.id;
+    t += 8 * D;
+    expect((await row(a, id)).issues).toEqual(["invite_expired"]);
+    expect(await code(a.sendLink("s-bello", "resend-invite", GOOD))).toBe(
+      "409 conflict",
+    );
+    const again = await a.sendLink(id, "resend-invite", GOOD);
+    expect(
+      STAFF_WITH_LINK_SCHEMA.safeParse({ ...again.staff, link: again.link })
+        .success,
+    ).toBe(true);
+    expect(again.staff.issues).toEqual([]);
+    expect(again.staff.invite_expires_at).toBe(
+      new Date(t + 7 * D).toISOString(),
+    );
+    // Removing an invited person cancels the invite.
+    await a.removeStaff(id, GOOD);
+    expect((await a.listStaff()).some((s) => s.id === id)).toBe(false);
+  });
+
+  it("a password reset: never your own, only an active person, with a 30-minute link", async () => {
+    const a = director();
+    expect(await code(a.sendLink("s-obi", "password-reset", GOOD))).toBe(
+      "403 self_change",
+    );
+    expect(await code(a.sendLink("s-eze", "password-reset", GOOD))).toBe(
+      "409 conflict",
+    );
+    expect(await code(a.sendLink("s-bello", "password-reset", WRONG))).toBe(
+      "403 mfa_invalid",
+    );
+    const r = await a.sendLink("s-bello", "password-reset", GOOD);
+    expect(r.staff.id).toBe("s-bello");
+    expect(r.link?.expires_at).toBe(
+      new Date(ADMIN_NOW + 30 * 60_000).toISOString(),
+    );
+  });
+
+  it("resets two-step only where it is set up; they then need to set it up", async () => {
+    const a = director();
+    expect(await code(a.staffAction("s-mensah", "reset-mfa", GOOD))).toBe(
+      "409 conflict",
+    );
+    expect(await code(a.staffAction("s-okafor", "reset-mfa", GOOD))).toBe(
+      "409 conflict",
+    );
+    expect(await code(a.staffAction("s-obi", "reset-mfa", GOOD))).toBe(
+      "403 self_change",
+    );
+    const r = await a.staffAction("s-bello", "reset-mfa", GOOD);
+    expect(r.issues).toContain("mfa_not_set_up");
+    expect(STAFF_SCHEMA.safeParse(r).success).toBe(true);
+  });
+
+  it("reminds about two-step once a day, only someone who needs it", async () => {
+    let t = ADMIN_NOW;
+    const a = createMockAdmin({
+      now: () => t,
+      me: async () => DEMO_EMAILS.director,
+      delayMs: 0,
+    });
+    expect(await code(a.remindStaff("s-bello"))).toBe("409 conflict");
+    expect((await a.remindStaff("s-mensah")).id).toBe("s-mensah");
+    expect(await code(a.remindStaff("s-mensah"))).toBe("429 rate_limited");
+    t += D;
+    expect(await code(a.remindStaff("s-mensah"))).toBe("ok");
+  });
+
+  it("removes for good: never yourself or the last admin, with the code", async () => {
+    const a = director();
+    expect(await code(a.removeStaff("s-obi", GOOD))).toBe("403 self_change");
+    expect(await code(a.removeStaff("s-bello", WRONG))).toBe("403 mfa_invalid");
+    expect((await a.listStaff()).some((s) => s.id === "s-bello")).toBe(true);
+    await a.removeStaff("s-bello", GOOD);
+    expect((await a.listStaff()).some((s) => s.id === "s-bello")).toBe(false);
+    expect(await code(a.removeStaff("s-bello", GOOD))).toBe("404 not_found");
+  });
+
+  it("reminds and assigns reviewers as core does", async () => {
+    let t = ADMIN_NOW;
+    const a = createMockAdmin({
+      now: () => t,
+      me: async () => DEMO_EMAILS.director,
+      delayMs: 0,
+    });
+    await a.remindReviewers("c-117");
+    expect(await code(a.remindReviewers("c-117"))).toBe("429 rate_limited");
+    t += 60 * 60_000;
+    expect(await code(a.remindReviewers("c-117"))).toBe("ok");
+    expect(await code(a.remindReviewers("c-999"))).toBe("404 not_found");
+    // The suggester can't review it.
+    expect(await code(a.assignReviewer("c-118", "s-reyes"))).toBe(
+      "422 not_eligible",
+    );
+    await a.assignReviewer("c-118", "s-udo");
+    let o = await a.getOversight();
+    const item = (ref: string) => o.items.find((i) => i.ref === ref)!;
+    expect(item("C-118").assigned_to).toEqual({ display_name: "Dr. Udo" });
+    expect(item("C-117").reminded_at).toBe(new Date(t).toISOString());
+    await a.assignReviewer("c-118", null);
+    o = await a.getOversight();
+    expect(item("C-118").assigned_to).toBeNull();
   });
 });

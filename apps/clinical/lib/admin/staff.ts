@@ -1,8 +1,8 @@
 import type { SignInMethod, StaffOut, StaffRole } from "../api/admin-contract";
 import { ageLabel } from "../time";
 
-/** Core has no invites (1.24.0): nobody is ever invited. */
-export type StaffState = "active" | "attention" | "deactivated";
+/** Invited: waiting to choose a password (core 1.33.0). */
+export type StaffState = "active" | "invited" | "attention" | "deactivated";
 export type StaffFilter = "all" | StaffState;
 
 /** Words and chip tones (spec §7: a word and an icon, never colour alone). */
@@ -11,6 +11,7 @@ export const STAFF_STATE: Record<
   { label: string; tone: "ok" | "brand" | "warn" | "muted" }
 > = {
   active: { label: "Active", tone: "ok" },
+  invited: { label: "Invited", tone: "brand" },
   attention: { label: "Needs attention", tone: "warn" },
   deactivated: { label: "Deactivated", tone: "muted" },
 };
@@ -30,6 +31,7 @@ export const SIGN_IN_LABEL: Record<SignInMethod, string> = {
 export const STAFF_FILTERS: readonly { id: StaffFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "active", label: "Active" },
+  { id: "invited", label: "Invited" },
   { id: "attention", label: "Needs attention" },
   { id: "deactivated", label: "Deactivated" },
 ];
@@ -40,13 +42,21 @@ const time = (iso: string | null): number | null => {
   return Number.isFinite(t) ? t : null;
 };
 
+const D = 86_400_000;
+
+/** Core says when an invite has expired (`invite_expired`). */
+export const inviteExpired = (s: StaffOut) =>
+  s.status === "invited" && s.issues.includes("invite_expired");
+
 export function staffState(s: StaffOut): StaffState {
   if (s.status === "deactivated") return "deactivated";
+  if (s.status === "invited") return inviteExpired(s) ? "attention" : "invited";
   return s.issues.length ? "attention" : "active";
 }
 
 /** What needs attention, in words; null when nothing does. */
 export function attentionLabel(s: StaffOut): string | null {
+  if (inviteExpired(s)) return "Invite expired";
   if (s.status === "active" && s.issues.includes("mfa_not_set_up"))
     return "Two-step not set up";
   return null;
@@ -56,10 +66,24 @@ export function attentionLabel(s: StaffOut): string | null {
 export const statusText = (s: StaffOut): string =>
   attentionLabel(s) ?? STAFF_STATE[staffState(s)].label;
 
+/** One line about an invite, or null for anyone who isn't invited. */
+export function inviteNote(s: StaffOut, now: number): string | null {
+  if (s.status !== "invited") return null;
+  if (inviteExpired(s)) return "Invite expired. Send a new one.";
+  const t = time(s.invite_expires_at);
+  if (t === null) return "Waiting for them to choose a password";
+  const days = Math.max(1, Math.ceil((t - now) / D));
+  return `Invite expires in ${days} ${days === 1 ? "day" : "days"}`;
+}
+
+/** Until they join, core may know only the address. */
+export const nameOf = (s: StaffOut) => s.full_name.trim() || s.email;
+
 export function staffCounts(list: StaffOut[]): Record<StaffFilter, number> {
   const c: Record<StaffFilter, number> = {
     all: list.length,
     active: 0,
+    invited: 0,
     attention: 0,
     deactivated: 0,
   };
@@ -106,7 +130,8 @@ export const isActiveAdmin = (s: StaffOut) =>
 export const activeAdminCount = (list: StaffOut[]) =>
   list.filter(isActiveAdmin).length;
 
-export type GuardAction = "deactivate" | "drop_admin";
+export type GuardAction =
+  "deactivate" | "drop_admin" | "remove" | "password-reset" | "reset-mfa";
 export type Guard = { ok: true } | { ok: false; reason: string };
 
 const SELF: Record<GuardAction, string> = {
@@ -114,6 +139,11 @@ const SELF: Record<GuardAction, string> = {
     "You can't deactivate your own account. Ask another hospital admin.",
   drop_admin:
     "You can't remove your own hospital admin role. Ask another hospital admin.",
+  remove: "You can't remove your own account. Ask another hospital admin.",
+  "password-reset":
+    "To change your own password, use Change password in Profile & security.",
+  "reset-mfa":
+    "To change your own two-step verification, use Profile & security.",
 };
 
 export const LAST_ADMIN =
@@ -130,6 +160,8 @@ export function guardFor(
   list: StaffOut[],
 ): Guard {
   if (target.is_you) return { ok: false, reason: SELF[action] };
+  if (action === "password-reset" || action === "reset-mfa")
+    return { ok: true };
   if (isActiveAdmin(target) && activeAdminCount(list) <= 1)
     return { ok: false, reason: LAST_ADMIN };
   return { ok: true };

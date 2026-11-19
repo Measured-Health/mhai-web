@@ -8,6 +8,38 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Hospital admin: invites, resets, removal, reminders and reviewer
+  assignment** (core 1.33.0, needs the matching mhai-multiagent PR). Until
+  that core is deployed these answer 501 and say "Not available yet".
+  - Staff: **Invite staff** takes one address or a pasted list (up to
+    200), the Clinician and Hospital admin roles and a specialty, then the
+    admin's two-step code. What core skipped is listed in words. Invited
+    people show as Invited (or "Invite expired") with their own filter, and
+    the sidebar counts pending invites.
+  - A person's Account section: send a password reset, reset two-step,
+    send a new invite, cancel an invite and remove someone for good, each
+    with the admin's two-step code; a two-step reminder (no code, once a
+    day). Your own account and the last hospital admin are guarded on
+    screen too.
+  - Review oversight: remind a correction's reviewers (the assigned one, or
+    everyone who can review it), and assign a reviewer or clear the
+    assignment, using the eligible-reviewers list.
+  - **The demo's link, shown once.** On the demo deployment core sends no
+    email and hands the invite or reset link back. It is shown once in a
+    dialog with a copy button (a relative link becomes a full address) and
+    is gone when the dialog closes: the client splits it from the staff row,
+    the call is kept with `gcTime: 0` and reset after the answer, and it is
+    never stored, logged or put in a URL.
+  - Plain words for `no_delivery` ("MHAI can't send emails yet. Nothing was
+    changed.") and `invalid_token`, and per-action words for the daily
+    invite limit, the reminder limits and who can review. A `no_delivery`
+    is never retried.
+  - The staff readers take `invited`, `invite_expired` and the invite
+    dates; the link and the invite reply are read strictly (only an
+    http(s) or same-app link).
+  - /reset-password reads for both a reset and an invite ("Choose your
+    password").
+
 - **The public demo runs live** (deploy/README.md, "Public demo in live
   mode"): demo.measured-health.org signs in and asks through its BFF, over
   NATS, to the backend demo's core and its sample AI (synthetic data,

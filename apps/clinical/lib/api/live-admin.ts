@@ -4,12 +4,15 @@ import {
   stepUpBody,
   type ActivityQuery,
   type StaffOut,
+  type StaffWithLink,
 } from "./admin-contract";
 import {
   ACTIVITY_PAGE_SCHEMA,
+  INVITE_OUT_SCHEMA,
   SETTINGS_SCHEMA,
   STAFF_LIST_SCHEMA,
   STAFF_SCHEMA,
+  STAFF_WITH_LINK_SCHEMA,
   USAGE_SCHEMA,
 } from "./admin-schema";
 import type { WriteOpts } from "./contract";
@@ -17,13 +20,19 @@ import { ApiError } from "./errors";
 import { apiOk, keyHeader } from "./request";
 
 /**
- * Reads a reply strictly (core openapi 1.24.0): anything that doesn't match
+ * Reads a reply strictly (core openapi 1.33.0): anything that doesn't match
  * is 502 `bad_gateway`, never shown in part.
  */
 function read<S extends z.ZodType>(schema: S, data: unknown): z.output<S> {
   const r = schema.safeParse(data);
   if (!r.success) throw new ApiError(502, "bad_gateway");
   return r.data;
+}
+
+/** Core's `StaffWithLinkOut`, split: the row never carries the link. */
+function split(data: unknown): StaffWithLink {
+  const { link, ...staff } = read(STAFF_WITH_LINK_SCHEMA, data);
+  return { staff, link };
 }
 
 /** The hospital admin API through this app's /api/v1 proxy (the token stays server-side). */
@@ -61,6 +70,24 @@ export function createLiveAdminClient({
       staff(ok(`/staff/${id(s)}`, "PATCH", { ...p, ...stepUpBody(auth) }, o)),
     staffAction: (s, a, auth, o) =>
       staff(ok(`/staff/${id(s)}/${a}`, "POST", stepUpBody(auth), o)),
+    sendLink: async (s, a, auth, o) =>
+      split(await ok(`/staff/${id(s)}/${a}`, "POST", stepUpBody(auth), o)),
+    // No code: a reminder changes nothing about the account.
+    remindStaff: (s, o) => staff(ok(`/staff/${id(s)}/remind`, "POST", {}, o)),
+    // 204; the code goes in the body of the DELETE.
+    removeStaff: async (s, auth, o) => {
+      await ok(`/staff/${id(s)}`, "DELETE", stepUpBody(auth), o);
+    },
+    inviteStaff: async (p, auth, o) => {
+      const r = read(
+        INVITE_OUT_SCHEMA,
+        await ok("/staff/invites", "POST", { ...p, ...stepUpBody(auth) }, o),
+      );
+      return {
+        invited: r.invited.map(({ link, ...row }) => ({ staff: row, link })),
+        skipped: r.skipped,
+      };
+    },
     getSettings: async () => read(SETTINGS_SCHEMA, await ok("/settings")),
     // The code only when the edit loosens sign-in.
     updateSettings: async (p, auth, o) =>
@@ -85,5 +112,16 @@ export function createLiveAdminClient({
       (await ok(`/corrections/${id(c)}/eligible-reviewers`)) as Awaited<
         ReturnType<AdminClient["listEligibleReviewers"]>
       >,
+    remindReviewers: async (c, o) => {
+      await ok(`/corrections/${id(c)}/remind`, "POST", {}, o);
+    },
+    assignReviewer: async (c, staffId, o) => {
+      await ok(
+        `/corrections/${id(c)}/assign`,
+        "POST",
+        { staff_id: staffId },
+        o,
+      );
+    },
   };
 }

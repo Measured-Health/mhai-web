@@ -5,10 +5,11 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { getAdminClient, type StaffAction } from "./api/admin";
+import { getAdminClient, type LinkAction, type StaffAction } from "./api/admin";
 import type {
   ActivityEventOut,
   ActivityQuery,
+  InviteIn,
   SettingsPatchIn,
   StaffOut,
   StaffPatchIn,
@@ -186,7 +187,7 @@ export function useUpdateStaff() {
   );
 }
 
-/** Deactivate or reactivate, with the step-up code (as `useUpdateStaff`). */
+/** Deactivate, reactivate or reset two-step, with the step-up code (as `useUpdateStaff`). */
 export function useStaffAction() {
   const qc = useQueryClient();
   return useKeyedMutation(
@@ -196,6 +197,93 @@ export function useStaffAction() {
       }),
     { ...staffRowCallbacks(qc), onSuccess: (row) => putStaff(qc, row) },
     { gcTime: 0 },
+  );
+}
+
+/**
+ * A password reset or a fresh invite, with the step-up code. The reply may
+ * carry the demo's link: only the row goes in the cache, and the call itself
+ * is forgotten at once (`gcTime: 0`, `reset()` after the answer), so the
+ * link lives only in the dialog that shows it.
+ */
+export function useSendLink() {
+  const qc = useQueryClient();
+  return useKeyedMutation(
+    (v: { id: string; action: LinkAction; auth: StepUpAuth }, key) =>
+      getAdminClient().sendLink(v.id, v.action, v.auth, {
+        idempotencyKey: key,
+      }),
+    { ...staffRowCallbacks(qc), onSuccess: (r) => putStaff(qc, r.staff) },
+    { gcTime: 0 },
+  );
+}
+
+/** The two-step setup reminder (no code). */
+export function useRemindStaff() {
+  const qc = useQueryClient();
+  return useKeyedMutation(
+    (v: { id: string }, key) =>
+      getAdminClient().remindStaff(v.id, { idempotencyKey: key }),
+    { ...staffRowCallbacks(qc), onSuccess: (row) => putStaff(qc, row) },
+  );
+}
+
+/** Removes the person (or cancels the invite), with the step-up code. */
+export function useRemoveStaff() {
+  const qc = useQueryClient();
+  return useKeyedMutation(
+    (v: { id: string; auth: StepUpAuth }, key) =>
+      getAdminClient().removeStaff(v.id, v.auth, { idempotencyKey: key }),
+    {
+      ...staffRowCallbacks(qc),
+      onSuccess: (_r, v) => dropStaff(qc, v.id),
+    },
+    { gcTime: 0 },
+  );
+}
+
+/**
+ * Invites, with the step-up code. The new rows come from the refreshed list;
+ * any demo links stay only in the dialog (`gcTime: 0`, `reset()`).
+ */
+export function useInviteStaff() {
+  const qc = useQueryClient();
+  return useKeyedMutation(
+    (v: { p: InviteIn; auth: StepUpAuth }, key) =>
+      getAdminClient().inviteStaff(v.p, v.auth, { idempotencyKey: key }),
+    { onSettled: () => void refreshStaff(qc) },
+    { gcTime: 0 },
+  );
+}
+
+/** After an oversight write: the list, and the log. Gone or decided: refreshed too. */
+function oversightCallbacks(qc: QueryClient) {
+  return {
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ADMIN_KEYS.oversight });
+      void qc.invalidateQueries({ queryKey: ADMIN_KEYS.activityAll });
+    },
+  };
+}
+
+export function useRemindReviewers() {
+  const qc = useQueryClient();
+  return useKeyedMutation(
+    (v: { id: string }, key) =>
+      getAdminClient().remindReviewers(v.id, { idempotencyKey: key }),
+    oversightCallbacks(qc),
+  );
+}
+
+/** `staffId: null` clears the assignment. */
+export function useAssignReviewer() {
+  const qc = useQueryClient();
+  return useKeyedMutation(
+    (v: { id: string; staffId: string | null }, key) =>
+      getAdminClient().assignReviewer(v.id, v.staffId, {
+        idempotencyKey: key,
+      }),
+    oversightCallbacks(qc),
   );
 }
 

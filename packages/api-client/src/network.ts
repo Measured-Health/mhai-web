@@ -66,6 +66,8 @@ export function pollDelay(
 export function shouldRetry(failures: number, e: unknown, max = 3): boolean {
   if (e instanceof ApiError && e.status >= 400 && e.status < 500) return false;
   if (e instanceof ApiError && e.status === 501) return false;
+  // Core can't send the email (503 no_delivery): asking again won't help.
+  if (e instanceof ApiError && e.code === "no_delivery") return false;
   return failures < max;
 }
 

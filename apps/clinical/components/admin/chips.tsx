@@ -1,5 +1,6 @@
 import {
   CheckCircle2,
+  Clock,
   Flag,
   Hourglass,
   ShieldAlert,
@@ -19,6 +20,7 @@ import { Chip } from "@mhai/ui/chip";
 
 const STATE_ICON = {
   active: CheckCircle2,
+  invited: Clock,
   attention: TriangleAlert,
   deactivated: UserX,
 } as const;
