@@ -72,8 +72,11 @@ export function DemoHint({ onPick }: { onPick: OnPick }) {
           if (a) onPick(a.email, a.password);
         }}
       />
-      Two-step accounts show the demo code on the next page. The accounts are
-      reset each time the demo backend is deployed.
+      Two-step accounts show the demo code on the next page.
+      <p className="mt-2">
+        The demo resets every few hours: questions, corrections, passwords and
+        two-step go back to how they started, and everyone is signed out.
+      </p>
     </aside>
   );
 }
