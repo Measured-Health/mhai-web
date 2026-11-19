@@ -44,32 +44,42 @@ const time = (iso: string | null): number | null => {
 
 const D = 86_400_000;
 
-/** Core says when an invite has expired (`invite_expired`). */
-export const inviteExpired = (s: StaffOut) =>
-  s.status === "invited" && s.issues.includes("invite_expired");
+/**
+ * Invited and not joined yet: core marks it only by `invited_at` (the
+ * person is `active` with no sign-in method). Core 1.33.0.
+ */
+export const isInvited = (s: StaffOut) =>
+  s.status === "active" && s.invited_at !== null;
 
-export function staffState(s: StaffOut): StaffState {
+/** The invite's link has expired (a past expiry) or was revoked (null). */
+export function inviteExpired(s: StaffOut, now: number): boolean {
+  if (!isInvited(s)) return false;
+  const t = time(s.invite_expires_at);
+  return t === null || t <= now;
+}
+
+export function staffState(s: StaffOut, now: number): StaffState {
   if (s.status === "deactivated") return "deactivated";
-  if (s.status === "invited") return inviteExpired(s) ? "attention" : "invited";
+  if (isInvited(s)) return inviteExpired(s, now) ? "attention" : "invited";
   return s.issues.length ? "attention" : "active";
 }
 
 /** What needs attention, in words; null when nothing does. */
-export function attentionLabel(s: StaffOut): string | null {
-  if (inviteExpired(s)) return "Invite expired";
+export function attentionLabel(s: StaffOut, now: number): string | null {
+  if (inviteExpired(s, now)) return "Invite expired";
   if (s.status === "active" && s.issues.includes("mfa_not_set_up"))
     return "Two-step not set up";
   return null;
 }
 
 /** The status column: the problem itself when there is one (as the mockup shows). */
-export const statusText = (s: StaffOut): string =>
-  attentionLabel(s) ?? STAFF_STATE[staffState(s)].label;
+export const statusText = (s: StaffOut, now: number): string =>
+  attentionLabel(s, now) ?? STAFF_STATE[staffState(s, now)].label;
 
 /** One line about an invite, or null for anyone who isn't invited. */
 export function inviteNote(s: StaffOut, now: number): string | null {
-  if (s.status !== "invited") return null;
-  if (inviteExpired(s)) return "Invite expired. Send a new one.";
+  if (!isInvited(s)) return null;
+  if (inviteExpired(s, now)) return "Invite expired. Send a new one.";
   const t = time(s.invite_expires_at);
   if (t === null) return "Waiting for them to choose a password";
   const days = Math.max(1, Math.ceil((t - now) / D));
@@ -79,7 +89,10 @@ export function inviteNote(s: StaffOut, now: number): string | null {
 /** Until they join, core may know only the address. */
 export const nameOf = (s: StaffOut) => s.full_name.trim() || s.email;
 
-export function staffCounts(list: StaffOut[]): Record<StaffFilter, number> {
+export function staffCounts(
+  list: StaffOut[],
+  now: number,
+): Record<StaffFilter, number> {
   const c: Record<StaffFilter, number> = {
     all: list.length,
     active: 0,
@@ -87,7 +100,7 @@ export function staffCounts(list: StaffOut[]): Record<StaffFilter, number> {
     attention: 0,
     deactivated: 0,
   };
-  for (const s of list) c[staffState(s)]++;
+  for (const s of list) c[staffState(s, now)]++;
   return c;
 }
 
@@ -103,10 +116,11 @@ export function filterStaff(
   list: StaffOut[],
   filter: StaffFilter,
   search: string,
+  now: number,
 ): StaffOut[] {
   const q = fold(search.trim());
   return list
-    .filter((s) => filter === "all" || staffState(s) === filter)
+    .filter((s) => filter === "all" || staffState(s, now) === filter)
     .filter(
       (s) =>
         !q ||
@@ -124,6 +138,7 @@ export function filterStaff(
 /** As core counts them for the last-admin rule: active, with two-step on. */
 export const isActiveAdmin = (s: StaffOut) =>
   s.status === "active" &&
+  !isInvited(s) &&
   s.roles.includes("hospital_admin") &&
   !s.issues.includes("mfa_not_set_up");
 

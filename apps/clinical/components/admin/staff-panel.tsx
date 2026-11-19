@@ -181,7 +181,7 @@ function Member({
             {[row.email, joined(row)].filter(Boolean).join(" · ")}
           </small>
           <div className="mt-2">
-            <StaffStatusChip staff={row} />
+            <StaffStatusChip staff={row} now={now} />
           </div>
           {named !== undefined && <NamedAccessLine access={named} />}
           {retryNamed && <NamedAccessFailed retry={retryNamed} />}

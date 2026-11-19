@@ -8,11 +8,13 @@ import type { AlertSeverity } from "./alerts-contract";
 import type { NamedPurpose } from "./analysis-contract";
 
 export type StaffRole = "clinician" | "analyst" | "hospital_admin";
-/** `invited`: created by an invite, no password chosen yet (core 1.33.0). */
-export type StaffStatus = "active" | "invited" | "deactivated";
+/**
+ * An invited person (core 1.33.0) is `active` with `invited_at` set: core
+ * adds no status or issue for invites. See `isInvited` / `inviteExpired`.
+ */
+export type StaffStatus = "active" | "deactivated";
 export type SignInMethod = "sso" | "password_mfa" | "password";
-/** `invite_expired`: invited, and the invite link has expired. */
-export type StaffIssue = "mfa_not_set_up" | "invite_expired";
+export type StaffIssue = "mfa_not_set_up";
 
 export interface StaffOut {
   id: string;
@@ -30,8 +32,12 @@ export interface StaffOut {
   sign_in: SignInMethod | null;
   last_active_at: string | null; // ISO 8601
   joined_at: string | null;
-  /** For an invited person only (ISO 8601); null otherwise. */
+  /** Set while the person is invited (hasn't chosen a password); else null. */
   invited_at: string | null;
+  /**
+   * The invite link's expiry: a past time once it has expired, null when
+   * the link was revoked (or for anyone not invited).
+   */
   invite_expires_at: string | null;
   /** The signed-in admin's own row (the API decides, R15). */
   is_you: boolean;

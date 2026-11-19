@@ -29,8 +29,9 @@ export const STAFF_SCHEMA = z.strictObject({
   can_review: z.boolean(),
   // Core has no reviewing by specialty yet: always empty.
   review_specialties: z.array(text(100)).max(0),
-  status: z.enum(["active", "invited", "deactivated"]),
-  issues: z.array(z.enum(["mfa_not_set_up", "invite_expired"])).max(2),
+  // An invite adds no status or issue: it is `invited_at` (core 1.33.0).
+  status: z.enum(["active", "deactivated"]),
+  issues: z.array(z.enum(["mfa_not_set_up"])).max(1),
   sign_in: z.enum(["sso", "password_mfa", "password"]).nullable(),
   last_active_at: instant.nullable(),
   joined_at: instant.nullable(),

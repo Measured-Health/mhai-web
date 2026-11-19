@@ -14,7 +14,7 @@ import {
   type AdminError,
 } from "@/lib/admin/errors";
 import { INVITE_DAYS } from "@/lib/admin/invite";
-import { guardFor, nameOf } from "@/lib/admin/staff";
+import { guardFor, isInvited, nameOf } from "@/lib/admin/staff";
 import { useAuth } from "@/lib/auth/auth-context";
 import { ENDS_NAMED } from "@/lib/clearances/summary";
 import { useNetwork } from "@mhai/api-client/network";
@@ -113,7 +113,7 @@ function copyFor(
         doneBody: `${s.email} has a new invite for ${INVITE_DAYS} days.`,
       };
     case "remove":
-      return s.status === "invited"
+      return isInvited(s)
         ? {
             title: "Cancel this invite?",
             body: `${s.email} won't be able to use the invite.`,
@@ -244,8 +244,9 @@ export function AccountActions({
   const gotLink = useRef(false);
 
   const hospital = user?.hospital ?? "the hospital";
-  const active = row.status === "active";
-  const invited = row.status === "invited";
+  const invited = isInvited(row);
+  // An invited person is `active` in core but hasn't joined yet.
+  const active = row.status === "active" && !invited;
   const password = active && row.sign_in !== null && row.sign_in !== "sso";
   const sso = active && row.sign_in === "sso";
   const noTwoStep = row.issues.includes("mfa_not_set_up");

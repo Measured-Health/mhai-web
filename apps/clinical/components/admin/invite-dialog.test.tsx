@@ -175,7 +175,8 @@ describe("InviteDialog (core 1.33.0)", () => {
           staff: makeStaff({
             id: "s-x",
             email: "a.new@havanahospital.org",
-            status: "invited",
+            sign_in: null,
+            invited_at: new Date().toISOString(),
           }),
           link: null,
         },

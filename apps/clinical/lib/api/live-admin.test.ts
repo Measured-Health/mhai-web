@@ -60,22 +60,25 @@ describe("live admin client (core 1.33.0)", () => {
     await expect(client().listActivity({})).resolves.toEqual(page);
   });
 
-  it("reads an invited person, with their invite dates", async () => {
+  it("reads an invited person as core sends one: active, with invite dates", async () => {
     const invited = {
       ...staff,
-      status: "invited",
+      status: "active",
       sign_in: null,
-      issues: ["invite_expired"],
+      joined_at: null,
       invited_at: "2026-10-09T10:00:00Z",
       invite_expires_at: "2026-10-16T10:00:00Z",
     };
-    json([invited]);
-    await expect(client().listStaff()).resolves.toEqual([invited]);
+    json([invited, { ...invited, id: "s-revoked", invite_expires_at: null }]);
+    await expect(client().listStaff()).resolves.toHaveLength(2);
   });
 
   it.each([
     ["an unknown key", [{ ...staff, nickname: "x" }]],
     ["an unknown status", [{ ...staff, status: "pending" }]],
+    // Core adds no status or issue for invites (core 1.33.0).
+    ["an invited status", [{ ...staff, status: "invited" }]],
+    ["an expired-invite issue", [{ ...staff, issues: ["invite_expired"] }]],
     ["an unknown issue", [{ ...staff, issues: ["locked"] }]],
     ["an invite date that isn't a date", [{ ...staff, invited_at: "soon" }]],
     ["a link in the list", [{ ...staff, link: null }]],
@@ -288,7 +291,7 @@ describe("live admin client (core 1.33.0)", () => {
   it("invites with the code and splits each invited person from their link", async () => {
     const invitedRow = {
       ...staff,
-      status: "invited",
+      status: "active",
       sign_in: null,
       joined_at: null,
       invited_at: "2026-10-16T10:00:00Z",

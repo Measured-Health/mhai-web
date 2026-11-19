@@ -732,7 +732,9 @@ describe("invites, resets, removal and reminders (core 1.33.0)", () => {
     ).toBe(true);
     expect(row).toMatchObject({
       email: "n.ade@havanahospital.org",
-      status: "invited",
+      // Core marks an invite only by invited_at.
+      status: "active",
+      issues: [],
       roles: ["clinician", "hospital_admin"],
       specialty: "Paediatrics",
       can_review: false,
@@ -757,7 +759,18 @@ describe("invites, resets, removal and reminders (core 1.33.0)", () => {
     );
     const id = r.invited[0]!.staff.id;
     t += 8 * D;
-    expect((await row(a, id)).issues).toEqual(["invite_expired"]);
+    // Expired: the expiry is in the past; still no issue or status.
+    const expired = await row(a, id);
+    expect(expired.status).toBe("active");
+    expect(expired.issues).toEqual([]);
+    expect(Date.parse(expired.invite_expires_at!)).toBeLessThan(t);
+    // Not active people's actions: no password reset, reminder or two-step reset.
+    expect(await code(a.sendLink(id, "password-reset", GOOD))).toBe(
+      "409 conflict",
+    );
+    expect(await code(a.staffAction(id, "reset-mfa", GOOD))).toBe(
+      "409 conflict",
+    );
     expect(await code(a.sendLink("s-bello", "resend-invite", GOOD))).toBe(
       "409 conflict",
     );
@@ -766,7 +779,6 @@ describe("invites, resets, removal and reminders (core 1.33.0)", () => {
       STAFF_WITH_LINK_SCHEMA.safeParse({ ...again.staff, link: again.link })
         .success,
     ).toBe(true);
-    expect(again.staff.issues).toEqual([]);
     expect(again.staff.invite_expires_at).toBe(
       new Date(t + 7 * D).toISOString(),
     );

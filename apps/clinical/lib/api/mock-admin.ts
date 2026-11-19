@@ -71,7 +71,11 @@ type Seed = {
  */
 const derived = (s: StaffOut): StaffOut => ({
   ...s,
-  can_review: s.status === "active" && s.roles.includes("clinician"),
+  // Someone still invited hasn't joined: no reviewing yet.
+  can_review:
+    s.status === "active" &&
+    s.invited_at === null &&
+    s.roles.includes("clinician"),
   review_specialties: [],
 });
 
@@ -654,15 +658,6 @@ export function createMockAdmin({
     const email = await youEmail();
     return rows.map((s) => ({
       ...copy(s),
-      // An invite's expiry is read on every reply, as core does.
-      ...(s.status === "invited"
-        ? {
-            issues:
-              Date.parse(s.invite_expires_at ?? "") <= now()
-                ? (["invite_expired"] as StaffIssue[])
-                : [],
-          }
-        : {}),
       is_you: email !== null && s.email.toLowerCase() === email,
     }));
   };
@@ -682,16 +677,21 @@ export function createMockAdmin({
     staff.find((s) => s.id === id) ?? fail(404, "not_found");
   const isYou = async (s: StaffOut) =>
     s.email.toLowerCase() === (await youEmail());
-  /** Core counts only active admins with two-step on. */
+  /** An invited person is `active` with `invited_at` set (core 1.33.0). */
+  const invited = (s: StaffOut) =>
+    s.status === "active" && s.invited_at !== null;
+  /** Core counts only active admins with two-step on, never an invite. */
   const activeAdmins = () =>
     staff.filter(
       (s) =>
         s.status === "active" &&
+        !invited(s) &&
         s.roles.includes("hospital_admin") &&
         !s.issues.includes("mfa_not_set_up"),
     ).length;
   const isLastAdmin = (s: StaffOut) =>
     s.status === "active" &&
+    !invited(s) &&
     s.roles.includes("hospital_admin") &&
     !s.issues.includes("mfa_not_set_up") &&
     activeAdmins() <= 1;
@@ -834,6 +834,7 @@ export function createMockAdmin({
         // Only an active password account with two-step set up.
         if (
           s.status !== "active" ||
+          invited(s) ||
           s.sign_in === "sso" ||
           s.issues.includes("mfa_not_set_up")
         )
@@ -858,16 +859,15 @@ export function createMockAdmin({
       const s = find(id);
       if (action === "password-reset") {
         if (await isYou(s)) fail(403, "self_change");
-        if (s.status !== "active") fail(409, "conflict");
+        if (s.status !== "active" || invited(s)) fail(409, "conflict");
         await checkCode(auth);
         return { staff: await reply(s), link: demoLink(RESET_MS) };
       }
-      if (s.status !== "invited") fail(409, "conflict");
+      if (!invited(s)) fail(409, "conflict");
       await checkCode(auth);
       const next = save({
         ...s,
         invite_expires_at: iso(now() + INVITE_MS),
-        issues: [],
       });
       return { staff: await reply(next), link: demoLink(INVITE_MS) };
     },
@@ -875,7 +875,11 @@ export function createMockAdmin({
     async remindStaff(id) {
       await wait();
       const s = find(id);
-      if (s.status !== "active" || !s.issues.includes("mfa_not_set_up"))
+      if (
+        s.status !== "active" ||
+        invited(s) ||
+        !s.issues.includes("mfa_not_set_up")
+      )
         fail(409, "conflict");
       const last = remindedStaff.get(id);
       if (last !== undefined && now() - last < D) fail(429, "rate_limited");
@@ -933,7 +937,8 @@ export function createMockAdmin({
             specialty: p.specialty ?? null,
             can_review: false,
             review_specialties: [],
-            status: "invited",
+            // Core: active, with `invited_at` set and no sign-in yet.
+            status: "active",
             issues: [],
             sign_in: null,
             last_active_at: null,

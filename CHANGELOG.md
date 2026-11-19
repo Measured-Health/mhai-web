@@ -36,9 +36,13 @@ All notable changes to this project are documented here. The format follows
     changed.") and `invalid_token`, and per-action words for the daily
     invite limit, the reminder limits and who can review. A `no_delivery`
     is never retried.
-  - The staff readers take `invited`, `invite_expired` and the invite
-    dates; the link and the invite reply are read strictly (only an
-    http(s) or same-app link).
+  - Core adds no status or issue for invites: an invited person is
+    `active` with `invited_at` set, and the invite has expired when
+    `invite_expires_at` is past or null (revoked). The app derives Invited
+    and Invite expired from that, and never counts an invited person as an
+    active member or admin. The staff readers take the invite dates; the
+    link and the invite reply are read strictly (only an http(s) or
+    same-app link).
   - /reset-password reads for both a reset and an invite ("Choose your
     password").
 

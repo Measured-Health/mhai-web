@@ -59,8 +59,8 @@ export function StaffView() {
   }, [openId, qc]);
 
   const list = q.data ?? [];
-  const counts = staffCounts(list);
-  const rows = filterStaff(list, filter, search);
+  const counts = staffCounts(list, now);
+  const rows = filterStaff(list, filter, search, now);
   const hospital = user?.hospital ?? "your hospital";
   const failed = q.isError ? adminError(q.error) : null;
   const waiting = q.isPending && !q.isError && q.fetchStatus === "paused";
