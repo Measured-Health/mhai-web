@@ -323,6 +323,14 @@ describe("live admin client (core 1.33.0)", () => {
         }),
       }),
     ]);
+    const elsewhere = {
+      invited: [],
+      skipped: [{ email: "c@x.org", reason: "not_available" }],
+    };
+    json(elsewhere);
+    await expect(
+      client().inviteStaff({ emails: ["c@x.org"], roles: ["clinician"] }, CODE),
+    ).resolves.toEqual(elsewhere);
     json({
       invited: [],
       skipped: [{ email: "x", reason: "domain_not_allowed" }],

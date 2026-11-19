@@ -27,6 +27,9 @@ export const SKIP_REASON: Record<InviteSkipReason, string> = {
   invalid_email: INVITE_PROBLEM.invalid,
   duplicate: INVITE_PROBLEM.duplicate,
   already_staff: INVITE_PROBLEM.already_staff,
+  // Never says where the address is in use: core doesn't either.
+  not_available:
+    "Can't be invited here. Ask Measured Health if this person should join your hospital.",
 };
 
 const ANGLE = /<([^<>]*)>/;

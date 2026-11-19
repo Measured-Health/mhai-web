@@ -67,7 +67,13 @@ export interface InviteIn {
   specialty?: string | null;
 }
 
-export type InviteSkipReason = "already_staff" | "invalid_email" | "duplicate";
+/**
+ * Why core didn't invite an address. `already_staff`: on this hospital's
+ * staff list. `not_available`: in use outside this hospital (another
+ * hospital or a platform account); core never says which.
+ */
+export type InviteSkipReason =
+  "already_staff" | "not_available" | "invalid_email" | "duplicate";
 
 export interface InviteOut {
   invited: StaffWithLink[];

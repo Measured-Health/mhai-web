@@ -75,7 +75,12 @@ export const INVITE_OUT_SCHEMA = z.strictObject({
     .array(
       z.strictObject({
         email: text(320),
-        reason: z.enum(["already_staff", "invalid_email", "duplicate"]),
+        reason: z.enum([
+          "already_staff",
+          "not_available",
+          "invalid_email",
+          "duplicate",
+        ]),
       }),
     )
     .max(200),

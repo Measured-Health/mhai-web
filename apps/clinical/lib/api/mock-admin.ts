@@ -37,6 +37,14 @@ const H = 60 * MIN;
 const D = 24 * H;
 /** Core's link lives (1.33.0). */
 const INVITE_MS = 7 * D;
+/**
+ * Addresses in use outside this hospital (a platform account, another
+ * hospital's staff): core skips them as `not_available`.
+ */
+export const IN_USE_ELSEWHERE: ReadonlySet<string> = new Set([
+  DEMO_EMAILS.platformAdmin,
+  "f.ade@another-hospital.example",
+]);
 const RESET_MS = 30 * MIN;
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -911,6 +919,8 @@ export function createMockAdmin({
           out.skipped.push({ email, reason: "duplicate" });
         else if (staff.some((s) => s.email.toLowerCase() === email))
           out.skipped.push({ email, reason: "already_staff" });
+        else if (IN_USE_ELSEWHERE.has(email))
+          out.skipped.push({ email, reason: "not_available" });
         else {
           seen.add(email);
           const row = derived({

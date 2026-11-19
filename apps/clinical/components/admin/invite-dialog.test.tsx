@@ -180,13 +180,26 @@ describe("InviteDialog (core 1.33.0)", () => {
           link: null,
         },
       ],
-      skipped: [{ email: "b.new@havanahospital.org", reason: "already_staff" }],
+      skipped: [
+        { email: "b.new@havanahospital.org", reason: "already_staff" },
+        { email: "c.new@havanahospital.org", reason: "not_available" },
+      ],
     });
     const dialog = await openDialog();
-    await paste(dialog, "a.new@havanahospital.org, b.new@havanahospital.org");
-    await sendWithCode(dialog, "Send 2 invites?");
+    await paste(
+      dialog,
+      "a.new@havanahospital.org, b.new@havanahospital.org, c.new@havanahospital.org",
+    );
+    await sendWithCode(dialog, "Send 3 invites?");
     const result = await screen.findByRole("dialog", { name: "Invites sent" });
     expect(within(result).getByText(/1 invite was sent/)).toBeInTheDocument();
+    expect(
+      within(result).getByText(
+        "c.new@havanahospital.org — Can't be invited here. Ask Measured Health if this person should join your hospital.",
+      ),
+    ).toBeInTheDocument();
+    // Never says where the address is in use.
+    expect(result.textContent).not.toMatch(/another hospital|platform/i);
     expect(
       within(result).getByText(
         "b.new@havanahospital.org — Already on the staff list",

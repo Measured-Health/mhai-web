@@ -706,6 +706,7 @@ describe("invites, resets, removal and reminders (core 1.33.0)", () => {
           "N.Ade@havanahospital.org",
           "n.ade@havanahospital.org",
           "k.mensah@havanahospital.org",
+          DEMO_EMAILS.platformAdmin,
           "oops",
         ],
         roles: ["clinician", "hospital_admin"],
@@ -716,6 +717,8 @@ describe("invites, resets, removal and reminders (core 1.33.0)", () => {
     expect(r.skipped).toEqual([
       { email: "n.ade@havanahospital.org", reason: "duplicate" },
       { email: "k.mensah@havanahospital.org", reason: "already_staff" },
+      // In use outside this hospital: never says where.
+      { email: DEMO_EMAILS.platformAdmin, reason: "not_available" },
       { email: "oops", reason: "invalid_email" },
     ]);
     expect(r.invited).toHaveLength(1);

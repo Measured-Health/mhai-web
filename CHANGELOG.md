@@ -13,7 +13,9 @@ All notable changes to this project are documented here. The format follows
   that core is deployed these answer 501 and say "Not available yet".
   - Staff: **Invite staff** takes one address or a pasted list (up to
     200), the Clinician and Hospital admin roles and a specialty, then the
-    admin's two-step code. What core skipped is listed in words. Invited
+    admin's two-step code. What core skipped is listed in words, including
+    an address in use outside the hospital ("Can't be invited here"), without
+    saying where. Invited
     people show as Invited (or "Invite expired") with their own filter, and
     the sidebar counts pending invites.
   - A person's Account section: send a password reset, reset two-step,
