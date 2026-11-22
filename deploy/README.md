@@ -20,7 +20,7 @@ needs no header lines for them; the app leaves HSTS off for localhost.
 
 ## One-time setup on the instance
 
-Run as `ubuntu`. The demo is at `ai.measured-health.org` (`demo.measured-health.org` still works); its DNS A
+Run as `ubuntu`. The demo is at `ai.measured-health.org`; its DNS A
 record must point at the instance's public IP.
 
 1. Compose file:
@@ -45,7 +45,7 @@ record must point at the instance's public IP.
 3. TLS, once DNS resolves to the instance:
 
    ```bash
-   sudo certbot --nginx -d ai.measured-health.org -d demo.measured-health.org -m <ops-email> --agree-tos
+   sudo certbot --nginx -d ai.measured-health.org -m <ops-email> --agree-tos
    sudo nginx -t && sudo systemctl reload nginx
    ```
 

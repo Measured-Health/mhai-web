@@ -8,9 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
-- **The public demo is now at ai.measured-health.org.** nginx serves both
-  `ai.` and the old `demo.` name, so links already shared keep working; docs
-  and the live-demo test default point at `ai.`.
+- **The public demo is now at ai.measured-health.org.** The old
+  `demo.` name is no longer served; docs and the live-demo test default
+  point at `ai.`.
 
 ### Added
 
