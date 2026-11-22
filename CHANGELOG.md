@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The public demo is now at ai.measured-health.org.** The old
+  `demo.` name is no longer served; docs and the live-demo test default
+  point at `ai.`.
+
 ### Added
 
 - **Hospital admin: invites, resets, removal, reminders and reviewer

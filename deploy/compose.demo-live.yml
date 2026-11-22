@@ -1,4 +1,4 @@
-# The public demo (demo.measured-health.org) in live mode: an override for
+# The public demo (ai.measured-health.org) in live mode: an override for
 # the `web` service of deploy/compose.yml (project mhai-web), used as
 #   docker compose -f compose.yml -f compose.demo-live.yml up -d web
 # The deploy workflow ships this file to /srv/mhai-web and uses it unless

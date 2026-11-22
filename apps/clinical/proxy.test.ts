@@ -56,7 +56,7 @@ describe("proxy: security headers", () => {
   });
 
   it("sends HSTS in production on the real host only", () => {
-    const demo = "https://demo.measured-health.org";
+    const demo = "https://ai.measured-health.org";
     vi.stubEnv("NODE_ENV", "production");
     expect(
       proxy(request("/sign-in", {}, demo)).headers.get(

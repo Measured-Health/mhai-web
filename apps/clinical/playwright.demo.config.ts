@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 /**
  * The public demo in live mode, end to end (deploy/README.md, "Public demo
- * in live mode"): against DEMO_BASE_URL (https://demo.measured-health.org,
+ * in live mode"): against DEMO_BASE_URL (https://ai.measured-health.org,
  * or the build server's live stack), with the seeded demo accounts and the
  * sample AI. Synthetic questions only, so the run is recorded on video.
  */
@@ -16,7 +16,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: process.env.DEMO_BASE_URL ?? "https://demo.measured-health.org",
+    baseURL: process.env.DEMO_BASE_URL ?? "https://ai.measured-health.org",
     actionTimeout: 60_000,
     trace: "retain-on-failure",
     screenshot: "on",
