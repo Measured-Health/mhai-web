@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Deploy: image digests from one build no longer leak into another's merge.**
+  The digest artifacts are named `digests-<scope>--<arch>`, so the `web`
+  merge no longer picks up `web-live`'s digests ("expected 2 digests, found 4").
+
 ### Changed
 
 - **Multi-arch images: the demo can run on an x86_64 server.** "Deploy
