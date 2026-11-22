@@ -422,7 +422,7 @@ sign-on.
 - **On your machine:** `NEXT_PUBLIC_USE_MOCK=true npm run build && npm start`
   (the flag is read at build time, so it must be set for the build).
   Feedback is saved to `apps/clinical/.feedback/feedback.jsonl` in development.
-- **For the team:** https://demo.measured-health.org (open, not listed
+- **For the team:** https://ai.measured-health.org (open, not listed
   by search engines). Every merge to `main` that passes CI deploys there; see
   [deploy/README.md](deploy/README.md).
 

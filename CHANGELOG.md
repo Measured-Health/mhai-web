@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The public demo is now at ai.measured-health.org.** nginx serves both
+  `ai.` and the old `demo.` name, so links already shared keep working; docs
+  and the live-demo test default point at `ai.`.
+
 ### Added
 
 - **Hospital admin: invites, resets, removal, reminders and reviewer

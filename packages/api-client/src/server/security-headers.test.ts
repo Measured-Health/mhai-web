@@ -90,7 +90,7 @@ describe("securityHeaders", () => {
 
 describe("wantsHsts", () => {
   it("is on in production on a real host", () => {
-    expect(wantsHsts("production", "demo.measured-health.org")).toBe(true);
+    expect(wantsHsts("production", "ai.measured-health.org")).toBe(true);
   });
   it("is off for localhost, whatever the environment", () => {
     for (const host of ["localhost", "LOCALHOST", "127.0.0.1", "[::1]"])
@@ -98,6 +98,6 @@ describe("wantsHsts", () => {
   });
   it("is off outside production", () => {
     for (const env of ["development", "test", undefined])
-      expect(wantsHsts(env, "demo.measured-health.org")).toBe(false);
+      expect(wantsHsts(env, "ai.measured-health.org")).toBe(false);
   });
 });
