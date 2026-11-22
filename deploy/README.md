@@ -1,5 +1,10 @@
 # Demo deployment
 
+> **22 Nov 2026: the public demo is dropped.** The deployment runs as the
+> live site with the repository variable `SITE_MODE=live` ("Live site",
+> below). The demo sections stay for anyone who runs a demo (`SITE_MODE`
+> unset or `demo`, the default).
+
 The demo runs on the shared preview instance, next to the EMR
 stack, behind the host's nginx:
 
@@ -349,7 +354,143 @@ confirmed by the live Playwright run after each deploy.
 | Analysis, named access, clearance letters                                                        | off (sign-off gates above); no page                                                                                     |
 | Hospital sign-on                                                                                 | unavailable over NATS                                                                                                   |
 
+## Live site
+
+**Product owner, 22 Nov 2026: the public demo is dropped.**
+`ai.measured-health.org` serves the live clinical app and
+`platforms.measured-health.org` the live platform admin app, still behind
+its IP allow list. The demo code stays here, off. Real patient data still
+waits on the go-live sign-offs in mhai-multiagent's TODO.md: this switch
+signs nothing off.
+
+```
+browser ──https──> nginx (host) ──> 127.0.0.1:8093 ──> web-live-proxy ──> web-live ──mhai-bff──> NATS ──> core
+browser ──https──> nginx (host, allow list) ──> 127.0.0.1:8094 ──> platform-live-proxy ──> platform-live ──mhai-bff──> ...
+```
+
+**The switch:** the repository variable `SITE_MODE=live`, in this repository
+**and** in mhai-multiagent (its deploy/README.md, "Live site"). Unset or
+`demo` is the public demo, as before; any other value stops the deploy.
+
+```bash
+gh variable set SITE_MODE --repo Measured-Health/mhai-web --body live
+gh variable set SITE_MODE --repo Measured-Health/mhai-multiagent --body live
+```
+
+`DEMO_MODE` is ignored while `SITE_MODE=live`.
+
+**What "Deploy demo" does with `SITE_MODE=live`** (every green main run and
+every run by hand). It fails closed: every step below that fails fails the
+deploy, and nothing falls back to the demo or to sample data.
+
+1. Builds the `live` images (`USE_MOCK=false`) of both apps on this run
+   (before, only on a run by hand). Without both, it stops.
+2. Requires the backend to be a live site already: the marker
+   `/srv/mhai-backend/live-site`, which the backend's deploy writes with
+   `SITE_MODE=live` once it has checked that no demo hospital can sign in.
+   So **deploy the backend first**. The NATS seed files and the `mhai-bff`
+   network must be there too.
+3. Copies this commit's `compose.yml`, `compose.platform.yml` and
+   `nginx/live-proxy.conf.template` to `/srv/mhai-web` and
+   `/srv/mhai-web-platform`, and makes `WEB_LIVE_SESSION_SECRET` and
+   `PLATFORM_LIVE_SESSION_SECRET` in their `.env` files if missing (once,
+   kept, never printed).
+4. Removes the demo `web` container (8090) and the sample-data `platform`
+   container (8091), found by their compose labels. Neither is started on a
+   live site.
+5. Starts `web-live` and `platform-live` and recreates their proxies, then
+   checks each through its proxy: `/api/health` (connected to NATS),
+   `/sign-in` with its CSP header.
+6. Checks the client address, with TEST-NET addresses: a request from the
+   host with `X-Real-IP: 192.0.2.77` must reach the app as `192.0.2.77`, and
+   one from inside the proxy's network with `X-Real-IP: 192.0.2.78` must
+   reach it as the proxy's own peer address. If not, it **stops that proxy**
+   (the public name then answers 502) and fails.
+7. Warns if an nginx site still points at 8090 or 8091.
+
+With `SITE_MODE` not `live` on a host the backend marked live, the deploy
+stops: the demo never comes back by accident.
+
+### The client address (per-IP sign-in limits)
+
+Core counts sign-in attempts per client address, and the app passes it the
+`X-Real-IP` it is given (`TRUSTED_CLIENT_IP_HEADER`). On the live site:
+
+- the host's nginx (`deploy/nginx/mhai-live.conf`, the platform's `:443`
+  block) **overwrites** `X-Real-IP` and `X-Forwarded-For` with the address
+  that connected to it, the browser's, on every request;
+- the live proxy (`deploy/nginx/live-proxy.conf.template`) believes
+  `X-Real-IP` only from its default gateway, the Docker bridge address every
+  connection from the host arrives from (nginx `set_real_ip_from`, one hop,
+  not recursive). The compose files work that address out when the proxy
+  starts (`LIVE_TRUSTED_PROXY`); without one the proxy doesn't start. From
+  any other address (another container) the header is ignored and the
+  connecting address is used;
+- the proxies' ports are on `127.0.0.1` only, so only the host's own
+  processes connect from the bridge address: its nginx, and an operator's
+  SSH tunnel (someone who can already sign in to the host). No browser can
+  choose its own address.
+
+Before this change the proxy always used the connecting address, so behind
+the host's nginx every visitor would have shared one address (the bridge's)
+and one set of sign-in counters. `scripts/it/live-proxy-test.sh` (CI, with
+Docker) checks both sides on the real compose files.
+
+### Host steps (once, in order)
+
+On the server, as `ubuntu`. Nothing here deletes data except where the
+backend's README says so.
+
+1. Set `SITE_MODE=live` in both repositories (above).
+2. Backend: remove the demo data and run **Deploy backend demo**
+   (mhai-multiagent deploy/README.md, "Live site"); create the first platform
+   admin with its `core-cli`.
+3. Run **Deploy demo** here by hand (Actions, Run workflow, `main`). It
+   starts the live apps on 8093 and 8094 and removes the demo and
+   sample-data containers; until step 4, ai. and platforms. answer 502.
+4. Point the nginx sites at the live proxies. The sites keep their names
+   (`mhai-demo` for ai., `mhai-platform` for platforms.) and their certbot
+   `:443` blocks; only the ports change. Test before reloading:
+
+   ```bash
+   sudo cp /etc/nginx/sites-available/mhai-demo /root/mhai-demo.before-live
+   sudo cp /etc/nginx/sites-available/mhai-platform /root/mhai-platform.before-live
+   sudo sed -i 's#proxy_pass http://127.0.0.1:8090;#proxy_pass http://127.0.0.1:8093;#' /etc/nginx/sites-available/mhai-demo
+   sudo sed -i 's#proxy_pass http://127.0.0.1:8091;#proxy_pass http://127.0.0.1:8094;#' /etc/nginx/sites-available/mhai-platform
+   grep -n 'proxy_pass\|X-Real-IP\|X-Forwarded-For' /etc/nginx/sites-available/mhai-demo /etc/nginx/sites-available/mhai-platform
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+   Every `proxy_pass` must now be `127.0.0.1:8093` (ai.) or `:8094`
+   (platforms.), and every `X-Real-IP` and `X-Forwarded-For` line
+   `$remote_addr` (never `$proxy_add_x_forwarded_for`). The ai. site's
+   `:80` block is `deploy/nginx/mhai-live.conf`; a new host takes that file
+   as `/etc/nginx/sites-available/mhai-demo` before certbot. The platform's
+   `:443` block is as in "Platform admin app" above, with
+   `proxy_pass http://127.0.0.1:8094;`. Also raise the ai. site's body
+   limit for letters if it lacks one: `client_max_body_size 12m;` in each
+   `server` block (as in `mhai-live.conf`).
+
+5. Checks:
+
+   ```bash
+   curl -s https://ai.measured-health.org/api/health          # {"status":"ok"}
+   curl -sI https://ai.measured-health.org/sign-in | head -n1  # 200
+   # from an allowed address:
+   curl -sI https://platforms.measured-health.org/sign-in | head -n1   # 200
+   # the proxies see each visitor's own address (not 172.x):
+   cd /srv/mhai-web && docker compose --profile live logs --tail=5 web-live-proxy
+   ss -ltn | grep -E ':(8090|8091) ' || echo "demo ports closed"
+   ```
+
+**Rollback** (the apps, not the demo): `WEB_LIVE_IMAGE=ghcr.io/measured-health/mhai-web:live-sha-<previous> docker compose --profile live up -d web-live`
+in `/srv/mhai-web` (and `PLATFORM_LIVE_IMAGE` in `/srv/mhai-web-platform`).
+The demo is not a rollback for the live site.
+
 ## Live preview over NATS
+
+With `SITE_MODE=live` these are the live site's apps (above), on the public
+names. Without it, they are previews reached by SSH tunnel, as below.
 
 The platform app stays on sample data; the public demo runs live (above). Two more
 containers, `web-live` and `platform-live`, run the same apps built for live

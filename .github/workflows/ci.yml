@@ -170,6 +170,17 @@ jobs:
             apps/${{ matrix.app }}/test-results/
           retention-days: 7
 
+  # The live site's proxies (deploy/README.md, "Live site"): the real compose
+  # files with an echo app, X-Real-IP believed from the host only.
+  live-proxy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Live proxy client address
+        run: bash scripts/it/live-proxy-test.sh
+
   secrets:
     runs-on: ubuntu-latest
     steps:

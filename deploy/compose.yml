@@ -69,7 +69,9 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   # The loopback proxy in front of web-live: the only way in, on
-  # 127.0.0.1:8093. It overwrites X-Real-IP with the connecting address
+  # 127.0.0.1:8093. It takes X-Real-IP only from the host (the host's
+  # nginx sets it to the browser's address; deploy/README.md, "Live site")
+  # and otherwise uses the connecting address
   # (deploy/nginx/live-proxy.conf.template), so the client IP the app sends
   # core is never one a browser chose.
   web-live-proxy:
@@ -81,6 +83,21 @@ services:
     mem_limit: 64m
     environment:
       LIVE_UPSTREAM: web-live:8080
+    # LIVE_TRUSTED_PROXY: this container's default gateway, the Docker bridge
+    # address every connection from the host arrives from (the host's nginx,
+    # an SSH tunnel); live-proxy.conf.template trusts X-Real-IP from it only.
+    # No IPv4 gateway: the proxy exits (fail closed, nothing is served).
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        gw=$$(ip route | awk '/^default/ {print $$3; exit}')
+        if ! printf '%s' "$$gw" | grep -Eq '^[0-9]{1,3}([.][0-9]{1,3}){3}$$'; then
+          echo "live proxy: no IPv4 default gateway; refusing to start" >&2
+          exit 1
+        fi
+        export LIVE_TRUSTED_PROXY="$$gw"
+        exec /docker-entrypoint.sh nginx -g 'daemon off;'
     volumes:
       - ./live-proxy.conf.template:/etc/nginx/templates/default.conf.template:ro
     depends_on: [web-live]
