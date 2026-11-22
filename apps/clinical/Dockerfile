@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #
 # The sample-data demo as a Next.js standalone server. Built by
-# .github/workflows/deploy.yml for arm64 (the preview instance is Graviton).
+# .github/workflows/deploy.yml for linux/amd64 and linux/arm64 (multi-arch).
 #
 # Build from the repository root: docker build -f apps/clinical/Dockerfile .
 # The deps stage must copy every workspace's package.json, or npm ci can't

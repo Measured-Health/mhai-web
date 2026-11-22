@@ -1,0 +1,151 @@
+name: Build image (multi-arch)
+
+# Called by deploy.yml, once per image: builds the image for linux/amd64 and
+# linux/arm64, each natively on its own runner (no QEMU), pushes both by
+# digest, then puts them under the given tags as one multi-arch image, so an
+# arm64 (Graviton) or an x86_64 host pulls its own architecture from the
+# same tag. The tags are the ones deploy.yml used when it built arm64 only.
+
+on:
+  workflow_call:
+    inputs:
+      image-suffix:
+        description: "Appended to ghcr.io/<owner>/<repo> ('' or '-platform')"
+        type: string
+        default: ""
+      file:
+        description: "Dockerfile, relative to the repository root (the build context)"
+        type: string
+        required: true
+      tags:
+        description: "docker/metadata-action tags"
+        type: string
+        required: true
+      build-args:
+        type: string
+        default: ""
+      cache-scope:
+        description: "GHA cache scope; arm64 keeps it as is, amd64 adds -amd64. Also names the digest artifacts."
+        type: string
+        required: true
+      ref:
+        description: "The commit to build"
+        type: string
+        required: true
+
+permissions: {}
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # Lower case: the organisation has capitals; Docker refuses them.
+      - name: Image name
+        id: name
+        env:
+          SUFFIX: ${{ inputs.image-suffix }}
+        run: echo "value=ghcr.io/${GITHUB_REPOSITORY,,}${SUFFIX}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ steps.name.outputs.value }}
+
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ inputs.file }}
+          platforms: linux/${{ matrix.arch }}
+          build-args: ${{ inputs.build-args }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ steps.name.outputs.value }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.arch == 'arm64' && inputs.cache-scope || format('{0}-amd64', inputs.cache-scope) }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch == 'arm64' && inputs.cache-scope || format('{0}-amd64', inputs.cache-scope) }}
+
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: digests-${{ inputs.cache-scope }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-${{ inputs.cache-scope }}-*
+          merge-multiple: true
+
+      - name: Image name
+        id: name
+        env:
+          SUFFIX: ${{ inputs.image-suffix }}
+        run: echo "value=ghcr.io/${GITHUB_REPOSITORY,,}${SUFFIX}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ steps.name.outputs.value }}
+          tags: ${{ inputs.tags }}
+
+      - name: Push the multi-arch tags
+        env:
+          IMAGE_NAME: ${{ steps.name.outputs.value }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          set -euo pipefail
+          n=$(find . -maxdepth 1 -type f | wc -l)
+          [ "$n" = 2 ] || { echo "::error::expected 2 digests (amd64, arm64), found $n"; exit 1; }
+          args=()
+          while IFS= read -r t; do [ -n "$t" ] && args+=(-t "$t"); done <<< "$TAGS"
+          for d in *; do args+=("$IMAGE_NAME@sha256:$d"); done
+          docker buildx imagetools create "${args[@]}"
+          docker buildx imagetools inspect "$IMAGE_NAME:$VERSION"

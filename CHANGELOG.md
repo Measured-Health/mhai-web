@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Multi-arch images: the demo can run on an x86_64 server.** "Deploy
+  demo" builds every image (web `latest`, `live-demo`, `live`, and the
+  platform app's `latest` and `live`) for linux/amd64 and linux/arm64, each
+  on a native runner, through the new reusable
+  `.github/workflows/build-image.yml`, and pushes one multi-arch tag under
+  the same names. The arm64 demo host pulls what it pulled before; an x86_64
+  host pulls its own. Setting up or moving to a new server, platform app
+  included: mhai-multiagent's `deploy/NEW-SERVER.md`.
 - **The public demo is now at ai.measured-health.org.** The old
   `demo.` name is no longer served; docs and the live-demo test default
   point at `ai.`.
