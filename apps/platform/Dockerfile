@@ -2,7 +2,7 @@
 #
 # The platform admin app (apps/platform) as a Next.js standalone server, served
 # at platforms.measured-health.org behind an IP allow list. Built by
-# .github/workflows/deploy.yml for arm64 (the preview instance is Graviton).
+# .github/workflows/deploy.yml for linux/amd64 and linux/arm64 (multi-arch).
 #
 # Build from the repository root: docker build -f apps/platform/Dockerfile .
 # The deps stage must copy every workspace's package.json, or npm ci can't

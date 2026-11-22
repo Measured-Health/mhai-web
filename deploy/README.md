@@ -8,10 +8,14 @@ browser ──https──> nginx (host) ──> 127.0.0.1:8090 ──> mhai-web 
 ```
 
 Every merge to `main` that passes CI runs `.github/workflows/deploy.yml`:
-build the arm64 image in GitHub (from `apps/clinical/Dockerfile`, with the
-repository root as the build context), push it to
-`ghcr.io/measured-health/mhai-web`, then SSH to the instance, pull, restart
-and health-check. It never touches the EMR containers or nginx.
+build the image in GitHub (from `apps/clinical/Dockerfile`, with the
+repository root as the build context) for linux/amd64 and linux/arm64, each
+on a native runner (`.github/workflows/build-image.yml`), push it to
+`ghcr.io/measured-health/mhai-web` as one multi-arch tag, then SSH to the
+instance, pull (its own architecture: Graviton or x86_64), restart and
+health-check. Every image the workflow builds (`latest`, `live-demo`,
+`live`, and the platform app's) is multi-arch under the tags it always had.
+It never touches the EMR containers or nginx.
 
 Security headers (CSP, `X-Frame-Options`, `nosniff`, `Referrer-Policy`,
 `Permissions-Policy` and `Strict-Transport-Security: max-age=31536000;
@@ -19,6 +23,11 @@ includeSubDomains`) come from each app's `proxy.ts`, on every page, so nginx
 needs no header lines for them; the app leaves HSTS off for localhost.
 
 ## One-time setup on the instance
+
+A whole new server (backend, this app and the platform app), or moving the
+demo to one: mhai-multiagent's `deploy/new-server.sh` with
+`--platform-domain`, and its `deploy/NEW-SERVER.md` ("Moving the demo to a
+new server"). The steps below are the same setup by hand.
 
 Run as `ubuntu`. The demo is at `ai.measured-health.org`; its DNS A
 record must point at the instance's public IP.
