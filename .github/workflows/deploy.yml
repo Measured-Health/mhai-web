@@ -98,11 +98,19 @@ jobs:
       cache-scope: web-live-demo
       ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-  # The live preview images (docs/adr/0005): the same apps built with
-  # USE_MOCK=false, tagged `live` and `live-sha-<commit>`. Only on a manual
-  # run from main: the public demo's images and steps above never change.
+  # The live images (docs/adr/0005): the same apps built with
+  # USE_MOCK=false, tagged `live` and `live-sha-<commit>`. On a manual run
+  # from main, and on every green main run when the repository variable
+  # SITE_MODE is `live` (the live site, deploy/README.md "Live site"). Same
+  # trust check as build-web.
   build-web-live:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (vars.SITE_MODE == 'live' &&
+       (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository))
     permissions:
       contents: read
       packages: write
@@ -114,10 +122,16 @@ jobs:
         type=raw,value=live
         type=sha,format=long,prefix=live-sha-
       cache-scope: web-live
-      ref: ${{ github.sha }}
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
   build-platform-live:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (vars.SITE_MODE == 'live' &&
+       (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository))
     permissions:
       contents: read
       packages: write
@@ -130,7 +144,7 @@ jobs:
         type=raw,value=live
         type=sha,format=long,prefix=live-sha-
       cache-scope: platform-live
-      ref: ${{ github.sha }}
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
   deploy:
     needs:
@@ -152,6 +166,20 @@ jobs:
       needs.build-web.result == 'success' &&
       vars.DEPLOY_ENABLED == 'true'
     steps:
+      # The site mode (deploy/README.md, "Live site"): repository variable
+      # SITE_MODE, demo (the default, unset) or live. Anything else stops
+      # here, so a typo never puts the demo on a live site.
+      - name: Site mode
+        id: mode
+        env:
+          SITE_MODE: ${{ vars.SITE_MODE }}
+        run: |
+          case "$SITE_MODE" in
+            ''|demo) echo "value=demo" >> "$GITHUB_OUTPUT"; echo "Site mode: demo (the public demo)." ;;
+            live) echo "value=live" >> "$GITHUB_OUTPUT"; echo "Site mode: live (the live apps on the public names; no demo, no sample data)." ;;
+            *) echo "::error::Repository variable SITE_MODE must be demo or live (deploy/README.md, \"Live site\")"; exit 1 ;;
+          esac
+
       # Without a host-key check the SSH step would trust whatever answers at
       # DEPLOY_HOST, and hand it the GHCR token. Refuse to deploy without one.
       - name: Require the host key fingerprint
@@ -163,7 +191,7 @@ jobs:
             *) echo "::error::Secret DEPLOY_HOST_FINGERPRINT is missing or not SHA256:... (deploy/README.md)"; exit 1 ;;
           esac
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
@@ -175,6 +203,15 @@ jobs:
         run: |
           set -euo pipefail
           b=$(base64 -w0 deploy/compose.demo-live.yml)
+          echo "value=$b" >> "$GITHUB_OUTPUT"
+
+      # The live site's compose files and proxy template of this commit (no
+      # secret in them), used only with SITE_MODE=live.
+      - name: Bundle the live site's config
+        id: live_bundle
+        run: |
+          set -euo pipefail
+          b=$(tar -C deploy -czf - compose.yml compose.platform.yml nginx/live-proxy.conf.template | base64 -w0)
           echo "value=$b" >> "$GITHUB_OUTPUT"
 
       - name: Pull and restart on the instance
@@ -194,8 +231,11 @@ jobs:
           # "success" only on a manual run that built the live images.
           WEB_LIVE_BUILD: ${{ needs.build-web-live.result }}
           PLATFORM_LIVE_BUILD: ${{ needs.build-platform-live.result }}
+          # demo or live (the "Site mode" step above).
+          SITE_MODE: ${{ steps.mode.outputs.value }}
+          LIVE_SITE_BUNDLE: ${{ steps.live_bundle.outputs.value }}
         with:
-          envs: GHCR_TOKEN,GHCR_USER,PLATFORM_BUILD,WEB_LIVE_BUILD,PLATFORM_LIVE_BUILD,LIVE_DEMO_BUILD,DEMO_MODE,DEMO_LIVE_BUNDLE
+          envs: GHCR_TOKEN,GHCR_USER,PLATFORM_BUILD,WEB_LIVE_BUILD,PLATFORM_LIVE_BUILD,LIVE_DEMO_BUILD,DEMO_MODE,DEMO_LIVE_BUNDLE,SITE_MODE,LIVE_SITE_BUNDLE
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -208,6 +248,132 @@ jobs:
 
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+
+            # ---------------------------------------------------------------
+            # The live site (SITE_MODE=live; deploy/README.md, "Live site"):
+            # ai. and platforms. serve the live apps through their loopback
+            # proxies (web-live-proxy 127.0.0.1:8093, platform-live-proxy
+            # :8094; the host's nginx sites mhai-live.conf and
+            # mhai-platform.conf). Fail closed: the demo `web` and the
+            # sample-data `platform` are stopped first and never started
+            # here, and every failure below fails the deploy; nothing falls
+            # back to the demo or to sample data.
+            if [ "$SITE_MODE" = live ]; then
+              fail() { echo "::error::Live site: $*"; exit 1; }
+              web_dir=/srv/mhai-web
+              plat_dir=/srv/mhai-web-platform
+              [ "$WEB_LIVE_BUILD" = success ] || fail "no live clinical image on this run ($WEB_LIVE_BUILD)"
+              [ "$PLATFORM_LIVE_BUILD" = success ] || fail "no live platform image on this run ($PLATFORM_LIVE_BUILD)"
+              # The backend deploy ran with SITE_MODE=live: no demo seed, no
+              # sample answers, no demo hospital that can sign in.
+              [ -f /srv/mhai-backend/live-site ] || fail "the backend is not a live site yet (/srv/mhai-backend/live-site): run Deploy backend demo with SITE_MODE=live first"
+              for f in /srv/mhai-backend/secrets/bff/nats-bff-clinical.nk /srv/mhai-backend/secrets/bff/nats-bff-platform.nk; do
+                [ -e "$f" ] || fail "no NATS seed file $f from the backend"
+              done
+              docker network inspect mhai-bff >/dev/null 2>&1 || fail "no mhai-bff network"
+              [ -d "$plat_dir" ] || fail "$plat_dir is not set up (deploy/README.md, \"Platform admin app\")"
+
+              # This commit's compose files and proxy template.
+              tmp=$(mktemp -d)
+              printf '%s' "$LIVE_SITE_BUNDLE" | base64 -d | tar -xzf - -C "$tmp"
+              install -m 644 "$tmp/compose.yml" "$web_dir/compose.yml"
+              install -m 644 "$tmp/nginx/live-proxy.conf.template" "$web_dir/live-proxy.conf.template"
+              install -m 644 "$tmp/compose.platform.yml" "$plat_dir/compose.platform.yml"
+              install -m 644 "$tmp/nginx/live-proxy.conf.template" "$plat_dir/live-proxy.conf.template"
+              rm -rf "$tmp"
+
+              # Each live app's own session secret, made here once and kept;
+              # never printed. A new one would only sign everyone out.
+              ensure_secret() { # env file, variable
+                if ! grep -q "^$2=." "$1" 2>/dev/null; then
+                  ( umask 077; touch "$1"
+                    secret=$(openssl rand -base64 48 | tr -d '\n')
+                    [ "${#secret}" -ge 32 ] || exit 1
+                    printf '%s=%s\n' "$2" "$secret" >> "$1" ) || fail "could not make $2"
+                  echo "$2 generated in $1"
+                fi
+                chmod 600 "$1"
+              }
+              ensure_secret "$web_dir/.env" WEB_LIVE_SESSION_SECRET
+              ensure_secret "$plat_dir/.env" PLATFORM_LIVE_SESSION_SECRET
+
+              # No demo and no sample data on the public names, ever: the
+              # containers of compose services mhai-web/web (8090) and
+              # mhai-web-platform/platform (8091) are removed, found by their
+              # compose labels (so a compose file that doesn't validate can't
+              # hide one).
+              for ps in mhai-web/web mhai-web-platform/platform; do
+                ids=$(docker ps -aq --filter "label=com.docker.compose.project=${ps%/*}" \
+                  --filter "label=com.docker.compose.service=${ps#*/}")
+                if [ -n "$ids" ]; then
+                  # shellcheck disable=SC2086
+                  docker rm -f $ids >/dev/null || fail "could not remove $ps"
+                  echo "$ps removed"
+                fi
+                [ -z "$(docker ps -aq --filter "label=com.docker.compose.project=${ps%/*}" \
+                  --filter "label=com.docker.compose.service=${ps#*/}")" ] || fail "$ps is still there"
+              done
+              echo "No demo (web, 8090) and no sample-data platform (8091) run."
+
+              start_live() { # dir composefile service port
+                local dir=$1 file=$2 svc=$3 port=$4 h=000 s=000 csp=0 ok=0
+                cd "$dir"
+                docker compose -f "$file" --profile live config --quiet || fail "$file in $dir doesn't validate"
+                docker compose -f "$file" --profile live pull "$svc" "$svc-proxy" || fail "$svc: pull failed"
+                docker compose -f "$file" --profile live up -d "$svc" || fail "$svc: start failed"
+                # Recreated every time: it reads the template at start.
+                docker compose -f "$file" --profile live up -d --force-recreate --no-deps "$svc-proxy" || fail "$svc-proxy: start failed"
+                for _ in $(seq 1 24); do
+                  h=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/api/health" || echo 000)
+                  s=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/sign-in" || echo 000)
+                  csp=$(curl -s -D - -o /dev/null "http://127.0.0.1:$port/sign-in" | grep -ci '^content-security-policy:' || true)
+                  if [ "$h" = 200 ] && [ "$s" = 200 ] && [ "$csp" -ge 1 ]; then ok=1; break; fi
+                  sleep 5
+                done
+                if [ "$ok" != 1 ]; then
+                  docker compose -f "$file" --profile live logs --tail=80 "$svc" "$svc-proxy" || true
+                  fail "$svc unhealthy through its proxy (/api/health=$h, /sign-in=$s, csp=$csp)"
+                fi
+                echo "$svc healthy through its proxy (connected to NATS)."
+
+                # The client address: X-Real-IP is believed from the host (as
+                # the host's nginx sends it) and ignored from anything else.
+                # TEST-NET addresses only; /api/health signs nobody in.
+                local token got_host got_peer
+                token=$(openssl rand -hex 8)
+                curl -s -o /dev/null -H 'X-Real-IP: 192.0.2.77' "http://127.0.0.1:$port/api/health?probe=h$token" || true
+                docker compose -f "$file" --profile live exec -T "$svc-proxy" \
+                  wget -q -O /dev/null --header 'X-Real-IP: 192.0.2.78' "http://127.0.0.1:8080/api/health?probe=p$token" || true
+                sleep 1
+                got_host=$(docker compose -f "$file" --profile live logs --no-log-prefix --since 5m "$svc-proxy" | grep "probe=h$token" | awk '{print $1}' | tail -n1 || true)
+                got_peer=$(docker compose -f "$file" --profile live logs --no-log-prefix --since 5m "$svc-proxy" | grep "probe=p$token" | awk '{print $1}' | tail -n1 || true)
+                if [ "$got_host" != 192.0.2.77 ] || [ "$got_peer" != 127.0.0.1 ]; then
+                  # Shared or chosen client addresses would break core's per-IP
+                  # sign-in limits: take the app off the public name.
+                  docker compose -f "$file" --profile live stop "$svc-proxy" || true
+                  fail "$svc-proxy: client address check failed (host saw '${got_host:-none}', want 192.0.2.77; peer saw '${got_peer:-none}', want 127.0.0.1); the proxy is stopped"
+                fi
+                echo "$svc-proxy takes the client address from the host's nginx only."
+              }
+              start_live "$web_dir" compose.yml web-live 8093
+              start_live "$plat_dir" compose.platform.yml platform-live 8094
+
+              # The host's nginx: the public names must go to the live proxies.
+              # A site still on 8090/8091 now answers 502 (nothing listens
+              # there): fail closed, but say so.
+              if grep -rqsE 'proxy_pass http://127\.0\.0\.1:(8090|8091);' /etc/nginx/sites-enabled/; then
+                echo "::warning::An nginx site still points at 8090 or 8091 (the demo's ports): move it to 8093 (ai.) and 8094 (platforms.); deploy/README.md, \"Live site\"."
+              fi
+
+              docker image prune -f
+              exit 0
+            fi
+            # A host the backend marked live never gets the demo back.
+            if [ -f /srv/mhai-backend/live-site ]; then
+              echo "::error::This host is a live site (/srv/mhai-backend/live-site) but SITE_MODE is not live: no demo here (deploy/README.md, \"Live site\")."
+              exit 1
+            fi
+
             # The public demo: live mode (compose.demo-live.yml: the seeded
             # demo backend over NATS) when it can, else sample data exactly
             # as before. deploy/README.md, "Public demo in live mode".

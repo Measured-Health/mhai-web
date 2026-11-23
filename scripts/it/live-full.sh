@@ -346,10 +346,12 @@ apps_up() {
   app platform 3201 bff_platform bff_platform.pass -e PLATFORM_SESSION_SECRET="$s2"
   # One proxy, both apps: the browser shares its network, so each app is
   # http://localhost:<port> (a secure context), and nginx sets X-Real-IP.
+  # LIVE_TRUSTED_PROXY is 192.0.2.1 (TEST-NET, never a peer here): no
+  # X-Real-IP a client sends is believed.
   sed -e 's/listen 8080;/listen 8080;/' "$repo/deploy/nginx/live-proxy.conf.template" |
-    sed "s|\${LIVE_UPSTREAM}|$project-web-clinical:3200|" > "$state/proxy.conf"
+    sed -e "s|\${LIVE_UPSTREAM}|$project-web-clinical:3200|" -e "s|\${LIVE_TRUSTED_PROXY}|192.0.2.1|g" > "$state/proxy.conf"
   sed -e 's/listen 8080;/listen 8081;/' "$repo/deploy/nginx/live-proxy.conf.template" |
-    sed "s|\${LIVE_UPSTREAM}|$project-web-platform:3201|" >> "$state/proxy.conf"
+    sed -e "s|\${LIVE_UPSTREAM}|$project-web-platform:3201|" -e "s|\${LIVE_TRUSTED_PROXY}|192.0.2.1|g" >> "$state/proxy.conf"
   chmod 644 "$state/proxy.conf"
   docker rm -f "$project-proxy" >/dev/null 2>&1 || true
   docker run -d --name "$project-proxy" --network "${project}_default" \

@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Live site: the public demo is dropped (product owner, 22 Nov).** With the
+  repository variable `SITE_MODE=live`, "Deploy demo" builds the `live`
+  images on every green main run, requires the backend to be a live site
+  (`/srv/mhai-backend/live-site`), removes the demo `web` and sample-data
+  `platform` containers, and serves ai. and platforms. from `web-live` and
+  `platform-live` through their proxies (8093, 8094; new site file
+  `deploy/nginx/mhai-live.conf`). Every failure fails the deploy; nothing falls
+  back to the demo or sample data. A host marked live refuses the demo.
+
+### Security
+
+- **The live proxies take the client address from the host's nginx only.**
+  `live-proxy.conf.template` now believes `X-Real-IP` from the proxy's default
+  gateway (the Docker bridge address host connections arrive from; worked out
+  at start, `LIVE_TRUSTED_PROXY`, the proxy refuses to start without it), one
+  hop, and ignores it from anyone else. Behind the host's nginx every visitor
+  would otherwise have shared one address and one set of per-IP sign-in
+  counters. The deploy checks both sides on every live run and stops a proxy
+  that fails; `scripts/it/live-proxy-test.sh` (CI) and
+  `scripts/deploy-config.test.mjs` check them too.
+
 ### Fixed
 
 - **Deploy: image digests from one build no longer leak into another's merge.**

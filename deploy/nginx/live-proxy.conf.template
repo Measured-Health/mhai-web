@@ -1,12 +1,23 @@
-# The loopback proxy in front of a live preview container (web-live,
-# platform-live; deploy/README.md, "Live preview over NATS"). The nginx
-# image fills in ${LIVE_UPSTREAM} at start (envsubst replaces only variables
-# set in its environment, so nginx's own $variables stay as they are).
+# The loopback proxy in front of a live app container (web-live,
+# platform-live; deploy/README.md, "Live site" and "Live preview over
+# NATS"). The nginx image fills in ${LIVE_UPSTREAM} and ${LIVE_TRUSTED_PROXY}
+# at start (envsubst replaces only variables set in its environment, so
+# nginx's own $variables stay as they are). The compose files set
+# LIVE_TRUSTED_PROXY to this container's default gateway: the Docker bridge
+# address that every connection from the host (the host's nginx, an SSH
+# tunnel) arrives from. The proxy refuses to start without it.
 #
-# Its one job: overwrite X-Real-IP with the address of whoever connected,
-# so the app's TRUSTED_CLIENT_IP_HEADER (x-real-ip) is never what a browser
-# sent. Without it, core refuses sign-in (no client IP), and a tunnel user
-# could pick their own IP to get past the per-IP sign-in counters.
+# Its one job: the X-Real-IP the app gets (TRUSTED_CLIENT_IP_HEADER) is never
+# what a browser chose.
+#   - A connection from the host (LIVE_TRUSTED_PROXY): the host's nginx,
+#     which overwrites X-Real-IP with the browser's address on every request
+#     (deploy/nginx/mhai-live.conf, mhai-platform.conf). That address is
+#     taken, so core's per-IP sign-in counters see each visitor. The port is
+#     on 127.0.0.1 only, so only the host's own processes connect from there.
+#   - Any other connection (another container on the network): its own
+#     address; whatever X-Real-IP or X-Forwarded-For it sent is ignored.
+# Without a client IP core refuses sign-in; with a chosen one a visitor could
+# get past the per-IP counters.
 
 server {
     listen 8080;
@@ -16,15 +27,29 @@ server {
     # Letters (Plan 11) are bigger than nginx's 1 MB default; the app caps them.
     client_max_body_size 12m;
 
+    # X-Real-IP is believed from the host's address only, one hop, never
+    # recursively: $remote_addr becomes the browser's address for the host's
+    # nginx, and stays the connecting address for anyone else.
+    set_real_ip_from ${LIVE_TRUSTED_PROXY};
+    real_ip_header X-Real-IP;
+    real_ip_recursive off;
+
+    # https as the host's nginx saw it, only from the host; else this hop's.
+    set $forwarded_proto $scheme;
+    if ($realip_remote_addr = "${LIVE_TRUSTED_PROXY}") {
+        set $forwarded_proto $http_x_forwarded_proto;
+    }
+
     location / {
         set $upstream http://${LIVE_UPSTREAM};
         proxy_pass $upstream;
         proxy_http_version 1.1;
         # With the port: the app's same-origin check compares Origin and Host.
         proxy_set_header Host              $http_host;
+        # Overwritten, never appended: one address, the one decided above.
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
         proxy_set_header X-Forwarded-Host  $http_host;
         proxy_read_timeout 60s;
     }
