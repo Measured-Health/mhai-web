@@ -231,14 +231,14 @@ describe("readAnalytics: strict", () => {
   it("an unknown key in a row, a median or a value fails that area only", () => {
     const rowKey = readAnalytics(
       edit((a) => {
-        Object.assign(row(useBlock(a).rows, "h_havana"), { patient: "x" });
+        Object.assign(row(useBlock(a).rows, "h_pilot"), { patient: "x" });
       }),
     );
     expect(rowKey.use.status).toBe("failed");
     expect(rowKey.quality.status).toBe("ok");
     const valueKey = readAnalytics(
       edit((a) => {
-        Object.assign(row(qualityRows(a), "h_havana").answers, { raw: 3 });
+        Object.assign(row(qualityRows(a), "h_pilot").answers, { raw: 3 });
       }),
     );
     expect(valueKey.quality.status).toBe("failed");
@@ -248,7 +248,7 @@ describe("readAnalytics: strict", () => {
   it("an unsuppressed 3, or a hidden value with its number, fails the area", () => {
     const three = readAnalytics(
       edit((a) => {
-        row(qualityRows(a), "h_havana").reviews = v(3);
+        row(qualityRows(a), "h_pilot").reviews = v(3);
       }),
     );
     expect(three.quality.status).toBe("failed");
@@ -285,9 +285,9 @@ describe("readAnalytics: what changed", () => {
     expect(c.items.map((x) => x.id)).toEqual([
       "chg_ngh_needs_review",
       "chg_ngh_questions",
-      "chg_hav_needs_review",
+      "chg_plt_needs_review",
       "chg_all_questions",
-      "chg_hav_agreement",
+      "chg_plt_agreement",
       "chg_rch_questions",
     ]);
     expect(c.items.at(-1)!.followedUp).toBe(true);
@@ -370,7 +370,7 @@ describe("readAnalytics: what changed", () => {
 });
 
 describe("readSeries", () => {
-  const H = { id: "h_havana", name: "Havana Hospital" };
+  const H = { id: "h_pilot", name: "Pilot Hospital" };
   const pt = (value: Guarded, median: number | null = 10) => ({
     start: "2026-10-01T00:00:00.000Z",
     value,
@@ -388,7 +388,7 @@ describe("readSeries", () => {
         "questions_per_clinician",
         "needs_review_share",
       ] as const)
-        for (const h of ["h_havana", "h_lakeside", "h_hilltop"])
+        for (const h of ["h_pilot", "h_lakeside", "h_hilltop"])
           expect(readSeries(buildSeries(h, m, p, NOW), m, p).status).toBe("ok");
       for (const c of seedChanges(NOW, "normal"))
         expect(

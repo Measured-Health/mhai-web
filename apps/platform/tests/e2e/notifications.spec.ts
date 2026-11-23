@@ -110,7 +110,7 @@ test("an item opens Usage on that change", async ({ page }) => {
   await expect(
     page.getByRole("heading", { level: 1, name: "Usage" }),
   ).toBeVisible();
-  const words = /Havana Hospital · Better: Agreement rate better/;
+  const words = /Pilot Hospital · Better: Agreement rate better/;
   if (isMobile(page)) {
     // Phones open the change's detail alone.
     await expect(

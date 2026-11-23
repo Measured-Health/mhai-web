@@ -57,7 +57,7 @@ describe("analyticsCsv", () => {
       "Period,Hospital,Questions,Active clinicians,Questions per active clinician",
     );
     expect(use.slice(1).map((l) => l.split(",")[1])).toEqual([
-      "Havana Hospital",
+      "Pilot Hospital",
       "Northgate General Hospital",
       "Riverside Children's Hospital",
       "Lakeside Community Clinic",
@@ -81,7 +81,7 @@ describe("analyticsCsv", () => {
   it("weeks are named by their date range", () => {
     const csv = analyticsCsv(sample("normal", "week"), "week");
     expect(lines(csv)[0]).toBe("Analytics,Last week,Week 1–7 Nov 2026");
-    expect(section(csv, "Use")[1]).toMatch(/^Week 1–7 Nov 2026,Havana/);
+    expect(section(csv, "Use")[1]).toMatch(/^Week 1–7 Nov 2026,Pilot Hospital/);
   });
 
   it("hidden values written as 'Fewer than 5'; zeros show", () => {

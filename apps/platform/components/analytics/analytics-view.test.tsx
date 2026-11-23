@@ -318,11 +318,11 @@ describe("the Usage page", () => {
   });
 
   it("offline disables follow-up and CSV with the reason", async () => {
-    // Ada followed Havana up earlier, with a note she could edit online.
+    // Ada followed Pilot Hospital up earlier, with a note she could edit online.
     await api.followUp(
-      "chg_hav_agreement",
+      "chg_plt_agreement",
       { note: "Asked what changed.", version: 1 },
-      { idempotencyKey: "ada-hav" },
+      { idempotencyKey: "ada-plt" },
     );
     net.online = false;
     await open();
@@ -337,14 +337,14 @@ describe("the Usage page", () => {
     expect(within(d).getByLabelText("Note (optional)")).toBeDisabled();
     await userEvent.click(
       screen.getByRole("button", {
-        name: /Havana Hospital · Better: Agreement rate better/,
+        name: /Pilot Hospital · Better: Agreement rate better/,
       }),
     );
-    const hav = screen.getByRole("region", {
-      name: /Havana Hospital · Better: Agreement rate better/,
+    const plt = screen.getByRole("region", {
+      name: /Pilot Hospital · Better: Agreement rate better/,
     });
     for (const name of ["Undo", "Edit note"]) {
-      const b = within(hav).getByRole("button", { name });
+      const b = within(plt).getByRole("button", { name });
       expect(b).toBeDisabled();
       expect(b).toHaveAccessibleDescription(reason);
     }
@@ -441,7 +441,7 @@ describe("the Usage page", () => {
 
 describe("opening Usage on a change", () => {
   it("?change= selects that change", async () => {
-    nav.search = "change=chg_hav_agreement";
+    nav.search = "change=chg_plt_agreement";
     await open();
     await waitFor(() =>
       expect(
@@ -476,7 +476,7 @@ describe("opening Usage on a change", () => {
 
 describe("opening Usage on a hospital", () => {
   it("?hospital= opens the Hospitals tab on that hospital", async () => {
-    nav.search = "hospital=h_havana";
+    nav.search = "hospital=h_pilot";
     await open();
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: "Hospitals" })).toHaveAttribute(
@@ -487,7 +487,7 @@ describe("opening Usage on a hospital", () => {
     expect(
       await screen.findByRole("heading", {
         level: 2,
-        name: "Havana Hospital compared with the others",
+        name: "Pilot Hospital compared with the others",
       }),
     ).toBeInTheDocument();
   });

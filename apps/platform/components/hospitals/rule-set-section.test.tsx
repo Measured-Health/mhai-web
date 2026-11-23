@@ -15,7 +15,7 @@ import { ADA, AMARA, renderWithAuth } from "@/tests/render";
 import { NOT_READY, RuleSetSection, SHADOW_TEXT } from "./rule-set-section";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/hospitals/h_havana",
+  usePathname: () => "/hospitals/h_pilot",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
@@ -83,7 +83,7 @@ describe("a hospital's patient alerts (EMR rule set)", () => {
   });
 
   it("on shows the rule set, its fingerprint, and that it sends alerts", async () => {
-    const r = await show("h_havana");
+    const r = await show("h_pilot");
     expect(
       await within(r).findByText(/MHAI sends patient alerts to .*clinicians/),
     ).toBeVisible();
@@ -93,7 +93,7 @@ describe("a hospital's patient alerts (EMR rule set)", () => {
 
   it("an auditor sees it and can't switch it", async () => {
     who = AMARA.email;
-    const r = await show("h_havana", AMARA);
+    const r = await show("h_pilot", AMARA);
     await within(r).findByText(DEMO_RULE_SET.version);
     expect(within(r).queryByRole("button")).toBeNull();
   });
@@ -160,7 +160,7 @@ describe("a hospital's patient alerts (EMR rule set)", () => {
 
   it("switching off sends both nulls and says alerts stop", async () => {
     const spy = vi.spyOn(api, "setEmrRuleSet");
-    const r = await show("h_havana");
+    const r = await show("h_pilot");
     await userEvent.click(
       await within(r).findByRole("button", { name: "Change" }),
     );
@@ -248,7 +248,7 @@ describe("a hospital's patient alerts (EMR rule set)", () => {
     vi.spyOn(api, "getEmrRuleSet").mockRejectedValue(
       new ApiError(502, "bad_gateway"),
     );
-    const r = await show("h_havana");
+    const r = await show("h_pilot");
     expect(
       await within(r).findByText("Couldn't load patient alerts."),
     ).toBeVisible();

@@ -17,7 +17,7 @@ const summary = (
   over: Partial<EmrConnectionSummary> = {},
 ): EmrConnectionSummary => ({
   id: "emr_1",
-  hospital: { id: "h_havana", name: "Havana Hospital" },
+  hospital: { id: "h_pilot", name: "Pilot Hospital" },
   type: "fhir_r4",
   type_label: "FHIR R4 server",
   source_label: "Main record",
@@ -30,7 +30,7 @@ const summary = (
 });
 const full = (over: Partial<EmrConnection> = {}): EmrConnection => ({
   ...summary(),
-  base_url: "https://records.havana.example/fhir",
+  base_url: "https://records.pilot-hospital.example/fhir",
   settings: { client_id: "a" },
   credentials: [{ key: "private_key", set_at: AT }],
   errors: [],
@@ -64,7 +64,7 @@ const TYPE: ConnectorType = {
 };
 const form = (over: Partial<ConnectionForm> = {}): ConnectionForm => ({
   source_label: "Main record",
-  base_url: "https://records.havana.example/fhir",
+  base_url: "https://records.pilot-hospital.example/fhir",
   settings: { client_id: "mhai" },
   credentials: { private_key: "k" },
   ...over,
@@ -130,9 +130,9 @@ describe("validateConnection", () => {
       base_url: "Enter the base address.",
     });
     for (const base_url of [
-      "http://records.havana.example/",
-      "records.havana.example",
-      "ftp://records.havana.example/",
+      "http://records.pilot-hospital.example/",
+      "records.pilot-hospital.example",
+      "ftp://records.pilot-hospital.example/",
       "https://",
     ])
       expect(validateConnection(form({ base_url }), TYPE), base_url).toEqual({

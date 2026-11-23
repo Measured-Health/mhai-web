@@ -208,7 +208,7 @@ describe("AnalysisView", () => {
     expect(
       screen.getByRole("heading", { name: "Analysis", level: 2 }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Havana Hospital").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Pilot Hospital").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("tab", { name: "Prevalence and trends" }),
     ).toHaveAttribute("aria-selected", "true");
@@ -664,7 +664,7 @@ describe("AnalysisView", () => {
     expect(download).toHaveBeenCalledWith(
       "mhai-analysis-affected-2026-09-01-to-2026-09-30.csv",
       analysisCsv("affected", d, {
-        hospital: "Havana Hospital",
+        hospital: "Pilot Hospital",
         filters: f,
         options: FILTER_OPTIONS,
       }),

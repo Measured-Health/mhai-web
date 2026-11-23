@@ -57,9 +57,11 @@ describe("mock auth client", () => {
   });
 
   it("any other email is a clinician account: not_platform, no session", async () => {
-    expect(await client.signIn("a.reyes@havanahospital.org", "pw")).toEqual({
-      status: "not_platform",
-    });
+    expect(await client.signIn("a.reyes@pilot-hospital.example", "pw")).toEqual(
+      {
+        status: "not_platform",
+      },
+    );
     expect(await client.getSession()).toBeNull();
   });
 
@@ -117,7 +119,7 @@ describe("mock auth client", () => {
   it("a not_platform sign-in leaves the sample API signed out", async () => {
     await client.signIn(TEAM_EMAILS.ada, "pw");
     await client.verifyCode("123456", { backup: false });
-    await client.signIn("a.reyes@havanahospital.org", "pw");
+    await client.signIn("a.reyes@pilot-hospital.example", "pw");
     await expect(api().listHospitals({})).rejects.toMatchObject({
       status: 401,
     });

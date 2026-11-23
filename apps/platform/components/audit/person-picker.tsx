@@ -6,7 +6,7 @@ import { useAuditPeople } from "@/lib/queries/audit";
 import { Button } from "@mhai/ui/button";
 import { cn } from "@mhai/ui/cn";
 
-/** "Folake Adeyemi · Clinician · Havana Hospital · folake@hv.example". */
+/** "Folake Adeyemi · Clinician · Pilot Hospital · folake@hv.example". */
 export const personLine = (p: AuditPerson): string =>
   `${p.name} · ${ROLE_WORDS[p.role]} · ${p.hospital?.name ?? "Measured Health"} · ${p.email}`;
 

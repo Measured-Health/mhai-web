@@ -487,13 +487,13 @@ export const REVIEW_MONTHS = 6;
 
 **Fixtures** (`holds-fixtures.ts`; the people are Ada and Tunde):
 
-| id        | Hospital     | Scope                         | Reason        | Reference       | State                                                                                                         |
-| --------- | ------------ | ----------------------------- | ------------- | --------------- | ------------------------------------------------------------------------------------------------------------- |
-| `hold_hv` | Harbour View | All records                   | court_case    | `HC/2026/0412`  | active; placed by Ada 40 days ago. It blocks the existing Removal pending request                             |
-| `hold_ng` | Northgate    | 1 Jan 2025 – 30 Jun 2025      | regulator     | `REG-INSP-2291` | review_due (review_on yesterday)                                                                              |
-| `hold_rc` | Riverside    | All records                   | complaint     | `CMP-0193`      | lift_requested by Tunde 2 days ago; authority "Counsel's letter 14 Oct 2026, ref ABC-123"; `records_due` 1240 |
-| `hold_wf` | Westfield    | from 1 Mar 2024, until lifted | investigation | `INV-77`        | lifted 3 days ago (requested by Tunde, approved by Ada); `released_on` in 4 days                              |
-| `hold_hh` | Havana       | All records                   | other         | `BRD-2026-03`   | lifted 40 days ago and released; note "Board request pending legal review"                                    |
+| id        | Hospital       | Scope                         | Reason        | Reference       | State                                                                                                         |
+| --------- | -------------- | ----------------------------- | ------------- | --------------- | ------------------------------------------------------------------------------------------------------------- |
+| `hold_hv` | Harbour View   | All records                   | court_case    | `HC/2026/0412`  | active; placed by Ada 40 days ago. It blocks the existing Removal pending request                             |
+| `hold_ng` | Northgate      | 1 Jan 2025 – 30 Jun 2025      | regulator     | `REG-INSP-2291` | review_due (review_on yesterday)                                                                              |
+| `hold_rc` | Riverside      | All records                   | complaint     | `CMP-0193`      | lift_requested by Tunde 2 days ago; authority "Counsel's letter 14 Oct 2026, ref ABC-123"; `records_due` 1240 |
+| `hold_wf` | Westfield      | from 1 Mar 2024, until lifted | investigation | `INV-77`        | lifted 3 days ago (requested by Tunde, approved by Ada); `released_on` in 4 days                              |
+| `hold_hh` | Pilot Hospital | All records                   | other         | `BRD-2026-03`   | lifted 40 days ago and released; note "Board request pending legal review"                                    |
 
 Southpoint (Removal pending, nothing blocking) keeps no hold, so the demo and e2e can place one there.
 
@@ -590,8 +590,8 @@ Southpoint (Removal pending, nothing blocking) keeps no hold, so the demo and e2
     - each `validatePlace` message;
     - "Other needs a note".
   - `holds-view.test.tsx`:
-    - "opens on Open: Harbour View, Northgate and Riverside, not Westfield or Havana";
-    - "Lifted shows Westfield's 'Lifted · records released on …' and Havana's 'Lifted by Ada Bakare · …'";
+    - "opens on Open: Harbour View, Northgate and Riverside, not Westfield or Pilot Hospital";
+    - "Lifted shows Westfield's 'Lifted · records released on …' and Pilot Hospital's 'Lifted by Ada Bakare · …'";
     - "the hospital filter and reference search narrow the list and sit in the URL";
     - "Review due shows the word and an icon";
     - "an auditor sees no Place a hold";
@@ -663,7 +663,7 @@ Southpoint (Removal pending, nothing blocking) keeps no hold, so the demo and e2
     - "an approval refused as expired shows This request lapsed after 7 days. Make a new request. and reloads" (Review Focus 3);
     - "either admin can Cancel request";
     - "Westfield shows Undo lift; undo with the code makes it Active";
-    - "Havana shows no lift controls";
+    - "Pilot Hospital shows no lift controls";
     - "offline disables every action with the reason".
   - `hold-history.test.tsx`: "events newest first, and the note never appears".
 - [ ] **Step 2: Implement.**
@@ -708,7 +708,7 @@ Southpoint (Removal pending, nothing blocking) keeps no hold, so the demo and e2
   - `removal.test.tsx`:
     - "Harbour View reads '1 legal hold is active · View holds', and the link filters by hospital";
     - "the later-release line is gone".
-  - `hospitals-view.test.tsx`: "Harbour View, Northgate, Riverside and Westfield show Hold; Havana and Southpoint don't".
+  - `hospitals-view.test.tsx`: "Harbour View, Northgate, Riverside and Westfield show Hold; Pilot Hospital and Southpoint don't".
 - [ ] **Step 2: Implement.**
 - [ ] **Step 3: Write the e2e tests** (`holds.spec.ts`), on desktop and mobile, with `expectNoStorage` after each test and the CSP check on `/legal-holds`:
   - "Legal holds opens on Open holds; Lifted shows the grace period";

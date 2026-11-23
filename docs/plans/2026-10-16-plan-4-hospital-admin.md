@@ -184,18 +184,18 @@ Vitest + React Testing Library, Playwright 1.64.1). No new dependencies.
   Health configures them, in the planned platform admin app).
 - **The platform admin app** (ADR 0002).
 
-**Sample data (mock):** Havana Hospital, 13 synthetic staff, memory only (a
+**Sample data (mock):** Pilot Hospital, 13 synthetic staff, memory only (a
 reload signs you out and resets them):
 
 - the two admin sample accounts are on the list: **Grace Nwosu**
-  (`admin.nwosu@havanahospital.org`, hospital admin, not a clinician) and
-  **Dr. Ngozi Obi** (`director.obi@havanahospital.org`, medical director:
+  (`admin.nwosu@pilot-hospital.example`, hospital admin, not a clinician) and
+  **Dr. Ngozi Obi** (`director.obi@pilot-hospital.example`, medical director:
   clinician and hospital admin). Whoever of them signs in is "you" on the
   list;
 - Dr. Kofi Mensah needs attention (2-step not set up), Dr. Funmi Adeyemi is
   invited (expires in 5 days), Dr. Halima Sani's invite has expired, Dr.
   James Eze is deactivated, and one name is very long;
-- the hospital uses single sign-on (`havanahospital.org`), and reviewers
+- the hospital uses single sign-on (`pilot-hospital.example`), and reviewers
   must share the specialty, so Paediatrics is short of reviewers;
 - usage for three periods, about 130 activity events over 60 days (one
   locked account flagged as an alert, one sign-in without 2-step flagged as
@@ -726,7 +726,7 @@ function userFor(login: string, roles: Role[], mfaEnabled: boolean): User {
     email: login.includes("@") ? login : null,
     ...(PEOPLE[trigger(login)] ?? REYES),
     roles: [...roles],
-    hospital: "Havana Hospital",
+    hospital: "Pilot Hospital",
     mfaEnabled,
     backupCodesLeft: mfaEnabled ? 8 : null,
   };
@@ -975,13 +975,13 @@ In `lib/auth/mock.ts`, replace `SAMPLE_ACCOUNTS` with:
 ```ts
 /** The demo's sample logins. Task 3's sample hospital lists the two admins. */
 export const DEMO_EMAILS = {
-  clinician: "a.reyes@havanahospital.org",
-  twoStep: "mfa.okafor@havanahospital.org",
-  newAccount: "new.bello@havanahospital.org",
-  hospitalAdmin: "admin.nwosu@havanahospital.org",
-  director: "director.obi@havanahospital.org",
+  clinician: "a.reyes@pilot-hospital.example",
+  twoStep: "mfa.okafor@pilot-hospital.example",
+  newAccount: "new.bello@pilot-hospital.example",
+  hospitalAdmin: "admin.nwosu@pilot-hospital.example",
+  director: "director.obi@pilot-hospital.example",
   platformAdmin: "platform.bakare@measured-health.example",
-  locked: "locked.eze@havanahospital.org",
+  locked: "locked.eze@pilot-hospital.example",
 } as const;
 
 /** Sample accounts for the demo's sign-in page. Any other email works too. */
@@ -1168,7 +1168,7 @@ git commit -m "Add hospital admin and director demo accounts; 403 for platform"
   - `interface AdminClient` (13 methods below);
   - `getAdminClient(): AdminClient` (mock when `NEXT_PUBLIC_USE_MOCK=true`,
     otherwise live; the live client comes in Task 4).
-- Produces (`lib/api/mock-admin.ts`): `MOCK_HOSPITAL = "Havana Hospital"`,
+- Produces (`lib/api/mock-admin.ts`): `MOCK_HOSPITAL = "Pilot Hospital"`,
   `ACTIVITY_PAGE_SIZE = 50`,
   `createMockAdmin(opts?: { now?: () => number; me?: () => Promise<string | null>; delayMs?: number }): AdminClient`.
   Seeded staff ids: `s-reyes`, `s-obi`, `s-nwosu`, `s-okafor`, `s-bello`,
@@ -1480,7 +1480,7 @@ export function makeStaff(over: Partial<StaffOut> = {}): StaffOut {
     id: "s-test",
     full_name: "Dr. Test Person",
     display_name: "Dr. Person",
-    email: "t.person@havanahospital.org",
+    email: "t.person@pilot-hospital.example",
     roles: ["clinician"],
     specialty: "Internal Medicine",
     can_review: false,
@@ -1689,25 +1689,27 @@ describe("the sample hospital", () => {
     const a = director();
     const r = await a.inviteStaff({
       emails: [
-        "n.ade@havanahospital.org",
-        "N.Ade@havanahospital.org",
-        "k.mensah@havanahospital.org",
-        "j.eze@havanahospital.org",
+        "n.ade@pilot-hospital.example",
+        "N.Ade@pilot-hospital.example",
+        "k.mensah@pilot-hospital.example",
+        "j.eze@pilot-hospital.example",
         "someone@gmail.com",
         "not-an-email",
       ],
       roles: ["clinician"],
       specialty: "Paediatrics",
     });
-    expect(r.invited.map((s) => s.email)).toEqual(["n.ade@havanahospital.org"]);
+    expect(r.invited.map((s) => s.email)).toEqual([
+      "n.ade@pilot-hospital.example",
+    ]);
     expect(r.invited[0]).toMatchObject({
       status: "invited",
       specialty: "Paediatrics",
     });
     expect(r.skipped).toEqual([
-      { email: "n.ade@havanahospital.org", reason: "duplicate" },
-      { email: "k.mensah@havanahospital.org", reason: "already_staff" },
-      { email: "j.eze@havanahospital.org", reason: "already_staff" },
+      { email: "n.ade@pilot-hospital.example", reason: "duplicate" },
+      { email: "k.mensah@pilot-hospital.example", reason: "already_staff" },
+      { email: "j.eze@pilot-hospital.example", reason: "already_staff" },
       { email: "someone@gmail.com", reason: "domain_not_allowed" },
       { email: "not-an-email", reason: "invalid_email" },
     ]);
@@ -1718,7 +1720,7 @@ describe("the sample hospital", () => {
     const s = await a.getSettings();
     expect(s.sso).toEqual({
       status: "connected",
-      domain: "havanahospital.org",
+      domain: "pilot-hospital.example",
     });
     const saved = await a.updateSettings({
       version: s.version,
@@ -1824,7 +1826,7 @@ import type {
 } from "./admin-contract";
 import { ApiError } from "./errors";
 
-export const MOCK_HOSPITAL = "Havana Hospital";
+export const MOCK_HOSPITAL = "Pilot Hospital";
 export const ACTIVITY_PAGE_SIZE = 50;
 const MIN = 60_000;
 const H = 60 * MIN;
@@ -1879,7 +1881,7 @@ function person(now: number, p: Seed): StaffOut {
   };
 }
 
-/** 13 synthetic people at Havana Hospital. Names are invented. */
+/** 13 synthetic people at Pilot Hospital. Names are invented. */
 function seedStaff(now: number): StaffOut[] {
   return [
     {
@@ -1915,7 +1917,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-okafor",
       name: "Dr. Chidi Okafor",
       display: "Dr. Okafor",
-      email: "c.okafor@havanahospital.org",
+      email: "c.okafor@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Infectious disease",
       activeAgo: 2 * H,
@@ -1925,7 +1927,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-bello",
       name: "Dr. Tunde Bello",
       display: "Dr. Bello",
-      email: "t.bello@havanahospital.org",
+      email: "t.bello@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Internal Medicine",
       signIn: "password_mfa",
@@ -1936,7 +1938,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-mensah",
       name: "Dr. Kofi Mensah",
       display: "Dr. Mensah",
-      email: "k.mensah@havanahospital.org",
+      email: "k.mensah@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Cardiology",
       issues: ["mfa_not_set_up"],
@@ -1948,7 +1950,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-adeyemi",
       name: "Dr. Funmi Adeyemi",
       display: "Dr. Adeyemi",
-      email: "f.adeyemi@havanahospital.org",
+      email: "f.adeyemi@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Paediatrics",
       status: "invited",
@@ -1958,7 +1960,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-sani",
       name: "Dr. Halima Sani",
       display: "Dr. Sani",
-      email: "h.sani@havanahospital.org",
+      email: "h.sani@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Obstetrics",
       status: "invited",
@@ -1969,7 +1971,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-eze",
       name: "Dr. James Eze",
       display: "Dr. Eze",
-      email: "j.eze@havanahospital.org",
+      email: "j.eze@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Surgery",
       status: "deactivated",
@@ -1979,7 +1981,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-udo",
       name: "Dr. Amaka Udo",
       display: "Dr. Udo",
-      email: "a.udo@havanahospital.org",
+      email: "a.udo@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Paediatrics",
       activeAgo: 3 * H,
@@ -1989,7 +1991,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-owusu",
       name: "Dr. Samuel Owusu",
       display: "Dr. Owusu",
-      email: "s.owusu@havanahospital.org",
+      email: "s.owusu@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Emergency medicine",
       signIn: "password_mfa",
@@ -2000,7 +2002,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-danjuma",
       name: "Dr. Yusuf Danjuma",
       display: "Dr. Danjuma",
-      email: "y.danjuma@havanahospital.org",
+      email: "y.danjuma@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Internal Medicine",
       activeAgo: 4 * D,
@@ -2010,7 +2012,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-long",
       name: "Dr. Oluwaseun Adebayo-Ogunleye-Fashola",
       display: "Dr. Adebayo-Ogunleye-Fashola",
-      email: "o.adebayo-ogunleye-fashola@havanahospital.org",
+      email: "o.adebayo-ogunleye-fashola@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Infectious disease",
       activeAgo: 9 * D,
@@ -2027,8 +2029,8 @@ function seedSettings(): HospitalSettingsOut {
     require_mfa_for_clinicians: true,
     idle_timeout_minutes: 15,
     allow_trust_device: true,
-    sso: { status: "connected", domain: "havanahospital.org" },
-    allowed_email_domains: ["havanahospital.org"],
+    sso: { status: "connected", domain: "pilot-hospital.example" },
+    allowed_email_domains: ["pilot-hospital.example"],
     specialties: [
       "Cardiology",
       "Emergency medicine",
@@ -3615,34 +3617,34 @@ import { describe, expect, it } from "vitest";
 import { INVITE_MAX, okEmails, parseInviteList } from "./invite";
 
 const ctx = {
-  existing: ["K.Mensah@havanahospital.org", "j.eze@havanahospital.org"],
-  domains: ["havanahospital.org"],
+  existing: ["K.Mensah@pilot-hospital.example", "j.eze@pilot-hospital.example"],
+  domains: ["pilot-hospital.example"],
 };
 
 describe("parseInviteList (Review Focus 3)", () => {
   it("splits on commas, semicolons, new lines and tabs, and skips blanks", () => {
     const lines = parseInviteList(
-      "a@havanahospital.org, b@havanahospital.org;\n\n c@havanahospital.org\td@havanahospital.org,,",
+      "a@pilot-hospital.example, b@pilot-hospital.example;\n\n c@pilot-hospital.example\td@pilot-hospital.example,,",
       ctx,
     );
     expect(lines.map((l) => [l.email, l.status])).toEqual([
-      ["a@havanahospital.org", "ok"],
-      ["b@havanahospital.org", "ok"],
-      ["c@havanahospital.org", "ok"],
-      ["d@havanahospital.org", "ok"],
+      ["a@pilot-hospital.example", "ok"],
+      ["b@pilot-hospital.example", "ok"],
+      ["c@pilot-hospital.example", "ok"],
+      ["d@pilot-hospital.example", "ok"],
     ]);
   });
 
   it("reads names, angle brackets and mailto:, in any case", () => {
     const lines = parseInviteList(
-      'Funmi Adeyemi <F.Adeyemi@HavanaHospital.org>\n"Obi, Ngozi" <n.obi@havanahospital.org>\nmailto:T.Bello@havanahospital.org\nAmaka Udo a.udo@havanahospital.org',
+      'Funmi Adeyemi <F.Adeyemi@Pilot-Hospital.example>\n"Obi, Ngozi" <n.obi@pilot-hospital.example>\nmailto:T.Bello@pilot-hospital.example\nAmaka Udo a.udo@pilot-hospital.example',
       ctx,
     );
     expect(okEmails(lines)).toEqual([
-      "f.adeyemi@havanahospital.org",
-      "n.obi@havanahospital.org",
-      "t.bello@havanahospital.org",
-      "a.udo@havanahospital.org",
+      "f.adeyemi@pilot-hospital.example",
+      "n.obi@pilot-hospital.example",
+      "t.bello@pilot-hospital.example",
+      "a.udo@pilot-hospital.example",
     ]);
     expect(lines.every((l) => l.status === "ok")).toBe(true);
   });
@@ -3650,24 +3652,24 @@ describe("parseInviteList (Review Focus 3)", () => {
   it("names every problem", () => {
     const lines = parseInviteList(
       [
-        "n.ade@havanahospital.org",
-        "N.ADE@havanahospital.org",
-        "k.mensah@havanahospital.org",
-        "j.eze@havanahospital.org",
+        "n.ade@pilot-hospital.example",
+        "N.ADE@pilot-hospital.example",
+        "k.mensah@pilot-hospital.example",
+        "j.eze@pilot-hospital.example",
         "someone@gmail.com",
-        "f.adeyemi.havanahospital.org",
-        "x@havanahospital",
+        "f.adeyemi.pilot-hospital.example",
+        "x@pilot-hospital",
       ].join("\n"),
       ctx,
     );
     expect(lines.map((l) => [l.email, l.status])).toEqual([
-      ["n.ade@havanahospital.org", "ok"],
-      ["n.ade@havanahospital.org", "duplicate"],
-      ["k.mensah@havanahospital.org", "already_staff"],
-      ["j.eze@havanahospital.org", "already_staff"],
+      ["n.ade@pilot-hospital.example", "ok"],
+      ["n.ade@pilot-hospital.example", "duplicate"],
+      ["k.mensah@pilot-hospital.example", "already_staff"],
+      ["j.eze@pilot-hospital.example", "already_staff"],
       ["someone@gmail.com", "domain_not_allowed"],
-      ["f.adeyemi.havanahospital.org", "invalid"],
-      ["x@havanahospital", "invalid"],
+      ["f.adeyemi.pilot-hospital.example", "invalid"],
+      ["x@pilot-hospital", "invalid"],
     ]);
   });
 
@@ -4277,9 +4279,9 @@ describe("describeEvent (R9)", () => {
         {
           kind: "invite_cancelled",
           type: "admin",
-          target: who("n.ade@havanahospital.org"),
+          target: who("n.ade@pilot-hospital.example"),
         },
-        "Cancelled the invite for n.ade@havanahospital.org",
+        "Cancelled the invite for n.ade@pilot-hospital.example",
       ],
       [
         {
@@ -4472,11 +4474,11 @@ describe("CSV (R10)", () => {
         confidence: { high: 796, caution: 347, review: 103, failed: 38 },
         by_specialty: [{ specialty: "Paediatrics", consultations: 318 }],
       },
-      "Havana Hospital",
+      "Pilot Hospital",
     );
     expect(csv.split("\r\n")).toEqual([
       "﻿Measure,Value",
-      "Hospital,Havana Hospital",
+      "Hospital,Pilot Hospital",
       "Period,This month (2026-10-01 to 2026-10-16)",
       "Consultations,1284",
       "Active clinicians,39",
@@ -4525,8 +4527,8 @@ describe("CSV (R10)", () => {
   });
 
   it("names the file after the hospital and the day", () => {
-    expect(csvName("activity", "Havana Hospital", NOW)).toBe(
-      "havana-hospital-activity-2026-10-16.csv",
+    expect(csvName("activity", "Pilot Hospital", NOW)).toBe(
+      "pilot-hospital-activity-2026-10-16.csv",
     );
   });
 
@@ -4959,7 +4961,7 @@ describe("admin queries", () => {
       .mockResolvedValue({ invited: [], skipped: [] });
     const { result } = renderHook(() => useInviteStaff(), { wrapper });
     const i = {
-      emails: ["n.ade@havanahospital.org"],
+      emails: ["n.ade@pilot-hospital.example"],
       roles: ["clinician" as const],
       specialty: null,
     };
@@ -6439,7 +6441,7 @@ describe("StaffPanel", () => {
       await within(panel).findByText("Dr. Kofi Mensah"),
     ).toBeInTheDocument();
     expect(
-      within(panel).getByText(/k\.mensah@havanahospital\.org/),
+      within(panel).getByText(/k\.mensah@pilot-hospital\.example/),
     ).toBeInTheDocument();
     expect(within(panel).getByText("2-step not set up")).toBeInTheDocument();
     expect(
@@ -7376,7 +7378,9 @@ describe("AccountActions", () => {
     );
     const dialog = confirmIn("Remove this account?");
     expect(
-      within(dialog).getByText(/Dr. James Eze \(j\.eze@havanahospital\.org\)/),
+      within(dialog).getByText(
+        /Dr. James Eze \(j\.eze@pilot-hospital\.example\)/,
+      ),
     ).toBeInTheDocument();
     expect(
       within(dialog).getByText(/This can't be undone/),
@@ -8096,7 +8100,7 @@ describe("InviteDialog", () => {
     const dialog = await openDialog();
     await paste(
       dialog,
-      "n.ade@havanahospital.org, N.ADE@havanahospital.org\nk.mensah@havanahospital.org\nsomeone@gmail.com; oops",
+      "n.ade@pilot-hospital.example, N.ADE@pilot-hospital.example\nk.mensah@pilot-hospital.example\nsomeone@gmail.com; oops",
     );
     expect(within(dialog).getByText("1 person")).toBeInTheDocument();
     const problems = within(dialog).getByRole("list", { name: "Not invited" });
@@ -8105,8 +8109,8 @@ describe("InviteDialog", () => {
         .getAllByRole("listitem")
         .map((li) => li.textContent),
     ).toEqual([
-      "n.ade@havanahospital.org — Listed twice",
-      "k.mensah@havanahospital.org — Already on the staff list",
+      "n.ade@pilot-hospital.example — Listed twice",
+      "k.mensah@pilot-hospital.example — Already on the staff list",
       "someone@gmail.com — Not a hospital email address",
       "oops — Not an email address",
     ]);
@@ -8116,7 +8120,7 @@ describe("InviteDialog", () => {
     await waitFor(() =>
       expect(invite).toHaveBeenCalledWith(
         {
-          emails: ["n.ade@havanahospital.org"],
+          emails: ["n.ade@pilot-hospital.example"],
           roles: ["clinician"],
           specialty: null,
         },
@@ -8130,7 +8134,10 @@ describe("InviteDialog", () => {
   it("sends the role and specialty with the invite", async () => {
     const invite = vi.spyOn(holder.client, "inviteStaff");
     const dialog = await openDialog();
-    await paste(dialog, "a.new@havanahospital.org\nb.new@havanahospital.org");
+    await paste(
+      dialog,
+      "a.new@pilot-hospital.example\nb.new@pilot-hospital.example",
+    );
     await userEvent.click(
       within(dialog).getByRole("checkbox", { name: "Hospital admin" }),
     );
@@ -8144,7 +8151,10 @@ describe("InviteDialog", () => {
     await waitFor(() =>
       expect(invite).toHaveBeenCalledWith(
         {
-          emails: ["a.new@havanahospital.org", "b.new@havanahospital.org"],
+          emails: [
+            "a.new@pilot-hospital.example",
+            "b.new@pilot-hospital.example",
+          ],
           roles: ["clinician", "hospital_admin"],
           specialty: "Paediatrics",
         },
@@ -8159,14 +8169,19 @@ describe("InviteDialog", () => {
       invited: [
         makeStaff({
           id: "s-x",
-          email: "a.new@havanahospital.org",
+          email: "a.new@pilot-hospital.example",
           status: "invited",
         }),
       ],
-      skipped: [{ email: "b.new@havanahospital.org", reason: "already_staff" }],
+      skipped: [
+        { email: "b.new@pilot-hospital.example", reason: "already_staff" },
+      ],
     });
     const dialog = await openDialog();
-    await paste(dialog, "a.new@havanahospital.org, b.new@havanahospital.org");
+    await paste(
+      dialog,
+      "a.new@pilot-hospital.example, b.new@pilot-hospital.example",
+    );
     await userEvent.click(
       within(dialog).getByRole("button", { name: "Send 2 invites" }),
     );
@@ -8176,7 +8191,7 @@ describe("InviteDialog", () => {
     ).toBeInTheDocument();
     expect(
       within(result).getByText(
-        "b.new@havanahospital.org — Already on the staff list",
+        "b.new@pilot-hospital.example — Already on the staff list",
       ),
     ).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
@@ -8188,9 +8203,10 @@ describe("InviteDialog", () => {
     const dialog = await openDialog();
     await paste(
       dialog,
-      Array.from({ length: 201 }, (_, i) => `p${i}@havanahospital.org`).join(
-        "\n",
-      ),
+      Array.from(
+        { length: 201 },
+        (_, i) => `p${i}@pilot-hospital.example`,
+      ).join("\n"),
     );
     expect(
       within(dialog).getByText("Invite at most 200 people at a time."),
@@ -8199,7 +8215,7 @@ describe("InviteDialog", () => {
       within(dialog).getByRole("button", { name: "Send 201 invites" }),
     ).toBeDisabled();
     await userEvent.clear(within(dialog).getByLabelText("Work emails"));
-    await paste(dialog, "p1@havanahospital.org");
+    await paste(dialog, "p1@pilot-hospital.example");
     await userEvent.click(
       within(dialog).getByRole("checkbox", { name: "Clinician" }),
     );
@@ -8214,7 +8230,7 @@ describe("InviteDialog", () => {
   it("can't send offline, and says so", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     const dialog = await openDialog();
-    await paste(dialog, "a.new@havanahospital.org");
+    await paste(dialog, "a.new@pilot-hospital.example");
     expect(
       within(dialog).getByRole("button", { name: "Send 1 invite" }),
     ).toBeDisabled();
@@ -8226,7 +8242,7 @@ describe("InviteDialog", () => {
   it("Cancel closes without sending", async () => {
     const invite = vi.spyOn(holder.client, "inviteStaff");
     const dialog = await openDialog();
-    await paste(dialog, "a.new@havanahospital.org");
+    await paste(dialog, "a.new@pilot-hospital.example");
     await userEvent.click(
       within(dialog).getByRole("button", { name: "Cancel" }),
     );
@@ -8535,7 +8551,7 @@ git commit -m "Add Invite staff for one person or a pasted list"
   `Avatar`; `useIsDesktop` (`lib/hooks/use-media.ts`); `useNow`; `useAuth`.
 - Produces:
   - `AdminFrame({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode })`:
-    the top bar ("Hospital admin · Havana Hospital"), the eyebrow
+    the top bar ("Hospital admin · Pilot Hospital"), the eyebrow
     (hospital) and heading; used by every admin page;
   - `StaffTable({ rows, now, onOpen })` (from `md`) and
     `StaffCards({ rows, now, onOpen })` (phones, R13), both with
@@ -8601,7 +8617,7 @@ describe("StaffView", () => {
     const mensah = within(t)
       .getByRole("button", { name: "Manage Dr. Kofi Mensah" })
       .closest("tr")!;
-    expect(mensah).toHaveTextContent("k.mensah@havanahospital.org");
+    expect(mensah).toHaveTextContent("k.mensah@pilot-hospital.example");
     expect(mensah).toHaveTextContent("Clinician");
     expect(mensah).toHaveTextContent("Cardiology");
     expect(mensah).toHaveTextContent("2-step not set up");
@@ -8685,13 +8701,13 @@ describe("StaffView", () => {
     await userEvent.click(screen.getByRole("button", { name: "Invite staff" }));
     const dialog = await screen.findByRole("dialog", { name: "Invite staff" });
     await userEvent.click(within(dialog).getByLabelText("Work emails"));
-    await userEvent.paste("n.ade@havanahospital.org");
+    await userEvent.paste("n.ade@pilot-hospital.example");
     await userEvent.click(
       within(dialog).getByRole("button", { name: "Send 1 invite" }),
     );
     const row = (
       await within(await table()).findByRole("button", {
-        name: "Manage n.ade@havanahospital.org",
+        name: "Manage n.ade@pilot-hospital.example",
       })
     ).closest("tr")!;
     expect(row).toHaveTextContent("Invited");
@@ -8733,7 +8749,7 @@ describe("StaffView", () => {
     await table();
     expect(
       screen.getByText(
-        "Hospital admins manage people and settings for Havana Hospital only. They never see patients' consultations unless they're also a clinician.",
+        "Hospital admins manage people and settings for Pilot Hospital only. They never see patients' consultations unless they're also a clinician.",
       ),
     ).toBeInTheDocument();
   });
@@ -9220,9 +9236,11 @@ describe("SettingsView", () => {
     const signIn = screen.getByRole("region", { name: "Sign-in" });
     expect(within(signIn).getByText("Connected")).toBeInTheDocument();
     expect(
-      within(signIn).getByText(/Connected to havanahospital\.org/),
+      within(signIn).getByText(/Connected to pilot-hospital\.example/),
     ).toBeInTheDocument();
-    expect(within(signIn).getByText("havanahospital.org")).toBeInTheDocument();
+    expect(
+      within(signIn).getByText("pilot-hospital.example"),
+    ).toBeInTheDocument();
     expect(within(signIn).queryByRole("textbox")).toBeNull();
     expect(within(signIn).queryByRole("switch")).toBeNull();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
@@ -9883,7 +9901,7 @@ describe("UsageView", () => {
     await screen.findByText("1,284");
     await userEvent.click(screen.getByRole("button", { name: "Export CSV" }));
     expect(download).toHaveBeenCalledWith(
-      expect.stringMatching(/^havana-hospital-usage-\d{4}-\d{2}-\d{2}\.csv$/),
+      expect.stringMatching(/^pilot-hospital-usage-\d{4}-\d{2}-\d{2}\.csv$/),
       expect.stringContaining("Consultations,1284"),
     );
     expect(await screen.findByText("Usage exported")).toBeInTheDocument();
@@ -10313,7 +10331,7 @@ describe("ActivityView", () => {
     await waitFor(() => expect(download).toHaveBeenCalled());
     expect(list.mock.calls.length - before).toBe(3); // 134 events, 50 a page
     const [name, csv] = download.mock.calls[0] as [string, string];
-    expect(name).toMatch(/^havana-hospital-activity-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(name).toMatch(/^pilot-hospital-activity-\d{4}-\d{2}-\d{2}\.csv$/);
     expect(csv.startsWith("﻿Time (UTC),Who,Type,What happened,Flag\r\n")).toBe(
       true,
     );
@@ -11533,15 +11551,17 @@ test("invite people from a pasted list", async ({ page }) => {
   await dialog
     .getByLabel("Work emails")
     .fill(
-      "a.new@havanahospital.org, B.New@havanahospital.org\nk.mensah@havanahospital.org",
+      "a.new@pilot-hospital.example, B.New@pilot-hospital.example\nk.mensah@pilot-hospital.example",
     );
   await expect(
-    dialog.getByText("k.mensah@havanahospital.org — Already on the staff list"),
+    dialog.getByText(
+      "k.mensah@pilot-hospital.example — Already on the staff list",
+    ),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Send 2 invites" }).click();
   await expect(page.getByText("2 invites sent")).toBeVisible();
-  await expect(manage(page, "a.new@havanahospital.org")).toBeVisible();
-  await expect(manage(page, "b.new@havanahospital.org")).toBeVisible();
+  await expect(manage(page, "a.new@pilot-hospital.example")).toBeVisible();
+  await expect(manage(page, "b.new@pilot-hospital.example")).toBeVisible();
 });
 
 test("deactivate after confirming, then reactivate", async ({ page }) => {
@@ -11573,7 +11593,7 @@ test("remove an account after confirming", async ({ page }) => {
     .click();
   const confirm = page.getByRole("dialog", { name: "Remove this account?" });
   await expect(confirm).toContainText(
-    "Dr. James Eze (j.eze@havanahospital.org)",
+    "Dr. James Eze (j.eze@pilot-hospital.example)",
   );
   await expect(
     confirm.getByRole("button", { name: "Keep account" }),
@@ -11665,7 +11685,7 @@ test("the activity log flags security events and exports a CSV", async ({
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export CSV" }).click();
   expect((await download).suggestedFilename()).toMatch(
-    /^havana-hospital-activity-\d{4}-\d{2}-\d{2}\.csv$/,
+    /^pilot-hospital-activity-\d{4}-\d{2}-\d{2}\.csv$/,
   );
   await expect(page.getByText("Activity exported")).toBeVisible();
 });
@@ -11730,7 +11750,7 @@ In `README.md`, under "Run on mock data", after the paragraph starting
 
 ```markdown
 **Hospital admin.** Sign in with the hospital admin sample (Grace Nwosu) to
-land on **Staff** for Havana Hospital: 13 synthetic people, including one
+land on **Staff** for Pilot Hospital: 13 synthetic people, including one
 who hasn't set up 2-step, a waiting invite, an expired one and a
 deactivated account. Invite people (one or a pasted list), and open anyone
 to change their roles, specialty or review rights, send a password reset,

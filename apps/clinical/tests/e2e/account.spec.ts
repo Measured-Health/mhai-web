@@ -41,7 +41,9 @@ test("a second sign-in in the same tab can sign out too", async ({ page }) => {
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
   // Sign in again without reloading: the sign-out page stays kept alive.
-  await page.getByLabel("Work email").fill("admin.nwosu@havanahospital.org");
+  await page
+    .getByLabel("Work email")
+    .fill("admin.nwosu@pilot-hospital.example");
   await page.getByLabel("Password").fill("demo-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/staff$/);
@@ -52,7 +54,7 @@ test("a second sign-in in the same tab can sign out too", async ({ page }) => {
 });
 
 test("two-step code, including a wrong one first", async ({ page }) => {
-  await signIn(page, "mfa.okafor@havanahospital.org");
+  await signIn(page, "mfa.okafor@pilot-hospital.example");
   await expect(page).toHaveURL(/\/sign-in\/code$/);
   await page.getByLabel("Digit 1 of 6").click();
   // The sixth digit submits on its own: no button press.
@@ -75,7 +77,7 @@ test("a deep link to the code step with nothing pending goes to sign-in", async 
 test("first sign-in: password, two-step, backup codes, then terms", async ({
   page,
 }) => {
-  await signIn(page, "new.bello@havanahospital.org");
+  await signIn(page, "new.bello@pilot-hospital.example");
   await expect(page).toHaveURL(/\/welcome$/);
   await page.getByLabel("Temporary password").fill("demo-password");
   await page.getByLabel("New password").fill("tram-lantern-okra");
@@ -113,7 +115,7 @@ test("wrong passwords count down, and the message never confirms the account", a
   page,
 }) => {
   await page.goto("/sign-in");
-  await page.getByLabel("Work email").fill("x@havanahospital.org");
+  await page.getByLabel("Work email").fill("x@pilot-hospital.example");
   await page.getByLabel("Password").fill("wrong");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const alert = page

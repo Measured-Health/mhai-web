@@ -279,7 +279,7 @@ describe("AccountActions (core 1.24.0: step-up on every staff write)", () => {
     expect(within(shared).getByText(/shown only now/)).toBeInTheDocument();
     await userEvent.click(
       within(shared).getByRole("button", {
-        name: "Copy the link for t.bello@havanahospital.org",
+        name: "Copy the link for t.bello@pilot-hospital.example",
       }),
     );
     expect(writeText).toHaveBeenCalledWith(link.textContent);
@@ -407,7 +407,7 @@ describe("AccountActions (core 1.24.0: step-up on every staff write)", () => {
 
   it("an invited person gets a new invite or has it cancelled", async () => {
     const r = await holder.client.inviteStaff(
-      { emails: ["new.person@havanahospital.org"], roles: ["clinician"] },
+      { emails: ["new.person@pilot-hospital.example"], roles: ["clinician"] },
       CODE,
     );
     const id = r.invited[0]!.staff.id;

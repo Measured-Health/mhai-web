@@ -173,7 +173,7 @@ const exportId =
       e.refs.export_id ?? (e.target?.kind === "export" ? e.target.id : null);
     return t ? make(t) : without;
   };
-/** "Added the record connection “Main record” for Havana Hospital". */
+/** "Added the record connection “Main record” for Pilot Hospital". */
 const connectionWords = (done: string) => (e: AuditEvent) => {
   const t = tName(e);
   const what = t ? `the record connection “${t}”` : "the record connection";

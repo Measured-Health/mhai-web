@@ -1,4 +1,4 @@
-// The sample hospital's alert settings (Havana). Invented, synthetic data.
+// The sample hospital's alert settings (Pilot Hospital). Invented, synthetic data.
 // The source labels are the ones the platform sample and the sample alerts
 // use (`MOCK_SOURCES`), so both demos agree.
 import type {
@@ -17,7 +17,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const MAIN = "Main record";
 const RESULTS = "Results system";
 
-/** What alerts can flag, with Havana's levels. Ids are opaque. */
+/** What alerts can flag, with Pilot Hospital's levels. Ids are opaque. */
 export const SAMPLE_CATEGORIES: readonly CategoryOut[] = [
   {
     id: "blood-chemistry",
@@ -134,7 +134,7 @@ export function sampleConnection(
   };
 }
 
-/** Havana's settings as the demo starts. */
+/** Pilot Hospital's settings as the demo starts. */
 export function sampleAlertSettings(
   now: number,
   status: RecordsStatus = "connected",

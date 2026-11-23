@@ -92,7 +92,7 @@ describe("UsageView", () => {
     await screen.findByText("1,284");
     await userEvent.click(screen.getByRole("button", { name: "Export CSV" }));
     expect(download).toHaveBeenCalledWith(
-      expect.stringMatching(/^havana-hospital-usage-\d{4}-\d{2}-\d{2}\.csv$/),
+      expect.stringMatching(/^pilot-hospital-usage-\d{4}-\d{2}-\d{2}\.csv$/),
       expect.stringContaining("Consultations,1284"),
     );
     expect(await screen.findByText("Usage exported")).toBeInTheDocument();

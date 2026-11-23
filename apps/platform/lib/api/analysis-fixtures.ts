@@ -95,7 +95,7 @@ export type Profile = {
 const full = "consultations_and_records" as const;
 export const PROFILES: Profile[] = [
   {
-    id: "h_havana",
+    id: "h_pilot",
     kind: "general",
     coverage: full,
     seed: 11,
@@ -649,7 +649,7 @@ export function seedAccess(now: number): AccessEntry[] {
   const H = 3_600_000;
   const ADA = { id: "tm_ada", name: "Ada Bakare" };
   const TUNDE = { id: "tm_tunde", name: "Tunde Okafor" };
-  const HAVANA = { id: "h_havana", name: "Havana Hospital" };
+  const PILOT = { id: "h_pilot", name: "Pilot Hospital" };
   const at = (ago: number) => new Date(now - ago).toISOString();
   const base = {
     flagged: false,
@@ -664,7 +664,7 @@ export function seedAccess(now: number): AccessEntry[] {
       actor: ADA,
       kind: "patient_list",
       scope: "hospital",
-      hospital: HAVANA,
+      hospital: PILOT,
       view: "findings",
       period: "12m",
       filters: [{ key: "condition", label: "Type 2 diabetes" }],
@@ -679,7 +679,7 @@ export function seedAccess(now: number): AccessEntry[] {
       actor: TUNDE,
       kind: "download",
       scope: "hospital",
-      hospital: HAVANA,
+      hospital: PILOT,
       view: "quality",
       period: "6m",
       filters: [],

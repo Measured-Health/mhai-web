@@ -78,7 +78,7 @@ describe("AuthProvider", () => {
 
   it("sign-out drops a hospital handed to Analysis, so the next person never opens on it", async () => {
     renderWithAuth(<GrabAuth />);
-    handOffHospital("h_havana");
+    handOffHospital("h_pilot");
     await act(() => auth.current.signOut("manual"));
     expect(takeHandedOffHospital()).toBeNull();
   });

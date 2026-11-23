@@ -1,5 +1,5 @@
 // The platform demo's sample clearance letters and named-access switch
-// (Plan 11b). Every name is invented. Havana Hospital has the clinical demo's
+// (Plan 11b). Every name is invented. Pilot Hospital has the clinical demo's
 // letters, with the same ids, kept in this app's memory only: verifying one
 // here doesn't change the clinical demo. Dates are relative to the mock's
 // clock; the global switch went On on the latest 3 Feb at least 60 days
@@ -22,7 +22,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
  * member id: they never verify that hospital's letters (409 `same_side`).
  */
 export const LINKED: Readonly<Record<string, readonly string[]>> = {
-  tm_bola: ["h_havana"],
+  tm_bola: ["h_pilot"],
 };
 
 /** A calendar day shifted by whole days: no time zone, no clock change. */
@@ -43,7 +43,7 @@ export function dayIn(ms: number, timeZone: string): string {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
-const HAVANA: Person = { id: "h_havana", name: "Havana Hospital" };
+const PILOT: Person = { id: "h_pilot", name: "Pilot Hospital" };
 const NORTHGATE: Person = {
   id: "h_northgate",
   name: "Northgate General Hospital",
@@ -56,7 +56,7 @@ const RIVERSIDE: Person = {
 const ADA: Person = { id: "tm_ada", name: "Ada Bakare" };
 const TUNDE: Person = { id: "tm_tunde", name: "Tunde Okafor" };
 
-// Havana's staff, as the clinical demo has them.
+// Pilot Hospital's staff, as the clinical demo has them.
 const GRACE: Person = { id: "s-nwosu", name: "Grace Nwosu" };
 const KEMI: Person = { id: "s-kemi", name: "Dr. Kemi Adeyemi" };
 const OBI: Person = { id: "s-obi", name: "Dr. Obi" };
@@ -117,15 +117,15 @@ function letter(
  */
 export function seedClearances(now: number, today: string): ClearanceRecord[] {
   const up = (days: number) => now - days * D;
-  const havana = (
+  const pilot = (
     over: Partial<ClearanceRecord> & Pick<ClearanceRecord, "id">,
-  ) => letter({ hospital: HAVANA, uploaded_by: GRACE, ...over });
+  ) => letter({ hospital: PILOT, uploaded_by: GRACE, ...over });
   const uploaded = (at: number) => event("uploaded", at, GRACE, "hospital");
   const ready = (at: number) => event("ready", at);
   const verified = (at: number, by = TUNDE) =>
     event("verified", at, by, "platform");
   return [
-    havana({
+    pilot({
       id: "cl_check",
       status: "checking",
       letter_date: shiftDay(today, -1),
@@ -151,7 +151,7 @@ export function seedClearances(now: number, today: string): ClearanceRecord[] {
         ready(up(1) + 6000),
       ],
     }),
-    havana({
+    pilot({
       id: "cl_bad",
       status: "refused",
       refused_reason: "failed_safety_check",
@@ -164,7 +164,7 @@ export function seedClearances(now: number, today: string): ClearanceRecord[] {
         event("refused", up(0.1) + 4000, null, null, "failed_safety_check"),
       ],
     }),
-    havana({
+    pilot({
       id: "cl_wait",
       letter_date: shiftDay(today, -4),
       covered: [OBI],
@@ -175,7 +175,7 @@ export function seedClearances(now: number, today: string): ClearanceRecord[] {
       pages: 3,
       history: [uploaded(up(3)), ready(up(3) + 6000)],
     }),
-    havana({
+    pilot({
       id: "cl_act",
       status: "active",
       letter_date: shiftDay(today, -30),
@@ -232,7 +232,7 @@ export function seedClearances(now: number, today: string): ClearanceRecord[] {
         verified(up(91.5)),
       ],
     }),
-    havana({
+    pilot({
       id: "cl_soon",
       status: "active",
       letter_date: shiftDay(today, -340),
@@ -250,7 +250,7 @@ export function seedClearances(now: number, today: string): ClearanceRecord[] {
         event("reminded", up(18), null, null, "30_days"),
       ],
     }),
-    havana({
+    pilot({
       id: "cl_rej",
       status: "rejected",
       letter_date: shiftDay(today, -45),
@@ -271,7 +271,7 @@ export function seedClearances(now: number, today: string): ClearanceRecord[] {
         event("rejected", up(38), TUNDE, "platform", "end_date_mismatch"),
       ],
     }),
-    havana({
+    pilot({
       id: "cl_end",
       status: "ended",
       letter_date: shiftDay(today, -430),
@@ -289,7 +289,7 @@ export function seedClearances(now: number, today: string): ClearanceRecord[] {
         event("ended", up(59)),
       ],
     }),
-    havana({
+    pilot({
       id: "cl_rev",
       status: "revoked",
       letter_date: shiftDay(today, -90),
@@ -339,7 +339,7 @@ const GLOBAL_ON_MIN_DAYS = 60;
 
 /**
  * When the global switch went On: the latest 3 Feb, 09:00 UTC, at least 60
- * days before `now`. Everything after it (Havana's and Northgate's raises,
+ * days before `now`. Everything after it (Pilot Hospital's and Northgate's raises,
  * Northgate's lowering, Plan 9's named views from 40 days back) then falls
  * in order and in the past on any date.
  */
@@ -371,7 +371,7 @@ const off = (): SwitchState => ({
 
 /**
  * The switch as the demo starts: global On since 3 Feb (see
- * `globalOnSince`), Havana On a week later, Northgate On a fortnight later
+ * `globalOnSince`), Pilot Hospital On a week later, Northgate On a fortnight later
  * and turned Off 5 days ago, every other hospital Off. With the `off`
  * option, nothing was ever raised: global and every hospital are Off with
  * no history (no hospital can be raised above global).
@@ -382,7 +382,7 @@ export function seedSwitch(
 ): { global: SwitchState; hospitals: Record<string, SwitchState> } {
   if (!globalOn) return { global: off(), hospitals: {} };
   const since = globalOnSince(now);
-  const havanaAt = since + 7 * D;
+  const pilotAt = since + 7 * D;
   const northAt = since + 14 * D;
   const northOff = now - 5 * D;
   return {
@@ -394,10 +394,10 @@ export function seedSwitch(
       version: 1,
     },
     hospitals: {
-      h_havana: {
+      h_pilot: {
         position: "on",
-        since: iso(havanaAt),
-        history: [raised(havanaAt, signoffsFor(havanaAt, 1))],
+        since: iso(pilotAt),
+        history: [raised(pilotAt, signoffsFor(pilotAt, 1))],
         request: null,
         version: 1,
       },

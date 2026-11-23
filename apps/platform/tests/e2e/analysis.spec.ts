@@ -141,12 +141,12 @@ test("filter Sickle cell disease and read Fewer than 5 for Lakeside and Harbour 
     await expect(hospitalRow(page, name)).toContainText("Fewer than 5");
 });
 
-test("pick Havana Hospital: the comparison shows the previous period, then the median of 5, then the verdict", async ({
+test("pick Pilot Hospital: the comparison shows the previous period, then the median of 5, then the verdict", async ({
   page,
 }) => {
   await signIn(page, ADA);
   await openNav(page, "Analysis");
-  await pickHospital(page, "Havana Hospital");
+  await pickHospital(page, "Pilot Hospital");
   const panel = page.getByRole("region", {
     name: "Compared with similar hospitals",
   });

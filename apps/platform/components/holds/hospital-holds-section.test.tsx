@@ -61,7 +61,7 @@ describe("the hospital's legal holds", () => {
   it("Place a hold opens with the hospital filled in and goes to the new hold", async () => {
     renderWithAuth(
       <HospitalHoldsSection
-        hospital={await get("h_havana")}
+        hospital={await get("h_pilot")}
         onRetry={() => {}}
       />,
     );
@@ -69,7 +69,7 @@ describe("the hospital's legal holds", () => {
       within(section()).getByRole("button", { name: "Place a hold" }),
     );
     const d = screen.getByRole("dialog", { name: "Place a legal hold" });
-    expect(within(d).getByText("Havana Hospital")).toBeInTheDocument();
+    expect(within(d).getByText("Pilot Hospital")).toBeInTheDocument();
     await userEvent.click(within(d).getByLabelText("Complaint"));
     await userEvent.type(
       within(d).getByLabelText(/^Reference/),
@@ -77,7 +77,7 @@ describe("the hospital's legal holds", () => {
     );
     await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
     const s = await screen.findByRole("dialog", {
-      name: "Place a legal hold on Havana Hospital?",
+      name: "Place a legal hold on Pilot Hospital?",
     });
     await userEvent.click(within(s).getByLabelText("Digit 1 of 6"));
     await userEvent.keyboard(MOCK_CODE);
@@ -89,7 +89,7 @@ describe("the hospital's legal holds", () => {
   });
 
   it("a removed hospital offers no Place a hold", async () => {
-    const h: Hospital = { ...(await get("h_havana")), status: "removed" };
+    const h: Hospital = { ...(await get("h_pilot")), status: "removed" };
     renderWithAuth(<HospitalHoldsSection hospital={h} onRetry={() => {}} />);
     expect(
       within(section()).queryByRole("button", { name: "Place a hold" }),

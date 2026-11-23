@@ -246,7 +246,7 @@ describe("UploadDialog", () => {
         id: `s-a${i}`,
         full_name: `Analyst ${i}`,
         display_name: `Analyst ${i}`,
-        email: `a${i}@havanahospital.org`,
+        email: `a${i}@pilot-hospital.example`,
         roles: ["analyst"],
       }),
     );

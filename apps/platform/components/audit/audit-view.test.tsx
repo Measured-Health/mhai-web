@@ -153,7 +153,7 @@ describe("the Audit log page", () => {
         email: "folake.adeyemi@hv.example",
         role: "clinician",
         kind: "staff",
-        hospital: { id: "h_havana", name: "Havana Hospital" },
+        hospital: { id: "h_pilot", name: "Pilot Hospital" },
       },
       {
         id: "u_twin_2",
@@ -206,7 +206,7 @@ describe("the Audit log page", () => {
       name: /^Folake Adeyemi · /,
     });
     expect(opts.map((o) => o.textContent)).toEqual([
-      "Folake Adeyemi · Clinician · Havana Hospital · folake.adeyemi@hv.example",
+      "Folake Adeyemi · Clinician · Pilot Hospital · folake.adeyemi@hv.example",
       "Folake Adeyemi · Reviewer · Northgate General Hospital · f.adeyemi@ng.example",
     ]);
     await u.click(opts[1]!);

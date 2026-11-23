@@ -61,14 +61,13 @@ async function addEastbrook(page: Page, secret: string) {
   await expect(page).toHaveURL(/\/connections\/[A-Za-z0-9_-]+$/);
 }
 
-test("Connections shows Havana connected, Northgate needing attention, Riverside switched off and Eastbrook not connected", async ({
+test("Connections shows Pilot Hospital connected, Northgate needing attention, Riverside switched off and Eastbrook not connected", async ({
   page,
 }) => {
   await openConnections(page);
-  const havana = rowsOf(page, "Havana Hospital");
-  await expect(havana).toHaveCount(2);
-  for (const r of await havana.all())
-    await expect(r).toContainText("Connected");
+  const pilot = rowsOf(page, "Pilot Hospital");
+  await expect(pilot).toHaveCount(2);
+  for (const r of await pilot.all()) await expect(r).toContainText("Connected");
   await expect(rowsOf(page, "Northgate General Hospital")).toContainText(
     "Needs attention",
   );
@@ -82,7 +81,7 @@ test("Connections shows Havana connected, Northgate needing attention, Riverside
   // The filter lives in the address as ?state=.
   await page.getByRole("button", { name: /^Needs attention/ }).click();
   await expect(page).toHaveURL(/\/connections\?state=needs_attention$/);
-  await expect(rowsOf(page, "Havana Hospital")).toHaveCount(0);
+  await expect(rowsOf(page, "Pilot Hospital")).toHaveCount(0);
   await expect(rowsOf(page, "Northgate General Hospital")).toHaveCount(1);
   expectCleanUrl(page);
 });
@@ -141,7 +140,7 @@ test("the credential reads Set after saving and its value is nowhere in the page
 
 test("an auditor sees the connection and no controls", async ({ page }) => {
   await openConnections(page, AMARA);
-  await expect(rowsOf(page, "Havana Hospital")).toHaveCount(2);
+  await expect(rowsOf(page, "Pilot Hospital")).toHaveCount(2);
   await expect(
     page.getByRole("main").getByRole("link", { name: "Add a connection" }),
   ).toHaveCount(0);

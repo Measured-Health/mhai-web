@@ -60,11 +60,11 @@ test("Ada switches Northgate's patient alerts on, after the warning, then off", 
   await expect(r.getByText(/No alert is sent to anyone/)).toBeVisible();
 });
 
-test("an auditor sees Havana's rule set and can't switch it", async ({
+test("an auditor sees Pilot Hospital's rule set and can't switch it", async ({
   page,
 }) => {
   await signIn(page, AMARA);
-  await openHospital(page, "Havana Hospital");
+  await openHospital(page, "Pilot Hospital");
   const r = alerts(page);
   await expect(r.getByText("0-synthetic")).toBeVisible();
   await expect(r.getByRole("button")).toHaveCount(0);

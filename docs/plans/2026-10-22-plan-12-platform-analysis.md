@@ -139,7 +139,7 @@ Plan 7c's **Analytics** page is renamed **Usage** first. In 12b, a platform admi
 12b can't start until Plan 11 merges with these two additions. If the Plan 11 plan doesn't already include them, the controller adds them there:
 
 1. **A letter can cover Measured Health platform admins** as well as hospital staff. Platform-side letters carry `covered_platform: Person[]`.
-2. **Verify refuses a covered platform admin** with **409** `same_person`, and `verifiable_by_you` is false for them. The sample letter at Havana Hospital covers Ada Bakare and is verified by Tunde Okafor, in the shared platform mock's clearance store. Northgate has no letter.
+2. **Verify refuses a covered platform admin** with **409** `same_person`, and `verifiable_by_you` is false for them. The sample letter at Pilot Hospital covers Ada Bakare and is verified by Tunde Okafor, in the shared platform mock's clearance store. Northgate has no letter.
 
 ## Review Focus
 
@@ -213,7 +213,7 @@ apps/platform/tests/e2e/usage.spec.ts · analysis.spec.ts
 
 - [ ] **Step 1: Write the failing tests**
   - `app-shell.test.tsx`: "the sidebar shows Usage between Hospitals and Team, linking to /usage"; "no sidebar entry says Analytics".
-  - `bell.test.tsx`: "an item opens Usage with that change selected" (`/usage?change=chg_hav_review_time`); the list is named "New usage changes".
+  - `bell.test.tsx`: "an item opens Usage with that change selected" (`/usage?change=chg_plt_review_time`); the list is named "New usage changes".
   - `readme.test.ts`: "documents the platform usage demo", matching `/\*\*Usage across hospitals\.\*\*/`. The clinical README already has "**Usage.**", so the pin needs the longer phrase.
   - e2e `security.spec.ts`: `/usage` in the CSP list, and "`/analytics?change=x` lands on `/usage?change=x`".
 - [ ] **Step 2: Run them; they fail.**
@@ -503,7 +503,7 @@ type AccessQuery = { hospital?: string; kind?: AccessKind; cursor?: string };
 
   | Hospital             | Kind and coverage             | Analysis status                                   |
   | -------------------- | ----------------------------- | ------------------------------------------------- |
-  | Havana               | general, full coverage        | the demo's main hospital; peers are exactly 5     |
+  | Pilot Hospital       | general, full coverage        | the demo's main hospital; peers are exactly 5     |
   | Northgate            | general, full coverage        | no letter (12b)                                   |
   | Harbour View         | general, full coverage        |                                                   |
   | Westfield            | general, full coverage        |                                                   |
@@ -518,7 +518,7 @@ type AccessQuery = { hospital?: string; kind?: AccessKind; cursor?: string };
 
   "Full coverage" means `consultations_and_records`. The result is "10 of 12 hospitals included".
 
-- **Cohorts.** A seeded synthetic cohort per included hospital, from 120 to 1,400 patients over 12 whole months. It uses a small PRNG with no dependency, and the same seed always gives the same cohort. It uses Plan 6's conditions, findings and settings. Havana and Northgate each have two sources ("Main record" and "Results system"). The cohorts live only in the mock's memory.
+- **Cohorts.** A seeded synthetic cohort per included hospital, from 120 to 1,400 patients over 12 whole months. It uses a small PRNG with no dependency, and the same seed always gives the same cohort. It uses Plan 6's conditions, findings and settings. Pilot Hospital and Northgate each have two sources ("Main record" and "Results system"). The cohorts live only in the mock's memory.
 - **Planted cases:**
   - Sickle cell disease (D57): Lakeside 3 and Harbour View 6, so the server hides Harbour View too (second hiding);
   - Tuberculosis (A15): cases at only 2 hospitals, so the all-hospitals figure is "Too few hospitals to show";
@@ -546,7 +546,7 @@ type AccessQuery = { hospital?: string; kind?: AccessKind; cursor?: string };
 - **Options:** `analysis?: "normal" | "unavailable" | "off" | "few_peers" | { failView: ViewId }`.
   - "unavailable": every view returns `{unavailable: true}`;
   - "off": the status says off and every view is 403 `analysis_off`;
-  - "few_peers": drops Ridgeway, so Havana has 4 peers.
+  - "few_peers": drops Ridgeway, so Pilot Hospital has 4 peers.
 - `delayMs` and the clock work as today.
 
 - [ ] **Step 1: Write the failing tests**
@@ -558,7 +558,7 @@ type AccessQuery = { hospital?: string; kind?: AccessKind; cursor?: string };
     - "Tuberculosis across hospitals reads too_few_hospitals";
     - "the rare pair is hidden and listed after the shown pairs";
     - "a hospital's value is the same in both scopes";
-    - "Havana compares with 5 peers; few_peers gives too_few_peers; Southpoint partly_standardised; Fairhaven too_little_history; Riverside too_few_peers";
+    - "Pilot Hospital compares with 5 peers; few_peers gives too_few_peers; Southpoint partly_standardised; Fairhaven too_little_history; Riverside too_few_peers";
     - "a 4th filter across hospitals is 422 too_many_filters; a 5th for one hospital too";
     - "location across hospitals is 422 invalid";
     - "an auditor is 403";
@@ -822,7 +822,7 @@ This task mounts a placeholder body for each view (title and summary only). Task
   - "counts always show beside rates across hospitals";
   - "Sickle cell disease: Lakeside and Harbour View read Fewer than 5";
   - "Tuberculosis across hospitals reads Too few hospitals to show";
-  - "Havana: the previous period first, then the median of 5 similar hospitals, then the verdict in words";
+  - "Pilot Hospital: the previous period first, then the median of 5 similar hospitals, then the verdict in words";
   - "few_peers: Not enough similar hospitals to compare, with no median";
   - "Riverside, Southpoint and Fairhaven show their reasons";
   - "a hidden month reads Fewer than 5 with no column, beside a real 0";
@@ -907,8 +907,8 @@ This task mounts a placeholder body for each view (title and summary only). Task
   - any patient key is present.
 - **`accessLine(e: AccessEntry): string`:**
   - "Ada Bakare looked at Prevalence and trends · All hospitals · Last 12 months · Age 40–59, Female";
-  - "Tunde Okafor downloaded Who is affected as CSV · Havana Hospital · Last 6 months";
-  - "Ada Bakare opened 37 de-identified patients at Havana Hospital · Findings and alerts · letter CL_hav_01". This one has a **Security** chip with an icon.
+  - "Tunde Okafor downloaded Who is affected as CSV · Pilot Hospital · Last 6 months";
+  - "Ada Bakare opened 37 de-identified patients at Pilot Hospital · Findings and alerts · letter CL_plt_01". This one has a **Security** chip with an icon.
 - **Activity labels:** "{actor} turned Analysis on", "{actor} turned patient lists off".
 - **`AccessTrail`:**
   - filters for hospital (the page's existing select) and kind (All, Visits, Downloads, Patient lists);
@@ -947,7 +947,7 @@ This task mounts a placeholder body for each view (title and summary only). Task
 - [ ] **Step 1: e2e** on desktop and mobile, with `expectNoStorage` after each test:
   - "Ada opens Analysis from the sidebar: All hospitals, 10 of 12 included, Sample data";
   - "filter Sickle cell disease and read Fewer than 5 for Lakeside and Harbour View";
-  - "pick Havana Hospital: the comparison shows the previous period, then the median of 5, then the verdict";
+  - "pick Pilot Hospital: the comparison shows the previous period, then the median of 5, then the verdict";
   - "Riverside shows Not enough similar hospitals to compare";
   - "Download CSV saves a file whose hidden values read Fewer than 5, and the trail shows the download";
   - "Amara (auditor) sees no Analysis entry, /analysis lands on the access trail, and she exports it";
@@ -968,7 +968,7 @@ The controller then opens the 12a PR and the backend contract PR (§14.12, and t
 
 ### Task 10 (12b): The drill-down contract, mock and reader
 
-**Before you start:** Plan 12a and Plan 11 (with "Needs from Plan 11") are merged. Merge `origin/main`. Check that the platform mock has the clearance store and the sample Havana letter covering Ada.
+**Before you start:** Plan 12a and Plan 11 (with "Needs from Plan 11") are merged. Merge `origin/main`. Check that the platform mock has the clearance store and the sample Pilot Hospital letter covering Ada.
 
 **Files:**
 
@@ -1021,8 +1021,8 @@ type PlatformPatientsOut = {
 
 - [ ] **Step 1: Write the failing tests**
   - mock:
-    - "Ada has a clearance at Havana; Tunde has none";
-    - "drill only for Ada, at Havana, in One hospital scope, on shown counts ≥ 5";
+    - "Ada has a clearance at Pilot Hospital; Tunde has none";
+    - "drill only for Ada, at Pilot Hospital, in One hospital scope, on shown counts ≥ 5";
     - "no drill anywhere across hospitals";
     - "Northgate is 403 no_clearance";
     - "patientViews off gives 403 patient_views_off and no drill";
@@ -1074,7 +1074,7 @@ type PlatformPatientsOut = {
 
 - [ ] **Step 1: Write the failing tests**
   - "across hospitals no number is a button";
-  - "Ada at Havana sees See patients on a shown count; a hidden count has none";
+  - "Ada at Pilot Hospital sees See patients on a shown count; a hidden count has none";
   - "at Northgate the number shows the clearance hint on focus";
   - "with the switch off, no hint and no button";
   - "the list shows M- ids and never a name or MRN";
@@ -1085,8 +1085,8 @@ type PlatformPatientsOut = {
   - "the list is gone from the cache after closing";
   - "the trail shows the flagged entry with its letter".
   - e2e:
-    - "Ada picks Havana, opens See patients, sees the de-identified list, closes it, and the trail shows it flagged";
-    - "Tunde at Havana sees the hint, not the button";
+    - "Ada picks Pilot Hospital, opens See patients, sees the de-identified list, closes it, and the trail shows it flagged";
+    - "Tunde at Pilot Hospital sees the hint, not the button";
     - "phone: the list opens as a sheet".
 - [ ] **Step 2: Implement.**
 - [ ] **Step 3: Docs.** The README adds the per-hospital list: who can open it and under which letter. It stays off until `ANALYSIS_PATIENT_VIEWS_SIGNED_OFF=true` and the backend switch. Pin it with "documents the platform patient list gate", matching `/ANALYSIS_PATIENT_VIEWS_SIGNED_OFF=true/`. CHANGELOG.

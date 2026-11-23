@@ -517,7 +517,7 @@ All notable changes to this project are documented here. The format follows
   verify it. The named-access switch (global and per hospital: Off, Letters
   only, On) is raised with three sign-offs and a different platform admin's
   approval, and lowered at once by one admin. Auditors read it all. A new
-  sample platform admin, Bola Hassan, is linked to Havana Hospital. End-to-end
+  sample platform admin, Bola Hassan, is linked to Pilot Hospital. End-to-end
   tests cover it on desktop and phone.
 - Names in Analysis, on sample data: **Show names** on a patient list for
   someone a verified clearance letter covers, with a purpose, a banner and a
@@ -569,7 +569,7 @@ All notable changes to this project are documented here. The format follows
   to contact, and follow-ups with a note that platform admins add and
   undo and auditors read. Tabs and a CSV cover use, alert safety, answer
   quality and hospitals for the chosen period, in counts only, with
-  counts of 1 to 4 shown as "Fewer than 5". Havana Hospital and two small
+  counts of 1 to 4 shown as "Fewer than 5". Pilot Hospital and two small
   sample hospitals join the sample data. End-to-end tests cover it on
   desktop and phone.
 - Notifications in the platform admin app, on sample data: a bell that

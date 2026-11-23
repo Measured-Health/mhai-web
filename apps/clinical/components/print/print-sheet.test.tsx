@@ -29,7 +29,9 @@ afterEach(() => vi.unstubAllEnvs());
 describe("PrintSheet", () => {
   it("adds no clinician name", () => {
     const { container } = sheet(FIXTURES.high);
-    expect(container.textContent).not.toMatch(/Requested by|Reyes|Havana/);
+    expect(container.textContent).not.toMatch(
+      /Requested by|Reyes|Pilot Hospital/,
+    );
   });
   it("shows the clinician-agreed footer only when agreedAt is set", () => {
     expect(sheet(FIXTURES.high).container.textContent).not.toContain(

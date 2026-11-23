@@ -31,11 +31,11 @@ describe("CSV (R10)", () => {
         by_specialty: [{ specialty: "Paediatrics", consultations: 318 }],
         alerts: null,
       },
-      "Havana Hospital",
+      "Pilot Hospital",
     );
     expect(csv.split("\r\n")).toEqual([
       "\uFEFFMeasure,Value",
-      "Hospital,Havana Hospital",
+      "Hospital,Pilot Hospital",
       "Period,This month (2026-10-01 to 2026-10-16)",
       "Consultations,1284",
       "Active clinicians,39",
@@ -82,8 +82,8 @@ describe("CSV (R10)", () => {
   });
 
   it("names the file after the hospital and the day", () => {
-    expect(csvName("activity", "Havana Hospital", NOW)).toBe(
-      "havana-hospital-activity-2026-10-16.csv",
+    expect(csvName("activity", "Pilot Hospital", NOW)).toBe(
+      "pilot-hospital-activity-2026-10-16.csv",
     );
   });
 });

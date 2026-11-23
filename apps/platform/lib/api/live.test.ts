@@ -37,7 +37,7 @@ const GUARDRAILS = () => Response.json(guardrails());
 /** An Analysis query with most things unset: a null is never sent. */
 const ANALYSIS_Q: AnalysisQuery = {
   scope: "hospital",
-  hospital: "h_havana",
+  hospital: "h_pilot",
   period: "6m",
   condition: "e11",
   age_band: null,
@@ -73,7 +73,7 @@ const LETTERS = () =>
 /** A record connection exactly as core openapi 1.20.0 sends it (synthetic). */
 const coreConnection = (over: Record<string, unknown> = {}) => ({
   id: "emr_hv1",
-  hospital: { id: "h_havana", name: "Havana Hospital" },
+  hospital: { id: "h_pilot", name: "Pilot Hospital" },
   type: "fhir_r4",
   type_label: "FHIR R4 server",
   source_label: "Main record",
@@ -84,7 +84,7 @@ const coreConnection = (over: Record<string, unknown> = {}) => ({
   errors_24h: 0,
   paused: false,
   credentials_missing: false,
-  base_url: "https://records.havana.example/fhir",
+  base_url: "https://records.pilot-hospital.example/fhir",
   settings: { client_id: "a" },
   credentials: [{ key: "private_key", set_at: "2026-11-14T03:00:00Z" }],
   errors: [],
@@ -936,9 +936,9 @@ const ROWS: Row[] = [
   ],
   [
     "listConnections",
-    (c) => c.listConnections({ hospital: "h_havana", state: "off" }),
+    (c) => c.listConnections({ hospital: "h_pilot", state: "off" }),
     "GET",
-    "/api/v1/platform/emr/connections?hospital=h_havana&state=off",
+    "/api/v1/platform/emr/connections?hospital=h_pilot&state=off",
     undefined,
     CONNECTIONS,
   ],
@@ -1016,12 +1016,12 @@ const ROWS: Row[] = [
     (c) =>
       c.listClearances({
         status: "waiting",
-        hospital: "h_havana",
+        hospital: "h_pilot",
         covers: "me",
         cursor: "50",
       }),
     "GET",
-    "/api/v1/platform/clearances?status=waiting&hospital=h_havana&covers=me&cursor=50",
+    "/api/v1/platform/clearances?status=waiting&hospital=h_pilot&covers=me&cursor=50",
     undefined,
     LETTERS,
   ],
@@ -1156,16 +1156,16 @@ const ROWS: Row[] = [
   ],
   [
     "getAnalysisFilters",
-    (c) => c.getAnalysisFilters("hospital", "h_havana"),
+    (c) => c.getAnalysisFilters("hospital", "h_pilot"),
     "GET",
-    "/api/v1/platform/analysis/filters?scope=hospital&hospital=h_havana",
+    "/api/v1/platform/analysis/filters?scope=hospital&hospital=h_pilot",
     undefined,
   ],
   [
     "getAnalysisView",
     (c) => c.getAnalysisView("co-occurring", ANALYSIS_Q),
     "GET",
-    "/api/v1/platform/analysis/co-occurring?scope=hospital&hospital=h_havana&period=6m&condition=e11&sex=female",
+    "/api/v1/platform/analysis/co-occurring?scope=hospital&hospital=h_pilot&period=6m&condition=e11&sex=female",
     undefined,
   ],
   [
@@ -1179,19 +1179,19 @@ const ROWS: Row[] = [
     "listAnalysisAccess",
     (c) =>
       c.listAnalysisAccess({
-        hospital: "h_havana",
+        hospital: "h_pilot",
         kind: "download",
         cursor: "50",
       }),
     "GET",
-    "/api/v1/platform/audit/analysis-access?hospital=h_havana&kind=download&cursor=50",
+    "/api/v1/platform/audit/analysis-access?hospital=h_pilot&kind=download&cursor=50",
     undefined,
   ],
   [
     "exportAnalysisAccess",
-    (c) => c.exportAnalysisAccess({ hospital: "h_havana", kind: "visit" }),
+    (c) => c.exportAnalysisAccess({ hospital: "h_pilot", kind: "visit" }),
     "GET",
-    "/api/v1/platform/audit/analysis-access/export?hospital=h_havana&kind=visit",
+    "/api/v1/platform/audit/analysis-access/export?hospital=h_pilot&kind=visit",
     undefined,
     csv,
   ],
@@ -1921,7 +1921,7 @@ describe("live platform client", () => {
       expect(urls.slice(0, 5)).toEqual(
         ["prevalence", "affected", "co-occurring", "findings", "quality"].map(
           (v) =>
-            `/api/v1/platform/analysis/${v}?scope=hospital&hospital=h_havana&period=6m&condition=e11&sex=female`,
+            `/api/v1/platform/analysis/${v}?scope=hospital&hospital=h_pilot&period=6m&condition=e11&sex=female`,
         ),
       );
       expect(urls[5]).toBe(

@@ -48,7 +48,7 @@
   - raising a switch (global or hospital) needs all three sign-off references and a **second, different** platform admin's approval;
   - lowering needs one platform admin, a reason and a two-step code, and takes effect at once;
   - a hospital can't be raised above the global position (**409** `above_global`).
-  - The demo runs **On**, globally and for Havana Hospital.
+  - The demo runs **On**, globally and for Pilot Hospital.
 - **Names show only** (anti-goal 1) when all of these hold:
   - the effective position is On;
   - the person is covered by a verified letter whose end date hasn't passed;
@@ -172,7 +172,7 @@
   - Only `POST hospital/clearances` may be `multipart/form-data`. Its limit is `10 MB + 64 KB`, and a larger body is **413** `file_too_large`. Any other content type there is **415** `file_type`.
   - Every other write keeps the JSON path and its 64 KB limit.
 - **The two demos keep separate stores.** Each app seeds the same sample letters, with the same ids, but in memory per app. A letter verified in the platform demo doesn't change the clinical demo; the README says so.
-- **The platform demo gains a fifth team member**, Bola Hassan (`bola.hassan@measured-health.example`). He is a platform admin with two-step on, linked to Havana Hospital by a past account, and shows the same-side refusal. The team tests that list the sample team gain him.
+- **The platform demo gains a fifth team member**, Bola Hassan (`bola.hassan@measured-health.example`). He is a platform admin with two-step on, linked to Pilot Hospital by a past account, and shows the same-side refusal. The team tests that list the sample team gain him.
 - **The Named access nav entry** goes after Plan 6's Analysis entry in the Hospital admin group. It has the line "Clearance letters" and the `FileKey` icon, and shows only when `isHospitalAdmin(u) && canUseNamedAccess(u)`. The route is `/admin/named-access`.
 - **The platform nav entry** is **Clearances**, at `/clearances`, with the `FileCheck2` icon. The merged sidebar order is fixed by the controller: **Hospitals · Usage · Analysis · Clearances · Legal holds · System · Settings · Team · Activity · Audit log · Account**. Clearances goes straight after the Analysis entry (today's Analytics link, whatever it is called when 11b merges); whichever plan merges second fixes `nav.ts` and its test to the whole order. The selected letter lives in React state, never in the URL.
 - **Platform people on a letter (for Plan 12b).** A hospital admin types the emails of any Measured Health staff the letter names; the app never lists platform accounts to a hospital. Narrowing may remove them too. Covering a platform admin grants nothing in this plan's screens (platform staff still never see names); Plan 12b reads it through `covers=me`.
@@ -544,7 +544,7 @@ type NamedAccessOut = { position: NamedPosition; since: string | null }; // the 
 
 `ActivityEventOut` gains `purpose?: NamedPurpose`, which Task 13 defines; declare the type here.
 
-**Sample letters (`clearances-fixtures.ts`)** for Havana Hospital, relative to the mock's clock. The hospital's day is computed in `Africa/Lagos` inside the mock only.
+**Sample letters (`clearances-fixtures.ts`)** for Pilot Hospital, relative to the mock's clock. The hospital's day is computed in `Africa/Lagos` inside the mock only.
 
 | Id         | Status   | Covered                               | Other                                             |
 | ---------- | -------- | ------------------------------------- | ------------------------------------------------- |
@@ -979,19 +979,19 @@ None of them is in `AUDITOR_WRITES`. A page reply passes only as PNG or JPEG, wi
 **Sample data and mock rules:**
 
 - **Letters:**
-  - Havana Hospital has the 11a set, with the same ids;
+  - Pilot Hospital has the 11a set, with the same ids;
   - Northgate has `cl_north`, waiting, so that Bola can verify something;
-  - Havana's `cl_wait` covers Tunde (`covered_platform`), so Tunde gets `same_person` on it;
+  - Pilot Hospital's `cl_wait` covers Tunde (`covered_platform`), so Tunde gets `same_person` on it;
   - Riverside has `cl_river`, active, ending in 20 days.
 - **The switch:**
   - global On since 3 Feb, requested by Ada and approved by Tunde, with sign-off references "Clinical: Dr. A. Musa, 1 Feb, CS-014", "Privacy: …" and "Legal: …";
-  - Havana On;
+  - Pilot Hospital On;
   - other hospitals Off.
 - **Options:** `clearances?: "normal" | "unavailable" | "off"`. "unavailable" makes the list and named-access calls 503; "off" seeds the global switch as Off with no history.
 - **`verifiable_by_you`:**
   - false for an auditor;
   - false when `covers_you`;
-  - false for a member in `LINKED` (Bola is linked to `h_havana`);
+  - false for a member in `LINKED` (Bola is linked to `h_pilot`);
   - false for a member whose email domain is in the hospital's `email_domains`;
   - true otherwise.
 - **Verify:**
@@ -1016,8 +1016,8 @@ None of them is in `AUDITOR_WRITES`. A page reply passes only as PNG or JPEG, wi
   - `mock-clearances.test.ts`:
     - "the queue's To verify is waiting letters, oldest first";
     - "Ending soon is active letters within 30 days";
-    - "Bola gets verifiable_by_you false on Havana and true on Northgate";
-    - "Bola verifying Havana is 409 same_side and logs it" (Review Focus 4);
+    - "Bola gets verifiable_by_you false on Pilot Hospital and true on Northgate";
+    - "Bola verifying Pilot Hospital is 409 same_side and logs it" (Review Focus 4);
     - "Tunde verifying or rejecting cl_wait, which covers him, is 409 same_person; Ada can verify it";
     - "covers_you is true for Tunde on cl_wait and false for Ada";
     - "covers=me lists only the letters that cover the caller: cl_wait for Tunde, none for Ada";
@@ -1147,7 +1147,7 @@ None of them is in `AUDITOR_WRITES`. A page reply passes only as PNG or JPEG, wi
   - "View letter shows page 1 of 3 in an image and no download or print";
   - "closing the viewer revokes the page image";
   - "Ada verifies Northgate with a code; Northgate is Off, so the toast reads Verified. Names stay hidden until named access is switched on";
-  - "Bola sees You can't verify letters from a hospital you're linked to on Havana, and no buttons" (Review Focus 4);
+  - "Bola sees You can't verify letters from a hospital you're linked to on Pilot Hospital, and no buttons" (Review Focus 4);
   - "a forced same_side reply shows the same words" (Review Focus 4);
   - "Tunde sees You can't verify a letter that covers you on cl_wait, and no buttons; a forced same_person reply shows the same words";
   - "reject with Other needs a note";
@@ -1195,7 +1195,7 @@ None of them is in `AUDITOR_WRITES`. A page reply passes only as PNG or JPEG, wi
 
 - [ ] **Step 1: Write the failing tests**
   - "shows On since … · requested by Ada Bakare, approved by Tunde Okafor";
-  - "Havana On and Northgate Off, with effective positions";
+  - "Pilot Hospital On and Northgate Off, with effective positions";
   - "Ada requests Letters only for Riverside with three sign-offs and a code; it shows as waiting";
   - "Ada sees no Approve on her own request; Tunde approves and it takes effect";
   - "a missing legal reference blocks the request";
@@ -1223,7 +1223,7 @@ None of them is in `AUDITOR_WRITES`. A page reply passes only as PNG or JPEG, wi
 - [ ] **Step 1: e2e** on desktop and mobile, with `expectNoStorage` after each test, the CSP check on `/clearances`, and no letter id or page number in any page URL:
   - "Ada opens Clearances, views Northgate's letter and verifies it";
   - "Ada rejects a letter with Can't read it";
-  - "Bola sees the same-side line on Havana's waiting letter";
+  - "Bola sees the same-side line on Pilot Hospital's waiting letter";
   - "Tunde sees You can't verify a letter that covers you on cl_wait";
   - "the auditor views a letter and has no controls";
   - "Ada asks to turn Riverside to Letters only; Tunde, signed in in the same tab, approves";

@@ -2,34 +2,34 @@ import { describe, expect, it } from "vitest";
 import { INVITE_MAX, okEmails, parseInviteList } from "./invite";
 
 const ctx = {
-  existing: ["K.Mensah@havanahospital.org", "j.eze@havanahospital.org"],
-  domains: ["havanahospital.org"],
+  existing: ["K.Mensah@pilot-hospital.example", "j.eze@pilot-hospital.example"],
+  domains: ["pilot-hospital.example"],
 };
 
 describe("parseInviteList (Review Focus 3)", () => {
   it("splits on commas, semicolons, new lines and tabs, and skips blanks", () => {
     const lines = parseInviteList(
-      "a@havanahospital.org, b@havanahospital.org;\n\n c@havanahospital.org\td@havanahospital.org,,",
+      "a@pilot-hospital.example, b@pilot-hospital.example;\n\n c@pilot-hospital.example\td@pilot-hospital.example,,",
       ctx,
     );
     expect(lines.map((l) => [l.email, l.status])).toEqual([
-      ["a@havanahospital.org", "ok"],
-      ["b@havanahospital.org", "ok"],
-      ["c@havanahospital.org", "ok"],
-      ["d@havanahospital.org", "ok"],
+      ["a@pilot-hospital.example", "ok"],
+      ["b@pilot-hospital.example", "ok"],
+      ["c@pilot-hospital.example", "ok"],
+      ["d@pilot-hospital.example", "ok"],
     ]);
   });
 
   it("reads names, angle brackets and mailto:, in any case", () => {
     const lines = parseInviteList(
-      'Funmi Adeyemi <F.Adeyemi@HavanaHospital.org>\n"Obi, Ngozi" <n.obi@havanahospital.org>\nmailto:T.Bello@havanahospital.org\nAmaka Udo a.udo@havanahospital.org',
+      'Funmi Adeyemi <F.Adeyemi@Pilot-Hospital.example>\n"Obi, Ngozi" <n.obi@pilot-hospital.example>\nmailto:T.Bello@pilot-hospital.example\nAmaka Udo a.udo@pilot-hospital.example',
       ctx,
     );
     expect(okEmails(lines)).toEqual([
-      "f.adeyemi@havanahospital.org",
-      "n.obi@havanahospital.org",
-      "t.bello@havanahospital.org",
-      "a.udo@havanahospital.org",
+      "f.adeyemi@pilot-hospital.example",
+      "n.obi@pilot-hospital.example",
+      "t.bello@pilot-hospital.example",
+      "a.udo@pilot-hospital.example",
     ]);
     expect(lines.every((l) => l.status === "ok")).toBe(true);
   });
@@ -37,24 +37,24 @@ describe("parseInviteList (Review Focus 3)", () => {
   it("names every problem", () => {
     const lines = parseInviteList(
       [
-        "n.ade@havanahospital.org",
-        "N.ADE@havanahospital.org",
-        "k.mensah@havanahospital.org",
-        "j.eze@havanahospital.org",
+        "n.ade@pilot-hospital.example",
+        "N.ADE@pilot-hospital.example",
+        "k.mensah@pilot-hospital.example",
+        "j.eze@pilot-hospital.example",
         "someone@gmail.com",
-        "f.adeyemi.havanahospital.org",
-        "x@havanahospital",
+        "f.adeyemi.pilot-hospital.example",
+        "x@pilot-hospital",
       ].join("\n"),
       ctx,
     );
     expect(lines.map((l) => [l.email, l.status])).toEqual([
-      ["n.ade@havanahospital.org", "ok"],
-      ["n.ade@havanahospital.org", "duplicate"],
-      ["k.mensah@havanahospital.org", "already_staff"],
-      ["j.eze@havanahospital.org", "already_staff"],
+      ["n.ade@pilot-hospital.example", "ok"],
+      ["n.ade@pilot-hospital.example", "duplicate"],
+      ["k.mensah@pilot-hospital.example", "already_staff"],
+      ["j.eze@pilot-hospital.example", "already_staff"],
       ["someone@gmail.com", "domain_not_allowed"],
-      ["f.adeyemi.havanahospital.org", "invalid"],
-      ["x@havanahospital", "invalid"],
+      ["f.adeyemi.pilot-hospital.example", "invalid"],
+      ["x@pilot-hospital", "invalid"],
     ]);
   });
 
@@ -80,19 +80,25 @@ describe("parseInviteList (Review Focus 3)", () => {
     const L = (t: string) =>
       parseInviteList(t, ctx).map((l) => [l.email, l.status]);
     const want = [
-      ["a@havanahospital.org", "ok"],
-      ["b@havanahospital.org", "ok"],
+      ["a@pilot-hospital.example", "ok"],
+      ["b@pilot-hospital.example", "ok"],
     ];
-    expect(L("a@havanahospital.org b@havanahospital.org")).toEqual(want);
-    expect(L("a@havanahospital.org\u00A0b@havanahospital.org")).toEqual(want);
-    expect(L("a@havanahospital.org b@gmail.com a@havanahospital.org")).toEqual([
-      ["a@havanahospital.org", "ok"],
+    expect(L("a@pilot-hospital.example b@pilot-hospital.example")).toEqual(
+      want,
+    );
+    expect(L("a@pilot-hospital.example\u00A0b@pilot-hospital.example")).toEqual(
+      want,
+    );
+    expect(
+      L("a@pilot-hospital.example b@gmail.com a@pilot-hospital.example"),
+    ).toEqual([
+      ["a@pilot-hospital.example", "ok"],
       ["b@gmail.com", "domain_not_allowed"],
-      ["a@havanahospital.org", "duplicate"],
+      ["a@pilot-hospital.example", "duplicate"],
     ]);
-    expect(L("a@havanahospital.org b@havanahospital")).toEqual([
-      ["a@havanahospital.org", "ok"],
-      ["b@havanahospital", "invalid"],
+    expect(L("a@pilot-hospital.example b@pilot-hospital")).toEqual([
+      ["a@pilot-hospital.example", "ok"],
+      ["b@pilot-hospital", "invalid"],
     ]);
   });
 
@@ -101,22 +107,22 @@ describe("parseInviteList (Review Focus 3)", () => {
       expect(
         okEmails(
           parseInviteList(
-            `a@havanahospital.org${sep}b@havanahospital.org`,
+            `a@pilot-hospital.example${sep}b@pilot-hospital.example`,
             ctx,
           ),
         ),
-      ).toEqual(["a@havanahospital.org", "b@havanahospital.org"]);
+      ).toEqual(["a@pilot-hospital.example", "b@pilot-hospital.example"]);
   });
 
   it("never drops stray text before an <address> silently", () => {
     expect(
-      parseInviteList("junk, Ann <a@havanahospital.org>", ctx).map((l) => [
+      parseInviteList("junk, Ann <a@pilot-hospital.example>", ctx).map((l) => [
         l.email,
         l.status,
       ]),
     ).toEqual([
       ["junk", "invalid"],
-      ["a@havanahospital.org", "ok"],
+      ["a@pilot-hospital.example", "ok"],
     ]);
   });
 });

@@ -109,7 +109,7 @@ describe("Sidebar", () => {
       screen.getByRole("link", { name: /New consultation/ }),
     ).toHaveAttribute("href", "/");
     expect(screen.getByText(/kept for this session only/)).toBeInTheDocument();
-    expect(screen.getByText("Havana Hospital")).toBeInTheDocument();
+    expect(screen.getByText("Pilot Hospital")).toBeInTheDocument();
   });
   it("links to Help from the footer", () => {
     renderWithAuth(<Sidebar items={[]} />);
@@ -127,7 +127,7 @@ describe("Sidebar", () => {
   });
   it("hides the account footer when nobody is signed in", () => {
     renderWithAuth(<Sidebar items={[]} />, null);
-    expect(screen.queryByText("Havana Hospital")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pilot Hospital")).not.toBeInTheDocument();
   });
   it("links to Review corrections with the waiting count", async () => {
     renderWithAuth(<Sidebar items={[]} />);

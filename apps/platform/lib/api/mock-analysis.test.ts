@@ -152,7 +152,7 @@ describe("the sample cohorts", () => {
     expect(has("h_lakeside", "d57")).toBe(3);
     expect(has("h_harbour", "d57")).toBe(6);
     const tb = PROFILES.filter((p) => has(p.id, "a15") > 0).map((p) => p.id);
-    expect(tb.sort()).toEqual(["h_havana", "h_northgate"]);
+    expect(tb.sort()).toEqual(["h_northgate", "h_pilot"]);
     const pair = PROFILES.flatMap((p) =>
       cohortOf(p.id).filter((x) => {
         const ids = x.conditions.map((c) => c.id);
@@ -273,14 +273,14 @@ describe("the filter options", () => {
 
   it("for one hospital: its wards, and sources only when it has more than one", async () => {
     const { m } = setup();
-    const havana = await m.getAnalysisFilters("hospital", "h_havana");
-    expect(havana.sources.map((s) => s.label)).toEqual([
+    const pilot = await m.getAnalysisFilters("hospital", "h_pilot");
+    expect(pilot.sources.map((s) => s.label)).toEqual([
       "Main record",
       "Results system",
     ]);
-    expect(havana.locations.length).toBeGreaterThan(2);
-    expect(havana.conditions.map((c) => c.id)).toContain("j18_9");
-    expect(havana.conditions.map((c) => c.id)).toContain("unmapped");
+    expect(pilot.locations.length).toBeGreaterThan(2);
+    expect(pilot.conditions.map((c) => c.id)).toContain("j18_9");
+    expect(pilot.conditions.map((c) => c.id)).toContain("unmapped");
     expect(
       (await m.getAnalysisFilters("hospital", "h_westfield")).sources,
     ).toEqual([]);
@@ -330,7 +330,7 @@ describe("hiding small groups", () => {
     for (const q of [
       one("h_lakeside"),
       one("h_fairhaven", { period: "3m" }),
-      one("h_havana", { sex: "other", period: "3m" }),
+      one("h_pilot", { sex: "other", period: "3m" }),
     ]) {
       const { data } = await view(m, "affected", q);
       const rows = [
@@ -403,7 +403,7 @@ describe("hiding small groups", () => {
       why: "too_few_hospitals",
     });
     // The two hospitals' own rows show (each is 5 or more).
-    expect(rowOf(out, "h_havana").headline.count).toEqual({
+    expect(rowOf(out, "h_pilot").headline.count).toEqual({
       value: 9,
       suppressed: false,
     });
@@ -419,12 +419,12 @@ describe("hiding small groups", () => {
       why: "too_few_hospitals",
     });
     // In one hospital the figure is its own, so it shows.
-    const havana = await view(
+    const pilot = await view(
       m,
       "prevalence",
-      one("h_havana", { condition: "a15" }),
+      one("h_pilot", { condition: "a15" }),
     );
-    expect(havana.patients).toEqual({ value: 9, suppressed: false });
+    expect(pilot.patients).toEqual({ value: 9, suppressed: false });
   });
 
   it("lists a condition with no standard name once, as Not standardised, across hospitals", async () => {
@@ -445,7 +445,7 @@ describe("hiding small groups", () => {
 
   it("hides the rare pair and lists it after the shown pairs", async () => {
     const { m } = setup();
-    for (const q of [all(), one("h_havana")]) {
+    for (const q of [all(), one("h_pilot")]) {
       const { data } = await view(m, "co-occurring", q);
       expect(data.pairs.length).toBeLessThanOrEqual(20);
       const rare = data.pairs.findIndex(
@@ -841,7 +841,7 @@ describe("one hospital and all hospitals", () => {
       hospital: { name: "Lakeside Community Clinic" },
     });
     expect(rowOf(out, "h_riverside").kind).toBe("specialist");
-    expect(rowOf(out, "h_havana").size).toEqual({
+    expect(rowOf(out, "h_pilot").size).toEqual({
       value: 1400,
       suppressed: false,
     });
@@ -899,7 +899,7 @@ describe("one hospital and all hospitals", () => {
     const out = await view(
       setup().m,
       "prevalence",
-      one("h_havana", { condition: "e11" }),
+      one("h_pilot", { condition: "e11" }),
     );
     const { count, base, per_1000 } = out.headline;
     expect(base.value).toBe(1400);
@@ -913,10 +913,10 @@ describe("fair comparison", () => {
   const cmp = async (m: Mock, h: string, v: ViewId = "prevalence", f = {}) =>
     (await view(m, v, one(h, f))).comparison;
 
-  it("Havana compares with exactly 5 similar hospitals, never named", async () => {
+  it("Pilot Hospital compares with exactly 5 similar hospitals, never named", async () => {
     const { m } = setup();
     for (const v of ["prevalence", "findings", "quality"] as const) {
-      const c = (await cmp(m, "h_havana", v))!;
+      const c = (await cmp(m, "h_pilot", v))!;
       expect(c, v).toMatchObject({
         available: true,
         reason: null,
@@ -943,7 +943,7 @@ describe("fair comparison", () => {
       ])
         expect(json).not.toContain(name);
     }
-    const six = (await cmp(m, "h_havana", "prevalence", { period: "6m" }))!;
+    const six = (await cmp(m, "h_pilot", "prevalence", { period: "6m" }))!;
     expect(six.previous.value).not.toBeNull();
     expect(six.previous.suppressed).toBe(false);
   });
@@ -952,7 +952,7 @@ describe("fair comparison", () => {
     const { m } = setup();
     const seen = new Set<string>();
     for (const h of [
-      "h_havana",
+      "h_pilot",
       "h_northgate",
       "h_harbour",
       "h_westfield",
@@ -987,9 +987,9 @@ describe("fair comparison", () => {
     expect([...seen].sort()).toEqual(["about_same", "higher", "lower"]);
   });
 
-  it("few_peers drops Ridgeway, so Havana has 4: too_few_peers", async () => {
+  it("few_peers drops Ridgeway, so Pilot Hospital has 4: too_few_peers", async () => {
     const { m } = setup({ analysis: "few_peers" });
-    const c = (await cmp(m, "h_havana"))!;
+    const c = (await cmp(m, "h_pilot"))!;
     expect(c).toMatchObject({
       available: false,
       reason: "too_few_peers",
@@ -1031,9 +1031,9 @@ describe("fair comparison", () => {
 
   it("is not there when a peer hides the measure", async () => {
     const { m } = setup();
-    // Sickle cell: Harbour View is hidden for everyone, so Havana has 4 peers.
+    // Sickle cell: Harbour View is hidden for everyone, so Pilot Hospital has 4 peers.
     expect(
-      await cmp(m, "h_havana", "prevalence", { condition: "d57" }),
+      await cmp(m, "h_pilot", "prevalence", { condition: "d57" }),
     ).toMatchObject({
       available: false,
       reason: "too_few_peers",
@@ -1044,18 +1044,18 @@ describe("fair comparison", () => {
   it("is only on Prevalence, Findings and Quality, and only for one hospital", async () => {
     const { m } = setup();
     for (const v of ["affected", "co-occurring"] as const) {
-      expect((await view(m, v, one("h_havana"))).comparison).toBeNull();
+      expect((await view(m, v, one("h_pilot"))).comparison).toBeNull();
       expect((await view(m, v, all())).comparison).toBeNull();
     }
     for (const v of ["prevalence", "findings", "quality"] as const) {
       expect((await view(m, v, all())).comparison).toBeNull();
-      expect((await view(m, v, one("h_havana"))).hospitals).toBeNull();
+      expect((await view(m, v, one("h_pilot"))).hospitals).toBeNull();
     }
   });
 
   it("the series carries the median for one hospital when it can compare", async () => {
     const { m } = setup();
-    const own = await view(m, "prevalence", one("h_havana"));
+    const own = await view(m, "prevalence", one("h_pilot"));
     expect(own.data.series).toHaveLength(12);
     for (const s of own.data.series) expect(s.median).not.toBeNull();
     const none = await view(m, "prevalence", one("h_riverside"));
@@ -1077,7 +1077,7 @@ describe("the views", () => {
       "80+",
     ]);
     expect(a.data.by_location).toBeNull();
-    const h = await view(m, "affected", one("h_havana"));
+    const h = await view(m, "affected", one("h_pilot"));
     expect(h.data.by_age.map((r) => r.band)).toEqual([
       "0-17",
       "18-39",
@@ -1095,7 +1095,7 @@ describe("the views", () => {
   });
 
   it("findings and alerts: the severities add up to the total", async () => {
-    const { data } = await view(setup().m, "findings", one("h_havana"));
+    const { data } = await view(setup().m, "findings", one("h_pilot"));
     const sev = data.alerts.by_severity;
     expect(sev.critical.value! + sev.urgent.value! + sev.info.value!).toBe(
       data.alerts.total.value,
@@ -1106,7 +1106,7 @@ describe("the views", () => {
 
   it("quality: the confidence mix adds up, and reviewers follow the small-group rule", async () => {
     const { m } = setup();
-    const { data } = await view(m, "quality", one("h_havana"));
+    const { data } = await view(m, "quality", one("h_pilot"));
     expect(data.by_condition.length).toBeGreaterThan(3);
     for (const row of data.by_condition) {
       const c = row.confidence;
@@ -1136,13 +1136,13 @@ describe("the views", () => {
     const { m } = setup();
     let rated = 0;
     let agreed = 0;
-    for (const p of cohortOf("h_havana"))
+    for (const p of cohortOf("h_pilot"))
       for (const c of p.consultations)
         if (c.agreed !== null) {
           rated++;
           if (c.agreed) agreed++;
         }
-    const own = await view(m, "quality", one("h_havana"));
+    const own = await view(m, "quality", one("h_pilot"));
     expect(own.headline.count).toEqual({ value: agreed, suppressed: false });
     expect(own.headline.base).toEqual({ value: rated, suppressed: false });
     const rate = Math.round((agreed / rated) * 1000 * 10) / 10;
@@ -1157,7 +1157,7 @@ describe("the views", () => {
     );
     expect(sum).toBe(rated);
     const across = await view(m, "quality", all());
-    expect(rowOf(across, "h_havana").headline).toEqual(own.headline);
+    expect(rowOf(across, "h_pilot").headline).toEqual(own.headline);
   });
 });
 
@@ -1184,12 +1184,12 @@ describe("what the mock refuses", () => {
       setting: "admitted",
       age_band: "40-64",
     } as const;
-    await view(m, "prevalence", one("h_havana", four));
+    await view(m, "prevalence", one("h_pilot", four));
     expect(
       await failure(
         m.getAnalysisView(
           "prevalence",
-          one("h_havana", { ...four, specialty: "Cardiology" }),
+          one("h_pilot", { ...four, specialty: "Cardiology" }),
         ),
       ),
     ).toEqual([422, "too_many_filters"]);
@@ -1215,15 +1215,15 @@ describe("what the mock refuses", () => {
       all({ condition: "unmapped" }),
       all({ condition: "zzz" }),
       all({ age_band: "0-17" }),
-      all({ hospital: "h_havana" }),
+      all({ hospital: "h_pilot" }),
       all({ period: "1m" as never }),
-      one("h_havana", { age_band: "0-19" }),
-      one("h_havana", { condition: "j18" }),
-      one("h_havana", { location: "nowhere" }),
-      one("h_havana", { source: "nowhere" }),
+      one("h_pilot", { age_band: "0-19" }),
+      one("h_pilot", { condition: "j18" }),
+      one("h_pilot", { location: "nowhere" }),
+      one("h_pilot", { source: "nowhere" }),
       one("h_westfield", { source: "main_record" }),
-      one("h_havana", { sex: "robot" as never }),
-      one("h_havana", { specialty: "Astrology" }),
+      one("h_pilot", { sex: "robot" as never }),
+      one("h_pilot", { specialty: "Astrology" }),
       one("h_hilltop"),
       one("h_eastbrook"),
       { ...ALL, scope: "hospital", hospital: null },
@@ -1260,12 +1260,12 @@ describe("what the mock refuses", () => {
     await view(
       m,
       "prevalence",
-      one("h_havana", { source: "results_system", location: "ward4" }),
+      one("h_pilot", { source: "results_system", location: "ward4" }),
     );
     await view(
       m,
       "prevalence",
-      one("h_havana", { condition: "j18_9", age_band: "65-79" }),
+      one("h_pilot", { condition: "j18_9", age_band: "65-79" }),
     );
     await view(m, "prevalence", all({ condition: "j18", age_band: "60-79" }));
   });
@@ -1314,7 +1314,7 @@ describe("what the mock refuses", () => {
       "unavailable",
     ]);
     await view(m, "prevalence", all());
-    await view(m, "quality", one("h_havana"));
+    await view(m, "quality", one("h_pilot"));
   });
 });
 
@@ -1415,21 +1415,21 @@ describe("the access trail", () => {
       ),
     ).toEqual(["download"]);
     expect(
-      (await m.listAnalysisAccess({ hospital: "h_havana", kind: "visit" }))
+      (await m.listAnalysisAccess({ hospital: "h_pilot", kind: "visit" }))
         .entries,
     ).toEqual([]);
   });
 
   it("exports the trail as a CSV with who did what, and no figures", async () => {
     const { m } = setup();
-    await view(m, "prevalence", one("h_havana", { condition: "e11" }));
+    await view(m, "prevalence", one("h_pilot", { condition: "e11" }));
     const { filename, blob } = await m.exportAnalysisAccess({});
     expect(filename).toBe("mhai-analysis-access-2026-10-23.csv");
     expect(blob.type).toContain("text/csv");
     const text = await blob.text();
     expect(text).toContain("Ada Bakare");
     expect(text).toContain("Tunde Okafor");
-    expect(text).toContain("Havana Hospital");
+    expect(text).toContain("Pilot Hospital");
     expect(text).toContain("cl_act");
     expect(text.split("\r\n").filter(Boolean)).toHaveLength(5);
     const only = await m.exportAnalysisAccess({ kind: "download" });
@@ -1455,13 +1455,13 @@ describe("what a reply can carry", () => {
     const replies: unknown[] = [
       await m.getAnalysisStatus(),
       await m.getAnalysisFilters("all", null),
-      await m.getAnalysisFilters("hospital", "h_havana"),
+      await m.getAnalysisFilters("hospital", "h_pilot"),
       await m.listAnalysisAccess({}),
     ];
     for (const v of VIEW_IDS)
       for (const q of [
         all(),
-        one("h_havana"),
+        one("h_pilot"),
         one("h_lakeside", { condition: "d57" }),
       ])
         replies.push(await m.getAnalysisView(v, q));
@@ -1493,8 +1493,8 @@ describe("what a reply can carry", () => {
     const { m } = setup();
     const text = JSON.stringify([
       await m.getAnalysisStatus(),
-      await m.getAnalysisFilters("hospital", "h_havana"),
-      await view(m, "findings", one("h_havana")),
+      await m.getAnalysisFilters("hospital", "h_pilot"),
+      await view(m, "findings", one("h_pilot")),
       await m.listAnalysisAccess({}),
     ]).toLowerCase();
     for (const v of VENDOR_NAMES) expect(text).not.toContain(v);

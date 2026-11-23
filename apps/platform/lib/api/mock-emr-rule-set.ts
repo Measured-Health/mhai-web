@@ -35,9 +35,9 @@ export function emrRuleSetMock(
 ): EmrRuleSetClient {
   const { now } = core;
   const iso = (ms: number) => new Date(ms).toISOString();
-  // Havana sends alerts; every other hospital is in shadow.
+  // Pilot Hospital sends alerts; every other hospital is in shadow.
   const sets = new Map<string, Omit<EmrRuleSet, "hospital_id">>([
-    ["h_havana", { ...DEMO_RULE_SET, activated_at: iso(now() - 6 * D) }],
+    ["h_pilot", { ...DEMO_RULE_SET, activated_at: iso(now() - 6 * D) }],
   ]);
   const writes = new Map<string, number[]>();
   const shown = (id: string): EmrRuleSet => ({

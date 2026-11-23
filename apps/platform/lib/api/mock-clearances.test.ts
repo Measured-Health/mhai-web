@@ -92,12 +92,11 @@ describe("mock clearances: the letters", () => {
     expect(active.map((c) => c.id).sort()).toEqual(
       ["cl_act", "cl_northgate_2026", "cl_river", "cl_soon"].sort(),
     );
-    // Havana's set, Northgate's two and Riverside's one, by hospital.
+    // Pilot Hospital's set, Northgate's two and Riverside's one, by hospital.
     const all = (await m.listClearances({ status: "all" })).clearances;
     expect(all).toHaveLength(11);
-    const havana = (await m.listClearances({ hospital: "h_havana" }))
-      .clearances;
-    expect(havana.map((c) => c.id).sort()).toEqual(
+    const pilot = (await m.listClearances({ hospital: "h_pilot" })).clearances;
+    expect(pilot.map((c) => c.id).sort()).toEqual(
       [
         "cl_check",
         "cl_bad",
@@ -112,7 +111,7 @@ describe("mock clearances: the letters", () => {
     expect((await m.getClearance("cl_northgate_2026")).status).toBe("active");
   });
 
-  it("Bola gets verifiable_by_you false on Havana and true on Northgate", async () => {
+  it("Bola gets verifiable_by_you false on Pilot Hospital and true on Northgate", async () => {
     const { m } = setup({ email: TEAM_EMAILS.bola });
     expect((await m.getClearance("cl_wait")).verifiable_by_you).toBe(false);
     expect((await m.getClearance("cl_north")).verifiable_by_you).toBe(true);
@@ -122,7 +121,7 @@ describe("mock clearances: the letters", () => {
     expect((await ada.getClearance("cl_north")).verifiable_by_you).toBe(true);
   });
 
-  it("Bola verifying Havana is 409 same_side and logs it", async () => {
+  it("Bola verifying Pilot Hospital is 409 same_side and logs it", async () => {
     const { m } = setup({ email: TEAM_EMAILS.bola });
     const c = await m.getClearance("cl_wait");
     expect(
@@ -134,7 +133,7 @@ describe("mock clearances: the letters", () => {
     expect(e).toMatchObject({
       action: "clearance_verify_refused",
       actor: { id: "tm_bola", name: "Bola Hassan" },
-      hospital: { id: "h_havana", name: "Havana Hospital" },
+      hospital: { id: "h_pilot", name: "Pilot Hospital" },
       target: "the clearance letter signed by Dr. Funmi Ade",
       reason: "same_side",
       detail: null,
@@ -394,7 +393,7 @@ describe("mock clearances: the letters", () => {
     const [e] = await activity(m);
     expect(e).toMatchObject({
       action: "clearance_viewed",
-      hospital: { id: "h_havana" },
+      hospital: { id: "h_pilot" },
       target: "the clearance letter signed by Dr. Funmi Ade",
     });
   });
@@ -409,11 +408,11 @@ describe("mock clearances: the letters", () => {
 describe("mock clearances: same_person before same_side", () => {
   it("a covered admin who is also on the hospital's side still gets same_person", async () => {
     const { m, as } = setup();
-    // Havana now counts Measured Health's own domain as its own: everyone on
+    // Pilot Hospital now counts Measured Health's own domain as its own: everyone on
     // the team is on its side, Tunde included.
-    const h = await m.getHospital("h_havana");
+    const h = await m.getHospital("h_pilot");
     await m.updateHospital(
-      "h_havana",
+      "h_pilot",
       {
         email_domains: [...h.email_domains, "measured-health.example"],
         version: h.version,
@@ -484,11 +483,11 @@ describe("mock clearances: the seeded switch on any date", () => {
       }
       const globalOn = Date.parse(s.global.since!);
       const north = s.hospitals.find((h) => h.hospital.id === "h_northgate")!;
-      const havana = s.hospitals.find((h) => h.hospital.id === "h_havana")!;
+      const pilot = s.hospitals.find((h) => h.hospital.id === "h_pilot")!;
       const [lowered, raisedNorth] = north.history;
       expect([lowered!.to, raisedNorth!.to]).toEqual(["off", "on"]);
       // No hospital went On before the global switch did.
-      expect(Date.parse(havana.since!)).toBeGreaterThan(globalOn);
+      expect(Date.parse(pilot.since!)).toBeGreaterThan(globalOn);
       expect(Date.parse(raisedNorth!.at)).toBeGreaterThan(globalOn);
       // Plan 9's named views at Northgate all fall while it was On.
       const views = seedAudit(now).events.filter(
@@ -505,7 +504,7 @@ describe("mock clearances: the seeded switch on any date", () => {
 });
 
 describe("mock clearances: the named-access switch", () => {
-  it("seeds global On since 3 Feb, Havana On, Northgate turned Off 5 days ago", async () => {
+  it("seeds global On since 3 Feb, Pilot Hospital On, Northgate turned Off 5 days ago", async () => {
     const { m } = setup();
     const s = await m.getNamedAccess();
     expect(s.global.position).toBe("on");
@@ -521,8 +520,8 @@ describe("mock clearances: the named-access switch", () => {
       },
     });
     expect(s.global.request).toBeNull();
-    const havana = await switchOf(m, "h_havana");
-    expect([havana.position, havana.effective]).toEqual(["on", "on"]);
+    const pilot = await switchOf(m, "h_pilot");
+    expect([pilot.position, pilot.effective]).toEqual(["on", "on"]);
     const north = await switchOf(m, "h_northgate");
     expect(north.position).toBe("off");
     expect(north.history.map((c) => [c.from, c.to])).toEqual([
@@ -589,10 +588,10 @@ describe("mock clearances: the named-access switch", () => {
       await failure(
         m.requestNamedAccess(
           {
-            hospital: "h_havana",
+            hospital: "h_pilot",
             position: "letters_only",
             signoffs: SIGNOFFS,
-            version: (await switchOf(m, "h_havana")).version,
+            version: (await switchOf(m, "h_pilot")).version,
             ...CODE,
           },
           KEY(),
@@ -862,7 +861,7 @@ describe("mock clearances: the named-access switch", () => {
       await failure(
         amara.lowerNamedAccess(
           {
-            hospital: "h_havana",
+            hospital: "h_pilot",
             position: "off",
             reason: "x",
             version: 1,
@@ -887,8 +886,8 @@ describe("mock clearances: the named-access switch", () => {
       },
       KEY(),
     );
-    const havana = out.hospitals.find((h) => h.hospital.id === "h_havana")!;
-    expect([havana.position, havana.effective]).toEqual(["on", "letters_only"]);
+    const pilot = out.hospitals.find((h) => h.hospital.id === "h_pilot")!;
+    expect([pilot.position, pilot.effective]).toEqual(["on", "letters_only"]);
     const north = out.hospitals.find((h) => h.hospital.id === "h_northgate")!;
     expect([north.position, north.effective]).toEqual(["off", "off"]);
   });
@@ -991,8 +990,8 @@ describe("mock clearances: the named-access switch", () => {
       history: [],
       request: null,
     });
-    const havana = s.hospitals.find((h) => h.hospital.id === "h_havana")!;
-    expect(havana.effective).toBe("off");
+    const pilot = s.hospitals.find((h) => h.hospital.id === "h_pilot")!;
+    expect(pilot.effective).toBe("off");
     // Nothing was ever raised: no hospital sits above global.
     for (const h of s.hospitals)
       expect([h.hospital.id, h.position, h.history]).toEqual([
@@ -1019,7 +1018,7 @@ describe("mock clearances: revoke refusals", () => {
     expect((await m.getClearance("cl_wait")).status).toBe("waiting");
   });
 
-  it("Bola revoking Havana's cl_act is 409 same_side", async () => {
+  it("Bola revoking Pilot Hospital's cl_act is 409 same_side", async () => {
     const { m } = setup({ email: TEAM_EMAILS.bola });
     const c = await m.getClearance("cl_act");
     expect(

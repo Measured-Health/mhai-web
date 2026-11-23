@@ -52,14 +52,14 @@ async function typeCode(d: HTMLElement, code: string) {
 }
 
 describe("a connection's page", () => {
-  it("Havana's Main record reads Connected with its last update", async () => {
+  it("Pilot Hospital's Main record reads Connected with its last update", async () => {
     await open("emr_hv1");
     expect(
       screen.getByRole("heading", { name: "Main record" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Havana Hospital" }),
-    ).toHaveAttribute("href", "/hospitals/h_havana");
+      screen.getByRole("link", { name: "Pilot Hospital" }),
+    ).toHaveAttribute("href", "/hospitals/h_pilot");
     const s = within(region("Status"));
     expect(s.getByText("Connected")).toBeInTheDocument();
     expect(s.getByText("Last update 2 min ago · 1,284 records")).toBeVisible();
@@ -71,8 +71,10 @@ describe("a connection's page", () => {
     ).toBeVisible();
     const set = within(region("Settings"));
     expect(set.getByText(/FHIR R4 server/)).toBeVisible();
-    expect(set.getByText("https://records.havana.example/fhir")).toBeVisible();
-    expect(set.getByText("mhai-havana")).toBeVisible();
+    expect(
+      set.getByText("https://records.pilot-hospital.example/fhir"),
+    ).toBeVisible();
+    expect(set.getByText("mhai-pilot")).toBeVisible();
   });
 
   it("Northgate shows Needs attention and the sign-in refused words x3", async () => {

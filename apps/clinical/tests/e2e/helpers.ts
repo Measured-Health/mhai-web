@@ -15,7 +15,10 @@ export const isDesktop = (page: Page) =>
   (page.viewportSize()?.width ?? 0) >= 1024;
 
 /** Fills the sign-in form and submits. Callers wait for "/" themselves. */
-export async function signIn(page: Page, email = "a.reyes@havanahospital.org") {
+export async function signIn(
+  page: Page,
+  email = "a.reyes@pilot-hospital.example",
+) {
   await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(email);
   await page.getByLabel("Password").fill("demo-password");

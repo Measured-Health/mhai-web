@@ -160,9 +160,9 @@ describe("actionLabel", () => {
     expect(actionLabel("clearance_verify_refused", null, "constructor")).toBe(
       "couldn't verify a letter",
     );
-    expect(
-      actionLabel("named_access_requested", "On for Havana Hospital"),
-    ).toBe("asked to turn named access to On for Havana Hospital");
+    expect(actionLabel("named_access_requested", "On for Pilot Hospital")).toBe(
+      "asked to turn named access to On for Pilot Hospital",
+    );
     expect(
       actionLabel("named_access_approved", "Letters only for every hospital"),
     ).toBe("approved turning named access to Letters only for every hospital");

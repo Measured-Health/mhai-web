@@ -64,9 +64,9 @@ describe("editing a connection", () => {
       "Main record",
     );
     expect(screen.getByLabelText("Base address")).toHaveValue(
-      "https://records.havana.example/fhir",
+      "https://records.pilot-hospital.example/fhir",
     );
-    expect(screen.getByLabelText("Client ID")).toHaveValue("mhai-havana");
+    expect(screen.getByLabelText("Client ID")).toHaveValue("mhai-pilot");
     // The saved secret is a row, not an input.
     expect(screen.queryByLabelText("Private key")).toBeNull();
     expect(screen.getByText(/^Set · /)).toBeVisible();
@@ -77,7 +77,7 @@ describe("editing a connection", () => {
   it("an http address is refused with Use an address that starts with https://.", async () => {
     const spy = vi.spyOn(api, "updateConnection");
     await edit();
-    await type("Base address", "http://records.havana.example/fhir");
+    await type("Base address", "http://records.pilot-hospital.example/fhir");
     await save();
     expect(
       screen.getByText("Use an address that starts with https://."),
@@ -97,7 +97,7 @@ describe("editing a connection", () => {
     expect(input.tagName).toBe("TEXTAREA");
     expect(input).toHaveClass("[-webkit-text-security:disc]");
     expect(input).toHaveAttribute("autocomplete", "off");
-    await type("Client ID", "mhai-havana-2");
+    await type("Client ID", "mhai-pilot-2");
     await save();
     expect(
       screen.getByText(
@@ -108,7 +108,7 @@ describe("editing a connection", () => {
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
     const body = spy.mock.calls[0]![1];
     expect("credentials" in body).toBe(false);
-    expect(body.settings).toEqual({ client_id: "mhai-havana-2" });
+    expect(body.settings).toEqual({ client_id: "mhai-pilot-2" });
     expect(body.version).toBe(3);
   });
 
@@ -140,7 +140,7 @@ describe("editing a connection", () => {
     await type("Client ID", "other");
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByLabelText("Client ID")).toBeNull();
-    expect(screen.getByText("mhai-havana")).toBeVisible();
+    expect(screen.getByText("mhai-pilot")).toBeVisible();
     expect(spy).not.toHaveBeenCalled();
   });
 

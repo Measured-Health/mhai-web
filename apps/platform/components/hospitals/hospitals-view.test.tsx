@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 const NAMES = [
-  "Havana Hospital",
+  "Pilot Hospital",
   "Northgate General Hospital",
   "Riverside Children's Hospital",
   "Eastbrook Medical Centre",
@@ -74,7 +74,7 @@ describe("the hospitals list", () => {
     expect(within(north).getByText(/^(On|Off)$/)).toBeInTheDocument();
   });
 
-  it("Harbour View, Northgate, Riverside and Ridgeway show Hold; Lakeside (lifted at once), Havana and the rest don't", async () => {
+  it("Harbour View, Northgate, Riverside and Ridgeway show Hold; Lakeside (lifted at once), Pilot Hospital and the rest don't", async () => {
     renderWithAuth(<HospitalsView />);
     const table = await screen.findByRole("table");
     const held = ["Harbour View", "Northgate", "Riverside", "Ridgeway"];

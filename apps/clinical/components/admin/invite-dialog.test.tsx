@@ -81,7 +81,7 @@ describe("InviteDialog (core 1.33.0)", () => {
     const dialog = await openDialog();
     await paste(
       dialog,
-      "n.ade@havanahospital.org, N.ADE@havanahospital.org\nk.mensah@havanahospital.org; oops",
+      "n.ade@pilot-hospital.example, N.ADE@pilot-hospital.example\nk.mensah@pilot-hospital.example; oops",
     );
     expect(within(dialog).getByText("1 person")).toBeInTheDocument();
     const problems = within(dialog).getByRole("list", { name: "Not invited" });
@@ -90,8 +90,8 @@ describe("InviteDialog (core 1.33.0)", () => {
         .getAllByRole("listitem")
         .map((li) => li.textContent),
     ).toEqual([
-      "n.ade@havanahospital.org — Listed twice",
-      "k.mensah@havanahospital.org — Already on the staff list",
+      "n.ade@pilot-hospital.example — Listed twice",
+      "k.mensah@pilot-hospital.example — Already on the staff list",
       "oops — Not an email address",
     ]);
     const confirm = await sendWithCode(dialog, "Send 1 invite?");
@@ -99,7 +99,7 @@ describe("InviteDialog (core 1.33.0)", () => {
     await waitFor(() =>
       expect(invite).toHaveBeenCalledWith(
         {
-          emails: ["n.ade@havanahospital.org"],
+          emails: ["n.ade@pilot-hospital.example"],
           roles: ["clinician"],
           specialty: null,
         },
@@ -115,7 +115,10 @@ describe("InviteDialog (core 1.33.0)", () => {
     noLinks();
     const invite = vi.spyOn(holder.client, "inviteStaff");
     const dialog = await openDialog();
-    await paste(dialog, "a.new@havanahospital.org\nb.new@havanahospital.org");
+    await paste(
+      dialog,
+      "a.new@pilot-hospital.example\nb.new@pilot-hospital.example",
+    );
     await userEvent.click(
       within(dialog).getByRole("checkbox", { name: "Hospital admin" }),
     );
@@ -127,7 +130,10 @@ describe("InviteDialog (core 1.33.0)", () => {
     await waitFor(() =>
       expect(invite).toHaveBeenCalledWith(
         {
-          emails: ["a.new@havanahospital.org", "b.new@havanahospital.org"],
+          emails: [
+            "a.new@pilot-hospital.example",
+            "b.new@pilot-hospital.example",
+          ],
           roles: ["clinician", "hospital_admin"],
           specialty: "Paediatrics",
         },
@@ -140,7 +146,7 @@ describe("InviteDialog (core 1.33.0)", () => {
 
   it("needs a role", async () => {
     const dialog = await openDialog();
-    await paste(dialog, "a.new@havanahospital.org");
+    await paste(dialog, "a.new@pilot-hospital.example");
     await userEvent.click(
       within(dialog).getByRole("checkbox", { name: "Clinician" }),
     );
@@ -152,7 +158,7 @@ describe("InviteDialog (core 1.33.0)", () => {
 
   it("Back keeps what was typed", async () => {
     const dialog = await openDialog();
-    await paste(dialog, "a.new@havanahospital.org");
+    await paste(dialog, "a.new@pilot-hospital.example");
     await userEvent.click(
       within(dialog).getByRole("button", { name: "Continue" }),
     );
@@ -164,7 +170,7 @@ describe("InviteDialog (core 1.33.0)", () => {
     );
     const again = await screen.findByRole("dialog", { name: "Invite staff" });
     expect(within(again).getByLabelText("Work emails")).toHaveValue(
-      "a.new@havanahospital.org",
+      "a.new@pilot-hospital.example",
     );
   });
 
@@ -174,7 +180,7 @@ describe("InviteDialog (core 1.33.0)", () => {
         {
           staff: makeStaff({
             id: "s-x",
-            email: "a.new@havanahospital.org",
+            email: "a.new@pilot-hospital.example",
             sign_in: null,
             invited_at: new Date().toISOString(),
           }),
@@ -182,28 +188,28 @@ describe("InviteDialog (core 1.33.0)", () => {
         },
       ],
       skipped: [
-        { email: "b.new@havanahospital.org", reason: "already_staff" },
-        { email: "c.new@havanahospital.org", reason: "not_available" },
+        { email: "b.new@pilot-hospital.example", reason: "already_staff" },
+        { email: "c.new@pilot-hospital.example", reason: "not_available" },
       ],
     });
     const dialog = await openDialog();
     await paste(
       dialog,
-      "a.new@havanahospital.org, b.new@havanahospital.org, c.new@havanahospital.org",
+      "a.new@pilot-hospital.example, b.new@pilot-hospital.example, c.new@pilot-hospital.example",
     );
     await sendWithCode(dialog, "Send 3 invites?");
     const result = await screen.findByRole("dialog", { name: "Invites sent" });
     expect(within(result).getByText(/1 invite was sent/)).toBeInTheDocument();
     expect(
       within(result).getByText(
-        "c.new@havanahospital.org — Can't be invited here. Ask Measured Health if this person should join your hospital.",
+        "c.new@pilot-hospital.example — Can't be invited here. Ask Measured Health if this person should join your hospital.",
       ),
     ).toBeInTheDocument();
     // Never says where the address is in use.
     expect(result.textContent).not.toMatch(/another hospital|platform/i);
     expect(
       within(result).getByText(
-        "b.new@havanahospital.org — Already on the staff list",
+        "b.new@pilot-hospital.example — Already on the staff list",
       ),
     ).toBeInTheDocument();
     expect(
@@ -214,12 +220,17 @@ describe("InviteDialog (core 1.33.0)", () => {
   it("shows the demo's links once, then forgets them", async () => {
     let qc!: QueryClient;
     const dialog = await openDialog((c) => (qc = c));
-    await paste(dialog, "a.new@havanahospital.org, b.new@havanahospital.org");
+    await paste(
+      dialog,
+      "a.new@pilot-hospital.example, b.new@pilot-hospital.example",
+    );
     await sendWithCode(dialog, "Send 2 invites?");
     const result = await screen.findByRole("dialog", { name: "Invites sent" });
     const links = within(result).getByRole("list", { name: "Links to share" });
     expect(within(links).getAllByRole("listitem")).toHaveLength(2);
-    expect(within(links).getByText("a.new@havanahospital.org")).toBeTruthy();
+    expect(
+      within(links).getByText("a.new@pilot-hospital.example"),
+    ).toBeTruthy();
     expect(within(result).getByText(/shown only now/)).toBeInTheDocument();
     const cached = () =>
       JSON.stringify([
@@ -249,7 +260,7 @@ describe("InviteDialog (core 1.33.0)", () => {
   ])("says plainly when invites can't go (%s)", async (err, title) => {
     vi.spyOn(holder.client, "inviteStaff").mockRejectedValue(err);
     const dialog = await openDialog();
-    await paste(dialog, "a.new@havanahospital.org");
+    await paste(dialog, "a.new@pilot-hospital.example");
     const confirm = await sendWithCode(dialog, "Send 1 invite?");
     expect(await within(confirm).findByText(title)).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();

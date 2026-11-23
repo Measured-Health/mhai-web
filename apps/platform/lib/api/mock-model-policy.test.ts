@@ -51,10 +51,10 @@ const OFF: ModelPolicyIn = {
 };
 
 describe("mock AI model policy", () => {
-  it("Havana is on Anthropic for the synthetic demo, with this month's use", async () => {
-    const p = await setup().m.getModelPolicy("h_havana");
+  it("Pilot Hospital is on Anthropic for the synthetic demo, with this month's use", async () => {
+    const p = await setup().m.getModelPolicy("h_pilot");
     expect(p).toEqual({
-      hospital_id: "h_havana",
+      hospital_id: "h_pilot",
       cloud_provider: "anthropic",
       provider_code: "anthropic",
       agreement_ref: "DEMO-SYNTHETIC",
@@ -108,10 +108,10 @@ describe("mock AI model policy", () => {
   it("an auditor reads it but can't change it", async () => {
     const s = setup();
     s.as(TEAM_EMAILS.amara);
-    expect((await s.m.getModelPolicy("h_havana")).cloud_provider).toBe(
+    expect((await s.m.getModelPolicy("h_pilot")).cloud_provider).toBe(
       "anthropic",
     );
-    expect(await failure(s.m.setModelPolicy("h_havana", OFF, KEY()))).toEqual([
+    expect(await failure(s.m.setModelPolicy("h_pilot", OFF, KEY()))).toEqual([
       403,
       "forbidden",
     ]);
@@ -263,7 +263,7 @@ describe("mock AI model policy", () => {
   });
 
   it("no reply carries anything but the contract's keys", async () => {
-    const p = await setup().m.getModelPolicy("h_havana");
+    const p = await setup().m.getModelPolicy("h_pilot");
     expect(Object.keys(p).sort()).toEqual([
       "agreement_ref",
       "cloud_provider",

@@ -4,7 +4,7 @@ import { accessLine, countText, readAccessPage } from "./access";
 
 const ADA = { id: "tm_ada", name: "Ada Bakare" };
 const TUNDE = { id: "tm_tunde", name: "Tunde Okafor" };
-const HAVANA = { id: "h_havana", name: "Havana Hospital" };
+const PILOT = { id: "h_pilot", name: "Pilot Hospital" };
 
 const visit: AccessEntry = {
   id: "aa_1",
@@ -29,7 +29,7 @@ const download: AccessEntry = {
   actor: TUNDE,
   kind: "download",
   scope: "hospital",
-  hospital: HAVANA,
+  hospital: PILOT,
   view: "affected",
   period: "6m",
   filters: [],
@@ -39,11 +39,11 @@ const list: AccessEntry = {
   id: "aa_3",
   kind: "patient_list",
   scope: "hospital",
-  hospital: HAVANA,
+  hospital: PILOT,
   view: "findings",
   filters: [],
   count: 37,
-  clearance_id: "CL_hav_01",
+  clearance_id: "CL_plt_01",
   flagged: true,
 };
 const page = (entries: unknown[], next_cursor: string | null = null) => ({
@@ -60,18 +60,18 @@ describe("accessLine", () => {
   });
   it("says a download, with no filters part when there are none", () => {
     expect(accessLine(download)).toBe(
-      "Tunde Okafor downloaded Who is affected as CSV · Havana Hospital · Last 6 months",
+      "Tunde Okafor downloaded Who is affected as CSV · Pilot Hospital · Last 6 months",
     );
   });
   it("says a patient list with its count and its letter", () => {
     expect(accessLine(list)).toBe(
-      "Ada Bakare opened 37 de-identified patients at Havana Hospital · Findings and alerts · letter CL_hav_01",
+      "Ada Bakare opened 37 de-identified patients at Pilot Hospital · Findings and alerts · letter CL_plt_01",
     );
   });
   it("shows a patient-list count of 1 to 4 as Fewer than 5", () => {
     for (const n of [1, 4])
       expect(accessLine({ ...list, count: n })).toBe(
-        "Ada Bakare opened Fewer than 5 de-identified patients at Havana Hospital · Findings and alerts · letter CL_hav_01",
+        "Ada Bakare opened Fewer than 5 de-identified patients at Pilot Hospital · Findings and alerts · letter CL_plt_01",
       );
     expect(accessLine({ ...list, count: 5 })).toContain(
       "opened 5 de-identified",
@@ -165,7 +165,7 @@ describe("readAccessPage", () => {
     for (const bad of [
       { ...visit, id: "aa 1" },
       { ...visit, actor: { ...ADA, id: "ada@x.example" } },
-      { ...download, hospital: { ...HAVANA, id: "h/havana" } },
+      { ...download, hospital: { ...PILOT, id: "h/pilot" } },
       { ...list, clearance_id: "CL 01" },
     ])
       expect(readAccessPage(page([bad])).status).toBe("failed");

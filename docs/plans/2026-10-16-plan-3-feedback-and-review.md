@@ -872,19 +872,19 @@ export const MOCK_PEOPLE = {
     display_name: "Dr. Okafor",
     full_name: "Dr. Chidi Okafor",
     specialty: "Paediatrics",
-    hospital: "Havana Hospital",
+    hospital: "Pilot Hospital",
   },
   bello: {
     display_name: "Nurse Bello",
     full_name: "Amina Bello",
     specialty: "General ward",
-    hospital: "Havana Hospital",
+    hospital: "Pilot Hospital",
   },
   reyes: {
     display_name: "Dr. Reyes",
     full_name: "Dr. Ana Reyes",
     specialty: "Internal Medicine",
-    hospital: "Havana Hospital",
+    hospital: "Pilot Hospital",
   },
 } satisfies Record<string, PersonOut>;
 
@@ -1990,7 +1990,7 @@ export function makeCorrection(
       display_name: "Dr. Okafor",
       full_name: "Dr. Chidi Okafor",
       specialty: "Paediatrics",
-      hospital: "Havana Hospital",
+      hospital: "Pilot Hospital",
     },
     submitted_at: new Date(T0 - 42 * 60_000).toISOString(),
     original: {
@@ -5667,7 +5667,7 @@ git commit -m "Send an approval after a 60-second undo, or at once on leaving"
   - on phones a "Back to the queue" button and "1 of 3 · 42 min ago";
   - eyebrow "Correction · submitted 42 min ago", the title as `h2`, and
     "Original: {label}";
-  - the who row ("Dr. Chidi Okafor suggested this · Paediatrics · Havana
+  - the who row ("Dr. Chidi Okafor suggested this · Paediatrics · Pilot Hospital
     Hospital", or "You suggested this") with "Open consultation";
   - banners when `gone` ("Another clinician has already decided this
     correction" with "Next correction") or offline ("You're offline" ·
@@ -5801,7 +5801,7 @@ describe("ReviewDetail", () => {
     expect(screen.getByText("Original: Use with caution")).toBeVisible();
     expect(screen.getByText("Dr. Chidi Okafor")).toBeVisible();
     expect(
-      screen.getByText(/suggested this · Paediatrics · Havana Hospital/),
+      screen.getByText(/suggested this · Paediatrics · Pilot Hospital/),
     ).toBeVisible();
     const approve = screen.getByRole("button", { name: "Approve correction" });
     const reject = screen.getByRole("button", { name: "Reject" });

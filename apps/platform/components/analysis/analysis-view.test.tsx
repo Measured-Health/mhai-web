@@ -351,7 +351,7 @@ describe("the Analysis page", () => {
     await user.click(screen.getByRole("button", { name: "One hospital" }));
     const names = [...select("Hospital").options].map((o) => o.textContent);
     expect(names).toHaveLength(10);
-    expect(names).toContain("Havana Hospital");
+    expect(names).toContain("Pilot Hospital");
     expect(names).not.toContain("Hilltop Cottage Hospital");
     expect(names).not.toContain("Eastbrook Medical Centre");
   });
@@ -373,9 +373,9 @@ describe("the Analysis page", () => {
       "60–79",
       "80 and over",
     ]);
-    // One hospital (Havana has two sources) gets Plan 6's bands, wards and source.
+    // One hospital (Pilot Hospital has two sources) gets Plan 6's bands, wards and source.
     await user.click(screen.getByRole("button", { name: "One hospital" }));
-    await user.selectOptions(select("Hospital"), "Havana Hospital");
+    await user.selectOptions(select("Hospital"), "Pilot Hospital");
     await screen.findByRole("combobox", { name: "Source" });
     expect(screen.getByRole("combobox", { name: "Ward or clinic" }));
     expect([...select("Age band").options].map((o) => o.textContent)).toEqual([
@@ -433,7 +433,7 @@ describe("the Analysis page", () => {
     render();
     await loaded();
     await user.click(screen.getByRole("button", { name: "One hospital" }));
-    await user.selectOptions(select("Hospital"), "Havana Hospital");
+    await user.selectOptions(select("Hospital"), "Pilot Hospital");
     await screen.findByRole("combobox", { name: "Source" });
     await user.selectOptions(select("Ward or clinic"), "ward4");
     await user.selectOptions(select("Source"), "Results system");
@@ -442,7 +442,7 @@ describe("the Analysis page", () => {
     await waitFor(() =>
       expect(lastQuery(view)).toMatchObject({
         scope: "hospital",
-        hospital: "h_havana",
+        hospital: "h_pilot",
         location: "ward4",
         age_band: "18-39",
         sex: "female",
@@ -583,7 +583,7 @@ describe("the Analysis page", () => {
     await user.selectOptions(select("Period"), "3m");
     await user.click(screen.getByRole("tab", { name: "Who is affected" }));
     await user.click(screen.getByRole("button", { name: "One hospital" }));
-    await user.selectOptions(select("Hospital"), "Havana Hospital");
+    await user.selectOptions(select("Hospital"), "Pilot Hospital");
     await screen.findByRole("combobox", { name: "Source" });
     expect(window.location.href).toBe(href);
     expect(document.title).toBe(title);

@@ -510,7 +510,7 @@ function History({
   );
 }
 
-/** "Havana Hospital turned up to On · 10 Feb 2027 · requested by …, approved by …". */
+/** "Pilot Hospital turned up to On · 10 Feb 2027 · requested by …, approved by …". */
 function changeLine(c: SwitchChange, where: string): string {
   const way = rank(c.to) > rank(c.from) ? "up" : "down";
   const day = instantDay(c.at);

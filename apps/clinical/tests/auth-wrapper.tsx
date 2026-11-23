@@ -8,13 +8,13 @@ import { SessionProvider } from "@/lib/session-store";
 
 export const TEST_USER: User = {
   username: "a.reyes",
-  email: "a.reyes@havanahospital.org",
+  email: "a.reyes@pilot-hospital.example",
   displayName: "Dr. Reyes",
   fullName: "Dr. Ana Reyes",
   roles: ["clinician"],
   roleTitle: "Attending physician",
   specialty: "Internal Medicine",
-  hospital: "Havana Hospital",
+  hospital: "Pilot Hospital",
   mfaEnabled: true,
   backupCodesLeft: 8,
 };

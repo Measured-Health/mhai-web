@@ -50,7 +50,7 @@ export type ModelPolicyMockOptions = {
 function seed(now: number) {
   const policies = new Map<string, PolicyRecord>([
     [
-      "h_havana",
+      "h_pilot",
       {
         cloud_provider: "anthropic",
         agreement_ref: "DEMO-SYNTHETIC",
@@ -80,7 +80,7 @@ function seed(now: number) {
     ],
   ]);
   const usage = new Map<string, { used: number; reserved: number }>([
-    ["h_havana", { used: 1_240_000, reserved: 12_000 }],
+    ["h_pilot", { used: 1_240_000, reserved: 12_000 }],
     ["h_riverside", { used: 870_000, reserved: 0 }],
     ["h_lakeside", { used: 95_000, reserved: 0 }],
   ]);

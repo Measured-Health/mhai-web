@@ -170,11 +170,11 @@ describe("Activity: Analysis access", () => {
       Promise.resolve({ entries: [], next_cursor: null }),
     );
     mock({ listAnalysisAccess: spy });
-    nav.search = "tab=analysis-access&hospital=h_havana";
+    nav.search = "tab=analysis-access&hospital=h_pilot";
     renderWithAuth(<ActivityView />, { queryClient: qc() });
     await waitFor(() =>
       expect(spy).toHaveBeenCalledWith(
-        expect.objectContaining({ hospital: "h_havana" }),
+        expect.objectContaining({ hospital: "h_pilot" }),
       ),
     );
     await screen.findByText("No Analysis access yet.");
@@ -241,11 +241,11 @@ describe("Activity: Analysis access", () => {
 
   it("choosing the tab puts only the tab in the URL, and keeps the hospital", async () => {
     mock();
-    nav.search = "hospital=h_havana";
+    nav.search = "hospital=h_pilot";
     renderWithAuth(<ActivityView />, { queryClient: qc() });
     await userEvent.click(screen.getByRole("tab", { name: "Analysis access" }));
     expect(nav.replace).toHaveBeenCalledWith(
-      "/activity?tab=analysis-access&hospital=h_havana",
+      "/activity?tab=analysis-access&hospital=h_pilot",
     );
   });
 

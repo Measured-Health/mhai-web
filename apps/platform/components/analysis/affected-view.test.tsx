@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
-  HAVANA,
+  PILOT,
   HIDDEN,
   sampleRead,
   shown,
@@ -62,7 +62,7 @@ describe("Who is affected", () => {
   });
 
   it("ward or clinic only for one hospital", async () => {
-    const read = await sampleRead("affected", HAVANA);
+    const read = await sampleRead("affected", PILOT);
     show(read);
     for (const g of [...GROUPS, "By ward or clinic"])
       expect(screen.getByRole("list", { name: g })).toBeInTheDocument();
@@ -114,7 +114,7 @@ describe("Who is affected", () => {
   });
 
   it("each view has a Table with the same numbers (Who is affected)", async () => {
-    const read = await sampleRead("affected", HAVANA);
+    const read = await sampleRead("affected", PILOT);
     const { unmount } = show(read);
     const groups = [...GROUPS, "By ward or clinic"];
     const bars = new Map(groups.map((g) => [g, barTexts(g)]));

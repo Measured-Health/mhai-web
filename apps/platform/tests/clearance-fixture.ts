@@ -3,7 +3,7 @@ import type { Clearance } from "@/lib/api/clearances-contract";
 /** A bare waiting letter for the rules' tests; override what matters. */
 export const letter = (over: Partial<Clearance> = {}): Clearance => ({
   id: "cl_1",
-  hospital: { id: "h_havana", name: "Havana Hospital" },
+  hospital: { id: "h_pilot", name: "Pilot Hospital" },
   status: "waiting",
   refused_reason: null,
   signed_by: "Ngozi Eze",

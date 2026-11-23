@@ -11,7 +11,7 @@
    - Client checks, as a convenience only (core decides): `agreement_ref` matches `^(DEMO-SYNTHETIC|(AGR|DPA)-[0-9]{4}-[0-9]{2,8})$` after trimming and upper-casing; the limit is a whole number from 1 to 1,000,000,000 (commas and spaces allowed in the box). Off sends `agreement_ref: null`.
    - Refusals: **409** `conflict` means the provider isn't enabled on this deployment: the dialog closes and the provider field says so (not the usual "Changed by someone else"). **404**: the hospital is gone. **422**: check the details. **429** `rate_limited`: wait a minute. Code refusals stay in the dialog as everywhere else.
 2. **Clinical app: who drafted the answer.** From `generated_by`: "Drafted by MHAI's own model" (local), or "Drafted by Anthropic (cloud AI)" with the notice "Identifying patient details were masked where detected before the question was sent." A cloud route with a provider this app doesn't know still says it was a cloud model. No label when `generated_by` is absent or malformed (show only what the API returns).
-3. **BFF and clients.** Two proxy shapes, the live client calls with a fail-closed reader for `ModelPolicy`, the sample-data mock (Havana on Anthropic with `DEMO-SYNTHETIC` and usage; everyone else off; only Anthropic enabled, so OpenAI and xAI give the 409), and an Activity line for each change. Clinical fixtures carry `generated_by` (the normal answer from the cloud, the "use with caution" one local, the review one without it).
+3. **BFF and clients.** Two proxy shapes, the live client calls with a fail-closed reader for `ModelPolicy`, the sample-data mock (Pilot Hospital on Anthropic with `DEMO-SYNTHETIC` and usage; everyone else off; only Anthropic enabled, so OpenAI and xAI give the 409), and an Activity line for each change. Clinical fixtures carry `generated_by` (the normal answer from the cloud, the "use with caution" one local, the review one without it).
 
 ## Security and threat model
 
@@ -34,7 +34,7 @@
 3. Mock (`mock-model-policy.ts`) and its tests: auditor read, admin write, step-up, 409, 422s, 404, Activity line, idempotency.
 4. Query hooks and the `ModelPolicySection` on the hospital page; unit tests.
 5. Clinical: `generated_by` in the contract and fixtures, `generatedBy` in the result view, the label and notice on the result card; unit tests.
-6. E2E: platform (Ada switches Havana off and on, the 409 for OpenAI, an auditor reads only); clinical (the label and notice on a normal answer, the local label on a "fever" answer).
+6. E2E: platform (Ada switches Pilot Hospital off and on, the 409 for OpenAI, an auditor reads only); clinical (the label and notice on a normal answer, the local label on a "fever" answer).
 7. TODO.md and CHANGELOG; full checks on steven-reid.
 
 ## Open for a person

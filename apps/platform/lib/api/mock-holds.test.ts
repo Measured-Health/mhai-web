@@ -280,7 +280,7 @@ describe("mock legal holds (core openapi 1.26.0)", () => {
         m.placeHold(
           {
             ...PLACE,
-            hospital_id: "h_havana",
+            hospital_id: "h_pilot",
             reference: "HC-2026-0412",
             ...WRONG,
           },
@@ -292,7 +292,7 @@ describe("mock legal holds (core openapi 1.26.0)", () => {
     expect(
       (
         await m.placeHold(
-          { ...PLACE, hospital_id: "h_havana", reference: "BRD-2026-03" },
+          { ...PLACE, hospital_id: "h_pilot", reference: "BRD-2026-03" },
           KEY(),
         )
       ).reference,
@@ -557,7 +557,7 @@ describe("mock legal holds (core openapi 1.26.0)", () => {
         list.hospitals.map((h) => [h.id, h.legal_holds_active]),
       ),
     ).toEqual({
-      h_havana: 0,
+      h_pilot: 0,
       h_northgate: 1,
       h_riverside: 1,
       h_eastbrook: 0,
@@ -585,6 +585,6 @@ describe("mock legal holds (core openapi 1.26.0)", () => {
     expect((await m.getHospital("h_riverside")).legal_holds[0]?.status).toBe(
       "active",
     );
-    expect((await m.getHospital("h_havana")).legal_holds).toEqual([]);
+    expect((await m.getHospital("h_pilot")).legal_holds).toEqual([]);
   });
 });

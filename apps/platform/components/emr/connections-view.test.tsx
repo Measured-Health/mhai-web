@@ -64,7 +64,7 @@ describe("the connections list", () => {
     expect(screen.queryByText(/will load when you reconnect/)).toBeNull();
   });
 
-  it("lists Havana's two connections as Connected", async () => {
+  it("lists Pilot Hospital's two connections as Connected", async () => {
     renderWithAuth(<ConnectionsView />);
     const table = await screen.findByRole("table");
     for (const h of [
@@ -87,7 +87,7 @@ describe("the connections list", () => {
         .find((l) => l.getAttribute("href") === href)!;
       expect(link).toBeDefined();
       const row = link.closest("tr")!;
-      expect(within(row).getByText("Havana Hospital")).toBeInTheDocument();
+      expect(within(row).getByText("Pilot Hospital")).toBeInTheDocument();
       expect(within(row).getByText(type)).toBeInTheDocument();
       const chip = within(row).getByText("Connected");
       expect(chip.querySelector("svg")).not.toBeNull();
@@ -101,7 +101,7 @@ describe("the connections list", () => {
       screen.getByRole("button", { name: /^Needs attention/ }),
     );
     await waitFor(() =>
-      expect(screen.queryByText("Havana Hospital")).toBeNull(),
+      expect(screen.queryByText("Pilot Hospital")).toBeNull(),
     );
     const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(1);
@@ -133,7 +133,7 @@ describe("the connections list", () => {
     expect(
       within(row).getByRole("link", { name: "Add a connection" }),
     ).toHaveAttribute("href", "/connections/new?hospital=h_eastbrook");
-    expect(screen.queryByText("Havana Hospital")).toBeNull();
+    expect(screen.queryByText("Pilot Hospital")).toBeNull();
     unmount();
     renderWithAuth(<ConnectionsView />, { user: AMARA });
     await screen.findByText("Eastbrook Medical Centre");
@@ -147,7 +147,7 @@ describe("the connections list", () => {
     expect(
       screen.getByRole("button", { name: /^Switched off/ }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByText("Havana Hospital")).toBeNull();
+    expect(screen.queryByText("Pilot Hospital")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /^All/ }));
     expect(url.get()).toBe("");
     expect(localStorage.length).toBe(0);
@@ -157,7 +157,7 @@ describe("the connections list", () => {
   it("an unknown filter reads as All", async () => {
     url.set("state=bogus");
     renderWithAuth(<ConnectionsView />);
-    expect(await screen.findAllByText("Havana Hospital")).toHaveLength(2);
+    expect(await screen.findAllByText("Pilot Hospital")).toHaveLength(2);
     expect(screen.getByText("Eastbrook Medical Centre")).toBeInTheDocument();
   });
 });

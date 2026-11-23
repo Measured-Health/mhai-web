@@ -6,7 +6,7 @@
 
 ## Context
 
-MHAI will read patient data from many hospitals' EMR/EHR systems: our own Havana EMR first,
+MHAI will read patient data from many hospitals' EMR/EHR systems: our own Pilot Hospital EMR first,
 then others. They differ in almost every way:
 
 - **standards:** FHIR R4 (and some R5), older HL7 v2 messages (ADT, ORU), vendor REST APIs,

@@ -18,7 +18,7 @@ import {
 } from "./model-policy-section";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/hospitals/h_havana",
+  usePathname: () => "/hospitals/h_pilot",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
@@ -62,8 +62,8 @@ const dialog = () =>
   screen.findByRole("dialog", { name: "Change the AI model?" });
 
 describe("a hospital's AI model", () => {
-  it("shows Havana on Anthropic, its reference, limit and this month's use", async () => {
-    const r = await show("h_havana");
+  it("shows Pilot Hospital on Anthropic, its reference, limit and this month's use", async () => {
+    const r = await show("h_pilot");
     expect(await within(r).findByText("Anthropic (cloud)")).toBeVisible();
     expect(term(r, "Agreement reference")).toHaveTextContent("DEMO-SYNTHETIC");
     expect(term(r, "Monthly limit")).toHaveTextContent("2,000,000 tokens");
@@ -158,13 +158,13 @@ describe("a hospital's AI model", () => {
 
   it("an auditor sees it and no Change", async () => {
     who = AMARA.email;
-    const r = await show("h_havana", AMARA);
+    const r = await show("h_pilot", AMARA);
     await within(r).findByText("Anthropic (cloud)");
     expect(within(r).queryByRole("button", { name: "Change" })).toBeNull();
   });
 
   it("a removed hospital can't be changed", async () => {
-    const r = await show("h_havana", ADA, { status: "removed" });
+    const r = await show("h_pilot", ADA, { status: "removed" });
     await within(r).findByText("Anthropic (cloud)");
     expect(within(r).queryByRole("button", { name: "Change" })).toBeNull();
   });
@@ -208,7 +208,7 @@ describe("a hospital's AI model", () => {
 
   it("switching off sends no reference, whatever was typed", async () => {
     const spy = vi.spyOn(api, "setModelPolicy");
-    const r = await show("h_havana");
+    const r = await show("h_pilot");
     await change(r);
     await userEvent.click(within(r).getByLabelText(/^MHAI's own model/));
     expect(within(r).queryByLabelText("Agreement reference")).toBeNull();
@@ -265,7 +265,7 @@ describe("a hospital's AI model", () => {
   });
 
   it("a wrong code stays in the dialog, cleared for another try", async () => {
-    const r = await show("h_havana");
+    const r = await show("h_pilot");
     await change(r);
     const limit = within(r).getByLabelText("Monthly limit (tokens)");
     await userEvent.clear(limit);
@@ -284,7 +284,7 @@ describe("a hospital's AI model", () => {
     vi.spyOn(api, "setModelPolicy").mockRejectedValueOnce(
       new ApiError(422, "validation_failed"),
     );
-    const r = await show("h_havana");
+    const r = await show("h_pilot");
     await change(r);
     await userEvent.click(within(r).getByLabelText(/^MHAI's own model/));
     await saveForm(r);
@@ -309,7 +309,7 @@ describe("a hospital's AI model", () => {
     vi.spyOn(api, "setModelPolicy").mockRejectedValueOnce(
       new ApiError(429, "rate_limited"),
     );
-    const r = await show("h_havana");
+    const r = await show("h_pilot");
     await change(r);
     await userEvent.click(within(r).getByLabelText(/^MHAI's own model/));
     await saveForm(r);
@@ -327,7 +327,7 @@ describe("a hospital's AI model", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const r = await show("h_havana", ADA, {}, queryClient);
+    const r = await show("h_pilot", ADA, {}, queryClient);
     await change(r);
     await userEvent.click(within(r).getByLabelText(/^MHAI's own model/));
     await saveForm(r);
@@ -344,7 +344,7 @@ describe("a hospital's AI model", () => {
 
   it("unchanged, Save closes the form without asking for a code", async () => {
     const spy = vi.spyOn(api, "setModelPolicy");
-    const r = await show("h_havana");
+    const r = await show("h_pilot");
     await change(r);
     await saveForm(r);
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -358,7 +358,7 @@ describe("a hospital's AI model", () => {
     vi.spyOn(api, "getModelPolicy").mockRejectedValue(
       new ApiError(502, "bad_gateway"),
     );
-    const r = await show("h_havana");
+    const r = await show("h_pilot");
     expect(
       await within(r).findByText("Couldn't load the AI model."),
     ).toBeVisible();

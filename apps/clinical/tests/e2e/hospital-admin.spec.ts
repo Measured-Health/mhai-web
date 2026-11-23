@@ -174,7 +174,7 @@ test("invite staff with your two-step code; the demo's link shows once", async (
   await page.getByRole("button", { name: "Invite staff" }).click();
   const invite = page.getByRole("dialog", { name: "Invite staff" });
   await expect(invite.getByLabel("Work emails")).toBeFocused();
-  await invite.getByLabel("Work emails").fill("n.ade@havanahospital.org");
+  await invite.getByLabel("Work emails").fill("n.ade@pilot-hospital.example");
   await invite.getByRole("button", { name: "Continue" }).click();
   const confirm = page.getByRole("dialog", { name: "Send 1 invite?" });
   await typeCode(page, "123456", confirm);
@@ -186,7 +186,7 @@ test("invite staff with your two-step code; the demo's link shows once", async (
   await expect(page.getByText(/token=/)).toHaveCount(0);
   await expect(page).not.toHaveURL(/token=/);
   await page.getByRole("button", { name: /^Invited · 1$/ }).click();
-  await expect(manage(page, "n.ade@havanahospital.org")).toBeVisible();
+  await expect(manage(page, "n.ade@pilot-hospital.example")).toBeVisible();
 });
 
 test("deactivate and reactivate, each with your two-step code", async ({
@@ -333,7 +333,7 @@ test("on a phone, each person is a card with a Manage button", async ({
   const card = cards
     .getByRole("listitem")
     .filter({ hasText: "Dr. Kofi Mensah" });
-  await expect(card).toContainText("k.mensah@havanahospital.org");
+  await expect(card).toContainText("k.mensah@pilot-hospital.example");
   await expect(card).toContainText("Two-step not set up");
   // The card itself isn't a control: tapping it opens nothing.
   await card.getByText("Dr. Kofi Mensah", { exact: true }).click();
@@ -390,7 +390,7 @@ test("the activity log shows core's events and exports a CSV", async ({
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export CSV" }).click();
   expect((await download).suggestedFilename()).toMatch(
-    /^havana-hospital-activity-\d{4}-\d{2}-\d{2}\.csv$/,
+    /^pilot-hospital-activity-\d{4}-\d{2}-\d{2}\.csv$/,
   );
   await expect(page.getByText("Activity exported")).toBeVisible();
 });

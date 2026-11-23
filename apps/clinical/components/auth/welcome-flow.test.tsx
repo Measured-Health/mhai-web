@@ -34,7 +34,7 @@ describe("WelcomeFlow", () => {
       </ToastProvider>,
       null,
     );
-    await act(() => auth.signIn("new.nurse@havanahospital.org", "temp"));
+    await act(() => auth.signIn("new.nurse@pilot-hospital.example", "temp"));
     const out = () => screen.getByRole("link", { name: "Not you? Sign out" });
     expect(screen.getByText("Step 1 of 4 · Your password")).toBeInTheDocument();
     expect(out()).toHaveAttribute("href", "/sign-out");
@@ -60,7 +60,7 @@ describe("WelcomeFlow", () => {
       </ToastProvider>,
       null,
     );
-    await act(() => auth.signIn("new.nurse@havanahospital.org", "temp"));
+    await act(() => auth.signIn("new.nurse@pilot-hospital.example", "temp"));
 
     expect(screen.getByText("Step 1 of 4 · Your password")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Temporary password"), "temp");
@@ -114,7 +114,7 @@ describe("WelcomeFlow", () => {
       </ToastProvider>,
       null,
     );
-    await act(() => auth.signIn("new.nurse@havanahospital.org", "temp"));
+    await act(() => auth.signIn("new.nurse@pilot-hospital.example", "temp"));
     await user.type(screen.getByLabelText("New password"), "tram-lantern-okra");
     await user.type(
       screen.getByLabelText("Confirm password"),
@@ -145,7 +145,7 @@ describe("WelcomeFlow", () => {
       </ToastProvider>,
       null,
     );
-    await act(() => auth.signIn("newadmin.eze@havanahospital.org", "temp"));
+    await act(() => auth.signIn("newadmin.eze@pilot-hospital.example", "temp"));
     expect(screen.getByText("Step 1 of 4 · Your password")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Temporary password"), "temp");
     await user.type(
@@ -180,7 +180,7 @@ describe("WelcomeFlow", () => {
     async (_who, roles, home) => {
       const user = userEvent.setup();
       const client = createMockAuthClient();
-      await client.signIn("admin.nwosu@havanahospital.org", "pw");
+      await client.signIn("admin.nwosu@pilot-hospital.example", "pw");
       renderWithAuth(
         <ToastProvider>
           <Grab />

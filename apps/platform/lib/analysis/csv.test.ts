@@ -64,13 +64,13 @@ function cells(csv: string): string[][] {
 }
 
 const ALL = emptyQuery("all", null);
-const HAVANA = emptyQuery("hospital", "h_havana");
+const PILOT = emptyQuery("hospital", "h_pilot");
 
 describe("analysisCsv", () => {
   it("the header rows list scope, months, filters by label and Sample data", async () => {
     const m = mock();
     const q: AnalysisQuery = {
-      ...HAVANA,
+      ...PILOT,
       condition: "e11",
       age_band: "18-39",
       sex: "female",
@@ -79,7 +79,7 @@ describe("analysisCsv", () => {
     const rows = cells(await csvOf(m, "prevalence", q));
     expect(rows[0]).toEqual(["Prevalence and trends"]);
     expect(rows).toContainEqual(["Scope", "One hospital"]);
-    expect(rows).toContainEqual(["Hospital", "Havana Hospital"]);
+    expect(rows).toContainEqual(["Hospital", "Pilot Hospital"]);
     expect(rows).toContainEqual(["Months", "Oct 2025 to Sep 2026"]);
     expect(rows).toContainEqual(["Period", "Last 12 months"]);
     expect(rows).toContainEqual(["Condition", "Type 2 diabetes · E11"]);
@@ -226,17 +226,17 @@ describe("analysisCsv", () => {
     const m = mock();
     const v = readView(
       "prevalence",
-      await m.getAnalysisView("prevalence", HAVANA),
-      HAVANA,
+      await m.getAnalysisView("prevalence", PILOT),
+      PILOT,
       NOW,
     );
     if (v.status !== "ok" || !v.data.comparison?.available)
-      throw new Error("Havana should compare");
+      throw new Error("Pilot Hospital should compare");
     v.data.data.series[0] = {
       ...v.data.data.series[0]!,
       median: { value: null, suppressed: true },
     };
-    const ctx = await context(m, HAVANA);
+    const ctx = await context(m, PILOT);
     const rows = cells(analysisCsv("prevalence", v, ctx));
     const at = rows.findIndex((r) => r[0] === "Cases per 1,000 by month");
     expect(rows[at + 1]).toContain("Median of similar hospitals");
@@ -269,18 +269,18 @@ describe("analysisCsv", () => {
       "Partly standardised",
     ]);
     const names = across.slice(header + 1, header + 11).map((r) => r[0]);
-    expect(names).toContain("Havana Hospital");
+    expect(names).toContain("Pilot Hospital");
     expect(names).toContain("Southpoint Hospital");
     expect(across.flat()).not.toContain("Last period");
 
-    const one = await csvOf(m, "prevalence", HAVANA);
+    const one = await csvOf(m, "prevalence", PILOT);
     expect(one).toContain("Median of 5 similar hospitals");
     expect(one).toContain("patients seen · General hospital");
     expect(cells(one).some((r) => r[0] === "Kind")).toBe(false);
 
-    const quality = await csvOf(m, "quality", HAVANA);
+    const quality = await csvOf(m, "quality", PILOT);
     expect(quality).toMatch(/Last period|Not compared|Not enough similar/);
-    const affected = await csvOf(m, "affected", HAVANA);
+    const affected = await csvOf(m, "affected", PILOT);
     expect(affected).not.toMatch(/Last period|similar hospitals/);
   });
 
@@ -297,8 +297,8 @@ describe("analysisCsv", () => {
     for (const view of VIEW_IDS)
       for (const q of [
         ALL,
-        HAVANA,
-        { ...HAVANA, location: "ward4", source: "results_system" },
+        PILOT,
+        { ...PILOT, location: "ward4", source: "results_system" },
       ]) {
         const csv = await csvOf(m, view, q);
         for (const id of ids) expect(csv).not.toContain(id);
@@ -323,12 +323,12 @@ describe("analysisCsvName", () => {
     expect(
       analysisCsvName(
         "co-occurring",
-        { ...HAVANA, period: "3m", sex: "female" },
-        "Havana Hospital",
+        { ...PILOT, period: "3m", sex: "female" },
+        "Pilot Hospital",
       ),
-    ).toBe("mhai-analysis-havana-hospital-co-occurring-3m.csv");
+    ).toBe("mhai-analysis-pilot-hospital-co-occurring-3m.csv");
     expect(
-      analysisCsvName("quality", HAVANA, "Riverside Children's (East)"),
+      analysisCsvName("quality", PILOT, "Riverside Children's (East)"),
     ).toBe("mhai-analysis-riverside-children-s-east-quality-12m.csv");
   });
 });

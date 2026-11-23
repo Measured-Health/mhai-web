@@ -104,7 +104,7 @@ describe("ReviewDetail", () => {
     expect(screen.getByText("Original: Use with caution")).toBeVisible();
     expect(screen.getByText("Dr. Chidi Okafor")).toBeVisible();
     expect(
-      screen.getByText(/suggested this · Paediatrics · Havana Hospital/),
+      screen.getByText(/suggested this · Paediatrics · Pilot Hospital/),
     ).toBeVisible();
     const approve = screen.getByRole("button", { name: "Approve correction" });
     const reject = screen.getByRole("button", { name: "Reject" });

@@ -167,11 +167,11 @@ describe("the positions", () => {
     ).toBeInTheDocument();
   });
 
-  it("Havana On and Northgate Off, with effective positions", async () => {
+  it("Pilot Hospital On and Northgate Off, with effective positions", async () => {
     await show();
-    const havana = scope("Havana Hospital");
-    expect(fact(havana, "Own switch")).toBe("On");
-    expect(fact(havana, "In effect")).toBe("On");
+    const pilot = scope("Pilot Hospital");
+    expect(fact(pilot, "Own switch")).toBe("On");
+    expect(fact(pilot, "In effect")).toBe("On");
     const north = scope("Northgate General Hospital");
     expect(fact(north, "Own switch")).toBe("Off");
     expect(fact(north, "In effect")).toBe("Off");
@@ -194,11 +194,11 @@ describe("the positions", () => {
       { idempotencyKey: crypto.randomUUID() },
     );
     await show();
-    const havana = scope("Havana Hospital");
-    expect(fact(havana, "Own switch")).toBe("On");
-    expect(fact(havana, "In effect")).toBe("Letters only");
+    const pilot = scope("Pilot Hospital");
+    expect(fact(pilot, "Own switch")).toBe("On");
+    expect(fact(pilot, "In effect")).toBe("Letters only");
     expect(
-      within(havana).getByText("Limited by the global switch"),
+      within(pilot).getByText("Limited by the global switch"),
     ).toBeInTheDocument();
   });
 });
@@ -320,9 +320,9 @@ describe("turning up", () => {
       { idempotencyKey: crypto.randomUUID() },
     );
     await show();
-    // Havana is On, above global: nothing higher to offer.
+    // Pilot Hospital is On, above global: nothing higher to offer.
     expect(
-      within(scope("Havana Hospital")).queryByRole("button", {
+      within(scope("Pilot Hospital")).queryByRole("button", {
         name: "Turn up",
       }),
     ).toBeNull();
@@ -513,7 +513,7 @@ describe("turning down", () => {
     expect(
       within(global()).getByText(/turned down by Ada Bakare: Pilot only$/),
     ).toBeInTheDocument();
-    expect(fact(scope("Havana Hospital"), "In effect")).toBe("Letters only");
+    expect(fact(scope("Pilot Hospital"), "In effect")).toBe("Letters only");
     expect(status()).toHaveTextContent(
       "Named access for every hospital is now Letters only",
     );
@@ -524,7 +524,7 @@ describe("turning down", () => {
   it("a wrong code stays in the dialog", async () => {
     await show();
     await userEvent.click(
-      within(scope("Havana Hospital")).getByRole("button", {
+      within(scope("Pilot Hospital")).getByRole("button", {
         name: "Turn down",
       }),
     );
@@ -540,7 +540,7 @@ describe("turning down", () => {
     expect(
       await within(d).findByText("That code didn't work. Try again."),
     ).toBeInTheDocument();
-    expect(fact(scope("Havana Hospital"), "Own switch")).toBe("On");
+    expect(fact(scope("Pilot Hospital"), "Own switch")).toBe("On");
     expect(holding("000000")).toEqual([]);
   });
 });
@@ -591,13 +591,13 @@ describe("history", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     const list = within(panel()).getByRole("list", { name: "Switch history" });
     const items = within(list).getAllByRole("listitem");
-    // Newest first: Northgate turned Off, Northgate On, Havana On, global On.
+    // Newest first: Northgate turned Off, Northgate On, Pilot Hospital On, global On.
     expect(items.map((li) => li.querySelector("p")?.textContent)).toEqual([
       expect.stringMatching(
         /^Northgate General Hospital turned down to Off · /,
       ),
       expect.stringMatching(/^Northgate General Hospital turned up to On · /),
-      expect.stringMatching(/^Havana Hospital turned up to On · /),
+      expect.stringMatching(/^Pilot Hospital turned up to On · /),
       expect.stringMatching(/^Every hospital turned up to On · /),
     ]);
     expect(items[0]).toHaveTextContent(

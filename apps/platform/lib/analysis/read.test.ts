@@ -113,7 +113,7 @@ const MONTHS_12M = [
 const E11 = { id: "e11", name: "Type 2 diabetes", icd10: "E11" };
 const I10 = { id: "i10", name: "Hypertension", icd10: "I10" };
 const N18 = { id: "n18", name: "Chronic kidney disease", icd10: "N18" };
-const HAVANA = { id: "h_havana", name: "Havana Hospital" };
+const PILOT = { id: "h_pilot", name: "Pilot Hospital" };
 
 const row = (id: string, name: string, size: number, count: number) => ({
   hospital: { id, name },
@@ -135,7 +135,7 @@ const ROWS = () => [
 const meta = (view: ViewId, scope: ScopeKind) => ({
   view,
   scope,
-  hospital: scope === "all" ? null : HAVANA,
+  hospital: scope === "all" ? null : PILOT,
   period: PERIOD_12M,
   updated_at: "2026-10-23T09:30:00.000Z",
   patients: g(2000),
@@ -324,7 +324,7 @@ const MADE: Record<ViewId, (s: ScopeKind) => Raw> = {
   findings,
   quality,
 };
-const queryFor = (s: ScopeKind) => (s === "all" ? all() : one("h_havana"));
+const queryFor = (s: ScopeKind) => (s === "all" ? all() : one("h_pilot"));
 
 describe("readView: the hand-made replies", () => {
   it("each view reads in both scopes", () => {
@@ -336,7 +336,7 @@ describe("readView: the hand-made replies", () => {
   });
 
   it("a read view carries the query it was read against (I1)", () => {
-    const q = one("h_havana", { sex: "female" });
+    const q = one("h_pilot", { sex: "female" });
     const out = read("prevalence", prevalence("hospital"), q);
     expect(out.status).toBe("ok");
     if (out.status !== "ok") return;
@@ -363,7 +363,7 @@ describe("readView: fails closed", () => {
     );
     expect(read("prevalence", null, all()).status).toBe("failed");
     const extra = prevalence("all");
-    extra.note = "Havana had 3";
+    extra.note = "Pilot Hospital had 3";
     expect(problem("prevalence", extra, all())).toMatch(/key/);
     const deep = prevalence("all");
     deep.data.by_condition[0].local_name = "Sugar";
@@ -372,7 +372,7 @@ describe("readView: fails closed", () => {
 
   it("on a scope, hospital or view that doesn't match the query", () => {
     expect(problem("affected", prevalence("all"), all())).toMatch(/view/);
-    expect(problem("prevalence", prevalence("all"), one("h_havana"))).toMatch(
+    expect(problem("prevalence", prevalence("all"), one("h_pilot"))).toMatch(
       /scope/,
     );
     expect(
@@ -422,7 +422,7 @@ describe("readView: fails closed", () => {
     const q = quality("hospital");
     q.headline = { ...rate(97, 100), per_1000: HID };
     q.comparison = null;
-    expect(problem("quality", q, one("h_havana"))).toMatch(/leaving 1–4/);
+    expect(problem("quality", q, one("h_pilot"))).toMatch(/leaving 1–4/);
   });
 
   it("a rate that doesn't match its count and base fails", () => {
@@ -518,7 +518,7 @@ describe("readView: fails closed", () => {
       { sex: "other", patients: dr(g(0)), share: HID },
       { sex: "not_recorded", patients: dr(g(0)), share: HID },
     ];
-    expect(problem("affected", r, one("h_havana"))).toMatch(/patients/);
+    expect(problem("affected", r, one("h_pilot"))).toMatch(/patients/);
 
     // A shown group beside a hidden headline base fails too.
     const p = prevalence("all");
@@ -574,7 +574,7 @@ describe("readView: fails closed", () => {
     // For one hospital, the finer code reads.
     const own = prevalence("hospital");
     own.data.by_condition[1].condition = fine.data.by_condition[1].condition;
-    expect(problem("prevalence", own, one("h_havana"))).toBeNull();
+    expect(problem("prevalence", own, one("h_pilot"))).toBeNull();
 
     const pair = coOccurring("all");
     pair.data.pairs[0].b = { id: "x1", name: "Local term", icd10: null };
@@ -586,12 +586,12 @@ describe("readView: fails closed", () => {
     const f = findings("hospital");
     f.patients = g(202);
     expect(
-      problem("findings", f, one("h_havana", { condition: "e11" })),
+      problem("findings", f, one("h_pilot", { condition: "e11" })),
     ).toMatch(/group less the headline leaving 1–4/);
     // Prevalence: patients seen, but not in one month.
     const s = prevalence("hospital");
     s.data.series[4].rate = rate(40, 1998);
-    expect(problem("prevalence", s, one("h_havana"))).toMatch(
+    expect(problem("prevalence", s, one("h_pilot"))).toMatch(
       /not seen that month leaving 1–4/,
     );
     // Findings: flagged patients without one flagged finding.
@@ -624,7 +624,7 @@ describe("readView: fails closed", () => {
     p.data.by_condition[0].cases = dr(HID);
     p.data.by_condition[0].rate = { count: HID, base: g(2000), per_1000: HID };
     p.data.by_condition[0].new = g(198);
-    expect(problem("prevalence", p, one("h_havana"))).toMatch(
+    expect(problem("prevalence", p, one("h_pilot"))).toMatch(
       /headline\.count less condition\.new \(through condition\.cases\) leaving 1–4/,
     );
     // Prevalence, a condition filter: patients seen less one month's count,
@@ -649,12 +649,12 @@ describe("readView: fails closed", () => {
     for (const m of s.data.series) m.median = null;
     s.data.series[4].rate = { count: g(1997), base: HID, per_1000: HID };
     expect(
-      problem("prevalence", s, one("h_havana", { condition: "e11" })),
+      problem("prevalence", s, one("h_pilot", { condition: "e11" })),
     ).toMatch(/headline\.base less series\.count/);
   });
 
   it("a ward is inside its setting: one ward, and all its wards together (R1)", () => {
-    const q = one("h_havana");
+    const q = one("h_pilot");
     expect(problem("affected", affected("hospital"), q)).toBeNull();
     // Outpatient 100 less the outpatient clinic 97: 3 outpatients elsewhere.
     const a = affected("hospital");
@@ -715,10 +715,10 @@ describe("readView: fails closed", () => {
     const row = ok.data.by_condition[0];
     row.consultations = HID;
     row.confidence = { high: HID, medium: g(80), low: g(20) };
-    expect(problem("quality", ok, one("h_havana"))).toBeNull();
+    expect(problem("quality", ok, one("h_pilot"))).toBeNull();
 
     row.confidence.high = g(200);
-    expect(problem("quality", ok, one("h_havana"))).toMatch(/confidence/);
+    expect(problem("quality", ok, one("h_pilot"))).toMatch(/confidence/);
   });
 
   it("a shown 0 across hospitals comes from no hospital, and reads", () => {
@@ -854,7 +854,7 @@ describe("readView: across hospitals (Review Focus 2)", () => {
   it("`why` anywhere in hospital scope, or in a hospital row, fails", () => {
     const r = prevalence("hospital");
     r.data.by_condition[1].new = FEW;
-    expect(problem("prevalence", r, one("h_havana"))).toMatch(/why/);
+    expect(problem("prevalence", r, one("h_pilot"))).toMatch(/why/);
 
     const rows = prevalence("all");
     rows.hospitals[0].not_standardised_share = FEW;
@@ -895,7 +895,7 @@ describe("readView: across hospitals (Review Focus 2)", () => {
     expect(problem("prevalence", c, all())).toMatch(/comparison/);
 
     const h = prevalence("all");
-    h.hospital = HAVANA;
+    h.hospital = PILOT;
     expect(problem("prevalence", h, all())).toMatch(/hospital/);
 
     const a = affected("all");
@@ -913,7 +913,7 @@ describe("readView: across hospitals (Review Focus 2)", () => {
 });
 
 describe("readView: one hospital (Review Focus 3)", () => {
-  const H = one("h_havana");
+  const H = one("h_pilot");
   /** Not available: no median, no verdict, and no median on the series. */
   function notAvailable(over: Raw) {
     const r = prevalence("hospital");
@@ -1081,7 +1081,7 @@ describe("readView: lists, periods and patient fields", () => {
       expect(problem("prevalence", r, all())).toMatch(new RegExp(key));
       const top = prevalence("hospital");
       top[key] = null;
-      expect(problem("prevalence", top, one("h_havana"))).toMatch(
+      expect(problem("prevalence", top, one("h_pilot"))).toMatch(
         new RegExp(key),
       );
     }
@@ -1498,7 +1498,7 @@ describe("readStatus", () => {
     hospitals: {
       included: 2,
       total: 3,
-      list: [HAVANA, { id: "h_northgate", name: "Northgate Hospital" }],
+      list: [PILOT, { id: "h_northgate", name: "Northgate Hospital" }],
       excluded: [
         { id: "h_hilltop", name: "Hilltop Hospital", reason: "not_covered" },
       ],
@@ -1535,7 +1535,7 @@ describe("readStatus", () => {
     ];
     expect(readStatus(c).status).toBe("failed");
     c.my_clearances = [
-      { hospital: HAVANA, clearance_id: "cl_1", until: "2027-01-01" },
+      { hospital: PILOT, clearance_id: "cl_1", until: "2027-01-01" },
     ];
     expect(readStatus(c).status).toBe("ok");
   });

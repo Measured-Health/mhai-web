@@ -1,5 +1,5 @@
 // The platform demo's sample data. Every hospital and person is invented;
-// the names are not drawn from real organisations. Havana Hospital is the
+// the names are not drawn from real organisations. Pilot Hospital is the
 // clinical demo's own (invented) hospital, so the two demos line up. No
 // patient data.
 import type {
@@ -28,7 +28,7 @@ export const TEAM_EMAILS = {
   tunde: "tunde.okafor@measured-health.example",
   amara: "amara.eze@measured-health.example",
   kemi: "kemi.lawal@measured-health.example",
-  /** A platform admin linked to Havana Hospital by a past account there. */
+  /** A platform admin linked to Pilot Hospital by a past account there. */
   bola: "bola.hassan@measured-health.example",
   /** A new platform admin: first sign-in steps, then two-step setup. */
   newAdmin: "new.admin@measured-health.example",
@@ -107,7 +107,7 @@ export function seedTeam(now: number): TeamMember[] {
       ),
       mfa_enabled: false,
     },
-    // Linked to Havana Hospital (clearances-fixtures `LINKED`): he can't
+    // Linked to Pilot Hospital (clearances-fixtures `LINKED`): he can't
     // verify its letters, and shows the same-side refusal.
     m(
       { id: "tm_bola", name: "Bola Hassan" },
@@ -169,25 +169,25 @@ export function seedHospitals(now: number): HospitalRecord[] {
   return [
     {
       hospital: base(
-        "h_havana",
-        "Havana Hospital",
-        "HAVANA",
-        "havanahospital.org",
+        "h_pilot",
+        "Pilot Hospital",
+        "PILOT",
+        "pilot-hospital.example",
         {
           staff_count: 186,
           created_at: iso(now - 500 * D),
           last_activity_at: iso(now - 4 * MIN),
           first_admin: accepted(
-            "inv_havana1",
+            "inv_pilot1",
             "Grace Nwosu",
-            "admin.nwosu@havanahospital.org",
+            "admin.nwosu@pilot-hospital.example",
             500 * D,
           ),
         },
       ),
       admins: [
-        admin("Grace Nwosu", "admin.nwosu@havanahospital.org"),
-        admin("Dr. Ngozi Obi", "director.obi@havanahospital.org"),
+        admin("Grace Nwosu", "admin.nwosu@pilot-hospital.example"),
+        admin("Dr. Ngozi Obi", "director.obi@pilot-hospital.example"),
       ],
       sso: NO_SSO,
       ...clear,

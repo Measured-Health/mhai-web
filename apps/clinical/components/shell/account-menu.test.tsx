@@ -25,7 +25,7 @@ describe("AccountMenu", () => {
     renderWithAuth(<AccountMenu rail={false} />);
     const button = screen.getByRole("button", { name: "Account: Dr. Reyes" });
     expect(button).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByText("Havana Hospital")).toBeInTheDocument();
+    expect(screen.getByText("Pilot Hospital")).toBeInTheDocument();
     await userEvent.click(button);
     expect(screen.getByRole("menu", { name: "Account" })).toBeInTheDocument();
     expect(screen.getByText(TEST_USER.email!)).toBeInTheDocument();
