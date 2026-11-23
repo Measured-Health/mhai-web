@@ -152,7 +152,7 @@ describe("the sample cohorts", () => {
     expect(has("h_lakeside", "d57")).toBe(3);
     expect(has("h_harbour", "d57")).toBe(6);
     const tb = PROFILES.filter((p) => has(p.id, "a15") > 0).map((p) => p.id);
-    expect(tb.sort()).toEqual(["h_pilot", "h_northgate"]);
+    expect(tb.sort()).toEqual(["h_northgate", "h_pilot"]);
     const pair = PROFILES.flatMap((p) =>
       cohortOf(p.id).filter((x) => {
         const ids = x.conditions.map((c) => c.id);
