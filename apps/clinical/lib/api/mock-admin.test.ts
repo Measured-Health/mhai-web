@@ -686,7 +686,7 @@ describe("invites, resets, removal and reminders (core 1.33.0)", () => {
   it("invites in core's order: roles, then the code, then each address", async () => {
     const a = director();
     const ok: InviteIn = {
-      emails: ["n.ade@havanahospital.org"],
+      emails: ["n.ade@pilot-hospital.example"],
       roles: ["clinician"],
     };
     const analyst = ["clinician", "analyst"] as unknown as InviteIn["roles"];
@@ -703,9 +703,9 @@ describe("invites, resets, removal and reminders (core 1.33.0)", () => {
     const r = await a.inviteStaff(
       {
         emails: [
-          "N.Ade@havanahospital.org",
-          "n.ade@havanahospital.org",
-          "k.mensah@havanahospital.org",
+          "N.Ade@pilot-hospital.example",
+          "n.ade@pilot-hospital.example",
+          "k.mensah@pilot-hospital.example",
           DEMO_EMAILS.platformAdmin,
           "oops",
         ],
@@ -715,8 +715,8 @@ describe("invites, resets, removal and reminders (core 1.33.0)", () => {
       GOOD,
     );
     expect(r.skipped).toEqual([
-      { email: "n.ade@havanahospital.org", reason: "duplicate" },
-      { email: "k.mensah@havanahospital.org", reason: "already_staff" },
+      { email: "n.ade@pilot-hospital.example", reason: "duplicate" },
+      { email: "k.mensah@pilot-hospital.example", reason: "already_staff" },
       // In use outside this hospital: never says where.
       { email: DEMO_EMAILS.platformAdmin, reason: "not_available" },
       { email: "oops", reason: "invalid_email" },
@@ -731,7 +731,7 @@ describe("invites, resets, removal and reminders (core 1.33.0)", () => {
       }).success,
     ).toBe(true);
     expect(row).toMatchObject({
-      email: "n.ade@havanahospital.org",
+      email: "n.ade@pilot-hospital.example",
       // Core marks an invite only by invited_at.
       status: "active",
       issues: [],
@@ -754,7 +754,7 @@ describe("invites, resets, removal and reminders (core 1.33.0)", () => {
       delayMs: 0,
     });
     const r = await a.inviteStaff(
-      { emails: ["n.ade@havanahospital.org"], roles: ["clinician"] },
+      { emails: ["n.ade@pilot-hospital.example"], roles: ["clinician"] },
       GOOD,
     );
     const id = r.invited[0]!.staff.id;

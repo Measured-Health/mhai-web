@@ -83,9 +83,9 @@ describe("mock record connections", () => {
     expect(
       out.connections.map((c) => [c.id, c.hospital.name, c.source_label]),
     ).toEqual([
-      ["emr_hv1", "Havana Hospital", "Main record"],
-      ["emr_hv2", "Havana Hospital", "Results system"],
       ["emr_ng1", "Northgate General Hospital", "Patient record"],
+      ["emr_hv1", "Pilot Hospital", "Main record"],
+      ["emr_hv2", "Pilot Hospital", "Results system"],
       ["emr_rc1", "Riverside Children's Hospital", "Nightly export"],
       ["emr_wf1", "Westfield Clinic", "Main record"],
     ]);
@@ -99,7 +99,7 @@ describe("mock record connections", () => {
       "Ridgeway General Hospital",
       "Southpoint Hospital",
     ]);
-    const hv1 = out.connections[0]!;
+    const hv1 = out.connections.find((c) => c.id === "emr_hv1")!;
     expect(hv1).toMatchObject({
       type: "fhir_r4",
       type_label: "FHIR R4 server",
@@ -112,7 +112,7 @@ describe("mock record connections", () => {
     // A summary carries no address, fields or credentials.
     expect(Object.keys(hv1)).not.toContain("base_url");
     expect(Object.keys(hv1)).not.toContain("credentials");
-    const one = await setup().m.listConnections({ hospital: "h_havana" });
+    const one = await setup().m.listConnections({ hospital: "h_pilot" });
     expect(one.connections.map((c) => c.id)).toEqual(["emr_hv1", "emr_hv2"]);
     expect(one.not_connected).toEqual([]);
   });
@@ -310,13 +310,15 @@ describe("mock record connections", () => {
     const moved = await m.updateConnection(
       hv.id,
       {
-        base_url: "https://records.havana.example/fhir/r4",
+        base_url: "https://records.pilot-hospital.example/fhir/r4",
         version: renamed.version,
         ...CODE,
       },
       KEY(),
     );
-    expect(moved.base_url).toBe("https://records.havana.example/fhir/r4");
+    expect(moved.base_url).toBe(
+      "https://records.pilot-hospital.example/fhir/r4",
+    );
     expect(moved.last_test).toBeNull();
     // A connection that is on stays on.
     expect(moved.enabled).toBe(true);
@@ -344,7 +346,7 @@ describe("mock record connections", () => {
     const { m } = setup();
     const hv = await m.getConnection("emr_hv1");
     for (const over of [
-      { base_url: "http://records.havana.example/" },
+      { base_url: "http://records.pilot-hospital.example/" },
       { source_label: " " },
       { settings: { client_id: "" } },
       { settings: { nope: "a" } },
@@ -482,7 +484,7 @@ describe("mock record connections", () => {
     });
     // A test changes nothing a version guards.
     expect(t.version).toBe(c.version);
-    // The fixtures' results are fixed: Northgate is refused, Havana passes.
+    // The fixtures' results are fixed: Northgate is refused, Pilot Hospital passes.
     expect((await m.testConnection("emr_ng1", KEY())).last_test).toMatchObject({
       ok: false,
       code: "sign_in_refused",

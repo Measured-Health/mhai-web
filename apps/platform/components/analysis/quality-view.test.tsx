@@ -9,7 +9,7 @@ import {
 } from "@/lib/api/client";
 import { createMockPlatform } from "@/lib/api/mock";
 import {
-  HAVANA,
+  PILOT,
   HIDDEN,
   sampleRead,
   shown,
@@ -98,7 +98,7 @@ describe("MHAI quality", () => {
   });
 
   it("One hospital: the comparison on the agreement rate, as a percentage", async () => {
-    const read = await sampleRead("quality", HAVANA);
+    const read = await sampleRead("quality", PILOT);
     show(read);
     const panel = screen.getByRole("region", {
       name: "Compared with similar hospitals",

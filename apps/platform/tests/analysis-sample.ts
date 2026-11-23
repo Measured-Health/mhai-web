@@ -11,7 +11,7 @@ import { ADA } from "./render";
 export type OkRead<V extends ViewId> = Extract<ViewRead<V>, { status: "ok" }>;
 
 export const ALL: AnalysisQuery = emptyQuery("all", null);
-export const HAVANA: AnalysisQuery = emptyQuery("hospital", "h_havana");
+export const PILOT: AnalysisQuery = emptyQuery("hospital", "h_pilot");
 
 /** One view of the sample, read as the page reads it. */
 export async function sampleRead<V extends ViewId>(

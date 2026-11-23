@@ -37,9 +37,9 @@ describe("the periods and the empty query", () => {
       location: null,
       source: null,
     });
-    expect(emptyQuery("hospital", "h_havana", "3m")).toMatchObject({
+    expect(emptyQuery("hospital", "h_pilot", "3m")).toMatchObject({
       scope: "hospital",
-      hospital: "h_havana",
+      hospital: "h_pilot",
       period: "3m",
     });
   });
@@ -86,7 +86,7 @@ describe("the filter limit", () => {
     expect(setFilter(q, "sex", "male").sex).toBe("male");
     expect(activeCount(setFilter(q, "sex", null))).toBe(2);
 
-    let h = emptyQuery("hospital", "h_havana");
+    let h = emptyQuery("hospital", "h_pilot");
     h = setFilter(h, "location", "ward4");
     h = setFilter(h, "source", "results_system");
     h = setFilter(h, "age_band", "18-39");
@@ -116,7 +116,7 @@ describe("the filter limit", () => {
       setFilter(emptyQuery("all", null), "age_band", "18-39"),
     ).toThrow();
     expect(() =>
-      setFilter(emptyQuery("hospital", "h_havana"), "age_band", "20-39"),
+      setFilter(emptyQuery("hospital", "h_pilot"), "age_band", "20-39"),
     ).toThrow();
     expect(setFilter(emptyQuery("all", null), "age_band", "80+").age_band).toBe(
       "80+",
@@ -126,7 +126,7 @@ describe("the filter limit", () => {
 
 describe("switching scope (Review Focus 1)", () => {
   it("switching One hospital (ward, source, 18–39, female) to All hospitals clears every filter and says so", () => {
-    let q = emptyQuery("hospital", "h_havana", "6m");
+    let q = emptyQuery("hospital", "h_pilot", "6m");
     q = setFilter(q, "location", "ward4");
     q = setFilter(q, "source", "results_system");
     q = setFilter(q, "age_band", "18-39");
@@ -143,7 +143,7 @@ describe("switching scope (Review Focus 1)", () => {
       "results_system",
       "18-39",
       "female",
-      "h_havana",
+      "h_pilot",
     ])
       expect(params).not.toContain(word);
   });
@@ -156,18 +156,14 @@ describe("switching scope (Review Focus 1)", () => {
   });
 
   it("another hospital clears; nothing to clear says nothing", () => {
-    const q = setFilter(
-      emptyQuery("hospital", "h_havana"),
-      "location",
-      "ward4",
-    );
+    const q = setFilter(emptyQuery("hospital", "h_pilot"), "location", "ward4");
     expect(switchScope(q, "hospital", "h_northgate")).toEqual({
       query: emptyQuery("hospital", "h_northgate"),
       cleared: true,
     });
-    expect(
-      switchScope(emptyQuery("all", null), "hospital", "h_havana"),
-    ).toEqual({ query: emptyQuery("hospital", "h_havana"), cleared: false });
+    expect(switchScope(emptyQuery("all", null), "hospital", "h_pilot")).toEqual(
+      { query: emptyQuery("hospital", "h_pilot"), cleared: false },
+    );
   });
 });
 
@@ -200,12 +196,12 @@ describe("conditions, sources and the query string", () => {
 
   it("query params drop nulls", () => {
     const q = setFilter(
-      setFilter(emptyQuery("hospital", "h_havana"), "sex", "female"),
+      setFilter(emptyQuery("hospital", "h_pilot"), "sex", "female"),
       "specialty",
       "General medicine",
     );
     expect(analysisQueryParams(q)).toBe(
-      "scope=hospital&hospital=h_havana&period=12m&sex=female&specialty=General+medicine",
+      "scope=hospital&hospital=h_pilot&period=12m&sex=female&specialty=General+medicine",
     );
   });
 });

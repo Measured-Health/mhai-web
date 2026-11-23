@@ -39,9 +39,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const HAVANA = { id: "h_havana", name: "Havana Hospital" };
+const PILOT = { id: "h_pilot", name: "Pilot Hospital" };
 
-function open(hospital = HAVANA, onPlaced = vi.fn(), onClose = vi.fn()) {
+function open(hospital = PILOT, onPlaced = vi.fn(), onClose = vi.fn()) {
   renderWithAuth(
     <PlaceHoldDialog
       open
@@ -134,7 +134,7 @@ describe("Place a hold: the form", () => {
       <PlaceHoldDialog open onClose={vi.fn()} onPlaced={vi.fn()} />,
     );
     const list = await screen.findByRole("list", { name: "Hospitals" });
-    expect(within(list).getByText("Havana Hospital")).toBeInTheDocument();
+    expect(within(list).getByText("Pilot Hospital")).toBeInTheDocument();
     expect(within(list).queryByText("Gone Hospital")).toBeNull();
   });
 
@@ -163,7 +163,7 @@ describe("Place a hold: confirming", () => {
     await fill(d);
     await userEvent.click(within(d).getByRole("button", { name: "Continue" }));
     const s = await screen.findByRole("dialog", {
-      name: "Place a legal hold on Havana Hospital?",
+      name: "Place a legal hold on Pilot Hospital?",
     });
     expect(
       within(s).getByText("All of the hospital's records."),
@@ -179,7 +179,7 @@ describe("Place a hold: confirming", () => {
     );
     await waitFor(() => expect(onPlaced).toHaveBeenCalledTimes(1));
     expect(onPlaced.mock.calls[0]![0]).toMatchObject({
-      hospital: HAVANA,
+      hospital: PILOT,
       reference: "CMP-2026-0009",
       reason: "complaint",
       status: "active",
@@ -188,7 +188,7 @@ describe("Place a hold: confirming", () => {
     });
     expect(onClose).toHaveBeenCalled();
     expect(spy.mock.calls[0]![0]).toEqual({
-      hospital_id: "h_havana",
+      hospital_id: "h_pilot",
       reason: "complaint",
       reference: "CMP-2026-0009",
       review_on: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
@@ -220,7 +220,7 @@ describe("Place a hold: confirming", () => {
     renderWithAuth(
       <PlaceHoldDialog
         open
-        hospital={HAVANA}
+        hospital={PILOT}
         onClose={vi.fn()}
         onPlaced={vi.fn()}
       />,
@@ -250,7 +250,7 @@ describe("Place a hold: confirming", () => {
   });
 
   it("removal_started shows This hospital's removal has already started. Act outside the app now.", async () => {
-    install({}, { removalStarted: ["h_havana"] });
+    install({}, { removalStarted: ["h_pilot"] });
     const { onPlaced } = open();
     const d = form();
     await fill(d);
@@ -312,7 +312,7 @@ describe("Place a hold: confirming", () => {
     renderWithAuth(
       <PlaceHoldDialog
         open
-        hospital={HAVANA}
+        hospital={PILOT}
         onClose={vi.fn()}
         onPlaced={onPlaced}
       />,

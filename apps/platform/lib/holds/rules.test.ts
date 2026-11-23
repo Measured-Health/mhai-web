@@ -59,7 +59,7 @@ describe("isDocumentReference", () => {
 
 describe("validatePlace", () => {
   const ok: PlaceForm = {
-    hospital: { id: "h_havana", name: "Havana Hospital" },
+    hospital: { id: "h_pilot", name: "Pilot Hospital" },
     reason: "complaint",
     reference: "CMP-2026-0001",
     review_on: "2027-04-22",

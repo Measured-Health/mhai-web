@@ -373,21 +373,21 @@ describe("mock analytics", () => {
       items(await m.getAnalytics("month")).some(byHospital("h_hilltop")),
     ).toBe(false);
     // Active hospitals list their active admins.
-    const havana = await m.getHospital("h_havana");
-    expect(havana).toMatchObject({
-      name: "Havana Hospital",
-      short_code: "HAVANA",
+    const pilot = await m.getHospital("h_pilot");
+    expect(pilot).toMatchObject({
+      name: "Pilot Hospital",
+      short_code: "PILOT",
       status: "active",
       sso_enabled: false,
-      email_domains: ["havanahospital.org"],
+      email_domains: ["pilot-hospital.example"],
       first_admin: {
         name: "Grace Nwosu",
-        email: "admin.nwosu@havanahospital.org",
+        email: "admin.nwosu@pilot-hospital.example",
         status: "accepted",
       },
       admins: [
-        { name: "Grace Nwosu", email: "admin.nwosu@havanahospital.org" },
-        { name: "Dr. Ngozi Obi", email: "director.obi@havanahospital.org" },
+        { name: "Grace Nwosu", email: "admin.nwosu@pilot-hospital.example" },
+        { name: "Dr. Ngozi Obi", email: "director.obi@pilot-hospital.example" },
       ],
     });
     // A new hospital has nobody active yet.
@@ -453,7 +453,7 @@ describe("mock analytics", () => {
     // The Critical measures wait for alerts (F10); rolling windows are gone.
     for (const measure of ["critical_within_target", "questions"] as const)
       expect(
-        await failure(m.getHospitalSeries("h_havana", measure, "month")),
+        await failure(m.getHospitalSeries("h_pilot", measure, "month")),
       ).toEqual([422, "validation_failed"]);
     expect(await failure(m.getAnalytics("30d" as Period))).toEqual([
       422,
@@ -464,7 +464,7 @@ describe("mock analytics", () => {
   it("analytics cover active hospitals only", async () => {
     const { m } = setup();
     const active = [
-      "h_havana",
+      "h_pilot",
       "h_northgate",
       "h_riverside",
       "h_lakeside",
@@ -509,7 +509,7 @@ describe("mock analytics", () => {
     expect(a.what_changed).toEqual({ unavailable: true });
     expect(
       await failure(
-        m.getHospitalSeries("h_havana", "questions_per_clinician", "month"),
+        m.getHospitalSeries("h_pilot", "questions_per_clinician", "month"),
       ),
     ).toEqual([404, "not_found"]);
     expect(await failure(m.getGuardrailPeriods("month"))).toEqual([

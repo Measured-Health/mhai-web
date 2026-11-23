@@ -66,7 +66,7 @@ test("the hospital pages show holds, the Hold tag and View holds", async ({
   page,
 }) => {
   await signIn(page, ADA);
-  // Harbour View, Northgate, Riverside and Ridgeway; not Lakeside or Havana
+  // Harbour View, Northgate, Riverside and Ridgeway; not Lakeside or Pilot Hospital
   // (lifted, at once).
   await expect(
     page.getByRole("main").getByText("Hold", { exact: true }),
@@ -222,7 +222,7 @@ test("the auditor sees a hold's history, and no controls; the command line's hol
   await signIn(page, AMARA);
   await openNav(page, "Legal holds");
   await page.getByLabel("Status").selectOption({ label: "All" });
-  await openHold(page, "Havana Hospital", "BRD-2026-03");
+  await openHold(page, "Pilot Hospital", "BRD-2026-03");
   const main = page.getByRole("main");
   await expect(main.getByText("Ada Bakare").first()).toBeVisible();
   await expect(main.getByText("Asked for by")).toHaveCount(0);
@@ -238,13 +238,13 @@ test("Activity shows a placed hold's reference", async ({ page }) => {
   // The narrowest phone the app supports.
   if (isMobile(page)) await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page, ADA);
-  await openHospital(page, "Havana Hospital");
+  await openHospital(page, "Pilot Hospital");
   await page
     .getByRole("region", { name: "Legal holds" })
     .getByRole("button", { name: "Place a hold" })
     .click();
   const form = page.getByRole("dialog", { name: "Place a legal hold" });
-  await expect(form.getByText("Havana Hospital")).toBeVisible();
+  await expect(form.getByText("Pilot Hospital")).toBeVisible();
   // The form fits the screen: no sideways scroll.
   expect(
     await page.evaluate(
@@ -254,7 +254,7 @@ test("Activity shows a placed hold's reference", async ({ page }) => {
   await chooseReason(form, "Complaint");
   await form.getByLabel(/^Reference/).fill("CMP-2026-0101");
   await form.getByRole("button", { name: "Continue" }).click();
-  const ask = stepUp(page, "Place a legal hold on Havana Hospital?");
+  const ask = stepUp(page, "Place a legal hold on Pilot Hospital?");
   await typeCode(page, CODE, ask);
   await ask.getByRole("button", { name: "Place hold" }).click();
   await expect(

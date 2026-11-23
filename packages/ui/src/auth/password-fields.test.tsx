@@ -13,7 +13,7 @@ function Harness({ showErrors = false }: { showErrors?: boolean }) {
       confirm={confirm}
       onNext={setNext}
       onConfirm={setConfirm}
-      identity="a.reyes@havanahospital.org"
+      identity="a.reyes@pilot-hospital.example"
       showErrors={showErrors}
     />
   );

@@ -67,7 +67,7 @@ type Hosp = AuditHospital & {
   minAge: number;
 };
 const HOSPITALS: Hosp[] = [
-  { id: "h_havana", name: "Havana Hospital", key: "hv" },
+  { id: "h_pilot", name: "Pilot Hospital", key: "hv" },
   { id: "h_northgate", name: "Northgate General Hospital", key: "ng" },
   { id: "h_riverside", name: "Riverside Children's Hospital", key: "rv" },
   { id: "h_eastbrook", name: "Eastbrook Medical Centre", key: "eb" },

@@ -40,8 +40,8 @@ const as = (connection?: RecordsStatus): EmrClient => {
 
 beforeEach(resetAudit);
 
-describe("the sample alert settings (Havana)", () => {
-  it("Havana is connected through Main record and Results system", async () => {
+describe("the sample alert settings (Pilot Hospital)", () => {
+  it("Pilot Hospital is connected through Main record and Results system", async () => {
     const s = await as().getAlertSettings();
     expect(s.connection.status).toBe("connected");
     expect(s.connection.sources.map((x) => x.label)).toEqual([...MOCK_SOURCES]);

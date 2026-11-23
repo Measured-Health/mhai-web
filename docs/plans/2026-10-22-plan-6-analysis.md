@@ -204,7 +204,7 @@ apps/clinical/tests/e2e/analysis.spec.ts
   - `analysisSignedOff(env = process.env): boolean`, true only for `ANALYSIS_SIGNED_OFF === "true"` (server only);
   - `ANALYSIS_KEYS = { all: ["analysis"] }`, declared here in `lib/analysis-queries.ts` so `TwoStepRequired` can watch it;
   - `ANALYSIS_HREF = "/analysis"`;
-  - the demo's `DEMO_EMAILS.analyst = "analyst.adeyemi@havanahospital.org"`: Dr. Kemi Adeyemi, Consultant physician, Internal Medicine, roles `["clinician", "analyst"]`, two-step on. It is listed in `SAMPLE_ACCOUNTS` as "Analyst", with the note "Clinician with Analysis".
+  - the demo's `DEMO_EMAILS.analyst = "analyst.adeyemi@pilot-hospital.example"`: Dr. Kemi Adeyemi, Consultant physician, Internal Medicine, roles `["clinician", "analyst"]`, two-step on. It is listed in `SAMPLE_ACCOUNTS` as "Analyst", with the note "Clinician with Analysis".
 - **Proxy:**
   - `ALLOWED` gains `analysis`;
   - shapes: GET `analysis/filters`; GET `analysis/{view}` for `prevalence`, `affected`, `co-occurring`, `findings` and `quality`; GET `analysis/patients`. Anything else is 404;
@@ -437,7 +437,7 @@ type PatientsOut = {
 
 **Sample data and mock rules:**
 
-- **The cohort.** `analysis-fixtures.ts` builds about 600 synthetic patients at Havana Hospital over 12 months from a fixed seed (a small PRNG, no dependency). The same seed gives the same cohort, and `pid`s look like `P-7F3K2`. It has:
+- **The cohort.** `analysis-fixtures.ts` builds about 600 synthetic patients at Pilot Hospital over 12 months from a fixed seed (a small PRNG, no dependency). The same seed gives the same cohort, and `pid`s look like `P-7F3K2`. It has:
   - conditions: Type 2 diabetes (E11), Hypertension (I10), Malaria (B54), Pneumonia (J18.9), Sickle cell disease (D57), Chronic kidney disease (N18), Asthma (J45), and Tuberculosis (A15) with 3 patients;
   - about 12 records whose codes are "Not standardised";
   - pairs: diabetes with hypertension, and kidney disease with hypertension;

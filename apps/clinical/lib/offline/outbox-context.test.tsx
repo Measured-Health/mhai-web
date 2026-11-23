@@ -200,7 +200,7 @@ describe("OutboxProvider", () => {
     vi.mocked(ownerId).mockImplementationOnce(() => new Promise(() => {}));
     await act(async () => {
       await result.current.auth.signIn(
-        "a.reyes@havanahospital.org",
+        "a.reyes@pilot-hospital.example",
         "demo-password",
       );
     });
@@ -245,7 +245,7 @@ describe("OutboxProvider", () => {
     await act(() => result.current.auth.signOut("idle"));
     await act(async () => {
       await result.current.auth.signIn(
-        "b.other@havanahospital.org",
+        "b.other@pilot-hospital.example",
         "demo-password",
       );
     });

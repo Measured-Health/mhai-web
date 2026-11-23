@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
-  HAVANA,
+  PILOT,
   HIDDEN,
   sampleRead,
   shown,
@@ -100,7 +100,7 @@ describe("Findings and alerts", () => {
   });
 
   it("One hospital: the comparison on abnormal findings per 1,000", async () => {
-    const read = await sampleRead("findings", HAVANA);
+    const read = await sampleRead("findings", PILOT);
     show(read);
     const panel = screen.getByRole("region", {
       name: "Compared with similar hospitals",

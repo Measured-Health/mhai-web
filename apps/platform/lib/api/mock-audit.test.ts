@@ -109,7 +109,7 @@ describe("the sample log", () => {
     const { hospitals } = await m.listAuditHospitals();
     expect(hospitals.map((h) => h.id)).toEqual(
       expect.arrayContaining([
-        "h_havana",
+        "h_pilot",
         "h_northgate",
         "h_westfield",
         "h_oldmill",
@@ -977,11 +977,7 @@ describe("audit writes and roles", () => {
     ).toEqual({ kind: "event", id: "ev_9880001" });
     expect(
       await failure(
-        m.deactivate(
-          "h_havana",
-          { reason: "other", note: "x", ...CODE },
-          KEY(),
-        ),
+        m.deactivate("h_pilot", { reason: "other", note: "x", ...CODE }, KEY()),
       ),
     ).toEqual([403, "forbidden"]);
     as(null);

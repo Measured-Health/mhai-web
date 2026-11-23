@@ -17,7 +17,7 @@ export function makeCorrection(
       display_name: "Dr. Okafor",
       full_name: "Dr. Chidi Okafor",
       specialty: "Paediatrics",
-      hospital: "Havana Hospital",
+      hospital: "Pilot Hospital",
     },
     submitted_at: new Date(T0 - 42 * 60_000).toISOString(),
     original: {

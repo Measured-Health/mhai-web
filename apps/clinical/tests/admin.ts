@@ -21,7 +21,7 @@ export function makeStaff(over: Partial<StaffOut> = {}): StaffOut {
     id: "s-test",
     full_name: "Dr. Test Person",
     display_name: "Dr. Person",
-    email: "t.person@havanahospital.org",
+    email: "t.person@pilot-hospital.example",
     roles: ["clinician"],
     specialty: "Internal Medicine",
     can_review: false,

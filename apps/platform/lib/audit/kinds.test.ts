@@ -302,12 +302,12 @@ describe("Plan 11's audit words", () => {
       target: {
         kind: "setting",
         id: "named_access",
-        name: "On for Havana Hospital",
+        name: "On for Pilot Hospital",
       },
       reason: null,
     });
     expect(KINDS.named_access_requested!.words(s)).toBe(
-      "Asked to turn named access to On for Havana Hospital",
+      "Asked to turn named access to On for Pilot Hospital",
     );
     expect(
       KINDS.named_access_lowered!.words({
@@ -522,7 +522,7 @@ describe("Plan 13's record connection and alert settings kinds", () => {
     const e = auditEvent({
       type: "hospital_settings",
       reason: null,
-      hospital: { id: "h_havana", name: "Havana Hospital", removed: false },
+      hospital: { id: "h_pilot", name: "Pilot Hospital", removed: false },
       target: { kind: "connection", id: "emr_hv1", name: "Main record" },
     });
     for (const [kind, start] of Object.entries(EMR)) {
@@ -532,10 +532,10 @@ describe("Plan 13's record connection and alert settings kinds", () => {
       expect(k.named, kind).toBe(true);
       expect(k.note, kind).toBe(false);
       expect(k.words({ ...e, kind }), kind).toBe(
-        `${start} “Main record” for Havana Hospital`,
+        `${start} “Main record” for Pilot Hospital`,
       );
       expect(k.words({ ...e, kind, target: null }), kind).toBe(
-        `${start} for Havana Hospital`,
+        `${start} for Pilot Hospital`,
       );
       expect(k.words({ ...e, kind, target: null, hospital: null }), kind).toBe(
         `${start} for a hospital`,

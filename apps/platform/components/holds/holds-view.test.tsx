@@ -67,7 +67,7 @@ const hospitalsIn = (t: HTMLElement) =>
   rowsOf(t).map((r) => within(r).getAllByRole("link")[0]!.textContent);
 
 describe("the legal holds list", () => {
-  it("opens on Open: Harbour View, Northgate, Riverside and Ridgeway, not Lakeside or Havana", async () => {
+  it("opens on Open: Harbour View, Northgate, Riverside and Ridgeway, not Lakeside or Pilot Hospital", async () => {
     renderWithAuth(<HoldsView />);
     const table = await screen.findByRole("table");
     for (const h of [
@@ -99,7 +99,7 @@ describe("the legal holds list", () => {
     );
   });
 
-  it("Lifted shows who lifted Lakeside and Havana: no grace period", async () => {
+  it("Lifted shows who lifted Lakeside and Pilot Hospital: no grace period", async () => {
     renderWithAuth(<HoldsView />);
     await screen.findByRole("table");
     await userEvent.selectOptions(screen.getByLabelText("Status"), "Lifted");
@@ -108,8 +108,8 @@ describe("the legal holds list", () => {
     );
     const table = screen.getByRole("table");
     expect(hospitalsIn(table).sort()).toEqual([
-      "Havana Hospital",
       "Lakeside Community Clinic",
+      "Pilot Hospital",
     ]);
     expect(within(table).queryByText(/records released on/)).toBeNull();
     expect(url.get()).toBe("status=lifted");
@@ -171,12 +171,10 @@ describe("the legal holds list", () => {
   });
 
   it("starts from a link's query", async () => {
-    url.set("hospital=h_havana&status=all");
+    url.set("hospital=h_pilot&status=all");
     renderWithAuth(<HoldsView />);
     const table = await screen.findByRole("table");
-    await waitFor(() =>
-      expect(hospitalsIn(table)).toEqual(["Havana Hospital"]),
-    );
+    await waitFor(() => expect(hospitalsIn(table)).toEqual(["Pilot Hospital"]));
     expect(screen.getByLabelText("Status")).toHaveValue("all");
   });
 

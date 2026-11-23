@@ -84,7 +84,7 @@ bell in the top bar keeps this session's decisions. Like the rest of the
 demo, all of it is in memory only.
 
 **Hospital admin.** Sign in with the hospital admin sample (Grace Nwosu) to
-land on **Staff** for Havana Hospital: 13 synthetic people, including one
+land on **Staff** for Pilot Hospital: 13 synthetic people, including one
 who hasn't set up two-step, a waiting invite, an expired one and a
 deactivated account. Invite people (one or a pasted list), and open anyone
 to change their roles, specialty or review rights, send a password reset,
@@ -131,7 +131,7 @@ rest of the demo it is all in memory only: the sample alerts and pop-up
 settings start afresh at each sign-in.
 
 **Analysis.** Sign in as the analyst sample (Dr. Kemi Adeyemi,
-`analyst.adeyemi@havanahospital.org`, a clinician with the Analyst role), or
+`analyst.adeyemi@pilot-hospital.example`, a clinician with the Analyst role), or
 as the hospital admin or the medical director, and open **Analysis**. It
 shows how conditions and findings are spread across the hospital, in five
 views: Prevalence and trends, Who is affected, Co-occurring conditions,
@@ -198,7 +198,7 @@ codes work too):
 
 - Ada Bakare, platform admin: `ada.bakare@measured-health.example`;
 - Tunde Okafor, platform admin: `tunde.okafor@measured-health.example`;
-- Bola Hassan, platform admin linked to Havana Hospital: `bola.hassan@measured-health.example`;
+- Bola Hassan, platform admin linked to Pilot Hospital: `bola.hassan@measured-health.example`;
 - Amara Eze, auditor: `amara.eze@measured-health.example`;
 - Chidi Nwosu, a new platform admin: `new.admin@measured-health.example`.
   He sets a password, accepts the terms and sets up two-step (code
@@ -208,7 +208,7 @@ codes work too):
 Any other email is a hospital account and is turned away with "This account
 can't use the platform admin app." The nine sample hospitals:
 
-- **Havana Hospital**: active, the clinical demo's hospital (admins Grace
+- **Pilot Hospital**: active, the clinical demo's hospital (admins Grace
   Nwosu and Dr. Ngozi Obi);
 - **Northgate General Hospital**: active, with single sign-on on and tested;
 - **Riverside Children's Hospital**: active; try editing, deactivating and
@@ -259,7 +259,7 @@ hospital. It is for platform admins only: auditors have no Analysis entry,
 they read and export that trail. The periods are Last 3, 6 and 12 months. It
 shows a **Sample data** sign, and "10 of 12 hospitals included": **See which
 aren't** names Hilltop Cottage (not covered by its agreement) and Eastbrook
-(not enough data yet). In the sample, Havana Hospital is a healthy
+(not enough data yet). In the sample, Pilot Hospital is a healthy
 comparison (the previous period, then the median of 5 similar hospitals,
 then "Higher than", "Lower than" or "About the same as similar hospitals");
 Riverside Children's Hospital has "Not enough similar hospitals to compare";
@@ -301,7 +301,7 @@ with their two-step code. The samples: Harbour View has an active hold
 yesterday (**Review due**); Riverside's hold has a request to lift it from
 Tunde, waiting for a different platform admin to approve; Lakeside's was
 lifted 3 days ago and its records are released in 4 (**Undo lift** until
-then, and it still blocks a removal); Havana's was lifted long ago. Lifting a hold needs two platform
+then, and it still blocks a removal); Pilot Hospital's was lifted long ago. Lifting a hold needs two platform
 admins, each with their own code, and a lift request lapses after 7 days.
 Auditors see every hold, note and history, and change nothing.
 
@@ -369,10 +369,10 @@ by page (page images only: no download, no print, nothing kept). **Verify**,
 **Reject** (with a reason) and **Revoke** each take your two-step code
 (`123456`). Try Northgate General's waiting letter as Ada Bakare, who can
 verify it. Bola Hassan
-(`bola.hassan@measured-health.example`) is a platform admin linked to Havana
-Hospital by a past account, so Havana's letters read "You can't verify
+(`bola.hassan@measured-health.example`) is a platform admin linked to Pilot Hospital
+Hospital by a past account, so Pilot Hospital's letters read "You can't verify
 letters from a hospital you're linked to"; Tunde Okafor is covered by
-Havana's waiting letter, so it reads "You can't verify a letter that covers
+Pilot Hospital's waiting letter, so it reads "You can't verify a letter that covers
 you". Auditors read the page and see no buttons. **Named access** at the top
 shows the global switch and each hospital's (Off, Letters only or On; the
 lower of the two is in effect). The demo runs On, with Northgate General
@@ -496,7 +496,7 @@ Until it is given, alerts run on sample data only; see
 ### EMR connections and alert settings
 
 Sample data only. Platform admin app: sign in as a platform admin and open
-**Connections** (right after Hospitals). Havana is connected, Northgate needs
+**Connections** (right after Hospitals). Pilot Hospital is connected, Northgate needs
 attention (its sign-in is refused: replace the key on its page, test, and it
 reads Connected), Riverside is switched off and Eastbrook is not connected.
 **Add a connection** takes a type, a name, an address, the type's fields and

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { passwordError, passwordRules } from "./password-rules";
 
-const ok = (pw: string, id: string | null = "a.reyes@havanahospital.org") =>
+const ok = (pw: string, id: string | null = "a.reyes@pilot-hospital.example") =>
   Object.fromEntries(passwordRules(pw, id).map((r) => [r.id, r.ok]));
 
 describe("passwordRules", () => {

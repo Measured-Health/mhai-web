@@ -1,4 +1,4 @@
-// The demo's sample clearance letters for Havana Hospital (Plan 11). Every
+// The demo's sample clearance letters for Pilot Hospital (Plan 11). Every
 // name is invented. Dates are relative to the mock's clock, so the sample
 // always has a letter ending soon, one ended, and so on.
 

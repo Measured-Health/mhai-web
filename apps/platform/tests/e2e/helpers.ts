@@ -4,11 +4,11 @@ import { expect, type Locator, type Page } from "@playwright/test";
 export const ADA = "ada.bakare@measured-health.example";
 export const TUNDE = "tunde.okafor@measured-health.example";
 export const AMARA = "amara.eze@measured-health.example";
-/** A platform admin linked to Havana Hospital by a past account there. */
+/** A platform admin linked to Pilot Hospital by a past account there. */
 export const BOLA = "bola.hassan@measured-health.example";
 export const NEW_ADMIN = "new.admin@measured-health.example";
 /** A hospital (clinician) account: not on the platform team. */
-export const CLINICIAN = "a.reyes@havanahospital.org";
+export const CLINICIAN = "a.reyes@pilot-hospital.example";
 /** The demo's two-step code. */
 export const CODE = "123456";
 

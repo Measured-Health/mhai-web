@@ -47,14 +47,12 @@ describe("a hold's page", () => {
     expect(
       await screen.findByRole("heading", { name: "BRD-2026-03" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("Havana Hospital", { selector: "p" }),
-    ).toBeVisible();
+    expect(screen.getByText("Pilot Hospital", { selector: "p" })).toBeVisible();
     expect(
       within(term("Hospital") as HTMLElement).getByRole("link", {
-        name: "Havana Hospital",
+        name: "Pilot Hospital",
       }),
-    ).toHaveAttribute("href", "/hospitals/h_havana");
+    ).toHaveAttribute("href", "/hospitals/h_pilot");
     expect(term("What it covers")).toHaveTextContent("All records");
     expect(term("Reason")).toHaveTextContent("Other");
     expect(term("Reference")).toHaveTextContent("BRD-2026-03");

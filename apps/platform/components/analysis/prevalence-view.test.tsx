@@ -123,11 +123,11 @@ describe("Prevalence and trends", () => {
     expect(conditions[0]!.textContent).toMatch(/new in this period/);
     const rows = hospitalRows();
     expect(rows.size).toBe(10);
-    const havana = rows.get("Havana Hospital")!;
-    expect(havana[1]).toMatch(/^[\d,]+$/);
-    expect(havana[3]).toBe("General hospital");
-    expect(havana[4]).toBe("Consultations and connected records");
-    expect(havana[5]).toMatch(/^\d+%$/);
+    const pilot = rows.get("Pilot Hospital")!;
+    expect(pilot[1]).toMatch(/^[\d,]+$/);
+    expect(pilot[3]).toBe("General hospital");
+    expect(pilot[4]).toBe("Consultations and connected records");
+    expect(pilot[5]).toMatch(/^\d+%$/);
     expect(rows.get("Lakeside Community Clinic")![4]).toBe(
       "MHAI consultations only",
     );
@@ -212,10 +212,10 @@ describe("Prevalence and trends", () => {
     expect(bar.closest("li")!.querySelector("[aria-hidden]")).toBeNull();
   });
 
-  it("Havana: the previous period first, then the median of 5 similar hospitals, then the verdict in words", async () => {
+  it("Pilot Hospital: the previous period first, then the median of 5 similar hospitals, then the verdict in words", async () => {
     render();
     await loaded();
-    const panel = await pickHospital("Havana Hospital");
+    const panel = await pickHospital("Pilot Hospital");
     await waitFor(() => expect(lines(panel)).toHaveLength(4));
     const [context, previous, median, verdict] = lines(panel);
     expect(context).toMatch(
@@ -252,7 +252,7 @@ describe("Prevalence and trends", () => {
     install("few_peers");
     render();
     await loaded();
-    const panel = await pickHospital("Havana Hospital");
+    const panel = await pickHospital("Pilot Hospital");
     await waitFor(() =>
       expect(lines(panel)).toEqual([
         expect.stringMatching(/patients seen · General hospital/),
@@ -419,7 +419,7 @@ describe("PrevalenceView on its own", () => {
     );
 
   it("One hospital: a hidden monthly median reads Not enough similar hospitals", async () => {
-    const read = await readAll(emptyQuery("hospital", "h_havana"));
+    const read = await readAll(emptyQuery("hospital", "h_pilot"));
     expect(read.data.comparison?.available).toBe(true);
     const series = read.data.data.series;
     series[2] = { ...series[2]!, median: hidden };

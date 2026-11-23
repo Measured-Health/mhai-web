@@ -90,11 +90,11 @@ test("a bad agreement reference is caught before the code", async ({
   await expect(page.getByRole("dialog")).toBeHidden();
 });
 
-test("an auditor sees Havana's AI model and its use, and can't change it", async ({
+test("an auditor sees Pilot Hospital's AI model and its use, and can't change it", async ({
   page,
 }) => {
   await signIn(page, AMARA);
-  await openHospital(page, "Havana Hospital");
+  await openHospital(page, "Pilot Hospital");
   const r = model(page);
   await expect(r.getByText("Anthropic (cloud)", { exact: true })).toBeVisible();
   await expect(r.getByText("DEMO-SYNTHETIC")).toBeVisible();

@@ -212,7 +212,7 @@ describe("the analytics bell", () => {
     await userEvent.click(
       within(list()).getByRole("button", { name: /Agreement rate better/ }),
     );
-    expect(env.push).toHaveBeenCalledWith("/usage?change=chg_hav_agreement");
+    expect(env.push).toHaveBeenCalledWith("/usage?change=chg_plt_agreement");
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", { name: "Notifications" }),

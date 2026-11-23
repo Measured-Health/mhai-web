@@ -284,7 +284,7 @@ describe("SettingsView", () => {
     const real = await holder.client.getSettings();
     vi.spyOn(holder.client, "getSettings").mockResolvedValue({
       ...real,
-      sso: { status: "error", domain: "havanahospital.org" },
+      sso: { status: "error", domain: "pilot-hospital.example" },
     });
     renderAdmin(<SettingsView />);
     await ready();
@@ -292,7 +292,7 @@ describe("SettingsView", () => {
     expect(within(signIn).getByText("Needs attention")).toBeInTheDocument();
     expect(within(signIn).queryByText(/Connected to/)).toBeNull();
     expect(
-      within(signIn).getByText(/Domain: havanahospital\.org/),
+      within(signIn).getByText(/Domain: pilot-hospital\.example/),
     ).toBeInTheDocument();
   });
 });

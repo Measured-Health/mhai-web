@@ -33,10 +33,10 @@ async function failure(p: Promise<unknown>): Promise<[number, string]> {
 }
 
 describe("mock EMR rule set", () => {
-  it("Havana sends alerts, every other hospital is in shadow, in core's shape", async () => {
+  it("Pilot Hospital sends alerts, every other hospital is in shadow, in core's shape", async () => {
     const { m } = setup();
-    const h = await m.getEmrRuleSet("h_havana");
-    expect(readEmrRuleSet(h, "h_havana")).toMatchObject(DEMO_RULE_SET);
+    const h = await m.getEmrRuleSet("h_pilot");
+    expect(readEmrRuleSet(h, "h_pilot")).toMatchObject(DEMO_RULE_SET);
     expect(await m.getEmrRuleSet("h_northgate")).toEqual({
       hospital_id: "h_northgate",
       version: null,
@@ -81,8 +81,8 @@ describe("mock EMR rule set", () => {
   it("an auditor reads it and can't switch it", async () => {
     const { m, as } = setup();
     as(TEAM_EMAILS.amara);
-    expect((await m.getEmrRuleSet("h_havana")).version).toBe("0-synthetic");
-    expect(await failure(m.setEmrRuleSet("h_havana", ON, KEY()))).toEqual([
+    expect((await m.getEmrRuleSet("h_pilot")).version).toBe("0-synthetic");
+    expect(await failure(m.setEmrRuleSet("h_pilot", ON, KEY()))).toEqual([
       403,
       "forbidden",
     ]);
@@ -90,7 +90,7 @@ describe("mock EMR rule set", () => {
 
   it("with patient records off, a switch is 503 not_ready", async () => {
     const { m } = setup(false);
-    expect(await failure(m.setEmrRuleSet("h_havana", ON, KEY()))).toEqual([
+    expect(await failure(m.setEmrRuleSet("h_pilot", ON, KEY()))).toEqual([
       503,
       "not_ready",
     ]);

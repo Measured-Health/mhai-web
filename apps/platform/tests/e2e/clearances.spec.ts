@@ -146,11 +146,11 @@ test("Ada rejects a letter with Can't read it", async ({ page }) => {
   expectCleanUrl(page);
 });
 
-test("Bola sees the same-side line on Havana's waiting letter", async ({
+test("Bola sees the same-side line on Pilot Hospital's waiting letter", async ({
   page,
 }) => {
   await openClearances(page, BOLA);
-  await openLetter(page, "Havana Hospital");
+  await openLetter(page, "Pilot Hospital");
   const d = detail(page);
   await expect(
     d.getByText("You can't verify letters from a hospital you're linked to"),
@@ -167,7 +167,7 @@ test("Tunde sees You can't verify a letter that covers you on cl_wait", async ({
   page,
 }) => {
   await openClearances(page, TUNDE);
-  await openLetter(page, "Havana Hospital");
+  await openLetter(page, "Pilot Hospital");
   const d = detail(page);
   await expect(d.getByText("Measured Health staff")).toBeVisible();
   await expect(d.getByText("Tunde Okafor").first()).toBeVisible();
@@ -280,8 +280,8 @@ test("Ada turns global down to Letters only at once", async ({ page }) => {
   await openClearances(page, ADA);
   const global = scope(page, "Every hospital");
   await expect(global.getByText("On", { exact: true })).toBeVisible();
-  const havana = scope(page, "Havana Hospital");
-  await expect(fact(havana, "In effect")).toHaveText("On");
+  const pilot = scope(page, "Pilot Hospital");
+  await expect(fact(pilot, "In effect")).toHaveText("On");
 
   await global.getByRole("button", { name: "Turn down" }).click();
   const form = page.getByRole("dialog", {
@@ -298,13 +298,13 @@ test("Ada turns global down to Letters only at once", async ({ page }) => {
   await ask.getByRole("button", { name: "Turn down", exact: true }).click();
   await expect(ask).toBeHidden();
 
-  // At once, with one admin: Havana's own switch is On, but global limits it.
+  // At once, with one admin: Pilot Hospital's own switch is On, but global limits it.
   await expect(global.getByText(/^Letters only since/)).toBeVisible();
   await expect(
     global.getByText(/turned down by Ada Bakare: Pilot only$/),
   ).toBeVisible();
-  await expect(fact(havana, "In effect")).toHaveText("Letters only");
-  await expect(havana.getByText("Limited by the global switch")).toBeVisible();
+  await expect(fact(pilot, "In effect")).toHaveText("Letters only");
+  await expect(pilot.getByText("Limited by the global switch")).toBeVisible();
   expectCleanUrl(page);
 });
 

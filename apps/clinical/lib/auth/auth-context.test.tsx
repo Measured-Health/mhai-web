@@ -186,7 +186,7 @@ describe("signing out with an approval waiting to retry", () => {
     await lostAnswer();
     await act(() => api.signOut("manual"));
     const before = approve.mock.calls.length;
-    await act(() => api.signIn("new.bello@havanahospital.org", "pw"));
+    await act(() => api.signIn("new.bello@pilot-hospital.example", "pw"));
     expect(api.status).toBe("signed_in");
     await act(() => vi.advanceTimersByTimeAsync(10_000));
     expect(approve).toHaveBeenCalledTimes(before);
@@ -202,7 +202,7 @@ describe("signing out with an approval waiting to retry", () => {
     let signingIn!: Promise<unknown>;
     act(() => {
       signingOut = api.signOut("manual");
-      signingIn = api.signIn("new.bello@havanahospital.org", "pw");
+      signingIn = api.signIn("new.bello@pilot-hospital.example", "pw");
     });
     await act(() => vi.advanceTimersByTimeAsync(5_000));
     await act(() => Promise.all([signingOut, signingIn]));
@@ -212,7 +212,7 @@ describe("signing out with an approval waiting to retry", () => {
       into.mock.invocationCallOrder[0]!,
     );
     expect(api.status).toBe("signed_in");
-    expect(api.user?.email).toBe("new.bello@havanahospital.org");
+    expect(api.user?.email).toBe("new.bello@pilot-hospital.example");
     // An approval the new person makes is sent, not dropped.
     approve.mockReset();
     approve.mockResolvedValue(undefined);

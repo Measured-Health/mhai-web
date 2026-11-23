@@ -37,7 +37,7 @@ describe("mock auth client", () => {
             })) && (await c.getSession())!.user;
       expect(user.features).toEqual({ analysis: true, named: true });
     }
-    expect(DEMO_EMAILS.analyst).toBe("analyst.adeyemi@havanahospital.org");
+    expect(DEMO_EMAILS.analyst).toBe("analyst.adeyemi@pilot-hospital.example");
     expect(SAMPLE_ACCOUNTS).toContainEqual({
       email: DEMO_EMAILS.analyst,
       label: "Analyst",
@@ -58,11 +58,11 @@ describe("mock auth client", () => {
 
   it("signs a normal clinician straight in", async () => {
     const c = createMockAuthClient();
-    const r = await c.signIn("a.reyes@havanahospital.org", "anything");
+    const r = await c.signIn("a.reyes@pilot-hospital.example", "anything");
     expect(r).toMatchObject({ status: "signed_in", steps: [] });
     if (r.status !== "signed_in") throw new Error();
     expect(r.user).toMatchObject({
-      email: "a.reyes@havanahospital.org",
+      email: "a.reyes@pilot-hospital.example",
       roles: ["clinician"],
       displayName: "Dr. Reyes",
       mfaEnabled: true,
@@ -185,7 +185,7 @@ describe("mock auth client", () => {
 
   it("gives a new hospital admin the first sign-in steps", async () => {
     const c = createMockAuthClient();
-    const r = await c.signIn("newadmin.eze@havanahospital.org", "temp");
+    const r = await c.signIn("newadmin.eze@pilot-hospital.example", "temp");
     if (r.status !== "signed_in") throw new Error();
     expect(r.user.roles).toEqual(["hospital_admin"]);
     expect(isClinical(r.user)).toBe(false);
@@ -295,14 +295,14 @@ describe("mock auth client", () => {
   it("accepts a real authenticator code and rejects a wrong one", async () => {
     const at = 1_700_000_000_000;
     const c = createMockAuthClient({ now: () => at });
-    await c.signIn("mfa.okafor@havanahospital.org", "pw");
+    await c.signIn("mfa.okafor@pilot-hospital.example", "pw");
     const good = await totp(MOCK_TOTP_SECRET, at);
     const bad = good === "000000" ? "000001" : "000000";
     expect(
       (await fail(c.verifyCode(bad, { backup: false, trustDevice: false })))
         .code,
     ).toBe("mfa_invalid");
-    await c.signIn("mfa.okafor@havanahospital.org", "pw");
+    await c.signIn("mfa.okafor@pilot-hospital.example", "pw");
     expect(
       await c.verifyCode(good, { backup: false, trustDevice: false }),
     ).toMatchObject({ status: "signed_in" });
@@ -311,7 +311,7 @@ describe("mock auth client", () => {
   it("confirms two-step setup with a real authenticator code", async () => {
     const at = 1_700_000_000_000;
     const c = createMockAuthClient({ now: () => at });
-    await c.signIn("new.bello@havanahospital.org", "temp");
+    await c.signIn("new.bello@pilot-hospital.example", "temp");
     await expect(c.confirmMfaSetup("999999")).rejects.toMatchObject({
       code: "mfa_invalid",
     });

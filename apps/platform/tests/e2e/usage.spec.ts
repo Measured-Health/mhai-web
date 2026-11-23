@@ -46,7 +46,7 @@ test("Usage opens on What changed with Northgate's change selected", async ({
   // The sign always has words with it.
   await expect(first).toContainText("⚠");
   // The top 5 show; the followed-up change waits behind Show all.
-  await expect(row(page, /Havana Hospital · Better: Agreement/)).toBeVisible();
+  await expect(row(page, /Pilot Hospital · Better: Agreement/)).toBeVisible();
   await page.getByRole("button", { name: /^Show all \(\d+\)$/ }).click();
   await expect(row(page, /Riverside Children's Hospital/)).toBeVisible();
 

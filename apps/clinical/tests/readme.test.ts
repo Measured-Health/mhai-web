@@ -154,7 +154,7 @@ describe("README demo instructions", () => {
 
   it("documents the analysis demo", () => {
     expect(readme).toMatch(/\*\*Analysis\.\*\*/);
-    expect(readme).toContain("analyst.adeyemi@havanahospital.org");
+    expect(readme).toContain("analyst.adeyemi@pilot-hospital.example");
   });
 
   it("says Analysis needs sign-off and stays off in live mode", () => {

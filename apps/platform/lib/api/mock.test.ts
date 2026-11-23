@@ -55,7 +55,7 @@ describe("mock platform API", () => {
     const { m } = setup();
     const all = await m.listHospitals({});
     expect(all.hospitals.map((h) => h.name)).toEqual([
-      "Havana Hospital",
+      "Pilot Hospital",
       "Northgate General Hospital",
       "Riverside Children's Hospital",
       "Eastbrook Medical Centre",
@@ -78,7 +78,7 @@ describe("mock platform API", () => {
     ]);
     const active = await m.listHospitals({ status: "active" });
     expect(active.hospitals.map((h) => h.id)).toEqual([
-      "h_havana",
+      "h_pilot",
       "h_northgate",
       "h_riverside",
       "h_lakeside",

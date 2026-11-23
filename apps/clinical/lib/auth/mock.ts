@@ -111,15 +111,15 @@ const trigger = (login: string) =>
 
 /** The demo's sample logins. Task 3's sample hospital lists the two admins. */
 export const DEMO_EMAILS = {
-  clinician: "a.reyes@havanahospital.org",
-  twoStep: "mfa.okafor@havanahospital.org",
-  newAccount: "new.bello@havanahospital.org",
-  newAdmin: "newadmin.okoro@havanahospital.org",
-  hospitalAdmin: "admin.nwosu@havanahospital.org",
-  director: "director.obi@havanahospital.org",
+  clinician: "a.reyes@pilot-hospital.example",
+  twoStep: "mfa.okafor@pilot-hospital.example",
+  newAccount: "new.bello@pilot-hospital.example",
+  newAdmin: "newadmin.okoro@pilot-hospital.example",
+  hospitalAdmin: "admin.nwosu@pilot-hospital.example",
+  director: "director.obi@pilot-hospital.example",
   platformAdmin: "platform.bakare@measured-health.example",
-  locked: "locked.eze@havanahospital.org",
-  analyst: "analyst.adeyemi@havanahospital.org",
+  locked: "locked.eze@pilot-hospital.example",
+  analyst: "analyst.adeyemi@pilot-hospital.example",
 } as const;
 
 /** Sample accounts for the demo's sign-in page. Any other email works too. */
@@ -247,7 +247,7 @@ function userFor(login: string, roles: Role[], mfaEnabled: boolean): User {
     email: login.includes("@") ? login : null,
     ...(PEOPLE[trigger(login)] ?? REYES),
     roles: [...roles],
-    hospital: "Havana Hospital",
+    hospital: "Pilot Hospital",
     mfaEnabled,
     backupCodesLeft: mfaEnabled ? 8 : null,
     // The demo has Analysis and named access on for everyone (live mode is
@@ -354,7 +354,7 @@ export function createMockAuthClient({
     },
 
     async signInWithHospital() {
-      const u = userFor("a.reyes@havanahospital.org", ["clinician"], true);
+      const u = userFor("a.reyes@pilot-hospital.example", ["clinician"], true);
       startSession(u);
       return { status: "signed_in", user: u, steps: [] };
     },
@@ -379,7 +379,7 @@ export function createMockAuthClient({
 
     async completeHospitalSignIn(code) {
       if (code !== MOCK_SSO_CODE) throw new AuthError("sso_failed");
-      const u = userFor("a.reyes@havanahospital.org", ["clinician"], true);
+      const u = userFor("a.reyes@pilot-hospital.example", ["clinician"], true);
       startSession(u);
       return { status: "signed_in", user: u, steps: [] };
     },

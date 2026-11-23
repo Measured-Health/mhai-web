@@ -48,7 +48,7 @@
 
 ## Rulings made while planning
 
-- **Many connections per hospital** (D3). The platform lists them by hospital; there is no "the" connection. Havana has two, labelled "Main record" and "Results system", which are `MOCK_SOURCES` in the clinical mock, so the two demos agree.
+- **Many connections per hospital** (D3). The platform lists them by hospital; there is no "the" connection. Pilot Hospital has two, labelled "Main record" and "Results system", which are `MOCK_SOURCES` in the clinical mock, so the two demos agree.
 - **Connector types are data** (D4). `GET platform/emr/connector-types` returns each type's label, one-line summary and fields. The form renders those fields; adding a type needs no code. Sample types:
 
   | id            | label                 | summary                                      | fields (key · label · kind)                                                |
@@ -307,13 +307,13 @@ Without a target, "the record connection" replaces “{t}”. `emr_connection_ch
 
 **Fixtures** (`emr-fixtures.ts`; times relative to `now`):
 
-| id        | Hospital  | Type          | Source label   | State                                                                                   |
-| --------- | --------- | ------------- | -------------- | --------------------------------------------------------------------------------------- |
-| `emr_hv1` | Havana    | `fhir_r4`     | Main record    | Connected; last sync 2 min ago, 1,284 records; tested ok 30 days ago                    |
-| `emr_hv2` | Havana    | `hl7v2_feed`  | Results system | Connected; last sync 1 min ago, 312 records                                             |
-| `emr_ng1` | Northgate | `fhir_r4`     | Patient record | Needs attention; `sign_in_refused` ×3 today (latest 25 min ago), last good sync 6 h ago |
-| `emr_rc1` | Riverside | `file_export` | Nightly export | Switched off by Ada 5 days ago; tested ok                                               |
-| `emr_wf1` | Westfield | `fhir_r4`     | Main record    | Not tested; added by Tunde 1 hour ago; private key not set                              |
+| id        | Hospital       | Type          | Source label   | State                                                                                   |
+| --------- | -------------- | ------------- | -------------- | --------------------------------------------------------------------------------------- |
+| `emr_hv1` | Pilot Hospital | `fhir_r4`     | Main record    | Connected; last sync 2 min ago, 1,284 records; tested ok 30 days ago                    |
+| `emr_hv2` | Pilot Hospital | `hl7v2_feed`  | Results system | Connected; last sync 1 min ago, 312 records                                             |
+| `emr_ng1` | Northgate      | `fhir_r4`     | Patient record | Needs attention; `sign_in_refused` ×3 today (latest 25 min ago), last good sync 6 h ago |
+| `emr_rc1` | Riverside      | `file_export` | Nightly export | Switched off by Ada 5 days ago; tested ok                                               |
+| `emr_wf1` | Westfield      | `fhir_r4`     | Main record    | Not tested; added by Tunde 1 hour ago; private key not set                              |
 
 Base addresses use `https://records.{hospital}.example/...`. Eastbrook, Harbour View, Southpoint and Hilltop have none.
 
@@ -371,7 +371,7 @@ Base addresses use `https://records.{hospital}.example/...`. Eastbrook, Harbour 
 
 - [ ] **Step 1: Write the failing tests**
   - `connection-view.test.tsx`:
-    - "Havana's Main record reads Connected with its last update";
+    - "Pilot Hospital's Main record reads Connected with its last update";
     - "Northgate shows Needs attention and the sign-in refused words ×3";
     - "credentials read Set with a date and never a value" (Review Focus 1);
     - "Switch on is disabled with Test the saved settings first. on Westfield" (Review Focus 2);
@@ -411,8 +411,8 @@ Task 3 uses `StateChip` and the hooks from Task 2. To run in parallel with Task 
 **Hospital page section ("Patient record connections"):** each connection as a row (label, type, `StateChip`, last update) linking to its page; none: "Not connected. MHAI can't raise patient alerts for this hospital yet."; admins see **Add a connection** (link). Removed hospitals show the rows read-only and no Add.
 
 - [ ] **Step 1: Write the failing tests**
-  - `connections-view.test.tsx`: "lists Havana's two connections as Connected"; "Needs attention shows only Northgate"; "Not connected lists Eastbrook with Add a connection for admins only"; "the filter is in the URL query and nothing is stored".
-  - `hospital-connections-section.test.tsx`: "Havana's page lists Main record and Results system"; "Eastbrook reads Not connected"; "an auditor sees no Add".
+  - `connections-view.test.tsx`: "lists Pilot Hospital's two connections as Connected"; "Needs attention shows only Northgate"; "Not connected lists Eastbrook with Add a connection for admins only"; "the filter is in the URL query and nothing is stored".
+  - `hospital-connections-section.test.tsx`: "Pilot Hospital's page lists Main record and Results system"; "Eastbrook reads Not connected"; "an auditor sees no Add".
   - The app shell test's nav order gains Connections after Hospitals.
 - [ ] **Step 2: Implement.**
 - [ ] **Step 3: Run** the platform tests and lint (remote).
@@ -519,7 +519,7 @@ export interface EvidenceOut {
 - Each successful PATCH adds an Activity event `alert_units_changed`, `alert_rules_changed` or `alert_recipients_changed` (type `admin`, actor the admin) to `mock-admin`'s log through its existing `recordActivity` seam (add one if missing; one exported function).
 - Option `connection?: RecordsStatus` (tests and the e2e) sets the status; the default is `connected`.
 
-**Fixtures (`emr-fixtures.ts`), Havana:**
+**Fixtures (`emr-fixtures.ts`), Pilot Hospital:**
 
 - Connection: Main record (connected, 2 min ago) and Results system (connected, 1 min ago), the platform sample's labels.
 - Units (all covered unless marked): Ward 3, Ward 5, Ward 7 (not covered), Intensive care, Emergency department, Cardiology clinic, Kidney clinic (not covered), Diabetes clinic; all from Main record except none.
@@ -531,7 +531,7 @@ export interface EvidenceOut {
 **Words (`lib/admin/activity.ts`):** `alert_units_changed` "Changed which units alerts cover"; `alert_rules_changed` "Changed what alerts flag"; `alert_recipients_changed` "Changed who gets alerts". **Usage (`by_route`):** `{ queue: MeasureOut; named: MeasureOut }`, guarded like the other measures.
 
 - [ ] **Step 1: Write the failing tests**
-  - `mock-emr.test.ts`: "Havana is connected through Main record and Results system"; "covering units saves and logs alert_units_changed"; "a level outside the list is invalid"; "no queue and nobody named is no_recipients" (Review Focus 4); "a stale version is conflict"; "a PATCH with two sections is invalid"; "only active clinicians can be named"; "names no vendor and no technical detail" (no address, type or error code in any reply).
+  - `mock-emr.test.ts`: "Pilot Hospital is connected through Main record and Results system"; "covering units saves and logs alert_units_changed"; "a level outside the list is invalid"; "no queue and nobody named is no_recipients" (Review Focus 4); "a stale version is conflict"; "a PATCH with two sections is invalid"; "only active clinicians can be named"; "names no vendor and no technical detail" (no address, type or error code in any reply).
   - `mock-alerts.test.ts`: "sent_to you lists only alerts routed to you"; "sent_to queue lists only queue-only alerts"; "every seed has a category, routing and at most three pieces of evidence per cause"; existing tests unchanged.
   - `live-emr.test.ts`: GET and PATCH `hospital/alert-settings`, with an Idempotency-Key on PATCH.
   - `live-alerts.test.ts`: `sent_to` goes in the query.
@@ -640,7 +640,7 @@ export const ROUTE_LABEL = { you: "For you", queue: "Hospital queue" };
 
 **Platform e2e (`emr.spec.ts`), desktop and phone:**
 
-- "Connections shows Havana connected, Northgate needing attention, Riverside switched off and Eastbrook not connected";
+- "Connections shows Pilot Hospital connected, Northgate needing attention, Riverside switched off and Eastbrook not connected";
 - "add a connection to Eastbrook with a code, test it, switch it on" (enter `123456` as the demo code, as other platform e2e do);
 - "the credential reads Set after saving and its value is nowhere in the page" (Review Focus 1);
 - "an auditor sees the connection and no controls" (Review Focus 3);

@@ -78,7 +78,7 @@ export const CLI_PERSON: Person = {
 
 const TZ = "Africa/Lagos";
 const HOSPITAL = {
-  havana: { id: "h_havana", name: "Havana Hospital" },
+  pilot: { id: "h_pilot", name: "Pilot Hospital" },
   northgate: { id: "h_northgate", name: "Northgate General Hospital" },
   riverside: { id: "h_riverside", name: "Riverside Children's Hospital" },
   harbour: { id: "h_harbour", name: "Harbour View Hospital" },
@@ -208,9 +208,9 @@ export function seedHolds(now: number): LegalHoldDetail[] {
     ],
   };
 
-  // Havana: lifted 40 days ago.
+  // Pilot Hospital: lifted 40 days ago.
   const hhAt = now - 250 * D;
-  const hh0 = placed("hold_hh", HOSPITAL.havana, hhAt, ADA, {
+  const hh0 = placed("hold_hh", HOSPITAL.pilot, hhAt, ADA, {
     reason: "other",
     reference: "BRD-2026-03",
   });

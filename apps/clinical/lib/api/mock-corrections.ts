@@ -24,19 +24,19 @@ export const MOCK_PEOPLE = {
     display_name: "Dr. Okafor",
     full_name: "Dr. Chidi Okafor",
     specialty: "Paediatrics",
-    hospital: "Havana Hospital",
+    hospital: "Pilot Hospital",
   },
   bello: {
     display_name: "Nurse Bello",
     full_name: "Amina Bello",
     specialty: "General ward",
-    hospital: "Havana Hospital",
+    hospital: "Pilot Hospital",
   },
   reyes: {
     display_name: "Dr. Reyes",
     full_name: "Dr. Ana Reyes",
     specialty: "Internal Medicine",
-    hospital: "Havana Hospital",
+    hospital: "Pilot Hospital",
   },
 } satisfies Record<string, PersonOut>;
 

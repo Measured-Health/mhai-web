@@ -55,7 +55,7 @@ describe("StaffView", () => {
     const mensah = within(t)
       .getByRole("button", { name: "Manage Dr. Kofi Mensah" })
       .closest("tr")!;
-    expect(mensah).toHaveTextContent("k.mensah@havanahospital.org");
+    expect(mensah).toHaveTextContent("k.mensah@pilot-hospital.example");
     expect(mensah).toHaveTextContent("Clinician");
     expect(mensah).toHaveTextContent("Cardiology");
     expect(mensah).toHaveTextContent("Two-step not set up");
@@ -142,7 +142,7 @@ describe("StaffView", () => {
     const dialog = await screen.findByRole("dialog", { name: "Invite staff" });
     await within(dialog).findByText(/email invite/);
     await userEvent.click(within(dialog).getByLabelText("Work emails"));
-    await userEvent.paste("n.ade@havanahospital.org");
+    await userEvent.paste("n.ade@pilot-hospital.example");
     await userEvent.click(
       within(dialog).getByRole("button", { name: "Continue" }),
     );
@@ -153,7 +153,9 @@ describe("StaffView", () => {
     const result = await screen.findByRole("dialog", { name: "Invites sent" });
     await userEvent.click(within(result).getByRole("button", { name: "Done" }));
     const t = await table();
-    await waitFor(() => expect(names(t)).toContain("n.ade@havanahospital.org"));
+    await waitFor(() =>
+      expect(names(t)).toContain("n.ade@pilot-hospital.example"),
+    );
     expect(
       screen.getByRole("button", { name: /^Invited · 1$/ }),
     ).toBeInTheDocument();
@@ -177,7 +179,7 @@ describe("StaffView", () => {
     const card = mensah.closest("li")!;
     expect(card).toHaveTextContent("Two-step not set up");
     expect(card).toHaveTextContent("Cardiology");
-    expect(card).toHaveTextContent("k.mensah@havanahospital.org");
+    expect(card).toHaveTextContent("k.mensah@pilot-hospital.example");
     expect(mensah).toHaveTextContent("Manage");
     await userEvent.click(mensah);
     expect(
@@ -200,7 +202,7 @@ describe("StaffView", () => {
     await table();
     expect(
       screen.getByText(
-        "Hospital admins manage people and settings for Havana Hospital only. They never see patients' consultations unless they're also a clinician.",
+        "Hospital admins manage people and settings for Pilot Hospital only. They never see patients' consultations unless they're also a clinician.",
       ),
     ).toBeInTheDocument();
   });

@@ -180,7 +180,7 @@ describe("orderRows", () => {
 
     // The CSV writes the same fixed order.
     const csv = analysisCsv("affected", affected, {
-      hospital: "Havana Hospital",
+      hospital: "Pilot Hospital",
       filters: emptyFilters({ level: "quarter", start: "2026-07-01" }),
       options: null,
     });
@@ -215,7 +215,7 @@ describe("orderRows", () => {
   it("the CSV writes hidden rows in the same order", () => {
     const d = prevalence([row(A15, H), row(UNMAPPED, H), row(J45, H)]);
     const csv = analysisCsv("prevalence", d, {
-      hospital: "Havana Hospital",
+      hospital: "Pilot Hospital",
       filters: emptyFilters({ level: "quarter", start: "2026-07-01" }),
       options: null,
     });

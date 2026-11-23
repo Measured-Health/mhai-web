@@ -83,7 +83,7 @@ describe("SignInForm", () => {
       </>,
       { user: null, client },
     );
-    await signInWith("a.reyes@havanahospital.org");
+    await signInWith("a.reyes@pilot-hospital.example");
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "This account can't use the platform admin app.",
     );

@@ -35,7 +35,7 @@ in `design/v3/`; the system context is in `ARCHITECTURE.md`).
 the same `MhaiClient` pattern. That way the whole app can be clicked through
 and reviewed by the team before the backend is ready. Each plan then swaps
 in the live adapter once its API lands (spec §10). Plan 1 shows a fixed
-demo user ("Dr. Reyes · Havana Hospital") in the sidebar footer.
+demo user ("Dr. Reyes · Pilot Hospital") in the sidebar footer.
 
 ## Global Constraints
 
@@ -2999,7 +2999,7 @@ Read first: `node_modules/next/dist/docs/01-app/01-getting-started/` (layouts an
   - `<AppShell>{children}</AppShell>`;
   - `<TopBar title sub? urgency? actions? />`;
   - `groupHistory(items: SessionItem[], now: number): { label: "Today"|"Yesterday"|"Earlier"; items: SessionItem[] }[]`;
-  - `DEMO_USER = { initials: "DR", name: "Dr. Reyes", role: "Attending · Internal Medicine", hospital: "Havana Hospital" }`.
+  - `DEMO_USER = { initials: "DR", name: "Dr. Reyes", role: "Attending · Internal Medicine", hospital: "Pilot Hospital" }`.
 
 **Breakpoints** (spec §4):
 
@@ -3088,7 +3088,7 @@ describe("Sidebar", () => {
       screen.getByRole("link", { name: /New consultation/ }),
     ).toHaveAttribute("href", "/");
     expect(screen.getByText(/kept for this session only/)).toBeInTheDocument();
-    expect(screen.getByText("Havana Hospital")).toBeInTheDocument();
+    expect(screen.getByText("Pilot Hospital")).toBeInTheDocument();
   });
 });
 ```
@@ -3150,7 +3150,7 @@ export const DEMO_USER = {
   initials: "DR",
   name: "Dr. Reyes",
   role: "Attending · Internal Medicine",
-  hospital: "Havana Hospital",
+  hospital: "Pilot Hospital",
 };
 const DOT = {
   high: "bg-ok",

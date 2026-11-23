@@ -34,7 +34,7 @@ async function signIn(login: string, password: string) {
 describe("SignInForm", () => {
   it("signs a clinician in and goes home", async () => {
     page();
-    await signIn("a.reyes@havanahospital.org", "pw");
+    await signIn("a.reyes@pilot-hospital.example", "pw");
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
   });
 
@@ -166,11 +166,11 @@ describe("SignInForm", () => {
     page();
     await userEvent.click(
       screen.getByRole("button", {
-        name: /Use New account \(new\.bello@havanahospital\.org\)/,
+        name: /Use New account \(new\.bello@pilot-hospital\.example\)/,
       }),
     );
     expect(screen.getByLabelText("Work email")).toHaveValue(
-      "new.bello@havanahospital.org",
+      "new.bello@pilot-hospital.example",
     );
     expect(screen.getByLabelText("Password")).toHaveValue("demo-password");
   });

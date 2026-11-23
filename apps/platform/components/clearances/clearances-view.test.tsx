@@ -143,7 +143,7 @@ describe("the queue", () => {
     const list = rows();
     expect(list).toHaveLength(2);
     // cl_wait was ready just under 3 days ago, cl_north just under 1.
-    expect(list[0]).toHaveTextContent("Havana Hospital");
+    expect(list[0]).toHaveTextContent("Pilot Hospital");
     expect(list[0]).toHaveTextContent("2 people");
     expect(list[0]).toHaveTextContent(
       /Uploaded by Grace Nwosu · \d+ \w{3} \d{4}/,
@@ -255,9 +255,9 @@ describe("the detail", () => {
     expect(
       screen.getByText("Choose a letter to see what was entered"),
     ).toBeInTheDocument();
-    await pick("Havana Hospital");
+    await pick("Pilot Hospital");
     const d = detail();
-    expect(row("Havana Hospital")).toHaveAttribute("aria-current", "true");
+    expect(row("Pilot Hospital")).toHaveAttribute("aria-current", "true");
     expect(within(d).getByText("Dr. Funmi Ade")).toBeInTheDocument();
     expect(within(d).getByText("Chief Medical Director")).toBeInTheDocument();
     expect(within(d).getByText("Waiting for Measured Health")).toBeVisible();
@@ -281,7 +281,7 @@ describe("the detail", () => {
 
   it("View letter shows page 1 of 3 in an image and no download or print", async () => {
     await open();
-    await pick("Havana Hospital");
+    await pick("Pilot Hospital");
     const page = vi.spyOn(api, "getClearancePage");
     await userEvent.click(btn("View letter"));
     const viewer = screen.getByRole("dialog");
@@ -300,7 +300,7 @@ describe("the detail", () => {
 
   it("closing the viewer revokes the page image", async () => {
     await open();
-    await pick("Havana Hospital");
+    await pick("Pilot Hospital");
     await userEvent.click(btn("View letter"));
     const viewer = screen.getByRole("dialog");
     await within(viewer).findByAltText("Page 1 of 3");
@@ -315,7 +315,7 @@ describe("the detail", () => {
 
   it("the auditor sees the letter and the viewer but no Verify, Reject or Revoke", async () => {
     await open(AMARA);
-    await pick("Havana Hospital");
+    await pick("Pilot Hospital");
     for (const name of ["Verify", "Reject", "Revoke"]) noBtn(name);
     expect(within(detail()).queryByText(SAME_SIDE)).toBeNull();
     await userEvent.click(btn("View letter"));
@@ -326,8 +326,8 @@ describe("the detail", () => {
 
   it("a checking letter can't be verified yet", async () => {
     await open();
-    await pick("Havana Hospital", "All");
-    // The newest Havana letter in All is cl_check, still being checked.
+    await pick("Pilot Hospital", "All");
+    // The newest Pilot Hospital letter in All is cl_check, still being checked.
     expect(
       within(detail()).getByText(
         "Can't verify while the file is being checked",
@@ -375,11 +375,11 @@ describe("verify and reject", () => {
 
   it("a refusal whose reload takes the buttons away keeps the focus in the letter, and says it once", async () => {
     await open();
-    await pick("Havana Hospital");
+    await pick("Pilot Hospital");
     vi.spyOn(api, "verifyClearance").mockRejectedValueOnce(
       new ApiError(409, "same_side"),
     );
-    // The server now says this admin is linked to Havana.
+    // The server now says this admin is linked to Pilot Hospital.
     const real = api.getClearance.bind(api);
     vi.spyOn(api, "getClearance").mockImplementation(async (id) => ({
       ...(await real(id)),
@@ -429,9 +429,9 @@ describe("verify and reject", () => {
     expect(btn("Reject")).toHaveFocus();
   });
 
-  it("Bola sees You can't verify letters from a hospital you're linked to on Havana, and no buttons", async () => {
+  it("Bola sees You can't verify letters from a hospital you're linked to on Pilot Hospital, and no buttons", async () => {
     await open(BOLA);
-    await pick("Havana Hospital");
+    await pick("Pilot Hospital");
     expect(within(detail()).getByText(SAME_SIDE)).toBeInTheDocument();
     for (const name of ["Verify", "Reject", "Revoke"]) noBtn(name);
   });
@@ -441,7 +441,7 @@ describe("verify and reject", () => {
     vi.spyOn(api, "verifyClearance").mockRejectedValueOnce(
       new ApiError(409, "same_side"),
     );
-    await pick("Havana Hospital");
+    await pick("Pilot Hospital");
     await verifyWithCode();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(within(detail()).getByText(SAME_SIDE)).toBeInTheDocument();
@@ -449,7 +449,7 @@ describe("verify and reject", () => {
 
   it("Tunde sees You can't verify a letter that covers you on cl_wait, and no buttons; a forced same_person reply shows the same words", async () => {
     await open(TUNDE);
-    await pick("Havana Hospital");
+    await pick("Pilot Hospital");
     expect(within(detail()).getByText(COVERS_YOU)).toBeInTheDocument();
     for (const name of ["Verify", "Reject", "Revoke"]) noBtn(name);
     cleanup();
@@ -458,7 +458,7 @@ describe("verify and reject", () => {
     vi.spyOn(api, "verifyClearance").mockRejectedValueOnce(
       new ApiError(409, "same_person"),
     );
-    await pick("Havana Hospital");
+    await pick("Pilot Hospital");
     await verifyWithCode();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(within(detail()).getByText(COVERS_YOU)).toBeInTheDocument();

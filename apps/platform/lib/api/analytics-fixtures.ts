@@ -39,7 +39,7 @@ const COMPUTED_AFTER = 20 * MIN;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 const person = (id: string, name: string): Person => ({ id, name });
-const HAVANA = person("h_havana", "Havana Hospital");
+const PILOT = person("h_pilot", "Pilot Hospital");
 const NORTHGATE = person("h_northgate", "Northgate General Hospital");
 const RIVERSIDE = person("h_riverside", "Riverside Children's Hospital");
 const LAKESIDE = person("h_lakeside", "Lakeside Community Clinic");
@@ -83,10 +83,10 @@ const NONE: Daily = {
   degraded: 0,
 };
 
-/** In list order. Havana is healthy; each other one proves a rule. */
+/** In list order. Pilot Hospital is healthy; each other one proves a rule. */
 const PROFILES: Profile[] = [
   {
-    hospital: HAVANA,
+    hospital: PILOT,
     staff: 186,
     clinicians: { week: 52, month: 61, quarter: 66 },
     previous: {
@@ -210,8 +210,8 @@ export function seedChanges(now: number, mode: AnalyticsMode): Change[] {
       version: 1,
     },
     {
-      id: "chg_hav_needs_review",
-      hospital: HAVANA,
+      id: "chg_plt_needs_review",
+      hospital: PILOT,
       area: "quality",
       measure: "needs_review_share",
       direction: "better",
@@ -236,8 +236,8 @@ export function seedChanges(now: number, mode: AnalyticsMode): Change[] {
       version: 1,
     },
     {
-      id: "chg_hav_agreement",
-      hospital: HAVANA,
+      id: "chg_plt_agreement",
+      hospital: PILOT,
       area: "quality",
       measure: "agreement_rate",
       direction: "better",
@@ -275,9 +275,9 @@ export function seedChanges(now: number, mode: AnalyticsMode): Change[] {
 const FLAGGED_AFTER_MIN: Record<string, number> = {
   chg_ngh_needs_review: 40,
   chg_ngh_questions: 40,
-  chg_hav_needs_review: 40,
+  chg_plt_needs_review: 40,
   chg_all_questions: 40,
-  chg_hav_agreement: 40,
+  chg_plt_agreement: 40,
   // An older change, flagged again each week since.
   chg_rch_questions: -7 * 24 * 60 + 40,
 };

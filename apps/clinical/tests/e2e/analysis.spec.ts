@@ -174,7 +174,7 @@ test("the analyst signs in and opens Analysis from the sidebar", async ({
 }) => {
   await asAnalyst(page);
   await expect(
-    page.getByText("Havana Hospital").filter({ visible: true }).first(),
+    page.getByText("Pilot Hospital").filter({ visible: true }).first(),
   ).toBeVisible();
   await expect(
     page.getByText("Counts only; groups of fewer than 5 are hidden."),

@@ -35,8 +35,8 @@ const show = async (id: string, user = ADA, over?: Partial<Hospital>) => {
 };
 
 describe("a hospital's record connections", () => {
-  it("Havana's page lists Main record and Results system", async () => {
-    await show("h_havana");
+  it("Pilot Hospital's page lists Main record and Results system", async () => {
+    await show("h_pilot");
     const list = await screen.findByRole("list", {
       name: "Patient record connections",
     });
@@ -55,12 +55,12 @@ describe("a hospital's record connections", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Add a connection" }),
-    ).toHaveAttribute("href", "/connections/new?hospital=h_havana");
+    ).toHaveAttribute("href", "/connections/new?hospital=h_pilot");
   });
 
   it("offline it says so instead of loading forever", async () => {
     onlineManager.setOnline(false);
-    await show("h_havana");
+    await show("h_pilot");
     expect(
       await screen.findByText("You're offline. This needs a connection."),
     ).toBeVisible();
@@ -90,7 +90,7 @@ describe("a hospital's record connections", () => {
   });
 
   it("a removed hospital shows its rows read-only and no Add", async () => {
-    await show("h_havana", ADA, { status: "removed" });
+    await show("h_pilot", ADA, { status: "removed" });
     await screen.findByRole("link", { name: /Main record/ });
     expect(screen.queryByRole("link", { name: "Add a connection" })).toBeNull();
   });

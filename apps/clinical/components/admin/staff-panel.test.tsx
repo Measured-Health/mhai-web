@@ -63,7 +63,7 @@ describe("StaffPanel", () => {
       await within(panel).findByText("Dr. Kofi Mensah"),
     ).toBeInTheDocument();
     expect(
-      within(panel).getByText(/k\.mensah@havanahospital\.org/),
+      within(panel).getByText(/k\.mensah@pilot-hospital\.example/),
     ).toBeInTheDocument();
     expect(within(panel).getByText("Two-step not set up")).toBeInTheDocument();
     expect(

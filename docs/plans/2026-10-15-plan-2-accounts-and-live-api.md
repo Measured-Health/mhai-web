@@ -317,11 +317,11 @@ const fail = async (p: Promise<unknown>) => {
 describe("mock auth client", () => {
   it("signs a normal clinician straight in", async () => {
     const c = createMockAuthClient();
-    const r = await c.signIn("a.reyes@havanahospital.org", "anything");
+    const r = await c.signIn("a.reyes@pilot-hospital.example", "anything");
     expect(r).toMatchObject({ status: "signed_in", steps: [] });
     if (r.status !== "signed_in") throw new Error();
     expect(r.user).toMatchObject({
-      email: "a.reyes@havanahospital.org",
+      email: "a.reyes@pilot-hospital.example",
       role: "clinician",
       displayName: "Dr. Reyes",
       mfaEnabled: true,
@@ -647,7 +647,7 @@ function userFor(login: string, role: Role, mfaEnabled: boolean): User {
         ? "Hospital admin"
         : "Auditor",
     specialty: clinician ? "Internal Medicine" : null,
-    hospital: "Havana Hospital",
+    hospital: "Pilot Hospital",
     mfaEnabled,
   };
 }
@@ -746,7 +746,7 @@ export function createMockAuthClient({
     },
 
     async signInWithHospital() {
-      const u = userFor("a.reyes@havanahospital.org", "clinician", true);
+      const u = userFor("a.reyes@pilot-hospital.example", "clinician", true);
       startSession(u);
       return { status: "signed_in", user: u, steps: [] };
     },
@@ -902,27 +902,27 @@ export const MOCK_NEW_BACKUP_CODES = MOCK_BACKUP_CODES.map((c) =>
 /** Sample accounts for the demo's sign-in page. Any other email works too. */
 export const SAMPLE_ACCOUNTS = [
   {
-    email: "a.reyes@havanahospital.org",
+    email: "a.reyes@pilot-hospital.example",
     label: "Clinician",
     note: "Signs straight in",
   },
   {
-    email: "mfa.okafor@havanahospital.org",
+    email: "mfa.okafor@pilot-hospital.example",
     label: "Clinician with two-step",
     note: "Code 123456",
   },
   {
-    email: "new.bello@havanahospital.org",
+    email: "new.bello@pilot-hospital.example",
     label: "New account",
     note: "First sign-in steps",
   },
   {
-    email: "admin.adeyemi@havanahospital.org",
+    email: "admin.adeyemi@pilot-hospital.example",
     label: "Hospital admin",
     note: "Shows the 403 page",
   },
   {
-    email: "locked.eze@havanahospital.org",
+    email: "locked.eze@pilot-hospital.example",
     label: "Locked account",
     note: "Shows the lock",
   },
@@ -970,7 +970,7 @@ function userFor(login: string, role: Role, mfaEnabled: boolean): User {
     email: login.includes("@") ? login : null,
     ...(PEOPLE[trigger(login)] ?? REYES),
     role,
-    hospital: "Havana Hospital",
+    hospital: "Pilot Hospital",
     mfaEnabled,
     backupCodesLeft: mfaEnabled ? 8 : null,
   };
@@ -1073,7 +1073,7 @@ null): string | null`;
 import { describe, expect, it } from "vitest";
 import { passwordError, passwordRules } from "./password-rules";
 
-const ok = (pw: string, id: string | null = "a.reyes@havanahospital.org") =>
+const ok = (pw: string, id: string | null = "a.reyes@pilot-hospital.example") =>
   Object.fromEntries(passwordRules(pw, id).map((r) => [r.id, r.ok]));
 
 describe("passwordRules", () => {
@@ -1130,7 +1130,7 @@ function Harness({ showErrors = false }: { showErrors?: boolean }) {
       confirm={confirm}
       onNext={setNext}
       onConfirm={setConfirm}
-      identity="a.reyes@havanahospital.org"
+      identity="a.reyes@pilot-hospital.example"
       showErrors={showErrors}
     />
   );
@@ -1500,13 +1500,13 @@ import { SessionProvider } from "@/lib/session-store";
 
 export const TEST_USER: User = {
   username: "a.reyes",
-  email: "a.reyes@havanahospital.org",
+  email: "a.reyes@pilot-hospital.example",
   displayName: "Dr. Reyes",
   fullName: "Dr. Ana Reyes",
   role: "clinician",
   roleTitle: "Attending physician",
   specialty: "Internal Medicine",
-  hospital: "Havana Hospital",
+  hospital: "Pilot Hospital",
   mfaEnabled: true,
 };
 
@@ -2104,13 +2104,13 @@ git mv "app/(clinical)/ended" app/ended
 
 `components/shell/sidebar.test.tsx`: import `renderWithAuth` from
 `@/tests/auth-wrapper`, and replace every `render(<Sidebar` with
-`renderWithAuth(<Sidebar`. The "Havana Hospital" assertion keeps passing.
+`renderWithAuth(<Sidebar`. The "Pilot Hospital" assertion keeps passing.
 Add one test:
 
 ```tsx
 it("hides the account footer when nobody is signed in", () => {
   renderWithAuth(<Sidebar items={[]} />, null);
-  expect(screen.queryByText("Havana Hospital")).not.toBeInTheDocument();
+  expect(screen.queryByText("Pilot Hospital")).not.toBeInTheDocument();
 });
 ```
 
@@ -2174,7 +2174,7 @@ empty mock session, so sign in after each `goto`. Add:
 ```ts
 async function signIn(page: Page) {
   await page.goto("/sign-in");
-  await page.getByLabel("Work email").fill("a.reyes@havanahospital.org");
+  await page.getByLabel("Work email").fill("a.reyes@pilot-hospital.example");
   await page.getByLabel("Password").fill("demo-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
@@ -2322,7 +2322,7 @@ async function signIn(login: string, password: string) {
 describe("SignInForm", () => {
   it("signs a clinician in and goes home", async () => {
     page();
-    await signIn("a.reyes@havanahospital.org", "pw");
+    await signIn("a.reyes@pilot-hospital.example", "pw");
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
   });
 
@@ -2861,11 +2861,11 @@ it("fills the form from a sample account", async () => {
   page();
   await userEvent.click(
     screen.getByRole("button", {
-      name: /Use New account \(new\.bello@havanahospital\.org\)/,
+      name: /Use New account \(new\.bello@pilot-hospital\.example\)/,
     }),
   );
   expect(screen.getByLabelText("Work email")).toHaveValue(
-    "new.bello@havanahospital.org",
+    "new.bello@pilot-hospital.example",
   );
   expect(screen.getByLabelText("Password")).toHaveValue("demo-password");
 });
@@ -3615,7 +3615,7 @@ describe("WelcomeFlow", () => {
       </ToastProvider>,
       null,
     );
-    await act(() => auth.signIn("new.nurse@havanahospital.org", "temp"));
+    await act(() => auth.signIn("new.nurse@pilot-hospital.example", "temp"));
 
     expect(screen.getByText("Step 1 of 4 · First sign-in")).toBeInTheDocument();
     const go = screen.getByRole("button", { name: "Continue" });
@@ -5125,7 +5125,7 @@ describe("AccountMenu", () => {
     renderWithAuth(<AccountMenu rail={false} />);
     const button = screen.getByRole("button", { name: "Account: Dr. Reyes" });
     expect(button).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByText("Havana Hospital")).toBeInTheDocument();
+    expect(screen.getByText("Pilot Hospital")).toBeInTheDocument();
     await userEvent.click(button);
     expect(screen.getByRole("menu", { name: "Account" })).toBeInTheDocument();
     expect(screen.getByText(TEST_USER.email!)).toBeInTheDocument();
@@ -10192,7 +10192,10 @@ Export them all. Make `signIn` take an optional email, and add
 `openAccountMenu`:
 
 ```ts
-export async function signIn(page: Page, email = "a.reyes@havanahospital.org") {
+export async function signIn(
+  page: Page,
+  email = "a.reyes@pilot-hospital.example",
+) {
   await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(email);
   await page.getByLabel("Password").fill("demo-password");
@@ -10251,7 +10254,7 @@ test("sign in, see your name, sign out from the account menu", async ({
 });
 
 test("two-step code, including a wrong one first", async ({ page }) => {
-  await signIn(page, "mfa.reyes@havanahospital.org");
+  await signIn(page, "mfa.reyes@pilot-hospital.example");
   await expect(page).toHaveURL(/\/sign-in\/code$/);
   await page.getByLabel("Digit 1 of 6").click();
   await page.keyboard.type("000000");
@@ -10273,7 +10276,7 @@ test("a deep link to the code step with nothing pending goes to sign-in", async 
 test("first sign-in: terms, password, two-step, backup codes", async ({
   page,
 }) => {
-  await signIn(page, "new.nurse@havanahospital.org");
+  await signIn(page, "new.nurse@pilot-hospital.example");
   await expect(page).toHaveURL(/\/welcome$/);
   await page.getByLabel("I understand and agree to use MHAI this way").check();
   await page.getByRole("button", { name: "Continue" }).click();
@@ -10293,7 +10296,7 @@ test("first sign-in: terms, password, two-step, backup codes", async ({
 test("an admin account sees the 403 page, never the clinical app", async ({
   page,
 }) => {
-  await signIn(page, "admin@havanahospital.org");
+  await signIn(page, "admin@pilot-hospital.example");
   await expect(page).toHaveURL(/\/no-access$/);
   await expect(
     page.getByRole("heading", { name: "You don't have access" }),
@@ -10310,7 +10313,7 @@ test("wrong passwords count down, and the message never confirms the account", a
   page,
 }) => {
   await page.goto("/sign-in");
-  await page.getByLabel("Work email").fill("x@havanahospital.org");
+  await page.getByLabel("Work email").fill("x@pilot-hospital.example");
   await page.getByLabel("Password").fill("wrong");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const alert = page.getByRole("alert");

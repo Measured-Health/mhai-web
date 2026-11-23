@@ -31,7 +31,7 @@ import { ApiError } from "./errors";
 import { INVITE_DAYS } from "../admin/invite";
 import { auditEvents } from "./mock-audit";
 
-export const MOCK_HOSPITAL = "Havana Hospital";
+export const MOCK_HOSPITAL = "Pilot Hospital";
 export const ACTIVITY_PAGE_SIZE = 50;
 const MIN = 60_000;
 const H = 60 * MIN;
@@ -104,7 +104,7 @@ function person(now: number, p: Seed): StaffOut {
   });
 }
 
-/** 12 synthetic people at Havana Hospital; an invite adds more. Names are invented. */
+/** 12 synthetic people at Pilot Hospital; an invite adds more. Names are invented. */
 function seedStaff(now: number): StaffOut[] {
   return [
     {
@@ -138,7 +138,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-okafor",
       name: "Dr. Chidi Okafor",
       display: "Dr. Okafor",
-      email: "c.okafor@havanahospital.org",
+      email: "c.okafor@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Infectious disease",
       activeAgo: 2 * H,
@@ -147,7 +147,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-bello",
       name: "Dr. Tunde Bello",
       display: "Dr. Bello",
-      email: "t.bello@havanahospital.org",
+      email: "t.bello@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Internal Medicine",
       signIn: "password_mfa",
@@ -157,7 +157,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-mensah",
       name: "Dr. Kofi Mensah",
       display: "Dr. Mensah",
-      email: "k.mensah@havanahospital.org",
+      email: "k.mensah@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Cardiology",
       issues: ["mfa_not_set_up"],
@@ -168,7 +168,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-eze",
       name: "Dr. James Eze",
       display: "Dr. Eze",
-      email: "j.eze@havanahospital.org",
+      email: "j.eze@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Surgery",
       status: "deactivated",
@@ -178,7 +178,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-udo",
       name: "Dr. Amaka Udo",
       display: "Dr. Udo",
-      email: "a.udo@havanahospital.org",
+      email: "a.udo@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Paediatrics",
       activeAgo: 3 * H,
@@ -187,7 +187,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-owusu",
       name: "Dr. Samuel Owusu",
       display: "Dr. Owusu",
-      email: "s.owusu@havanahospital.org",
+      email: "s.owusu@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Emergency medicine",
       signIn: "password_mfa",
@@ -197,7 +197,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-danjuma",
       name: "Dr. Yusuf Danjuma",
       display: "Dr. Danjuma",
-      email: "y.danjuma@havanahospital.org",
+      email: "y.danjuma@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Internal Medicine",
       activeAgo: 4 * D,
@@ -215,7 +215,7 @@ function seedStaff(now: number): StaffOut[] {
       id: "s-long",
       name: "Dr. Oluwaseun Adebayo-Ogunleye-Fashola",
       display: "Dr. Adebayo-Ogunleye-Fashola",
-      email: "o.adebayo-ogunleye-fashola@havanahospital.org",
+      email: "o.adebayo-ogunleye-fashola@pilot-hospital.example",
       roles: ["clinician"],
       specialty: "Infectious disease",
       activeAgo: 9 * D,

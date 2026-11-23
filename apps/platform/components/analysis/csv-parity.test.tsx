@@ -104,7 +104,7 @@ const QUERIES: AnalysisQuery[] = [
   emptyQuery("all", null),
   { ...emptyQuery("all", null), sex: "female" },
   { ...emptyQuery("all", null), condition: "d57" },
-  emptyQuery("hospital", "h_havana"),
+  emptyQuery("hospital", "h_pilot"),
   { ...emptyQuery("hospital", "h_northgate"), age_band: "18-39" },
   emptyQuery("hospital", "h_riverside"),
 ];

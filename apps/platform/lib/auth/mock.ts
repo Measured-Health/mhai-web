@@ -53,7 +53,7 @@ export const SAMPLE_ACCOUNTS = [
   {
     email: TEAM_EMAILS.bola,
     label: "Bola Hassan",
-    note: "Platform admin, linked to Havana Hospital",
+    note: "Platform admin, linked to Pilot Hospital",
   },
   { email: TEAM_EMAILS.amara, label: "Amara Eze", note: "Auditor (read-only)" },
   {

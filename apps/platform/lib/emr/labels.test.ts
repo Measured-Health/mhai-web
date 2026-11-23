@@ -24,7 +24,7 @@ const summary = (
   over: Partial<EmrConnectionSummary> = {},
 ): EmrConnectionSummary => ({
   id: "emr_1",
-  hospital: { id: "h_havana", name: "Havana Hospital" },
+  hospital: { id: "h_pilot", name: "Pilot Hospital" },
   type: "fhir_r4",
   type_label: "FHIR R4 server",
   source_label: "Main record",

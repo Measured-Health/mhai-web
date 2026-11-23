@@ -14,7 +14,7 @@
 
 The team wants to show EMR integration end to end, today, on sample data: Measured Health
 connects a hospital's record system; the hospital chooses what MHAI watches and who hears
-about it; clinicians get alerts with the evidence behind them. Havana Hospital is the first
+about it; clinicians get alerts with the evidence behind them. Pilot Hospital is the first
 connected hospital.
 
 ## 2. Goals and non-goals
@@ -50,7 +50,7 @@ routing, category). All on sample data, with the backend contract written down.
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
 | D1  | Measured Health connects each hospital, in the platform admin app: type, base address, write-only credentials ("Set · 20 Oct 2026"), Test connection, on/off, the source label, last sync and errors                                                         | PO                    |
 | D2  | Every change (add, edit, switch on, switch off) asks for the person's two-step code (`StepUpDialog`, `useStepUpCall`). Auditors read only. Every change is in Activity and the audit log, one name per event                                                 | PO                    |
-| D3  | A hospital may have **several connections**, each with its own source label (ADR 0003 §5). Havana has two: "Main record" and "Results system", the labels Plan 5a's sample alerts already use                                                                | Design                |
+| D3  | A hospital may have **several connections**, each with its own source label (ADR 0003 §5). Pilot Hospital has two: "Main record" and "Results system", the labels Plan 5a's sample alerts already use                                                        | Design                |
 | D4  | Connector types and their fields come from the API (ADR 0003 frontend §6); a new type needs no new screen. Sample types: FHIR R4 server, results message feed, scheduled file export                                                                         | Design                |
 | D5  | **Test connection** needs no code (it changes nothing) but is recorded. A connection can be switched on only after a passing test of its saved settings, like single sign-on                                                                                 | Design                |
 | D6  | Sync errors are a closed list of codes shown in words; an unknown code reads "Something went wrong with this connection." Server text is never shown                                                                                                         | Design                |
@@ -100,7 +100,7 @@ routing, category). All on sample data, with the backend contract written down.
 
 - **Connection:** Not tested (new, off) · Connected (on, last sync ok) · Needs attention (on,
   errors) · Switched off. Words and an icon, never colour alone.
-- **Sample hospitals:** Havana: two connections, both Connected. Northgate: Needs attention
+- **Sample hospitals:** Pilot Hospital: two connections, both Connected. Northgate: Needs attention
   (sign-in refused, 3 times today). Riverside: Switched off. Westfield: a new connection, Not
   tested. Eastbrook and the rest: Not connected.
 - **Every list and block:** loading, empty, "Couldn't load {what}" with **Try again**, and

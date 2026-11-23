@@ -439,7 +439,7 @@ spec §10 item 3.
 
 ```text
 ┌────────────┬──────────────────────────────────────────────────────┐
-│ [M] logo   │ Staff · Havana Hospital                [＋ Invite]   │
+│ [M] logo   │ Staff · Pilot Hospital                [＋ Invite]   │
 │ + New      ├──────────────────────────────────────────────────────┤
 │ ⇄ Review 3 │ ⌕ search   All 48 · Active 44 · Invited 2 · ⚠ 1      │
 │ HOSPITAL   │ NAME          ROLES             SPECIALTY  STATUS    │
