@@ -1,3 +1,4 @@
+import { mfaReplaceCalls } from "@mhai/api-client/mfa-replace";
 import {
   AUTH_ERROR_CODES,
   AuthError,
@@ -54,6 +55,9 @@ export function createLiveAuthClient({
     );
   }
 
+  // Step-up calls: refusals come back as ApiError, like other step-ups.
+  const replace = mfaReplaceCalls(fetchImpl);
+
   return {
     capabilities: LIVE_CAPABILITIES,
     async getSession() {
@@ -85,6 +89,8 @@ export function createLiveAuthClient({
       const r = await call<{ backupCodes: string[] }>("/mfa/recovery-codes");
       return r.backupCodes;
     },
+    startMfaReplace: (code, key) => replace.start(code, key),
+    confirmMfaReplace: (code, key) => replace.confirm(code, key),
     requestPasswordReset: (email) => call("/password/forgot", { email }),
     resetPassword: (token, next) => call("/password/reset", { token, next }),
     listDevices: () => call("/devices", undefined, "GET"),

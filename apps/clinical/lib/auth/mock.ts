@@ -1,5 +1,6 @@
 import { normalizeBackupCode } from "@mhai/api-client/codes";
-import { verifyTotp } from "@mhai/api-client/totp";
+import { ApiError } from "@mhai/api-client/errors";
+import { base32Encode, verifyTotp } from "@mhai/api-client/totp";
 import {
   AuthError,
   type AuthClient,
@@ -31,8 +32,12 @@ export const MOCK_NEW_BACKUP_CODES = MOCK_BACKUP_CODES.map((c) =>
 
 /** The demo's authenticator secret: scan the QR code and real app codes work too. */
 export const MOCK_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
+/** The demo's "new app" key when two-step moves to another app. */
+export const MOCK_NEW_TOTP_SECRET = base32Encode("mhai-demo-new-app");
 const LOCK_MS = 15 * 60_000;
 const MAX_TRIES = 5;
+/** How long a move to a new app waits for its first code (core: 15 minutes). */
+export const REPLACE_MS = 15 * 60_000;
 
 export type StepUpResult = "ok" | "invalid" | "locked";
 
@@ -42,31 +47,38 @@ export type StepUpResult = "ok" | "invalid" | "locked";
  * replace the old ones. Wrong tries are counted per person and lock for a while.
  */
 export interface StepUp {
-  /** A current authenticator code (or the demo code). */
-  digitsOk(code: string): Promise<boolean>;
+  /** A current code from the app (or the demo code); `secret`: another app's key. */
+  digitsOk(code: string, secret?: string): Promise<boolean>;
   /** Uses up a backup code if it is current; false if not. */
   takeBackup(code: string): boolean;
   setBackupCodes(codes: string[]): void;
+  /** Moves two-step to another app's key: the old app's codes stop working. */
+  setSecret(secret: string): void;
   /** Called after a backup code is used. */
   onBackupSpent?: () => void;
-  /** Checks a code for `email`, counting wrong tries; locks after five. */
+  /**
+   * Checks a code for `email`, counting wrong tries; locks after five.
+   * `secret` checks a code from another app (a new one being added).
+   */
   check(
     email: string | null,
     auth: { mfaCode: string } | { backupCode: string },
+    secret?: string,
   ): Promise<StepUpResult>;
 }
 
 export function createStepUp(now: () => number = () => Date.now()): StepUp {
   let backupLeft = new Set(MOCK_BACKUP_CODES);
+  let appSecret = MOCK_TOTP_SECRET;
   const failures = new Map<string, number>();
   const lockedUntil = new Map<string, number>();
   const self: StepUp = {
-    async digitsOk(code) {
+    async digitsOk(code, secret = appSecret) {
       const digits = code.replace(/\s/g, "");
-      return (
-        digits === MOCK_CODE ||
-        (await verifyTotp(MOCK_TOTP_SECRET, digits, now()))
-      );
+      return digits === MOCK_CODE || (await verifyTotp(secret, digits, now()));
+    },
+    setSecret(secret) {
+      appSecret = secret;
     },
     takeBackup(code) {
       const c = normalizeBackupCode(code);
@@ -77,13 +89,13 @@ export function createStepUp(now: () => number = () => Date.now()): StepUp {
     setBackupCodes(codes) {
       backupLeft = new Set(codes);
     },
-    async check(email, auth) {
+    async check(email, auth, secret) {
       const key = email?.toLowerCase() ?? "";
       if ((lockedUntil.get(key) ?? 0) > now()) return "locked";
       const ok =
         "backupCode" in auth
           ? self.takeBackup(auth.backupCode)
-          : await self.digitsOk(auth.mfaCode);
+          : await self.digitsOk(auth.mfaCode, secret);
       if (ok) {
         failures.delete(key);
         return "ok";
@@ -268,9 +280,12 @@ export function createMockAuthClient({
   const failures = new Map<string, number>();
   const lockedUntil = new Map<string, number>();
   let devices: Device[] = [];
+  /** A move to a new app waiting for its first code (memory only). */
+  let replacing: { secret: string; at: number } | null = null;
 
   const startSession = (u: User, owed: FirstStep[] = []): void => {
     session = u;
+    replacing = null;
     steps = owed;
     devices = [
       {
@@ -388,6 +403,7 @@ export function createMockAuthClient({
       session = null;
       steps = [];
       pending = null;
+      replacing = null;
     },
 
     async acceptTerms() {
@@ -405,6 +421,7 @@ export function createMockAuthClient({
     async startMfaSetup() {
       const u = requireSession();
       codes.setBackupCodes(MOCK_BACKUP_CODES);
+      codes.setSecret(MOCK_TOTP_SECRET);
       return {
         // Authenticator apps list it as "MHAI Demo" over the email, so the
         // shared demo key is never mistaken for a real MHAI account.
@@ -426,6 +443,43 @@ export function createMockAuthClient({
       codes.setBackupCodes(MOCK_NEW_BACKUP_CODES);
       session = { ...u, backupCodesLeft: 10 };
       return [...MOCK_NEW_BACKUP_CODES];
+    },
+
+    // Core's rules: a step-up starts it, the current app works until the
+    // new app's code confirms it (within 15 minutes), the backup codes stay.
+    async startMfaReplace(code) {
+      const u = session;
+      if (!u) throw new ApiError(401, "session_expired");
+      if (!u.mfaEnabled) throw new ApiError(403, "mfa_required");
+      const r = await codes.check(
+        u.email,
+        "backup_code" in code
+          ? { backupCode: code.backup_code }
+          : { mfaCode: code.mfa_code },
+      );
+      if (r === "locked") throw new ApiError(429, "mfa_locked");
+      if (r === "invalid") throw new ApiError(403, "mfa_invalid");
+      replacing = { secret: MOCK_NEW_TOTP_SECRET, at: now() };
+      const label = encodeURIComponent("MHAI Demo");
+      return {
+        otpauthUri: `otpauth://totp/${label}:${encodeURIComponent(u.email ?? u.username)}?secret=${MOCK_NEW_TOTP_SECRET}&issuer=${label}&algorithm=SHA1&digits=6&period=30`,
+        secret: MOCK_NEW_TOTP_SECRET,
+      };
+    },
+
+    async confirmMfaReplace(code) {
+      const u = session;
+      if (!u) throw new ApiError(401, "session_expired");
+      const waiting = replacing;
+      if (!waiting || now() - waiting.at > REPLACE_MS) {
+        replacing = null;
+        throw new ApiError(409, "conflict");
+      }
+      const r = await codes.check(u.email, { mfaCode: code }, waiting.secret);
+      if (r === "locked") throw new ApiError(429, "mfa_locked");
+      if (r === "invalid") throw new ApiError(403, "mfa_invalid");
+      codes.setSecret(waiting.secret);
+      replacing = null;
     },
 
     async requestPasswordReset() {
@@ -451,6 +505,7 @@ export function createMockAuthClient({
       devices = [];
       session = null;
       steps = [];
+      replacing = null;
     },
   };
 }

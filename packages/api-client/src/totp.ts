@@ -21,6 +21,28 @@ function base32Decode(input: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
+/**
+ * Text as an authenticator key (RFC 4648 base32, no padding). For the demo
+ * and tests only: their keys are made from plain words at run time, so no
+ * key-like string sits in the source.
+ */
+export function base32Encode(text: string): string {
+  let bits = 0;
+  let value = 0;
+  let out = "";
+  for (const byte of new TextEncoder().encode(text)) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      out += ALPHABET[(value >> bits) & 31];
+    }
+    value &= (1 << bits) - 1;
+  }
+  if (bits > 0) out += ALPHABET[(value << (5 - bits)) & 31];
+  return out;
+}
+
 export async function totp(
   secretBase32: string,
   timeMs: number,

@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Move two-step to a new authenticator app, from the Account page, in both
+  apps (product owner, 24 Nov).** "Move to a new app" asks for the current
+  6-digit code or a backup code, shows the new app's QR code and key exactly
+  as first-time setup does, then takes a code from the new app: "Your new app
+  is set up. Your old app no longer works. Remembered devices have been signed
+  out; your backup codes haven't changed." After 15 minutes it says "That took
+  too long. Start again." New BFF routes `POST /api/auth/mfa/replace` and
+  `/api/auth/mfa/replace/confirm` forward exact bodies (`{mfa_code}` or
+  `{backup_code}`, then `{code}`) with an Idempotency-Key, refuse any other key,
+  and check core's `otpauth_uri` strictly (otpauth, totp, issuer MHAI, base32
+  secret, SHA1, 6 digits, 30 seconds) before rebuilding it for the page; the
+  replies are `no-store`. The key is held in the dialog's state only (the
+  mutations use `gcTime: 0` and are reset after every answer) and is dropped
+  when the move ends, is cancelled or runs out of time. The clinical app also
+  forgets this browser's remembered-device token after the move. The demo
+  (mock) clients follow the same rules. Needs core's `POST /auth/mfa/replace`
+  (mhai-multiagent) deployed first. First-time setup's QR block is now the
+  shared `ScanApp` component in each app.
+
 ### Fixed
 
 - **Platform app: a browser tab icon.** platforms. had no favicon (404); it

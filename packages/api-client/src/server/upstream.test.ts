@@ -24,6 +24,20 @@ describe("callUpstream", () => {
     });
     expect(init.body).toBe('{"a":1}');
   });
+  it("sends an Idempotency-Key only when given one", async () => {
+    const fetchImpl = vi.fn(async () => Response.json({}));
+    await callUpstream("http://api.test", "/x", {
+      method: "POST",
+      idempotencyKey: "k-1",
+      fetchImpl,
+    });
+    await callUpstream("http://api.test", "/y", { method: "POST", fetchImpl });
+    const headers = fetchImpl.mock.calls.map(
+      (c) => (c as unknown as [string, RequestInit])[1].headers,
+    );
+    expect(headers[0]).toMatchObject({ "Idempotency-Key": "k-1" });
+    expect(headers[1]).not.toHaveProperty("Idempotency-Key");
+  });
   it("a non-ok reply throws UpstreamError with the body's code", async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json(

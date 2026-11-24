@@ -117,6 +117,11 @@ export async function writeTrust(deviceToken: string) {
   );
 }
 
+/** Drops this browser's remembered-device token (core revoked it). */
+export async function forgetTrust() {
+  (await cookies()).delete(TRUST_COOKIE);
+}
+
 /** Seals a fresh API token into the session cookie and drops any MFA step. */
 export async function startSession(
   r: ApiLoginOk,
