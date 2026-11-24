@@ -15,6 +15,8 @@ describe("the AI model's words", () => {
     expect(policyLabel("xai")).toBe("xAI (cloud)");
     expect(policyLabel("gemini")).toBe("Google Gemini (cloud)");
     expect(policyLabel(null)).toBe("MHAI's own model");
+    expect(policyLabel(null, true)).toBe("MHAI's own model (GPU server)");
+    expect(policyLabel("anthropic", true)).toBe("Anthropic (cloud)");
   });
 
   it("a provider code it doesn't know is shown as it is, and is never off", () => {

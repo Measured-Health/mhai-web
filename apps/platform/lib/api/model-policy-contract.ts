@@ -59,6 +59,12 @@ export type ModelPolicy = {
   provider_code: string | null;
   agreement_ref: string | null;
   monthly_token_budget: number;
+  /**
+   * Whether the hospital's questions go to MHAI's own answer model on the
+   * GPU server (core 1.35.0); never with a cloud provider. False when the
+   * reply comes from a core before 1.35.0, which doesn't send it.
+   */
+  own_model: boolean;
   /** null when no policy was ever set. */
   updated_at: string | null;
   /** This month's (UTC) token ledger; zeros when nothing was used. */
@@ -90,7 +96,10 @@ export interface ModelPolicyClient {
 const MONTH = /^[0-9]{4}-(0[1-9]|1[0-2])$/;
 const COUNT = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 
-/** `ModelPolicy` as core 1.16.0 sends it: these keys and no others. */
+/**
+ * `ModelPolicy` as core sends it: these keys and no others. `own_model`
+ * came in 1.35.0; an older core leaves it out (read as false).
+ */
 const MODEL_POLICY = z
   .strictObject({
     hospital_id: z.string(),
@@ -98,6 +107,7 @@ const MODEL_POLICY = z
     provider_code: z.string().regex(PROVIDER_CODE).nullable(),
     agreement_ref: z.string().regex(AGREEMENT_REF).nullable(),
     monthly_token_budget: COUNT.min(1).max(BUDGET_MAX),
+    own_model: z.boolean().optional(),
     updated_at: z
       .string()
       .refine((s) => !Number.isNaN(Date.parse(s)))
@@ -116,7 +126,10 @@ const MODEL_POLICY = z
       : p === null,
   )
   // A provider needs its reference.
-  .refine((v) => v.provider_code === null || v.agreement_ref !== null);
+  .refine((v) => v.provider_code === null || v.agreement_ref !== null)
+  // One route per hospital: our own model never with a cloud provider.
+  .refine((v) => v.own_model !== true || v.provider_code === null)
+  .transform((v) => ({ ...v, own_model: v.own_model ?? false }));
 
 /**
  * Reads a policy reply, failing closed: anything the contract doesn't allow

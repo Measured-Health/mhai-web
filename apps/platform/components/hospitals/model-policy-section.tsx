@@ -138,7 +138,9 @@ function ReadView({ policy: p }: { policy: ModelPolicy }) {
       <dl className="grid gap-x-6 gap-y-3 text-[13.5px] sm:grid-cols-[160px_1fr]">
         {/* `provider_code`, never `cloud_provider`: that is null for Gemini
             (core 1.16.0), which is on, not off. */}
-        <Row term="Drafts answers">{policyLabel(p.provider_code)}</Row>
+        <Row term="Drafts answers">
+          {policyLabel(p.provider_code, p.own_model)}
+        </Row>
         {p.provider_code !== null && (
           <Row term="Agreement reference">
             <span className="font-mono">{p.agreement_ref}</span>

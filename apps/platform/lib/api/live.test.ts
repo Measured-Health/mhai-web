@@ -263,6 +263,7 @@ const POLICY = () =>
     provider_code: "anthropic",
     agreement_ref: "DEMO-SYNTHETIC",
     monthly_token_budget: 2_000_000,
+    own_model: false,
     updated_at: "2026-11-05T09:00:00Z",
     usage: { month: "2026-11", used: 10, reserved: 0 },
   });
@@ -1717,6 +1718,7 @@ describe("live platform client", () => {
         provider_code: "gemini",
         agreement_ref: "DPA-2026-0107",
         monthly_token_budget: 500_000,
+        own_model: false,
         updated_at: "2026-11-05T09:00:00Z",
         usage: { month: "2026-11", used: 95_000, reserved: 0 },
       };

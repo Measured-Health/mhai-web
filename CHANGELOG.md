@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Platform app: a hospital's AI model section loads again.** Core 1.35.0
+  added `own_model` to the model policy reply, and the app's strict reader
+  refused the unknown key, so the section said it couldn't load. The reader
+  now takes `own_model` (a reply without it, from an older core, reads as
+  off), refuses `own_model` with a cloud provider, and the section shows
+  "MHAI's own model (GPU server)" when it is on. The form never sends it,
+  so a change keeps it while there is no provider, as core does.
+
 ### Changed
 
 - **Live site: the public demo is dropped (product owner, 22 Nov).** With the

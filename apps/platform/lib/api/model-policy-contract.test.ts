@@ -8,6 +8,7 @@ const GOOD = {
   provider_code: "anthropic",
   agreement_ref: "DEMO-SYNTHETIC",
   monthly_token_budget: 2_000_000,
+  own_model: false,
   updated_at: "2026-11-05T09:00:00Z",
   usage: { month: "2026-11", used: 1_240_000, reserved: 12_000 },
 };
@@ -46,6 +47,15 @@ describe("readModelPolicy", () => {
     expect(readModelPolicy(OFF, ID)).toEqual(OFF);
   });
 
+  it("reads own_model (core 1.35.0), and a reply without it as off", () => {
+    expect(readModelPolicy({ ...OFF, own_model: true }, ID).own_model).toBe(
+      true,
+    );
+    const older: Record<string, unknown> = { ...OFF };
+    delete older.own_model;
+    expect(readModelPolicy(older, ID).own_model).toBe(false);
+  });
+
   it("reads Gemini from provider_code, with cloud_provider null", () => {
     expect(readModelPolicy(GEMINI, ID)).toEqual(GEMINI);
   });
@@ -79,6 +89,8 @@ describe("readModelPolicy", () => {
     ["a text count", { ...GOOD, usage: { ...GOOD.usage, reserved: "5" } }],
     ["a bad month", { ...GOOD, usage: { ...GOOD.usage, month: "2026-13" } }],
     ["an extra key", { ...GOOD, api_key: "x" }],
+    ["own model with a provider", { ...GOOD, own_model: true }],
+    ["own model not a boolean", { ...OFF, own_model: "yes" }],
     ["an extra usage key", { ...GOOD, usage: { ...GOOD.usage, cost: 1 } }],
     ["a missing key", { ...GOOD, updated_at: undefined }],
     ["a bad date", { ...GOOD, updated_at: "yesterday" }],

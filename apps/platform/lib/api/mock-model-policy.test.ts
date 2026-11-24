@@ -59,6 +59,7 @@ describe("mock AI model policy", () => {
       provider_code: "anthropic",
       agreement_ref: "DEMO-SYNTHETIC",
       monthly_token_budget: 2_000_000,
+      own_model: false,
       updated_at: "2026-11-03T09:30:00.000Z",
       usage: { month: "2026-11", used: 1_240_000, reserved: 12_000 },
     });
@@ -72,6 +73,7 @@ describe("mock AI model policy", () => {
       provider_code: "gemini",
       agreement_ref: "DPA-2026-0107",
       monthly_token_budget: 500_000,
+      own_model: false,
       updated_at: "2026-11-05T09:30:00.000Z",
       usage: { month: "2026-11", used: 95_000, reserved: 0 },
     });
@@ -269,6 +271,7 @@ describe("mock AI model policy", () => {
       "cloud_provider",
       "hospital_id",
       "monthly_token_budget",
+      "own_model",
       "provider_code",
       "updated_at",
       "usage",
