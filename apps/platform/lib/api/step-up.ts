@@ -1,21 +1,28 @@
 import { normalizeBackupCode } from "@mhai/api-client/codes";
+import { offerNewBackupCode } from "@mhai/api-client/new-backup-code";
 import { ApiError } from "@mhai/api-client/errors";
 import { verifyTotp } from "@mhai/api-client/totp";
 
 /** The demo's two-step code. */
 export const MOCK_CODE = "123456";
-/** The demo's backup codes (the clinical demo's set), each usable once. */
+/** An obviously synthetic code in core's shape: "aaaaa-aaaaa" for "a". */
+const fakeCode = (c: string) => `${c.repeat(5)}-${c.repeat(5)}`;
+/**
+ * The demo's backup codes (the clinical demo's set: synthetic, in core's
+ * shape), in the order they are issued. An account holds one at a time:
+ * using it, or making a new one, moves to the next.
+ */
 export const MOCK_BACKUP_CODES = [
-  "4F7K-92QX",
-  "M8TD-31LP",
-  "Z2HV-7R6C",
-  "Q9WE-5N4B",
-  "K3YU-8J2D",
-  "P6RA-1T9M",
-  "B5NC-4X7H",
-  "W1GZ-6E3V",
-  "D8LS-2K5Q",
-  "H7MF-9P1Y",
+  fakeCode("a"),
+  fakeCode("b"),
+  fakeCode("c"),
+  fakeCode("d"),
+  fakeCode("e"),
+  fakeCode("f"),
+  fakeCode("g"),
+  fakeCode("h"),
+  fakeCode("j"),
+  fakeCode("k"),
 ] as const;
 /** The demo's authenticator secret: real app codes for it work too. */
 export const MOCK_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
@@ -28,20 +35,34 @@ export type StepUpResult = "ok" | "invalid" | "locked";
 
 /**
  * The demo's two-step codes for the platform's sign-in and its step-up
- * actions: one set of backup codes, wrong tries counted per person, five
- * wrong tries lock that person for 15 minutes of the given clock.
+ * actions: one backup code at a time (using it issues the next, as core
+ * does), wrong tries counted per person, five wrong tries lock that person
+ * for 15 minutes of the given clock.
  */
 export interface DemoStepUp {
   /** The demo code or a current authenticator code. */
   digitsOk(code: string): Promise<boolean>;
-  /** Uses up a backup code if it is current; false if not. */
-  takeBackup(code: string): boolean;
-  setBackupCodes(codes: readonly string[]): void;
-  check(email: string | null, code: StepUpCode): Promise<StepUpResult>;
+  /** Uses the backup code if it is the current one: the new one, else null. */
+  takeBackup(code: string): string | null;
+  /** The backup code that works now. */
+  backupCode(): string;
+  /** Replaces the backup code with the next one, and returns it. */
+  nextBackupCode(): string;
+  /** Back to the first code (a new two-step setup). */
+  resetBackupCode(): string;
+  /**
+   * Checks a code. A backup code that works hands its replacement to
+   * `fresh`: by default it is offered as core's reply header would be.
+   */
+  check(
+    email: string | null,
+    code: StepUpCode,
+    fresh?: (code: string) => void,
+  ): Promise<StepUpResult>;
 }
 
 export function createStepUp(now: () => number = () => Date.now()): DemoStepUp {
-  let backupLeft = new Set<string>(MOCK_BACKUP_CODES);
+  let issued = 0;
   const failures = new Map<string, number>();
   const lockedUntil = new Map<string, number>();
   const self: DemoStepUp = {
@@ -53,18 +74,27 @@ export function createStepUp(now: () => number = () => Date.now()): DemoStepUp {
       );
     },
     takeBackup(code) {
-      return backupLeft.delete(normalizeBackupCode(code));
+      if (normalizeBackupCode(code) !== self.backupCode()) return null;
+      return self.nextBackupCode();
     },
-    setBackupCodes(codes) {
-      backupLeft = new Set(codes);
+    backupCode: () => MOCK_BACKUP_CODES[issued % MOCK_BACKUP_CODES.length]!,
+    nextBackupCode() {
+      issued += 1;
+      return self.backupCode();
     },
-    async check(email, code) {
+    resetBackupCode() {
+      issued = 0;
+      return self.backupCode();
+    },
+    async check(email, code, fresh = offerNewBackupCode) {
       const key = email?.toLowerCase() ?? "";
       if ((lockedUntil.get(key) ?? 0) > now()) return "locked";
-      const ok =
-        "backup_code" in code
-          ? self.takeBackup(code.backup_code)
-          : await self.digitsOk(code.mfa_code);
+      let ok: boolean;
+      if ("backup_code" in code) {
+        const next = self.takeBackup(code.backup_code);
+        if (next) fresh(next);
+        ok = next !== null;
+      } else ok = await self.digitsOk(code.mfa_code);
       if (ok) {
         failures.delete(key);
         return "ok";

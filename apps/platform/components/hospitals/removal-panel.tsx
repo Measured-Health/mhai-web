@@ -9,6 +9,7 @@ import {
   type RemovalRequest,
 } from "@/lib/api/contract";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
+import { backupCodesAfterUse } from "@/lib/auth/backup-code-used";
 import { platformError } from "@/lib/errors";
 import {
   useApproveRemoval,
@@ -162,7 +163,7 @@ export function RemovalPanel({ hospital: h }: { hospital: Hospital }) {
         });
         if ("backup_code" in code && user?.backupCodesLeft != null)
           updateUser({
-            backupCodesLeft: Math.max(0, user.backupCodesLeft - 1),
+            backupCodesLeft: backupCodesAfterUse(user.backupCodesLeft),
           });
         close();
       },

@@ -1,9 +1,13 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/lib/auth/auth-context";
-import { MOCK_TOTP_SECRET, createMockAuthClient } from "@/lib/auth/mock";
+import {
+  MOCK_BACKUP_CODES,
+  MOCK_TOTP_SECRET,
+  createMockAuthClient,
+} from "@/lib/auth/mock";
 import { totp } from "@mhai/api-client/totp";
 import { FROM_CLIENT, renderWithAuth, TEST_USER } from "@/tests/auth-wrapper";
 import { ToastProvider } from "@mhai/ui/toast";
@@ -13,7 +17,12 @@ const replace = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace }),
 }));
-beforeEach(() => replace.mockClear());
+beforeEach(() => {
+  replace.mockClear();
+  // The backup code screen waits 3 s before its button works.
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+});
+afterEach(() => vi.useRealTimers());
 
 let auth: ReturnType<typeof useAuth>;
 function Grab() {
@@ -24,9 +33,23 @@ function Grab() {
   return null;
 }
 
+/**
+ * The backup code screen: the one code shows, and its button works only
+ * after the 3-second wait.
+ */
+async function finishSetup(user: ReturnType<typeof userEvent.setup>) {
+  expect(
+    await screen.findByRole("group", { name: "Your backup code" }),
+  ).toHaveTextContent(MOCK_BACKUP_CODES[0]);
+  const finish = screen.getByRole("button", { name: "Finish setup" });
+  expect(finish).toHaveAttribute("aria-disabled", "true");
+  act(() => vi.advanceTimersByTime(3000));
+  await user.click(finish);
+}
+
 describe("WelcomeFlow", () => {
   it("offers a way out on every step: Not you? Sign out", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderWithAuth(
       <ToastProvider>
         <Grab />
@@ -52,7 +75,7 @@ describe("WelcomeFlow", () => {
   });
 
   it("walks a new account through password, two-step, codes, then the terms, then home", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderWithAuth(
       <ToastProvider>
         <Grab />
@@ -88,10 +111,7 @@ describe("WelcomeFlow", () => {
       await screen.findByText("Step 3 of 4 · Just in case"),
     ).toBeInTheDocument();
     expect(auth.user?.mfaEnabled).toBe(true);
-    await user.click(
-      screen.getByLabelText("I've saved these codes somewhere safe"),
-    );
-    await user.click(screen.getByRole("button", { name: "Finish setup" }));
+    await finishSetup(user);
 
     expect(
       await screen.findByText("Step 4 of 4 · Terms of use"),
@@ -106,7 +126,7 @@ describe("WelcomeFlow", () => {
   });
 
   it("the password step needs the temporary password, and says when it's wrong", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderWithAuth(
       <ToastProvider>
         <Grab />
@@ -137,7 +157,7 @@ describe("WelcomeFlow", () => {
   });
 
   it("sends a new hospital admin through the steps, then to the admin side", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderWithAuth(
       <ToastProvider>
         <Grab />
@@ -159,10 +179,7 @@ describe("WelcomeFlow", () => {
     await user.click(screen.getByRole("button", { name: "Save password" }));
     await user.click(await screen.findByLabelText("Digit 1 of 6"));
     await user.keyboard("123456");
-    await user.click(
-      await screen.findByLabelText("I've saved these codes somewhere safe"),
-    );
-    await user.click(screen.getByRole("button", { name: "Finish setup" }));
+    await finishSetup(user);
     await user.click(
       await screen.findByLabelText(
         "I understand and agree to use MHAI this way",
@@ -178,7 +195,7 @@ describe("WelcomeFlow", () => {
   ] as const)(
     "makes %s without two-step set it up before any page (amendment 3)",
     async (_who, roles, home) => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const client = createMockAuthClient();
       await client.signIn("admin.nwosu@pilot-hospital.example", "pw");
       renderWithAuth(
@@ -200,17 +217,14 @@ describe("WelcomeFlow", () => {
       ).toBeInTheDocument();
       await user.click(await screen.findByLabelText("Digit 1 of 6"));
       await user.keyboard("123456");
-      await user.click(
-        await screen.findByLabelText("I've saved these codes somewhere safe"),
-      );
-      await user.click(screen.getByRole("button", { name: "Finish setup" }));
+      await finishSetup(user);
       await waitFor(() => expect(replace).toHaveBeenCalledWith(home));
       expect(auth.user?.mfaEnabled).toBe(true);
     },
   );
 
   it("rejects a wrong setup code and lets you try again", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const client = createMockAuthClient();
     await client.signIn("new@h.org", "temp");
     await client.acceptTerms();
@@ -234,7 +248,7 @@ describe("WelcomeFlow", () => {
   });
 
   it("accepts a real authenticator code for the demo key", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const client = createMockAuthClient();
     await client.signIn("new@h.org", "temp");
     await client.acceptTerms();
@@ -253,7 +267,7 @@ describe("WelcomeFlow", () => {
     expect(
       await screen.findByText("Step 2 of 2 · Just in case"),
     ).toBeInTheDocument();
-    expect(auth.user?.backupCodesLeft).toBe(10);
+    expect(auth.user?.backupCodesLeft).toBe(1);
   });
 
   it("sends a signed-out visitor to sign in", async () => {

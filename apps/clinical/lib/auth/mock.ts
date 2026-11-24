@@ -1,4 +1,6 @@
 import { normalizeBackupCode } from "@mhai/api-client/codes";
+import { ApiError } from "@mhai/api-client/errors";
+import { offerNewBackupCode } from "@mhai/api-client/new-backup-code";
 import { verifyTotp } from "@mhai/api-client/totp";
 import {
   AuthError,
@@ -12,22 +14,26 @@ import {
 
 export const MOCK_CODE = "123456";
 export const MOCK_RESET_TOKEN = "demo";
+/** An obviously synthetic code in core's shape: "aaaaa-aaaaa" for "a". */
+const fakeCode = (c: string) => `${c.repeat(5)}-${c.repeat(5)}`;
+/**
+ * The demo's backup codes (obviously synthetic, in core's shape), in the order they
+ * are issued. An account holds one at a time: using it, or making a new
+ * one, moves to the next.
+ */
 export const MOCK_BACKUP_CODES = [
-  "4F7K-92QX",
-  "M8TD-31LP",
-  "Z2HV-7R6C",
-  "Q9WE-5N4B",
-  "K3YU-8J2D",
-  "P6RA-1T9M",
-  "B5NC-4X7H",
-  "W1GZ-6E3V",
-  "D8LS-2K5Q",
-  "H7MF-9P1Y",
-];
+  fakeCode("a"),
+  fakeCode("b"),
+  fakeCode("c"),
+  fakeCode("d"),
+  fakeCode("e"),
+  fakeCode("f"),
+  fakeCode("g"),
+  fakeCode("h"),
+  fakeCode("j"),
+  fakeCode("k"),
+] as const;
 export const MOCK_SSO_CODE = "demo-sso";
-export const MOCK_NEW_BACKUP_CODES = MOCK_BACKUP_CODES.map((c) =>
-  c.split("").reverse().join(""),
-);
 
 /** The demo's authenticator secret: scan the QR code and real app codes work too. */
 export const MOCK_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
@@ -38,18 +44,25 @@ export type StepUpResult = "ok" | "invalid" | "locked";
 
 /**
  * The demo's two-step codes, shared by sign-in and by removing staff, so a
- * backup code spent in one place is spent everywhere, and regenerated codes
- * replace the old ones. Wrong tries are counted per person and lock for a while.
+ * backup code spent in one place is spent everywhere. The account holds one
+ * backup code; using it issues the next, as core does. Wrong tries are
+ * counted per person and lock for a while.
  */
 export interface StepUp {
   /** A current authenticator code (or the demo code). */
   digitsOk(code: string): Promise<boolean>;
-  /** Uses up a backup code if it is current; false if not. */
-  takeBackup(code: string): boolean;
-  setBackupCodes(codes: string[]): void;
-  /** Called after a backup code is used. */
-  onBackupSpent?: () => void;
-  /** Checks a code for `email`, counting wrong tries; locks after five. */
+  /** Uses the backup code if it is the current one: the new one, else null. */
+  takeBackup(code: string): string | null;
+  /** The backup code that works now. */
+  backupCode(): string;
+  /** Replaces the backup code with the next one, and returns it. */
+  nextBackupCode(): string;
+  /** Back to the first code (a new two-step setup). */
+  resetBackupCode(): string;
+  /**
+   * Checks a code for `email`, counting wrong tries; locks after five. A
+   * backup code that works offers its replacement as core's reply would.
+   */
   check(
     email: string | null,
     auth: { mfaCode: string } | { backupCode: string },
@@ -57,7 +70,7 @@ export interface StepUp {
 }
 
 export function createStepUp(now: () => number = () => Date.now()): StepUp {
-  let backupLeft = new Set(MOCK_BACKUP_CODES);
+  let issued = 0;
   const failures = new Map<string, number>();
   const lockedUntil = new Map<string, number>();
   const self: StepUp = {
@@ -69,21 +82,28 @@ export function createStepUp(now: () => number = () => Date.now()): StepUp {
       );
     },
     takeBackup(code) {
-      const c = normalizeBackupCode(code);
-      if (!backupLeft.delete(c)) return false;
-      self.onBackupSpent?.();
-      return true;
+      if (normalizeBackupCode(code) !== self.backupCode()) return null;
+      return self.nextBackupCode();
     },
-    setBackupCodes(codes) {
-      backupLeft = new Set(codes);
+    backupCode: () => MOCK_BACKUP_CODES[issued % MOCK_BACKUP_CODES.length]!,
+    nextBackupCode() {
+      issued += 1;
+      return self.backupCode();
+    },
+    resetBackupCode() {
+      issued = 0;
+      return self.backupCode();
     },
     async check(email, auth) {
       const key = email?.toLowerCase() ?? "";
       if ((lockedUntil.get(key) ?? 0) > now()) return "locked";
-      const ok =
-        "backupCode" in auth
-          ? self.takeBackup(auth.backupCode)
-          : await self.digitsOk(auth.mfaCode);
+      let ok: boolean;
+      if ("backupCode" in auth) {
+        const fresh = self.takeBackup(auth.backupCode);
+        // Core sends the replacement with the reply (the proxy passes it on).
+        if (fresh) offerNewBackupCode(fresh);
+        ok = fresh !== null;
+      } else ok = await self.digitsOk(auth.mfaCode);
       if (ok) {
         failures.delete(key);
         return "ok";
@@ -249,7 +269,7 @@ function userFor(login: string, roles: Role[], mfaEnabled: boolean): User {
     roles: [...roles],
     hospital: "Pilot Hospital",
     mfaEnabled,
-    backupCodesLeft: mfaEnabled ? 8 : null,
+    backupCodesLeft: mfaEnabled ? 1 : null,
     // The demo has Analysis and named access on for everyone (live mode is
     // gated on the server).
     features: { analysis: true, named: true },
@@ -297,13 +317,6 @@ export function createMockAuthClient({
     if (pw.length < 12) throw new AuthError("weak_password");
   };
   const codeOk = (code: string) => codes.digitsOk(code);
-  codes.onBackupSpent = () => {
-    if (session)
-      session = {
-        ...session,
-        backupCodesLeft: Math.max(0, (session.backupCodesLeft ?? 0) - 1),
-      };
-  };
   const done = (step: FirstStep) => {
     steps = steps.filter((s) => s !== step);
   };
@@ -361,20 +374,20 @@ export function createMockAuthClient({
 
     async verifyCode(code, { backup }) {
       if (!pending) throw new AuthError("mfa_expired");
-      if (backup) {
-        if (!codes.takeBackup(code)) throw new AuthError("mfa_invalid");
-      } else if (!(await codeOk(code))) {
+      // A backup code signs in once: its replacement comes back with the
+      // session, as core's reply carries it.
+      const fresh = backup ? codes.takeBackup(code) : null;
+      if (backup ? !fresh : !(await codeOk(code)))
         throw new AuthError("mfa_invalid");
-      }
-      const u = backup
-        ? {
-            ...pending,
-            backupCodesLeft: Math.max(0, (pending.backupCodesLeft ?? 0) - 1),
-          }
-        : pending;
+      const u = pending;
       pending = null;
       startSession(u);
-      return { status: "signed_in", user: u, steps: [] };
+      return {
+        status: "signed_in",
+        user: u,
+        steps: [],
+        ...(fresh ? { newBackupCode: fresh } : {}),
+      };
     },
 
     async completeHospitalSignIn(code) {
@@ -404,28 +417,37 @@ export function createMockAuthClient({
 
     async startMfaSetup() {
       const u = requireSession();
-      codes.setBackupCodes(MOCK_BACKUP_CODES);
+      const backupCode = codes.resetBackupCode();
       return {
         // Authenticator apps list it as "MHAI Demo" over the email, so the
         // shared demo key is never mistaken for a real MHAI account.
         otpauthUri: `otpauth://totp/${encodeURIComponent("MHAI Demo")}:${encodeURIComponent(u.email ?? u.username)}?secret=${MOCK_TOTP_SECRET}&issuer=${encodeURIComponent("MHAI Demo")}&algorithm=SHA1&digits=6&period=30`,
         secret: MOCK_TOTP_SECRET,
-        backupCodes: [...MOCK_BACKUP_CODES],
+        backupCode,
       };
     },
 
     async confirmMfaSetup(code) {
       const u = requireSession();
       if (!(await codeOk(code))) throw new AuthError("mfa_invalid");
-      session = { ...u, mfaEnabled: true, backupCodesLeft: 10 };
+      session = { ...u, mfaEnabled: true, backupCodesLeft: 1 };
       done("mfa");
     },
 
-    async regenerateBackupCodes() {
+    async regenerateBackupCode(code) {
       const u = requireSession();
-      codes.setBackupCodes(MOCK_NEW_BACKUP_CODES);
-      session = { ...u, backupCodesLeft: 10 };
-      return [...MOCK_NEW_BACKUP_CODES];
+      // Core asks for the two-step code, or the current backup code (which
+      // then makes way for the new one in the same step, in the reply's
+      // body only).
+      const fresh =
+        "backup_code" in code
+          ? codes.takeBackup(code.backup_code)
+          : (await codeOk(code.mfa_code))
+            ? codes.nextBackupCode()
+            : null;
+      if (!fresh) throw new ApiError(403, "mfa_invalid");
+      session = { ...u, backupCodesLeft: 1 };
+      return fresh;
     },
 
     async requestPasswordReset() {

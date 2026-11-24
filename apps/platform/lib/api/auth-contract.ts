@@ -27,6 +27,11 @@ export interface ApiLoginOk {
   /** For the BFF only: sealed in the session cookie, never sent to the page. */
   refresh_token?: string;
   user: ApiUser;
+  /**
+   * Only when a backup code signed in: core's new one (the old no longer
+   * works). Read strictly and passed to the page in that one reply only.
+   */
+  new_backup_code?: unknown;
 }
 export interface ApiMfaRequired {
   mfa_required: true;

@@ -49,8 +49,9 @@ test("a new platform admin's first sign-in, then sign in again with the code", a
     "",
   );
   await typeCode(page, await totp(secret, Date.now()));
-  await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
-  await page.getByLabel("I've saved these codes somewhere safe").check();
+  await expect(
+    page.getByRole("group", { name: "Your backup code" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Finish setup" }).click();
 
   await expect(page.getByText("Step 4 of 4 · Terms of use")).toBeVisible();

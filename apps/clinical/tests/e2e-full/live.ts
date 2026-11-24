@@ -56,7 +56,7 @@ async function submitPassword(page: Page, u: LiveUser, password: string) {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 }
 
-/** The whole first sign-in: password, two-step, backup codes, terms. */
+/** The whole first sign-in: password, two-step, backup code, terms. */
 export async function firstSignIn(page: Page, name: string) {
   const u = readUser(name);
   const next = `Live-second-${Math.random().toString(36).slice(2)}${Date.now()}`;
@@ -80,8 +80,9 @@ export async function firstSignIn(page: Page, name: string) {
     { mode: 0o600 },
   );
   await typeCode(page, await totp(secret, Date.now()));
-  await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
-  await page.getByLabel("I've saved these codes somewhere safe").check();
+  await expect(
+    page.getByRole("group", { name: "Your backup code" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page.getByText(/Terms of use/)).toBeVisible();
   await page.getByLabel(/I understand and agree/).check();

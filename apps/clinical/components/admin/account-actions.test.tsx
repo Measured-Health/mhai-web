@@ -10,11 +10,16 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/errors";
+import {
+  clearNewBackupCode,
+  offerNewBackupCode,
+} from "@mhai/api-client/new-backup-code";
 import { DEMO_EMAILS, MOCK_BACKUP_CODES, MOCK_CODE } from "@/lib/auth/mock";
 import { LAST_ADMIN } from "@/lib/admin/staff";
 import { useAuth } from "@/lib/auth/auth-context";
 import { CODE, screenAdminAs } from "@/tests/admin";
 import { DIRECTOR, enterCode, renderAdmin } from "@/tests/admin-render";
+import { NewBackupCodeHost } from "@mhai/ui/auth/save-backup-code";
 
 const holder = vi.hoisted(() => ({ client: null as unknown as AdminClient }));
 vi.mock("@/lib/api/admin", () => ({ getAdminClient: () => holder.client }));
@@ -29,7 +34,11 @@ beforeEach(() => {
   holder.client = screenAdminAs(DEMO_EMAILS.director);
   onClose.mockReset();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  clearNewBackupCode();
+});
 
 async function open(id: string, user = DIRECTOR) {
   renderAdmin(<StaffPanel staffId={id} onClose={onClose} />, user);
@@ -192,39 +201,93 @@ describe("AccountActions (core 1.24.0: step-up on every staff write)", () => {
     expect(within(dialog).queryByLabelText("Digit 1 of 6")).toBeNull();
   });
 
-  it("deactivates with a backup code instead, and lowers your backup codes left", async () => {
+  it("deactivates with a backup code instead, then shows the new one before you go on", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     function Left() {
       const { user } = useAuth();
-      return <p>Backup codes left: {user?.backupCodesLeft}</p>;
+      return <p>Backup codes ready: {user?.backupCodesLeft}</p>;
     }
     const action = vi.spyOn(holder.client, "staffAction");
     renderAdmin(
       <>
         <StaffPanel staffId="s-bello" onClose={onClose} />
         <Left />
+        <NewBackupCodeHost />
       </>,
     );
-    expect(screen.getByText("Backup codes left: 8")).toBeInTheDocument();
+    expect(screen.getByText("Backup codes ready: 1")).toBeInTheDocument();
     const panel = await screen.findByRole("dialog", { name: "Staff member" });
-    await userEvent.click(
+    await user.click(
       await within(panel).findByRole("button", { name: "Deactivate" }),
     );
     const dialog = confirmIn("Deactivate this account?");
-    await userEvent.click(
+    await user.click(
       within(dialog).getByRole("button", { name: "Use a backup code" }),
     );
-    await userEvent.type(
+    await user.type(
       within(dialog).getByLabelText("Backup code"),
-      MOCK_BACKUP_CODES[1]!,
+      MOCK_BACKUP_CODES[0],
     );
-    await userEvent.click(
+    await user.click(
       within(dialog).getByRole("button", { name: "Deactivate" }),
     );
     expect(await screen.findByText("Account deactivated")).toBeInTheDocument();
     expect(action.mock.calls[0]![2]).toEqual({
-      backupCode: MOCK_BACKUP_CODES[1],
+      backupCode: MOCK_BACKUP_CODES[0],
     });
-    expect(await screen.findByText("Backup codes left: 7")).toBeInTheDocument();
+    // Core's new code, shown once on top; one is ready again.
+    const saving = screen.getByRole("dialog", {
+      name: "Save your new backup code",
+    });
+    expect(
+      within(saving).getByRole("group", { name: "Your backup code" }),
+    ).toHaveTextContent(MOCK_BACKUP_CODES[1]);
+    expect(screen.getByText("Backup codes ready: 1")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(3000));
+    await user.click(within(saving).getByRole("button", { name: "Continue" }));
+    expect(screen.queryByText(MOCK_BACKUP_CODES[1])).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("a backup code spent on a refused change: the new code shows first, then the refusal", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    // As the proxy passes it: core spent the code, then refused the change.
+    vi.spyOn(holder.client, "staffAction").mockImplementation(async () => {
+      offerNewBackupCode("rrrrr-sssss");
+      throw new ApiError(403, "forbidden");
+    });
+    renderAdmin(
+      <>
+        <StaffPanel staffId="s-bello" onClose={onClose} />
+        <NewBackupCodeHost />
+      </>,
+    );
+    const panel = await screen.findByRole("dialog", { name: "Staff member" });
+    await user.click(
+      await within(panel).findByRole("button", { name: "Deactivate" }),
+    );
+    const dialog = confirmIn("Deactivate this account?");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Use a backup code" }),
+    );
+    await user.type(
+      within(dialog).getByLabelText("Backup code"),
+      MOCK_BACKUP_CODES[0],
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Deactivate" }),
+    );
+    const saving = await screen.findByRole("dialog", {
+      name: "Save your new backup code",
+    });
+    expect(within(saving).getByText("rrrrr-sssss")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("alert")).toBeNull();
+    act(() => vi.advanceTimersByTime(3000));
+    await user.click(within(saving).getByRole("button", { name: "Continue" }));
+    expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByText("rrrrr-sssss")).toBeNull();
   });
 
   it("explains why a hospital-account person has no password actions", async () => {

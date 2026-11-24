@@ -4,6 +4,7 @@ import { COVER_MAX } from "@mhai/ui/clearances";
 import { ApiError } from "@/lib/api/errors";
 import { isMfaRequired, useStaff } from "@/lib/admin-queries";
 import { useAuth } from "@/lib/auth/auth-context";
+import { backupCodesAfterUse } from "@/lib/auth/backup-code-used";
 import { useClearances, useUploadClearance } from "@/lib/clearance-queries";
 import {
   endDateProblem,
@@ -253,7 +254,7 @@ function UploadForm({
           // A backup code works once; Profile & security shows what's left.
           if ("backupCode" in auth && user?.backupCodesLeft != null)
             updateUser({
-              backupCodesLeft: Math.max(0, user.backupCodesLeft - 1),
+              backupCodesLeft: backupCodesAfterUse(user.backupCodesLeft),
             });
           upload.reset();
           onClose();

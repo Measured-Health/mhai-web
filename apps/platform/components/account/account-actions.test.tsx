@@ -1,8 +1,8 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TEAM_EMAILS } from "@/lib/api/fixtures";
-import { MOCK_NEW_BACKUP_CODES } from "@/lib/auth/mock";
+import { MOCK_BACKUP_CODES } from "@/lib/api/step-up";
 import { auth, GrabAuth, renderWithAuth, testAuthClient } from "@/tests/render";
 import { AccountView } from "./account-view";
 
@@ -11,6 +11,8 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/account",
   useRouter: () => ({ push: vi.fn(), replace }),
 }));
+
+afterEach(() => vi.useRealTimers());
 
 async function signedIn() {
   const client = testAuthClient();
@@ -80,22 +82,32 @@ describe("Account actions", () => {
     expect(replace).toHaveBeenCalledWith("/sign-in");
   });
 
-  it("new backup codes stay until saved: Escape does not close them", async () => {
-    const u = userEvent.setup();
+  it("a new backup code stays until Continue: Escape does not close it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { client, user } = await signedIn();
     renderWithAuth(<AccountView />, { client, user });
-    await u.click(screen.getByRole("button", { name: "New backup codes" }));
-    await u.click(screen.getByRole("button", { name: "Get new codes" }));
-    const code = await screen.findByText(MOCK_NEW_BACKUP_CODES[0]!);
+    await u.click(
+      screen.getByRole("button", { name: "Make a new backup code" }),
+    );
+    const ask = screen.getByRole("dialog", { name: "New backup code" });
+    await u.click(within(ask).getByLabelText("Digit 1 of 6"));
+    await u.keyboard("123456");
+    await u.click(
+      within(ask).getByRole("button", { name: "Make a new backup code" }),
+    );
+    const code = await screen.findByText(MOCK_BACKUP_CODES[1]);
     const dialog = code.closest("dialog")!;
     await u.keyboard("{Escape}");
     expect(code).toBeVisible();
     expect(dialog).toHaveAttribute("open");
-    const done = within(dialog).getByRole("button", { name: "Done" });
-    expect(done).toBeDisabled();
-    await u.click(within(dialog).getByRole("checkbox"));
-    await u.click(done);
-    expect(screen.queryByText(MOCK_NEW_BACKUP_CODES[0]!)).toBeNull();
+    const go = within(dialog).getByRole("button", { name: "Continue" });
+    expect(go).toHaveAttribute("aria-disabled", "true");
+    await u.click(go);
+    expect(code).toBeVisible();
+    act(() => vi.advanceTimersByTime(3000));
+    await u.click(go);
+    expect(screen.queryByText(MOCK_BACKUP_CODES[1])).toBeNull();
   });
 
   it("a double click signs a device out once", async () => {

@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { AuthError } from "@/lib/auth/types";
 import { Button } from "@mhai/ui/button";
 import { AuthHeading } from "./auth-layout";
-import { BackupCodes } from "@mhai/ui/auth/backup-codes";
+import { SaveBackupCode } from "@mhai/ui/auth/save-backup-code";
 import { CodeInput, normalizeCode } from "@mhai/ui/auth/code-input";
 import { QrCode } from "@mhai/ui/auth/qr-code";
 import { AuthErrorBanner } from "./auth-error-banner";
@@ -14,7 +14,7 @@ import { errorCode } from "./auth-error-copy";
 export type MfaPhase = "setup" | "codes";
 const grouped = (s: string) => s.match(/.{1,4}/g)?.join(" ") ?? s;
 
-/** Enrol an authenticator app, then show the backup codes once (7b, 7c). */
+/** Enrol an authenticator app, then show the backup code once (7b, 7c). */
 export function MfaSetup({
   onDone,
   eyebrow,
@@ -40,10 +40,13 @@ export function MfaSetup({
 
   if (phase === "codes" && setup.data)
     return (
-      <BackupCodes
+      <SaveBackupCode
+        page
+        kind="setup"
         eyebrow={eyebrow?.("codes")}
-        codes={setup.data.backupCodes}
-        onFinish={onDone}
+        code={setup.data.backupCode}
+        continueLabel="Finish setup"
+        onContinue={onDone}
       />
     );
 
@@ -56,7 +59,7 @@ export function MfaSetup({
       await client.confirmMfaSetup(normalizeCode(code));
       updateUser({
         mfaEnabled: true,
-        backupCodesLeft: setup.data?.backupCodes.length ?? null,
+        backupCodesLeft: setup.data ? 1 : null,
       });
       setPhase("codes");
     } catch (err) {

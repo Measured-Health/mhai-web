@@ -1,6 +1,6 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MOCK_BACKUP_CODES } from "@/lib/api/step-up";
 import { NEW_ADMIN_EMAIL } from "@/lib/auth/mock";
 import { auth, GrabAuth, renderWithAuth } from "@/tests/render";
@@ -10,7 +10,12 @@ const replace = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace }),
 }));
-beforeEach(() => replace.mockClear());
+beforeEach(() => {
+  replace.mockClear();
+  // The backup code screen waits 3 s before its button works.
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+});
+afterEach(() => vi.useRealTimers());
 
 const SKIP = /skip|later|not now/i;
 function expectNoSkip() {
@@ -60,7 +65,7 @@ async function termsStep(user: ReturnType<typeof userEvent.setup>) {
 describe("WelcomeFlow", () => {
   it("the password step needs the temporary password, and says when it's wrong", async () => {
     await startAsNewAdmin();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await user.type(screen.getByLabelText("New password"), "tram-lantern-okra");
     await user.type(
       screen.getByLabelText("Confirm password"),
@@ -83,7 +88,7 @@ describe("WelcomeFlow", () => {
 
   it("the new admin must set a password, set up two-step, then accept the terms, with no way to skip", async () => {
     await startAsNewAdmin();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await passwordStep(user);
 
     expect(
@@ -95,14 +100,12 @@ describe("WelcomeFlow", () => {
     await user.keyboard("123456");
 
     expect(
-      await screen.findByText("Step 3 of 4 · Backup codes"),
+      await screen.findByText("Step 3 of 4 · Backup code"),
     ).toBeInTheDocument();
     expectNoSkip();
-    // Still owed until the codes are saved: no way round.
+    // Still owed until the code is saved: no way round.
     expect(auth.current.steps).toEqual(["mfa", "terms"]);
-    await user.click(
-      screen.getByLabelText("I've saved these codes somewhere safe"),
-    );
+    act(() => vi.advanceTimersByTime(3000));
     await user.click(screen.getByRole("button", { name: "Finish setup" }));
     await termsStep(user);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/hospitals"));
@@ -112,7 +115,7 @@ describe("WelcomeFlow", () => {
 
   it("a wrong setup code clears the boxes", async () => {
     await startAsNewAdmin();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await passwordStep(user);
     await screen.findByRole("img", {
       name: "QR code for your authenticator app",
@@ -125,28 +128,39 @@ describe("WelcomeFlow", () => {
     expect(screen.getByLabelText("Digit 1 of 6")).toHaveValue("");
   });
 
-  it("backup codes are shown once after two-step setup", async () => {
+  it("the one backup code is shown once after two-step setup", async () => {
     await startAsNewAdmin();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await passwordStep(user);
     await screen.findByRole("img", {
       name: "QR code for your authenticator app",
     });
     // Not before the code is confirmed.
-    expect(screen.queryByRole("list", { name: "Backup codes" })).toBeNull();
+    expect(
+      screen.queryByRole("group", { name: "Your backup code" }),
+    ).toBeNull();
     await user.click(screen.getByLabelText("Digit 1 of 6"));
     await user.keyboard("123456");
 
-    const list = await screen.findByRole("list", { name: "Backup codes" });
-    expect(list).toHaveTextContent(MOCK_BACKUP_CODES[0]);
-    expect(list.querySelectorAll("li")).toHaveLength(10);
-    await user.click(
-      screen.getByLabelText("I've saved these codes somewhere safe"),
-    );
-    await user.click(screen.getByRole("button", { name: "Finish setup" }));
-    // Done: the flow leaves, and the codes are gone from the screen.
+    const shown = await screen.findByRole("group", {
+      name: "Your backup code",
+    });
+    expect(shown).toHaveTextContent(MOCK_BACKUP_CODES[0]);
+    expect(shown).not.toHaveTextContent(MOCK_BACKUP_CODES[1]);
+    expect(
+      screen.getByRole("button", { name: "Copy backup code" }),
+    ).toBeInTheDocument();
+    const finish = screen.getByRole("button", { name: "Finish setup" });
+    // Not for 3 seconds.
+    await user.click(finish);
+    expect(shown).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(3000));
+    await user.click(finish);
+    // Done: the flow leaves, and the code is gone from the screen.
     await waitFor(() =>
-      expect(screen.queryByRole("list", { name: "Backup codes" })).toBeNull(),
+      expect(
+        screen.queryByRole("group", { name: "Your backup code" }),
+      ).toBeNull(),
     );
     expect(screen.queryByText(MOCK_BACKUP_CODES[0])).toBeNull();
     await termsStep(user);

@@ -19,7 +19,7 @@ import {
  * transport sends, then calls `globalThis.fetch` (looked up per call, so
  * `vi.stubGlobal` works) as core's HTTP chain would see the request, with
  * the audience core derives from the subject. The Response goes back as a
- * reply with Mhai-Status-Code and the ten reply headers only.
+ * reply with Mhai-Status-Code and the eleven reply headers only.
  *
  * A broken rule answers as core does (405, 404, 413). A publish on another
  * app's subject is a permissions violation (thrown, as nats.js does); a

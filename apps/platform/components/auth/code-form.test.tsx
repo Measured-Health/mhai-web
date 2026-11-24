@@ -78,18 +78,61 @@ describe("CodeForm", () => {
     expect(auth.current.status).not.toBe("signed_in");
   });
 
-  it("accepts a backup code instead, and it is spent", async () => {
-    const stepUp = createStepUp();
-    await pending(createMockAuthClient({ stepUp }));
+  it("accepts a backup code, shows the new one, and goes on only after Continue", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const stepUp = createStepUp();
+      await pending(createMockAuthClient({ stepUp }));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(
+        screen.getByRole("button", { name: "Use a backup code instead" }),
+      );
+      await user.type(
+        screen.getByLabelText("Backup code"),
+        MOCK_BACKUP_CODES[0],
+      );
+      await user.click(screen.getByRole("button", { name: "Verify" }));
+      expect(
+        await screen.findByRole("heading", {
+          name: "Save your new backup code",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("group", { name: "Your backup code" }),
+      ).toHaveTextContent(MOCK_BACKUP_CODES[1]);
+      expect(auth.current.status).toBe("signed_in");
+      expect(replace).not.toHaveBeenCalledWith("/hospitals");
+      // The step-ups share the same code: the old one can't be used again,
+      // and the new one is the one that works.
+      expect(stepUp.takeBackup(MOCK_BACKUP_CODES[0])).toBeNull();
+      expect(stepUp.backupCode()).toBe(MOCK_BACKUP_CODES[1]);
+      act(() => vi.advanceTimersByTime(3000));
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+      await waitFor(() => expect(replace).toHaveBeenCalledWith("/hospitals"));
+      expect(auth.current.newBackupCode).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the lost-phone link forgets the new code and goes to the Account page", async () => {
+    await pending();
     const user = userEvent.setup();
     await user.click(
       screen.getByRole("button", { name: "Use a backup code instead" }),
     );
-    await user.type(screen.getByLabelText("Backup code"), MOCK_BACKUP_CODES[1]);
+    await user.type(screen.getByLabelText("Backup code"), MOCK_BACKUP_CODES[0]);
     await user.click(screen.getByRole("button", { name: "Verify" }));
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/hospitals"));
-    // The step-ups share the same codes: it can't be used again.
-    expect(stepUp.takeBackup(MOCK_BACKUP_CODES[1])).toBe(false);
+    await user.click(
+      await screen.findByRole("link", {
+        name: "Lost your phone? Move to a new authenticator app",
+      }),
+    );
+    expect(push).toHaveBeenCalledWith("/account#security");
+    expect(auth.current.newBackupCode).toBeNull();
+    // Not sent home over it.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(replace).not.toHaveBeenCalledWith("/hospitals");
   });
 
   it("after a wrong backup code the focus is on the backup field", async () => {
@@ -98,7 +141,7 @@ describe("CodeForm", () => {
     await user.click(
       screen.getByRole("button", { name: "Use a backup code instead" }),
     );
-    await user.type(screen.getByLabelText("Backup code"), "AAAA-BBBB");
+    await user.type(screen.getByLabelText("Backup code"), "aaaaa-bbbbb");
     await user.click(screen.getByRole("button", { name: "Verify" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "That backup code didn't work.",

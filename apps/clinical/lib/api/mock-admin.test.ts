@@ -5,11 +5,11 @@ import {
   MOCK_CODE,
   MOCK_TOTP_SECRET,
 } from "@/lib/auth/mock";
+import { createMockAuthClient, createStepUp } from "@/lib/auth/mock";
 import {
-  createMockAuthClient,
-  createStepUp,
-  MOCK_NEW_BACKUP_CODES,
-} from "@/lib/auth/mock";
+  clearNewBackupCode,
+  pendingBackupCode,
+} from "@mhai/api-client/new-backup-code";
 import { createMockAdmin, MOCK_ANALYST_CAP } from "./mock-admin";
 import { totp } from "@mhai/api-client/totp";
 import { ADMIN_NOW, mockAdminAs, mockAdminWith } from "@/tests/admin";
@@ -186,7 +186,7 @@ describe("staff writes need a step-up code", () => {
   });
 
   it("checks refusals that need no code first, so they never spend one", async () => {
-    const backup = { backupCode: MOCK_BACKUP_CODES[2]! };
+    const backup = { backupCode: MOCK_BACKUP_CODES[0] };
     const a = director();
     const me = await row(a, "s-obi");
     expect(
@@ -334,11 +334,11 @@ describe("staff writes need a step-up code", () => {
     );
   });
 
-  it("shares backup codes with sign-in, and a spent one lowers the signed-in count", async () => {
+  it("shares the backup code with sign-in: a step-up spends it and offers the next", async () => {
+    clearNewBackupCode();
     const stepUp = createStepUp(() => ADMIN_NOW);
     const auth = createMockAuthClient({ now: () => ADMIN_NOW, stepUp });
     await auth.signIn(DEMO_EMAILS.director, "anything");
-    const left = (await auth.getSession())!.user.backupCodesLeft!;
     const mk = () =>
       createMockAdmin({
         now: () => ADMIN_NOW,
@@ -347,17 +347,31 @@ describe("staff writes need a step-up code", () => {
         stepUp,
       });
     await mk().staffAction("s-bello", "deactivate", {
-      backupCode: MOCK_BACKUP_CODES[0]!,
+      backupCode: MOCK_BACKUP_CODES[0],
     });
-    expect((await auth.getSession())!.user.backupCodesLeft).toBe(left - 1);
-    stepUp.setBackupCodes(MOCK_NEW_BACKUP_CODES); // regenerated
+    // Core's new code comes with the reply: one is ready again.
+    expect(pendingBackupCode()).toBe(MOCK_BACKUP_CODES[1]);
+    expect((await auth.getSession())!.user.backupCodesLeft).toBe(1);
+    clearNewBackupCode();
     expect(
       await code(
         mk().staffAction("s-okafor", "deactivate", {
-          backupCode: MOCK_BACKUP_CODES[1]!,
+          backupCode: MOCK_BACKUP_CODES[0],
         }),
       ),
     ).toBe("403 mfa_invalid");
+    expect(pendingBackupCode()).toBeNull();
+    // The new one works at sign-in.
+    await auth.signOut();
+    await auth.signIn("mfa@h.org", "pw");
+    expect(
+      await auth.verifyCode(MOCK_BACKUP_CODES[1], {
+        backup: true,
+        trustDevice: false,
+      }),
+    ).toMatchObject({ newBackupCode: MOCK_BACKUP_CODES[2] });
+    // Sign-in hands its code back in the reply, never to the step-up slot.
+    expect(pendingBackupCode()).toBeNull();
   });
 });
 

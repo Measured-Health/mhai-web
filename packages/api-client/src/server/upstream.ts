@@ -1,9 +1,16 @@
+import { NEW_BACKUP_CODE_HEADER, readBackupCode } from "../codes";
 import type { BackendFetch } from "./backend-fetch";
 
 export class UpstreamError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    /**
+     * Core's new backup code when a backup code was spent before the call
+     * failed (its `X-MHAI-New-Backup-Code` header, read strictly), else
+     * undefined. Never logged.
+     */
+    readonly newBackupCode?: string,
   ) {
     super(code);
     this.name = "UpstreamError";
@@ -18,12 +25,15 @@ export async function callUpstream<T>(
     method = "GET",
     body,
     token,
+    idempotencyKey,
     timeoutMs = 15_000,
     fetchImpl = fetch,
   }: {
     method?: string;
     body?: unknown;
     token?: string;
+    /** Sent as Idempotency-Key; the caller has checked it already. */
+    idempotencyKey?: string;
     timeoutMs?: number;
     fetchImpl?: BackendFetch;
   } = {},
@@ -37,6 +47,7 @@ export async function callUpstream<T>(
         Accept: "application/json",
         ...(body !== undefined && { "Content-Type": "application/json" }),
         ...(token && { Authorization: `Bearer ${token}` }),
+        ...(idempotencyKey && { "Idempotency-Key": idempotencyKey }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
@@ -54,7 +65,8 @@ export async function callUpstream<T>(
     } catch {
       // Not problem+json: keep the generic code.
     }
-    throw new UpstreamError(res.status, code);
+    const fresh = readBackupCode(res.headers.get(NEW_BACKUP_CODE_HEADER));
+    throw new UpstreamError(res.status, code, fresh ?? undefined);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;

@@ -65,8 +65,9 @@ test("first sign-in, a question, sign out, and sign in again with the code", asy
     "",
   );
   await typeCode(page, await totp(secret, Date.now()));
-  await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
-  await page.getByLabel("I've saved these codes somewhere safe").check();
+  await expect(
+    page.getByRole("group", { name: "Your backup code" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Finish setup" }).click();
 
   // 3. The terms, which core takes only from the full session the BFF
