@@ -32,7 +32,13 @@ All notable changes to this project are documented here. The format follows
 - **Platform app: a browser tab icon.** platforms. had no favicon (404); it
   now uses the same Measured Health icon as the clinical app
   (`app/favicon.ico` and `app/icon.svg`).
-
+- **Deploys now replace the running web apps.** The compose files keep
+  `pull_policy: missing` (a plain restart needs no GHCR login), and
+  `docker compose pull` honours it, so it skipped every moving tag
+  (`:live`, `:latest`) already on the host ("Image is already present
+  locally"): since 22 Nov each deploy reported success while ai. and
+  platforms. kept the 22 Nov build. Every pull in the deploy workflow is now
+  `pull --policy always`.
 - **Platform app: a hospital's AI model section loads again.** Core 1.35.0
   added `own_model` to the model policy reply, and the app's strict reader
   refused the unknown key, so the section said it couldn't load. The reader
