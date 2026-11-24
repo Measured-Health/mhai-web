@@ -332,7 +332,9 @@ export function createLivePlatformClient({
       ok<unknown>(
         `/hospitals${query({ status: q.status, q: q.q, cursor: q.cursor })}`,
       ).then(readHospitals),
-    addHospital: (b, o) => ok("/hospitals", "POST", b, o),
+    // Its reply is the hospital as its page reads it (core 1.38.0).
+    addHospital: (b, o) =>
+      ok<unknown>("/hospitals", "POST", b, o).then(readHospital),
     getHospital: (x) => ok<unknown>(h(x)).then(readHospital),
     updateHospital: (x, b, o) => ok(h(x), "PATCH", b, o),
     deactivate: (x, b, o) => ok(h(x, "/deactivate"), "POST", b, o),

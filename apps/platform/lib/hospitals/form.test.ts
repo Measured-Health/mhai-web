@@ -56,6 +56,16 @@ describe("parseHospitalForm", () => {
       expect(r.ok, JSON.stringify(bad)).toBe(false);
     }
   });
+  it("takes only an assigned 2-letter country code, in any case", () => {
+    const r = parseHospitalForm({ ...OK, country: " gh " });
+    expect(r.ok && r.value.country).toBe("GH");
+    for (const country of ["Nigeria", "", "XX", "NGA", "N"]) {
+      const bad = parseHospitalForm({ ...OK, country });
+      expect(bad.ok, country).toBe(false);
+      if (!bad.ok)
+        expect(bad.errors.country).toBe("Choose a country from the list.");
+    }
+  });
   it("allows no domains", () => {
     const r = parseHospitalForm({ ...OK, domains: "" });
     expect(r.ok && r.value.email_domains).toEqual([]);

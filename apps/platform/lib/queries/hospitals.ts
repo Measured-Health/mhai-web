@@ -47,16 +47,22 @@ export function useHospitals(filter: HospitalFilter) {
   });
 }
 
-/** Adds a hospital: one Idempotency-Key per submit, reused on its retries. */
+/**
+ * Adds a hospital: one Idempotency-Key per submit, reused on its retries.
+ * It is confirmed with the person's two-step code, which is in the
+ * variables, so the mutation forgets each call as soon as nothing watches
+ * it (gcTime 0). Run it through `useStepUpCall`.
+ */
 export function useAddHospital() {
   const qc = useQueryClient();
   return useKeyedMutation(
-    (body: HospitalIn, key) =>
+    (body: HospitalIn & StepUp, key) =>
       getPlatformClient().addHospital(body, { idempotencyKey: key }),
     {
       onSuccess: () =>
         void qc.invalidateQueries({ queryKey: queryKeys.hospitals }),
     },
+    { gcTime: 0 },
   );
 }
 

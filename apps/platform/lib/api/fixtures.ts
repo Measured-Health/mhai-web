@@ -19,7 +19,8 @@ import { seedHolds } from "./holds-fixtures";
 const MIN = 60_000;
 const H = 60 * MIN;
 const D = 24 * H;
-export const INVITE_MS = 7 * D;
+/** A first admin's invite lasts 3 days, as core makes it. */
+export const INVITE_MS = 3 * D;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 /** The Measured Health team's sample sign-ins. */

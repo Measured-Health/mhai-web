@@ -23,6 +23,15 @@ test("add a hospital, then it shows Set-up incomplete with a pending invite", as
 
   await page.getByLabel("Name", { exact: true }).fill("Lakeside Hospital");
   await page.getByLabel("Short code", { exact: true }).fill("lkh");
+  // The country is picked by name; the form sends its 2-letter code.
+  const country = page.getByRole("combobox", { name: "Country" });
+  await expect(country).toHaveValue("Nigeria");
+  await country.fill("Gha");
+  await page
+    .getByRole("listbox", { name: "Countries" })
+    .getByRole("option", { name: "Ghana", exact: true })
+    .click();
+  await expect(country).toHaveValue("Ghana");
   // Pasted with spaces and capitals: the form tidies them.
   await page
     .getByLabel("Allowed email domains")
@@ -30,6 +39,12 @@ test("add a hospital, then it shows Set-up incomplete with a pending invite", as
   await page.getByLabel("First admin name").fill("Ngozi Ade");
   await page.getByLabel("First admin email").fill("ngozi.ade@lakeside.example");
   await page.getByRole("button", { name: "Add hospital" }).click();
+
+  // Adding a hospital is confirmed with the person's own two-step code.
+  const d = stepUp(page, "Add this hospital?");
+  await typeCode(page, CODE, d);
+  await d.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(d).toBeHidden();
 
   await expect(
     toast(page, "Hospital added. Invite sent to ngozi.ade@lakeside.example."),
@@ -46,6 +61,7 @@ test("add a hospital, then it shows Set-up incomplete with a pending invite", as
   await expect(admin.getByText("Pending", { exact: true })).toBeVisible();
   const details = page.getByRole("region", { name: "Details" });
   await expect(details.getByText("LKH", { exact: true })).toBeVisible();
+  await expect(details.getByText("Ghana", { exact: true })).toBeVisible();
   await expect(
     details.getByText("lakeside.example", { exact: true }),
   ).toBeVisible();
