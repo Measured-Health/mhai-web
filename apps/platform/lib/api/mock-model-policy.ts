@@ -34,6 +34,8 @@ type PolicyRecord = {
   cloud_provider: CloudProvider | null;
   agreement_ref: string | null;
   monthly_token_budget: number;
+  /** Our own model on the GPU (core 1.35.0); only with no provider. */
+  own_model?: boolean;
   updated_at: string | null;
 };
 
@@ -135,6 +137,7 @@ export function modelPolicyMock(
       provider_code: code,
       agreement_ref: p?.agreement_ref ?? null,
       monthly_token_budget: p?.monthly_token_budget ?? BUDGET_DEFAULT,
+      own_model: p?.own_model ?? false,
       updated_at: p?.updated_at ?? null,
       usage: { month: monthOf(now()), ...u },
     };
@@ -162,8 +165,13 @@ export function modelPolicyMock(
         if (recent.length >= RATE_MAX) fail(429, "rate_limited");
         writes.set(m.id, [...recent, now()]);
         await core.checkCode(m, body);
-        const previous = policies.get(id)?.cloud_provider ?? null;
-        policies.set(id, { ...next, updated_at: iso(now()) });
+        const before = policies.get(id);
+        const previous = before?.cloud_provider ?? null;
+        // As core 1.35.0: own_model is kept while there is no provider and
+        // cleared when one is set (this form never sends it).
+        const own =
+          next.cloud_provider === null && (before?.own_model ?? false);
+        policies.set(id, { ...next, own_model: own, updated_at: iso(now()) });
         log(person(m), "model_policy_changed", {
           hospital: { id: h.id, name: h.name },
           target: next.cloud_provider ?? "none",

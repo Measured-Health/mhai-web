@@ -13,6 +13,8 @@ export const PROVIDER_LABEL: Record<CloudProvider, string> = {
   gemini: "Google Gemini",
 };
 export const LOCAL_LABEL = "MHAI's own model";
+/** No provider and our own model switched on: the GPU server answers. */
+export const OWN_GPU_LABEL = "MHAI's own model (GPU server)";
 
 const isProvider = (v: unknown): v is CloudProvider =>
   CLOUD_PROVIDERS.includes(v as CloudProvider);
@@ -29,8 +31,9 @@ export function providerName(code: string): string {
  * "Anthropic (cloud)", or "MHAI's own model" only when there is no provider
  * code: a code this app doesn't know is still a cloud provider, never off.
  */
-export function policyLabel(code: string | null): string {
-  return code === null ? LOCAL_LABEL : `${providerName(code)} (cloud)`;
+export function policyLabel(code: string | null, ownModel = false): string {
+  if (code !== null) return `${providerName(code)} (cloud)`;
+  return ownModel ? OWN_GPU_LABEL : LOCAL_LABEL;
 }
 
 /**
