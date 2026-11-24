@@ -11,6 +11,7 @@ import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { AnalyticsEmailSection } from "./analytics-email-section";
 import { ChangePasswordDialog } from "./change-password-dialog";
 import { DevicesSection } from "./devices-section";
+import { MoveAppDialog } from "./move-app-dialog";
 import { NewBackupCodeDialog } from "./new-backup-code-dialog";
 
 const row =
@@ -21,6 +22,7 @@ export function AccountView() {
   const net = useNeedsConnection();
   const [pwOpen, setPwOpen] = useState(false);
   const [codesOpen, setCodesOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   if (!user) return null;
   return (
     <>
@@ -115,6 +117,22 @@ export function AccountView() {
                 </Button>
               </Banner>
             )}
+            <div className={row}>
+              <span className="flex-1">
+                Authenticator app
+                <small className="block text-[12px] text-ink-3">
+                  Got a new phone? Move your two-step codes to it.
+                </small>
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                {...net.props}
+                onClick={() => setMoveOpen(true)}
+              >
+                Move to a new app
+              </Button>
+            </div>
           </section>
 
           {isPlatformAdmin(user) && <AnalyticsEmailSection />}
@@ -128,6 +146,7 @@ export function AccountView() {
         open={codesOpen}
         onClose={() => setCodesOpen(false)}
       />
+      <MoveAppDialog open={moveOpen} onClose={() => setMoveOpen(false)} />
     </>
   );
 }

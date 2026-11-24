@@ -1,3 +1,4 @@
+import { mfaReplaceCalls } from "@mhai/api-client/mfa-replace";
 import { readBackupCode } from "@mhai/api-client/codes";
 import { ApiError } from "@mhai/api-client/errors";
 import { createApiRequest, keyHeader } from "@mhai/api-client/request";
@@ -71,6 +72,9 @@ export function createLiveAuthClient({
     }
   };
 
+  // Step-up calls: refusals come back as ApiError, like other step-ups.
+  const replace = mfaReplaceCalls(fetchImpl);
+
   const signOutDevice = (id: string) =>
     call<void>(`/devices/${encodeURIComponent(id)}`, undefined, "DELETE");
 
@@ -105,6 +109,8 @@ export function createLiveAuthClient({
       if (!fresh) throw new ApiError(502, "bad_gateway");
       return fresh;
     },
+    startMfaReplace: (code, key) => replace.start(code, key),
+    confirmMfaReplace: (code, key) => replace.confirm(code, key),
     listDevices: () => call<Device[]>("/devices", undefined, "GET"),
     signOutDevice,
     async signOutEverywhere() {

@@ -1,10 +1,12 @@
 import {
   readRecoveryReply,
-  readRecoveryStepUp,
-  readRequestKey,
-  readSmallJson,
   recoveryRefusal,
 } from "@mhai/api-client/server/backup-code";
+import {
+  readCappedJson,
+  readIdempotencyKey,
+  readStepUpBody,
+} from "@mhai/api-client/server/mfa-replace";
 import { NEW_BACKUP_CODE_HEADER } from "@mhai/api-client/codes";
 import { api, UpstreamError } from "@/lib/server/api";
 import { forbidden, json, sameOrigin } from "@/lib/server/http";
@@ -19,8 +21,8 @@ export async function POST(req: Request) {
   if (!sameOrigin(req)) return forbidden();
   const s = await readSession();
   if (!s) return json(401, { code: "session_expired" });
-  const key = readRequestKey(req.headers);
-  const body = readRecoveryStepUp(await readSmallJson(req));
+  const key = readIdempotencyKey(req.headers);
+  const body = readStepUpBody(await readCappedJson(req));
   if (!key || !body) return json(422, { code: "invalid" });
   let reply: unknown;
   try {

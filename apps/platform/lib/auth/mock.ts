@@ -3,6 +3,7 @@ import { setMockSignedIn } from "../api/mock";
 import { seedTeam, TEAM_EMAILS } from "../api/fixtures";
 import {
   getDemoStepUp,
+  MOCK_NEW_TOTP_SECRET,
   MOCK_TOTP_SECRET,
   type DemoStepUp,
 } from "../api/step-up";
@@ -20,6 +21,8 @@ import {
 export const NEW_ADMIN_EMAIL = TEAM_EMAILS.newAdmin;
 const LOCK_MS = 15 * 60_000;
 const MAX_TRIES = 5;
+/** How long a move to a new app waits for its first code (core: 15 minutes). */
+export const REPLACE_MS = 15 * 60_000;
 // Core's order: password and two-step first, then the terms.
 const ALL_STEPS: FirstStep[] = ["password", "mfa", "terms"];
 
@@ -77,6 +80,8 @@ export function createMockAuthClient({
   const failures = new Map<string, number>();
   const lockedUntil = new Map<string, number>();
   let devices: Device[] = [];
+  /** A move to a new app waiting for its first code (memory only). */
+  let replacing: { secret: string; at: number } | null = null;
 
   const userFor = (email: string, a: Account): User => ({
     id: email.split("@")[0]!,
@@ -113,6 +118,7 @@ export function createMockAuthClient({
     session = null;
     steps = [];
     pending = null;
+    replacing = null;
     setMockSignedIn(null);
   };
   const requireSession = () => {
@@ -167,7 +173,7 @@ export function createMockAuthClient({
       const r = await codes.check(
         pending.email,
         backup ? { backup_code: code } : { mfa_code: code },
-        (c) => (got.code = c),
+        { fresh: (c) => (got.code = c) },
       );
       if (r === "locked") throw new AuthError("mfa_locked");
       if (r === "invalid") throw new AuthError("mfa_invalid");
@@ -202,6 +208,7 @@ export function createMockAuthClient({
     async startMfaSetup() {
       const u = requireSession();
       const backupCode = codes.resetBackupCode();
+      codes.setSecret(MOCK_TOTP_SECRET);
       const label = encodeURIComponent("MHAI Platform Demo");
       return {
         // Listed as a demo in authenticator apps, so the shared demo key is
@@ -225,11 +232,49 @@ export function createMockAuthClient({
       // then makes way for the new one in the same step, in the reply's
       // body only).
       const got: { code?: string } = {};
-      const r = await codes.check(u.email, code, (c) => (got.code = c));
+      const r = await codes.check(u.email, code, {
+        fresh: (c) => (got.code = c),
+      });
       if (r === "locked") throw new ApiError(429, "mfa_locked");
       if (r === "invalid") throw new ApiError(403, "mfa_invalid");
       session = { ...u, backupCodesLeft: 1 };
       return got.code ?? codes.nextBackupCode();
+    },
+
+    // Core's rules: a step-up starts it, the current app works until the
+    // new app's code confirms it (within 15 minutes), the backup codes stay.
+    async startMfaReplace(code) {
+      const u = session;
+      if (!u) throw new ApiError(401, "session_expired");
+      if (!u.mfaEnabled) throw new ApiError(403, "mfa_required");
+      const r = await codes.check(u.email, code);
+      if (r === "locked") throw new ApiError(429, "mfa_locked");
+      if (r === "invalid") throw new ApiError(403, "mfa_invalid");
+      replacing = { secret: MOCK_NEW_TOTP_SECRET, at: now() };
+      const label = encodeURIComponent("MHAI Platform Demo");
+      return {
+        otpauthUri: `otpauth://totp/${label}:${encodeURIComponent(u.email)}?secret=${MOCK_NEW_TOTP_SECRET}&issuer=${label}&algorithm=SHA1&digits=6&period=30`,
+        secret: MOCK_NEW_TOTP_SECRET,
+      };
+    },
+
+    async confirmMfaReplace(code) {
+      const u = session;
+      if (!u) throw new ApiError(401, "session_expired");
+      const waiting = replacing;
+      if (!waiting || now() - waiting.at > REPLACE_MS) {
+        replacing = null;
+        throw new ApiError(409, "conflict");
+      }
+      const r = await codes.check(
+        u.email,
+        { mfa_code: code },
+        { secret: waiting.secret },
+      );
+      if (r === "locked") throw new ApiError(429, "mfa_locked");
+      if (r === "invalid") throw new ApiError(403, "mfa_invalid");
+      codes.setSecret(waiting.secret);
+      replacing = null;
     },
 
     async listDevices() {

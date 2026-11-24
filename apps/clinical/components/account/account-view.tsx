@@ -16,6 +16,7 @@ import { ChangePasswordDialog } from "./change-password-dialog";
 import { NewBackupCodeDialog } from "./new-backup-code-dialog";
 import { DevicesSection } from "./devices-section";
 import { FeedbackSection } from "./feedback-section";
+import { MoveAppDialog } from "./move-app-dialog";
 import { NotificationsSection } from "./notifications-section";
 
 const row =
@@ -29,6 +30,7 @@ export function AccountView() {
   const [pwOpen, setPwOpen] = useState(false);
   const [mfaOpen, setMfaOpen] = useState(false);
   const [codesOpen, setCodesOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   if (!user) return null;
   // A hospital admin who isn't a clinician has no clinical feedback (R3).
   const clinical = !isAdminOnly(user);
@@ -202,6 +204,23 @@ export function AccountView() {
                   </Button>
                 </Banner>
               )}
+              {user.mfaEnabled && (
+                <div className={row}>
+                  <span className="flex-1">
+                    Authenticator app
+                    <small className="block text-[12px] text-ink-3">
+                      Got a new phone? Move your two-step codes to it.
+                    </small>
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setMoveOpen(true)}
+                  >
+                    Move to a new app
+                  </Button>
+                </div>
+              )}
             </section>
 
             {clinical && <NotificationsSection />}
@@ -215,6 +234,7 @@ export function AccountView() {
         open={codesOpen}
         onClose={() => setCodesOpen(false)}
       />
+      <MoveAppDialog open={moveOpen} onClose={() => setMoveOpen(false)} />
       <Dialog
         open={mfaOpen}
         onClose={() => setMfaOpen(false)}
