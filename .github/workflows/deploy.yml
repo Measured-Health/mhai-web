@@ -319,7 +319,7 @@ jobs:
                 local dir=$1 file=$2 svc=$3 port=$4 h=000 s=000 csp=0 ok=0
                 cd "$dir"
                 docker compose -f "$file" --profile live config --quiet || fail "$file in $dir doesn't validate"
-                docker compose -f "$file" --profile live pull "$svc" "$svc-proxy" || fail "$svc: pull failed"
+                docker compose -f "$file" --profile live pull --policy always "$svc" "$svc-proxy" || fail "$svc: pull failed"
                 docker compose -f "$file" --profile live up -d "$svc" || fail "$svc: start failed"
                 # Recreated every time: it reads the template at start.
                 docker compose -f "$file" --profile live up -d --force-recreate --no-deps "$svc-proxy" || fail "$svc-proxy: start failed"
@@ -390,7 +390,7 @@ jobs:
             [ -z "$why" ] || mode=mock
 
             mock_up() {
-              docker compose pull web
+              docker compose pull --policy always web
               docker compose up -d web
               # Straight to the container, not through nginx: the home page
               # must load, and a dead consultation link must be a real 404.
@@ -425,7 +425,7 @@ jobs:
               ok=0
               signin=000 health=000
               if ! { docker compose "${live[@]}" config --quiet &&
-                     docker compose "${live[@]}" pull web &&
+                     docker compose "${live[@]}" pull --policy always web &&
                      docker compose "${live[@]}" up -d web; }; then
                 echo "::warning::Live demo didn't start."
               else
@@ -456,7 +456,7 @@ jobs:
               echo "Platform image not built ($PLATFORM_BUILD); skipped"
             elif [ -f /srv/mhai-web-platform/.env ] && grep -q '^PLATFORM_SESSION_SECRET=.' /srv/mhai-web-platform/.env; then
               cd /srv/mhai-web-platform
-              docker compose -f compose.platform.yml pull platform
+              docker compose -f compose.platform.yml pull --policy always platform
               docker compose -f compose.platform.yml up -d platform
 
               ok=0
@@ -490,7 +490,7 @@ jobs:
               if ! [ -f "$dir/live-proxy.conf.template" ]; then echo "$name: no live-proxy.conf.template in $dir; skipped"; return 0; fi
               # The app and its loopback proxy, the only way in (it sets X-Real-IP).
               ( cd "$dir"
-                docker compose -f "$file" --profile live pull "$svc" "$svc-proxy"
+                docker compose -f "$file" --profile live pull --policy always "$svc" "$svc-proxy"
                 docker compose -f "$file" --profile live up -d "$svc" "$svc-proxy" )
               ok=0
               for _ in $(seq 1 24); do
