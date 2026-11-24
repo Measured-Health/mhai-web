@@ -292,7 +292,25 @@ const EMR_RULE_SET_IN = z
     backup_code: z.string().optional(),
   })
   .refine((b) => (b.version === null) === (b.sha256 === null));
+/**
+ * Adding a hospital (core 1.38.0, `POST /platform/hospitals`): exactly the
+ * form's fields, the country as a 2-letter code, and the step-up code.
+ * Core still decides the rest (an assigned code, a free short code, names).
+ */
+const HOSPITAL_IN = z.strictObject({
+  name: z.string().max(200),
+  short_code: z.string().max(16),
+  country: z.string().regex(/^[A-Za-z]{2}$/),
+  time_zone: z.string().max(64),
+  email_domains: z.array(z.string().max(253)).max(20),
+  first_admin: z.strictObject({
+    name: z.string().max(200),
+    email: z.string().max(320),
+  }),
+  ...STEP_UP,
+});
 const BODIES: ReadonlyMap<string, z.ZodType> = new Map<string, z.ZodType>([
+  ["POST platform/hospitals", HOSPITAL_IN],
   ["PUT platform/hospitals/{id}/emr-rule-set", EMR_RULE_SET_IN],
   ["PUT platform/hospitals/{id}/model-policy", MODEL_POLICY_IN],
   ["PATCH platform/team/{id}", TEAM_ROLE_IN],

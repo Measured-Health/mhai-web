@@ -72,7 +72,7 @@ describe("the hospital page", () => {
       screen.getByRole("heading", { name: "Eastbrook Medical Centre" }),
     ).toBeInTheDocument();
     expect(within(details).getByText("EMC")).toBeInTheDocument();
-    expect(within(details).getByText("NG")).toBeInTheDocument();
+    expect(within(details).getByText("Nigeria")).toBeInTheDocument();
     expect(within(details).getByText("Africa/Lagos")).toBeInTheDocument();
     expect(within(details).getByText("eastbrook.example")).toBeInTheDocument();
     expect(

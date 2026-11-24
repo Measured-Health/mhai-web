@@ -251,6 +251,9 @@ const concrete = (shape: string) =>
     );
 /** A query and body each strictly checked shape accepts. */
 const VALID: Record<string, { query?: string; body?: string }> = {
+  "POST platform/hospitals": {
+    body: '{"name":"Synthetic Hospital","short_code":"SYN","country":"ng","time_zone":"Africa/Lagos","email_domains":["synthetic.example"],"first_admin":{"name":"Synthetic Admin","email":"admin@synthetic.example"},"mfa_code":"123456"}',
+  },
   "PUT platform/hospitals/{id}/model-policy": {
     body: '{"cloud_provider":"gemini","agreement_ref":"DPA-2026-0107","monthly_token_budget":5,"mfa_code":"123456"}',
   },
@@ -566,13 +569,13 @@ describe("platform API proxy", () => {
   it("a bad Idempotency-Key is dropped, a good one forwarded", async () => {
     await session();
     fetchMock.mockImplementation(async () => Response.json({}));
-    await call("POST", ["platform", "hospitals"], {
+    await call("POST", ["platform", "hospitals", "h1", "deactivate"], {
       headers: { "Idempotency-Key": "0b5c-11ef-AA" },
     });
     expect(headersOf(calls()[0]).get("Idempotency-Key")).toBe("0b5c-11ef-AA");
     for (const bad of ["bad key!", "a".repeat(65), "x/y", "k_1"]) {
       fetchMock.mockClear();
-      await call("POST", ["platform", "hospitals"], {
+      await call("POST", ["platform", "hospitals", "h1", "deactivate"], {
         headers: { "Idempotency-Key": bad },
       });
       expect(headersOf(calls()[0]).has("Idempotency-Key")).toBe(false);
@@ -588,8 +591,12 @@ describe("platform API proxy", () => {
     expect(calls()[0][0]).toBe(
       "http://api.test/api/v1/platform/activity?hospital=h1&cursor=c",
     );
-    await call("POST", ["platform", "hospitals"], { query: "?x=1" });
-    expect(calls()[1][0]).toBe("http://api.test/api/v1/platform/hospitals");
+    await call("POST", ["platform", "hospitals", "h1", "deactivate"], {
+      query: "?x=1",
+    });
+    expect(calls()[1][0]).toBe(
+      "http://api.test/api/v1/platform/hospitals/h1/deactivate",
+    );
   });
 
   it("refuses a body over 64 KB with 413", async () => {
@@ -656,6 +663,43 @@ describe("platform API proxy", () => {
       expect(res.status).toBe(422);
       expect(await res.json()).toEqual({ code: "validation_failed" });
     }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("adding a hospital: the write is checked strictly before it goes upstream", async () => {
+    await session();
+    const post = (body: string) =>
+      call("POST", ["platform", "hospitals"], { body });
+    fetchMock.mockImplementation(async () => Response.json({}));
+    const base = {
+      name: "Synthetic Hospital",
+      short_code: "SYN",
+      country: "NG",
+      time_zone: "Africa/Lagos",
+      email_domains: ["synthetic.example"],
+      first_admin: {
+        name: "Synthetic Admin",
+        email: "admin@synthetic.example",
+      },
+    };
+    const code = { mfa_code: "123456" };
+    const ok = await post(JSON.stringify({ ...base, ...code }));
+    expect(ok.status).toBe(200);
+    expect(calls()[0][0]).toBe("http://api.test/api/v1/platform/hospitals");
+    fetchMock.mockClear();
+    for (const bad of [
+      { ...base, country: "Nigeria", ...code },
+      { ...base, country: "NGA", ...code },
+      { ...base, email_domains: "synthetic.example", ...code },
+      { ...base, first_admin: { ...base.first_admin, role: "x" }, ...code },
+      { ...base, status: "active", ...code },
+      { ...base, hospital_id: "h2", ...code },
+    ]) {
+      const res = await post(JSON.stringify(bad));
+      expect(res.status).toBe(422);
+      expect(await res.json()).toEqual({ code: "validation_failed" });
+    }
+    expect((await post("not json")).status).toBe(422);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

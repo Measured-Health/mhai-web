@@ -21,7 +21,9 @@ import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { useToast } from "@mhai/ui/toast";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
+import { countryName } from "@/lib/countries";
 import { timeZones } from "./add-hospital-form";
+import { CountryPicker } from "./country-picker";
 import { dateLabel } from "./format";
 import { Section } from "./section";
 
@@ -97,7 +99,9 @@ export function DetailsSection({
           <Row term="Short code">
             <span className="font-mono">{hospital.short_code}</span>
           </Row>
-          <Row term="Country">{hospital.country}</Row>
+          <Row term="Country">
+            {hospital.country ? countryName(hospital.country) : "Not set"}
+          </Row>
           <Row term="Time zone">{hospital.time_zone}</Row>
           <Row term="Allowed email domains">
             {hospital.email_domains.length
@@ -280,7 +284,15 @@ function EditForm({
         text("shortCode"),
         "2 to 8 letters or numbers. It can't be used twice.",
       )}
-      {field("country", "Country", text("country"), "For example NG.")}
+      {field("country", "Country", (p) => (
+        <CountryPicker
+          id={p.id}
+          value={v.country}
+          onChange={set("country")}
+          invalid={p["aria-invalid"]}
+          describedBy={p["aria-describedby"]}
+        />
+      ))}
       {field("timeZone", "Time zone", (p) => (
         <select
           {...p}

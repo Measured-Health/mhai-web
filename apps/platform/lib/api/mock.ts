@@ -24,6 +24,7 @@ import {
   type HospitalRecord,
 } from "./fixtures";
 import { getDemoStepUp, requireStepUp, type DemoStepUp } from "./step-up";
+import { countryCode } from "../countries";
 import { keepsRecords } from "./holds-contract";
 import { holdsMock, keptHolds, settleHolds } from "./mock-holds";
 import {
@@ -110,6 +111,27 @@ const fail = (status: number, code: string): never => {
   throw new ApiError(status, code);
 };
 const invalid = (): never => fail(422, "invalid");
+/** Core's one body refusal for adding a hospital: `invalid` becomes it. */
+function asCore<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof ApiError && e.code === "invalid")
+      throw new ApiError(422, "validation_failed");
+    throw e;
+  }
+}
+/** What adding a hospital takes: the form's fields and the step-up code. */
+const ADD_FIELDS: ReadonlySet<string> = new Set([
+  "name",
+  "short_code",
+  "country",
+  "time_zone",
+  "email_domains",
+  "first_admin",
+  "mfa_code",
+  "backup_code",
+]);
 
 /** Trimmed text of 1 to `max` characters, else 422. */
 function text(v: unknown, max: number): string {
@@ -237,6 +259,7 @@ export function createMockPlatform({
   analysis,
   cloudProviders,
   emrEnabled,
+  delivery = "normal",
   onCore,
 }: {
   now?: () => number;
@@ -272,6 +295,11 @@ export function createMockPlatform({
   cloudProviders?: ModelPolicyMockOptions["cloudProviders"];
   /** Patient records are on for the deployment (see `EmrRuleSetMockOptions`). */
   emrEnabled?: EmrRuleSetMockOptions["emrEnabled"];
+  /**
+   * "none": email isn't set up, so adding a hospital (which emails its
+   * first admin) is 503 `no_delivery` and nothing is added.
+   */
+  delivery?: "normal" | "none";
   /** For tests: the core the areas are built on, once it exists. */
   onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
@@ -478,6 +506,18 @@ export function createMockPlatform({
     hospitals.some(
       (r) => r.hospital.short_code === code && r.hospital.id !== except,
     );
+  /** Whether an account has this email: the team, a hospital admin, an invite. */
+  const emailInUse = (mail: string) => {
+    const e = mail.toLowerCase();
+    return (
+      team.some((t) => t.email.toLowerCase() === e) ||
+      hospitals.some(
+        (r) =>
+          r.admins.some((a) => a.email.toLowerCase() === e) ||
+          r.hospital.first_admin?.email.toLowerCase() === e,
+      )
+    );
+  };
   const newInvite = (name: string, mail: string) => ({
     invite_id: newId("inv"),
     name,
@@ -613,17 +653,45 @@ export function createMockPlatform({
         return { hospitals: p.rows, next_cursor: p.next_cursor };
       }),
 
-    addHospital: (body: HospitalIn, opts) =>
-      write(opts, (m) => {
-        const b = (body ?? {}) as Partial<HospitalIn>;
-        const name = text(b.name, NAME_MAX);
-        const code = shortCode(b.short_code);
-        const country = text(b.country, 60);
-        const time_zone = text(b.time_zone, 64);
-        const email_domains = normaliseDomains(b.email_domains);
-        const adminName = text(b.first_admin?.name, NAME_MAX);
-        const adminEmail = email(b.first_admin?.email);
+    // As core 1.38.0: the body checked (422 `validation_failed`), then the
+    // step-up code, then the short code, the first admin's email and email
+    // delivery, all before anything is added.
+    addHospital: (body, opts) =>
+      write(opts, async (m) => {
+        const b = (body ?? {}) as Partial<HospitalIn> & Record<string, unknown>;
+        const { name, code, country, time_zone, email_domains, admin } = asCore(
+          () => {
+            if (Object.keys(b).some((k) => !ADD_FIELDS.has(k))) invalid();
+            if (
+              b.first_admin === null ||
+              typeof b.first_admin !== "object" ||
+              Object.keys(b.first_admin).some(
+                (k) => k !== "name" && k !== "email",
+              )
+            )
+              invalid();
+            return {
+              name: text(b.name, NAME_MAX),
+              code: shortCode(b.short_code),
+              country:
+                typeof b.country === "string"
+                  ? (countryCode(b.country) ?? invalid())
+                  : invalid(),
+              time_zone: text(b.time_zone, 64),
+              email_domains: normaliseDomains(b.email_domains),
+              admin: {
+                name: text(b.first_admin?.name, NAME_MAX),
+                email: email(b.first_admin?.email),
+              },
+            };
+          },
+        );
+        await checkCode(m, body);
         if (usedCode(code)) fail(409, "duplicate");
+        if (emailInUse(admin.email)) fail(409, "email_in_use");
+        if (delivery === "none") fail(503, "no_delivery");
+        const adminName = admin.name;
+        const adminEmail = admin.email;
         let id = `h_${slug(name)}`;
         for (let i = 2; hospitals.some((r) => r.hospital.id === id); i++)
           id = `h_${slug(name)}_${i}`;
@@ -632,7 +700,8 @@ export function createMockPlatform({
           name,
           short_code: code,
           status: "setup_incomplete",
-          staff_count: 0,
+          // Core counts the invited first admin.
+          staff_count: 1,
           sso_enabled: false,
           created_at: iso(now()),
           last_activity_at: null,
@@ -690,7 +759,11 @@ export function createMockPlatform({
               ? h.short_code
               : shortCode(body.short_code),
           country:
-            body.country === undefined ? h.country : text(body.country, 60),
+            body.country === undefined
+              ? h.country
+              : (typeof body.country === "string" &&
+                  countryCode(body.country)) ||
+                invalid(),
           time_zone:
             body.time_zone === undefined
               ? h.time_zone

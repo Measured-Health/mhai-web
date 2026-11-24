@@ -3,6 +3,7 @@ import { ApiError } from "@mhai/api-client/errors";
 import {
   BlockedError,
   type HospitalIn,
+  type StepUp,
   type TwoPersonRequest,
   type WriteOpts,
 } from "./contract";
@@ -41,13 +42,14 @@ async function failure(p: Promise<unknown>): Promise<[number, string]> {
   throw new Error("expected a refusal");
 }
 
-const NEW: HospitalIn = {
+const NEW: HospitalIn & StepUp = {
   name: "Lakeside Community Hospital",
   short_code: "lch",
   country: "NG",
   time_zone: "Africa/Lagos",
   email_domains: ["lakeside.example"],
   first_admin: { name: "Bola Ade", email: "bola.ade@lakeside.example" },
+  ...CODE,
 };
 
 describe("mock platform API", () => {
@@ -114,7 +116,17 @@ describe("mock platform API", () => {
     expect(await failure(m.getHospital("h_nope"))).toEqual([404, "not_found"]);
   });
 
-  it("add normalises domains and rejects a bad one", async () => {
+  /** The new hospital with no step-up code. */
+  const BARE: HospitalIn = {
+    name: NEW.name,
+    short_code: NEW.short_code,
+    country: NEW.country,
+    time_zone: NEW.time_zone,
+    email_domains: NEW.email_domains,
+    first_admin: NEW.first_admin,
+  };
+
+  it("add normalises domains and refuses a bad body as core does (422 validation_failed)", async () => {
     const { m } = setup();
     const h = await m.addHospital(
       { ...NEW, email_domains: [" Northgate.ORG , northgate.org"] },
@@ -126,25 +138,89 @@ describe("mock platform API", () => {
         ...NEW,
         short_code: "LC2",
         email_domains: [" Lakeside.ORG ", "lakeside.org", "b.example"],
+        first_admin: { name: "Tolu Ade", email: "tolu.ade@lakeside.example" },
       },
       KEY(),
     );
     expect(two.email_domains).toEqual(["lakeside.org", "b.example"]);
+    const other = { name: "Kunle Ade", email: "kunle.ade@lakeside.example" };
+    for (const bad of [
+      { email_domains: ["not a domain"] },
+      { name: "" },
+      { short_code: "TOO-LONG1" },
+      // A country is an assigned 2-letter code, never a name.
+      { country: "Nigeria" },
+      { country: "XX" },
+      { country: "" },
+      { first_admin: { ...other, role: "hospital_admin" } },
+      { status: "active" },
+    ])
+      expect(
+        await failure(
+          m.addHospital(
+            { ...NEW, short_code: "LC3", first_admin: other, ...bad },
+            KEY(),
+          ),
+        ),
+        JSON.stringify(bad),
+      ).toEqual([422, "validation_failed"]);
+  });
+
+  it("add takes the country's code in any case and keeps it upper-case", async () => {
+    const { m } = setup();
+    const h = await m.addHospital({ ...NEW, country: "gh" }, KEY());
+    expect(h.country).toBe("GH");
+  });
+
+  it("add needs the person's two-step code, as the other step-up writes", async () => {
+    const { m } = setup();
+    expect(
+      await failure(m.addHospital(BARE as HospitalIn & StepUp, KEY())),
+    ).toEqual([422, "invalid"]);
+    const wrong = { ...NEW, mfa_code: "000000" };
+    expect(await failure(m.addHospital(wrong, KEY()))).toEqual([
+      403,
+      "mfa_invalid",
+    ]);
+    for (let i = 0; i < 4; i++) await failure(m.addHospital(wrong, KEY()));
+    expect(await failure(m.addHospital(NEW, KEY()))).toEqual([
+      429,
+      "mfa_locked",
+    ]);
+    // Nothing was added on any of these.
+    expect((await m.listHospitals({})).hospitals).toHaveLength(12);
+  });
+
+  it("add without two-step on the account is 403 mfa_required", async () => {
+    const m = createMockPlatform({
+      now: () => START,
+      me: () => TEAM_EMAILS.ada,
+      delayMs: 0,
+      stepUp: createStepUp(() => START),
+      twoStep: () => false,
+    });
+    expect(await failure(m.addHospital(NEW, KEY()))).toEqual([
+      403,
+      "mfa_required",
+    ]);
+  });
+
+  it("add takes a backup code once", async () => {
+    const { m } = setup();
+    const backup = { ...BARE, backup_code: "4F7K-92QX" };
+    await m.addHospital(backup, KEY());
     expect(
       await failure(
         m.addHospital(
-          { ...NEW, short_code: "LC3", email_domains: ["not a domain"] },
+          {
+            ...backup,
+            short_code: "LC2",
+            first_admin: { name: "Tolu Ade", email: "tolu@lakeside.example" },
+          },
           KEY(),
         ),
       ),
-    ).toEqual([422, "invalid"]);
-    expect(await failure(m.addHospital({ ...NEW, name: "" }, KEY()))).toEqual([
-      422,
-      "invalid",
-    ]);
-    expect(
-      await failure(m.addHospital({ ...NEW, short_code: "TOO-LONG1" }, KEY())),
-    ).toEqual([422, "invalid"]);
+    ).toEqual([403, "mfa_invalid"]);
   });
 
   it("add with a used short code is 409 duplicate", async () => {
@@ -154,7 +230,44 @@ describe("mock platform API", () => {
     ).toEqual([409, "duplicate"]);
   });
 
-  it("add creates a set-up-incomplete hospital with a pending first-admin invite", async () => {
+  it("add with an email someone already has is 409 email_in_use", async () => {
+    const { m } = setup();
+    // A platform team member, a hospital's admin, another first admin's invite.
+    for (const used of [
+      TEAM_EMAILS.ada.toUpperCase(),
+      "admin.nwosu@pilot-hospital.example",
+      "chiamaka.obi@eastbrook.example",
+    ])
+      expect(
+        await failure(
+          m.addHospital(
+            { ...NEW, first_admin: { name: "Someone", email: used } },
+            KEY(),
+          ),
+        ),
+        used,
+      ).toEqual([409, "email_in_use"]);
+    expect((await m.listHospitals({})).hospitals).toHaveLength(12);
+  });
+
+  it("add when email isn't set up is 503 no_delivery, and nothing is added", async () => {
+    const m = createMockPlatform({
+      now: () => START,
+      me: () => TEAM_EMAILS.ada,
+      delayMs: 0,
+      stepUp: createStepUp(() => START),
+      delivery: "none",
+    });
+    const before = (await m.listActivity({})).events.length;
+    expect(await failure(m.addHospital(NEW, KEY()))).toEqual([
+      503,
+      "no_delivery",
+    ]);
+    expect((await m.listHospitals({})).hospitals).toHaveLength(12);
+    expect((await m.listActivity({})).events).toHaveLength(before);
+  });
+
+  it("add creates a set-up-incomplete hospital with one staff member and a 3-day first-admin invite", async () => {
     const { m } = setup();
     const key = KEY();
     const h = await m.addHospital(NEW, key);
@@ -162,8 +275,10 @@ describe("mock platform API", () => {
     expect(h).toMatchObject({
       name: "Lakeside Community Hospital",
       short_code: "LCH",
+      country: "NG",
       status: "setup_incomplete",
-      staff_count: 0,
+      // Core counts the invited first admin.
+      staff_count: 1,
       sso_enabled: false,
       version: 1,
       deactivation: null,
@@ -174,19 +289,25 @@ describe("mock platform API", () => {
         email: "bola.ade@lakeside.example",
         status: "pending",
         sent_at: new Date(START).toISOString(),
-        expires_at: new Date(START + 7 * 86_400_000).toISOString(),
+        expires_at: new Date(START + 3 * 86_400_000).toISOString(),
       },
     });
     expect(h.first_admin!.invite_id).toMatch(/^inv_[A-Za-z0-9_-]+$/);
     // A retry with the same key does not add it twice.
     expect((await m.addHospital(NEW, key)).id).toBe(h.id);
     expect((await m.listHospitals({})).hospitals).toHaveLength(13);
+    const row = (await m.listHospitals({})).hospitals.find(
+      (x) => x.id === h.id,
+    );
+    expect(row?.staff_count).toBe(1);
   });
 
-  it("invites expire after 7 days", async () => {
+  it("invites expire after 3 days", async () => {
     const { m, advance } = setup();
     const h = await m.addHospital(NEW, KEY());
-    advance(7 * 86_400_000 + 1);
+    advance(3 * 86_400_000);
+    expect((await m.getHospital(h.id)).first_admin?.status).toBe("pending");
+    advance(1);
     expect((await m.getHospital(h.id)).first_admin?.status).toBe("expired");
     const again = await m.resendInvite(h.id, h.first_admin!.invite_id, KEY());
     expect(again.first_admin?.status).toBe("pending");

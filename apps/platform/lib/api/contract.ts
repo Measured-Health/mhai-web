@@ -100,6 +100,7 @@ export type RemovalRequest = {
 export type HospitalIn = {
   name: string;
   short_code: string;
+  /** An assigned ISO 3166-1 alpha-2 code, e.g. "NG" (core takes any case). */
   country: string;
   time_zone: string;
   email_domains: string[];
@@ -299,7 +300,13 @@ export interface PlatformClient
   listHospitals(
     q: HospitalQuery,
   ): Promise<{ hospitals: HospitalSummary[]; next_cursor: string | null }>;
-  addHospital(body: HospitalIn, opts: WriteOpts): Promise<Hospital>;
+  /**
+   * `POST /platform/hospitals` (core 1.38.0), confirmed with the person's
+   * own two-step or backup code. Refusals: 422 `validation_failed`, 409
+   * `duplicate` (the short code), 409 `email_in_use` (the first admin's
+   * email), 503 `no_delivery` (email isn't set up; nothing is added).
+   */
+  addHospital(body: HospitalIn & StepUp, opts: WriteOpts): Promise<Hospital>;
   getHospital(id: string): Promise<Hospital>;
   updateHospital(
     id: string,

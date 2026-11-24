@@ -13,6 +13,7 @@ import { readAnalytics, readSeries } from "../analytics/read";
 import { readGuardrailPeriods } from "../analytics/guardrails";
 import { TEAM_EMAILS } from "./fixtures";
 import { createMockPlatform } from "./mock";
+import { MOCK_CODE } from "./step-up";
 
 // The latest finished week is 1–7 Nov, month October, quarter Jul–Sep.
 const START = Date.parse("2026-11-11T09:30:00.000Z");
@@ -399,6 +400,7 @@ describe("mock analytics", () => {
         time_zone: "Africa/Lagos",
         email_domains: ["lakeside.example"],
         first_admin: { name: "Bola Ade", email: "bola.ade@lakeside.example" },
+        mfa_code: MOCK_CODE,
       },
       KEY(),
     );

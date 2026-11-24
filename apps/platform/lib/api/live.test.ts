@@ -204,6 +204,28 @@ const coreHoldDetail = (over: Record<string, unknown> = {}) => ({
 const json = (v: unknown) => () => Response.json(v);
 const HOSPITALS = json({ hospitals: [coreSummary()], next_cursor: null });
 const HOSPITAL = json(coreHospital());
+/** A first admin's invite as core 1.38.0 sends it (synthetic). */
+const CORE_INVITE = {
+  invite_id: U2,
+  name: "Synthetic First Admin",
+  email: "first.admin@north.example",
+  status: "pending",
+  sent_at: "2026-11-24T09:00:00Z",
+  expires_at: "2026-11-27T09:00:00Z",
+};
+/** A hospital just added in the app, as core 1.38.0 replies. */
+const coreAdded = () =>
+  coreHospital({
+    status: "setup_incomplete",
+    staff_count: 1,
+    country: "NG",
+    email_domains: ["north.example"],
+    first_admin: CORE_INVITE,
+    admins: [],
+    legal_holds_active: 0,
+    legal_holds: [],
+  });
+const ADDED = json(coreAdded());
 const TEAM = json({ members: [coreMember()] });
 const MEMBER = json(coreMember());
 const ACTIVITY = json({ events: [coreEvent()], next_cursor: "40" });
@@ -300,6 +322,7 @@ const ROWS: Row[] = [
           time_zone: "Africa/Lagos",
           email_domains: ["a.example"],
           first_admin: { name: "B", email: "b@a.example" },
+          ...CODE,
         },
         K,
       ),
@@ -312,7 +335,9 @@ const ROWS: Row[] = [
       time_zone: "Africa/Lagos",
       email_domains: ["a.example"],
       first_admin: { name: "B", email: "b@a.example" },
+      ...CODE,
     },
+    ADDED,
   ],
   [
     "getHospital",
@@ -1288,8 +1313,20 @@ describe("live platform client", () => {
         (c) => c.getHospital(U1),
         coreHospital(),
         [
-          coreHospital({ country: "NG" }),
-          coreHospital({ email_domains: ["north.example"] }),
+          // Core sends a code, upper-case, never a name.
+          coreHospital({ country: "Nigeria" }),
+          coreHospital({ country: "ng" }),
+          coreHospital({ email_domains: [1] }),
+          coreHospital({
+            email_domains: Array.from(
+              { length: 21 },
+              (_, i) => `d${i}.example`,
+            ),
+          }),
+          coreHospital({
+            first_admin: { ...CORE_INVITE, status: "revoked" },
+          }),
+          coreHospital({ first_admin: { ...CORE_INVITE, token: "x" } }),
           coreHospital({ removal: { status: "requested" } }),
           coreHospital({
             legal_holds: [
@@ -1358,6 +1395,33 @@ describe("live platform client", () => {
             ],
           }),
         ],
+      ],
+      [
+        // One added in the app: its country, domains and first admin.
+        (c) => c.getHospital(U1),
+        coreAdded(),
+        [coreHospital({ ...coreAdded(), country: "Nigeria" })],
+      ],
+      [
+        // Adding one replies with the hospital, read the same strict way.
+        (c) =>
+          c.addHospital(
+            {
+              name: "Synthetic North Hospital",
+              short_code: "SNH",
+              country: "ng",
+              time_zone: "Africa/Lagos",
+              email_domains: ["north.example"],
+              first_admin: {
+                name: "Synthetic First Admin",
+                email: "first.admin@north.example",
+              },
+              ...CODE,
+            },
+            K,
+          ),
+        coreAdded(),
+        [{ ...coreAdded(), first_admin: { ...CORE_INVITE, link: "x" } }],
       ],
       [
         (c) => c.getEmailPref(),

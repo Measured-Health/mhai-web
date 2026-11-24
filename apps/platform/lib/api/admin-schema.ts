@@ -7,8 +7,9 @@
 // Where core sends less than the old frontend contract, the schema pins it:
 // a hold keeps every record (scope both null), carries no note and no
 // "asked by" (both null), and a lift has no grace period (`records_due` and
-// `due_after` null). A hospital has no country, domains, deactivation,
-// invite or removal record in core (empty or null).
+// `due_after` null). A hospital has no deactivation or removal record in
+// core (null); one made on core's command line has no country, domains or
+// invite either ("", [] and null).
 import { z } from "zod";
 import { ApiError } from "@mhai/api-client/errors";
 import type {
@@ -170,13 +171,24 @@ const HOSPITALS_PAGE = z.strictObject({
 });
 const HOSPITAL = z.strictObject({
   ...SUMMARY_FIELDS,
-  // Core keeps none of these.
-  country: z.literal(""),
+  // Core 1.38.0: a hospital added in the app has a country (an ISO 3166-1
+  // alpha-2 code, stored upper-case), its domains and its first admin's
+  // invite; one made on core's command line shows "", [] and null.
+  country: z.union([z.literal(""), z.string().regex(/^[A-Z]{2}$/)]),
   time_zone: text(64),
-  email_domains: z.array(z.string()).max(0),
+  email_domains: z.array(text(253)).max(20),
   version,
   deactivation: z.null(),
-  first_admin: z.null(),
+  first_admin: z
+    .strictObject({
+      invite_id: id,
+      name: text(200),
+      email: text(320),
+      status: z.enum(["pending", "accepted", "expired"]),
+      sent_at: instant,
+      expires_at: instant,
+    })
+    .nullable(),
   removal: z.null(),
   admins: z
     .array(z.strictObject({ name: text(200), email: text(320) }))

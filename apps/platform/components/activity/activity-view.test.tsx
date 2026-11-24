@@ -9,7 +9,7 @@ import {
 import type { HospitalIn, PlatformClient } from "@/lib/api/contract";
 import { TEAM_EMAILS } from "@/lib/api/fixtures";
 import { createMockPlatform } from "@/lib/api/mock";
-import { createStepUp } from "@/lib/api/step-up";
+import { MOCK_CODE, createStepUp } from "@/lib/api/step-up";
 import { renderWithAuth } from "@/tests/render";
 import { ActivityView } from "./activity-view";
 
@@ -124,7 +124,10 @@ describe("Activity", () => {
       email_domains: ["lakeside.example"],
       first_admin: { name: "Bola Ade", email: "bola.ade@lakeside.example" },
     };
-    await m.addHospital(body, { idempotencyKey: "t14-1" });
+    await m.addHospital(
+      { ...body, mfa_code: MOCK_CODE },
+      { idempotencyKey: "t14-1" },
+    );
     renderWithAuth(<ActivityView />, { queryClient: client });
     await waitFor(() => expect(rows()).toHaveLength(14));
     expect(rows()[0].textContent).toContain(

@@ -8,6 +8,30 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Platform app: Add hospital works with core's new route (pairs with
+  core #280, openapi 1.38.0).** The form now:
+  - picks the country from a searchable list of names and sends its
+    2-letter ISO code (Nigeria first), so "Nigeria" typed as text is no
+    longer refused. The hospital's page and its Edit form show and pick
+    the name too, and a hospital with no country says "Not set";
+  - asks for the person's two-step or backup code before anything is sent
+    (product owner, 24 Nov), through the same step-up dialog as the other
+    sensitive actions. A wrong code, a lock or two-step being off stays in
+    the dialog;
+  - maps core's refusals: 422 `validation_failed` as "Check the details",
+    409 `duplicate` on the short code, 409 `email_in_use` on the first
+    admin's email ("Someone already has an account with this email."),
+    503 `no_delivery` as "Email isn't set up, so the invitation couldn't be
+    sent. Nothing was added.", and a 404 as "Couldn't add the hospital. Try
+    again." rather than "This was removed or no longer exists".
+    The reply and the hospital's page are read strictly with core's new
+    fields (country code, domains, first admin's invite), and the proxy
+    checks the add body's exact shape before it goes upstream. The sample
+    API matches core: a 3-day invite, a staff count of 1 (the invited first
+    admin), the new codes, and a `delivery: "none"` option for tests.
+
+### Fixed
+
 - **Platform app: a browser tab icon.** platforms. had no favicon (404); it
   now uses the same Measured Health icon as the clinical app
   (`app/favicon.ico` and `app/icon.svg`).

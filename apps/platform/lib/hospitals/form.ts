@@ -1,4 +1,5 @@
 import type { HospitalIn } from "../api/contract";
+import { countryCode } from "../countries";
 
 // The same rules as the sample API (and the backend), so a form that passes
 // here is not refused there.
@@ -43,8 +44,9 @@ function details(v: DetailValues, errors: Errors): Details {
   const short_code = v.shortCode.trim().toUpperCase();
   if (!SHORT_CODE.test(short_code))
     errors.shortCode = "Use 2 to 8 letters or numbers.";
-  const country = v.country.trim();
-  if (!len(country, 60)) errors.country = "Enter a country.";
+  // An assigned 2-letter code, as core takes it (the picker sends one).
+  const country = countryCode(v.country) ?? "";
+  if (!country) errors.country = "Choose a country from the list.";
   const time_zone = v.timeZone.trim();
   if (!len(time_zone, 64)) errors.timeZone = "Pick a time zone.";
   const email_domains = splitDomains(v.domains);
