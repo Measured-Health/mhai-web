@@ -9,7 +9,7 @@ import {
 } from "./contract";
 import { TEAM_EMAILS } from "./fixtures";
 import { createMockPlatform, type MockCore } from "./mock";
-import { MOCK_CODE, createStepUp } from "./step-up";
+import { MOCK_BACKUP_CODES, MOCK_CODE, createStepUp } from "./step-up";
 
 const START = Date.parse("2026-10-20T09:00:00.000Z");
 let n = 0;
@@ -207,7 +207,7 @@ describe("mock platform API", () => {
 
   it("add takes a backup code once", async () => {
     const { m } = setup();
-    const backup = { ...BARE, backup_code: "4F7K-92QX" };
+    const backup = { ...BARE, backup_code: MOCK_BACKUP_CODES[0] };
     await m.addHospital(backup, KEY());
     expect(
       await failure(
