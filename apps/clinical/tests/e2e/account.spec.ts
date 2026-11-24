@@ -197,3 +197,44 @@ test("new backup codes from the account page", async ({ page }) => {
   await page.getByRole("button", { name: "Get new codes" }).click();
   await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
 });
+
+test("move two-step to a new authenticator app from the account page", async ({
+  page,
+}) => {
+  await signIn(page);
+  await expect(page).toHaveURL(/\/$/);
+  await openAccountMenu(page);
+  await page.getByRole("menuitem", { name: "Profile & security" }).click();
+  await page.getByRole("button", { name: "Move to a new app" }).click();
+  // The current app's code (the sixth digit submits).
+  await page.getByLabel("Digit 1 of 6").click();
+  await page.keyboard.type("123456");
+  const qr = page.getByRole("img", {
+    name: "QR code for your authenticator app",
+  });
+  await expect(qr).toBeVisible();
+  await page.getByRole("button", { name: "Can't scan? Show key" }).click();
+  // The key, in groups of four.
+  const shown = page.getByText(/^(?:[A-Z2-7]{4} )+[A-Z2-7]{1,4}$/);
+  await expect(shown).toBeVisible();
+  const key = (await shown.textContent())!;
+  // A wrong code from the new app, then the right one.
+  await page.getByLabel("Digit 1 of 6").click();
+  await page.keyboard.type("000000");
+  await expect(
+    page.getByRole("alert").filter({ hasText: "That code didn't work." }),
+  ).toBeVisible();
+  await page.getByLabel("Digit 1 of 6").click();
+  await page.keyboard.type("123456");
+  await expect(page.getByText("Your new app is set up.")).toBeVisible();
+  await expect(
+    page.getByText(/your backup codes haven't changed/),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Done" }).click();
+  // The key is gone from the page, the address and the title.
+  await expect(qr).toHaveCount(0);
+  await expect(page.getByText(key)).toHaveCount(0);
+  await expect(page).toHaveURL(/\/account$/);
+  expect(page.url()).not.toContain(key.replace(/ /g, ""));
+  expect(await page.title()).not.toContain(key.slice(0, 4));
+});

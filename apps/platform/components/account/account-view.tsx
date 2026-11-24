@@ -11,6 +11,7 @@ import { AnalyticsEmailSection } from "./analytics-email-section";
 import { BackupCodesDialog } from "./backup-codes-dialog";
 import { ChangePasswordDialog } from "./change-password-dialog";
 import { DevicesSection } from "./devices-section";
+import { MoveAppDialog } from "./move-app-dialog";
 
 const row =
   "flex min-h-14 items-center gap-3 border-t border-line py-3 text-[14px]";
@@ -20,6 +21,7 @@ export function AccountView() {
   const net = useNeedsConnection();
   const [pwOpen, setPwOpen] = useState(false);
   const [codesOpen, setCodesOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   if (!user) return null;
   return (
     <>
@@ -94,6 +96,22 @@ export function AccountView() {
                 New backup codes
               </Button>
             </div>
+            <div className={row}>
+              <span className="flex-1">
+                Authenticator app
+                <small className="block text-[12px] text-ink-3">
+                  Got a new phone? Move your two-step codes to it.
+                </small>
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                {...net.props}
+                onClick={() => setMoveOpen(true)}
+              >
+                Move to a new app
+              </Button>
+            </div>
           </section>
 
           {isPlatformAdmin(user) && <AnalyticsEmailSection />}
@@ -104,6 +122,7 @@ export function AccountView() {
       </div>
       <ChangePasswordDialog open={pwOpen} onClose={() => setPwOpen(false)} />
       <BackupCodesDialog open={codesOpen} onClose={() => setCodesOpen(false)} />
+      <MoveAppDialog open={moveOpen} onClose={() => setMoveOpen(false)} />
     </>
   );
 }

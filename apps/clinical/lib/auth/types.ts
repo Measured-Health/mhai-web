@@ -1,3 +1,5 @@
+import type { MfaReplace, StepUpCode } from "@mhai/api-client/mfa-replace";
+
 export type Role =
   | "clinician"
   | "hospital_admin"
@@ -94,6 +96,13 @@ export interface MfaSetup {
   backupCodes: string[];
 }
 
+/**
+ * `MfaReplace`: a new authenticator app's key while two-step moves to it,
+ * held in the dialog's state only until the move ends or is cancelled.
+ * `StepUpCode`: the app's code or a backup code, as the API takes it.
+ */
+export type { MfaReplace, StepUpCode };
+
 /** Who is signed in, and the first sign-in steps they still owe. */
 export interface Session {
   user: User;
@@ -119,6 +128,21 @@ export interface AuthClient {
   confirmMfaSetup(code: string): Promise<void>;
   /** Replaces all backup codes; returns the new ones (shown once). */
   regenerateBackupCodes(): Promise<string[]>;
+  /**
+   * Starts moving two-step to a new authenticator app, confirmed with the
+   * current app's code or a backup code. The current app keeps working
+   * until `confirmMfaReplace`. Refusals are `ApiError`s (status and code).
+   */
+  startMfaReplace(
+    code: StepUpCode,
+    idempotencyKey: string,
+  ): Promise<MfaReplace>;
+  /**
+   * Finishes it with a code from the new app: the old app stops working and
+   * remembered devices are signed out. 409 `conflict`: nothing is waiting
+   * any more (over 15 minutes), so start again.
+   */
+  confirmMfaReplace(code: string, idempotencyKey: string): Promise<void>;
   requestPasswordReset(email: string): Promise<void>;
   resetPassword(token: string, next: string): Promise<void>;
   listDevices(): Promise<Device[]>;

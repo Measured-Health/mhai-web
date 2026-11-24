@@ -18,12 +18,15 @@ export async function callUpstream<T>(
     method = "GET",
     body,
     token,
+    idempotencyKey,
     timeoutMs = 15_000,
     fetchImpl = fetch,
   }: {
     method?: string;
     body?: unknown;
     token?: string;
+    /** Sent as Idempotency-Key; the caller has checked it already. */
+    idempotencyKey?: string;
     timeoutMs?: number;
     fetchImpl?: BackendFetch;
   } = {},
@@ -37,6 +40,7 @@ export async function callUpstream<T>(
         Accept: "application/json",
         ...(body !== undefined && { "Content-Type": "application/json" }),
         ...(token && { Authorization: `Bearer ${token}` }),
+        ...(idempotencyKey && { "Idempotency-Key": idempotencyKey }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),

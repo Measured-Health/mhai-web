@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { totp, verifyTotp } from "./totp";
+import { base32Encode, totp, verifyTotp } from "./totp";
 
 // RFC 6238 appendix B, SHA-1, secret "12345678901234567890".
 const SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
@@ -36,5 +36,14 @@ describe("totp", () => {
   it("rejects malformed codes", async () => {
     expect(await verifyTotp(SECRET, "abc", 0)).toBe(false);
     expect(await verifyTotp(SECRET, "", 0)).toBe(false);
+  });
+});
+
+describe("base32Encode", () => {
+  it("matches RFC 4648 (without padding) and the RFC 6238 key", () => {
+    expect(base32Encode("")).toBe("");
+    expect(base32Encode("f")).toBe("MY");
+    expect(base32Encode("foobar")).toBe("MZXW6YTBOI");
+    expect(base32Encode("12345678901234567890")).toBe(SECRET);
   });
 });

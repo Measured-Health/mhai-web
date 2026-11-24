@@ -1,6 +1,6 @@
 import { normalizeBackupCode } from "@mhai/api-client/codes";
 import { ApiError } from "@mhai/api-client/errors";
-import { verifyTotp } from "@mhai/api-client/totp";
+import { base32Encode, verifyTotp } from "@mhai/api-client/totp";
 
 /** The demo's two-step code. */
 export const MOCK_CODE = "123456";
@@ -19,6 +19,8 @@ export const MOCK_BACKUP_CODES = [
 ] as const;
 /** The demo's authenticator secret: real app codes for it work too. */
 export const MOCK_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
+/** The demo's "new app" key when two-step moves to another app. */
+export const MOCK_NEW_TOTP_SECRET = base32Encode("mhai-demo-new-app");
 const LOCK_MS = 15 * 60_000;
 const MAX_TRIES = 5;
 
@@ -32,25 +34,30 @@ export type StepUpResult = "ok" | "invalid" | "locked";
  * wrong tries lock that person for 15 minutes of the given clock.
  */
 export interface DemoStepUp {
-  /** The demo code or a current authenticator code. */
-  digitsOk(code: string): Promise<boolean>;
+  /** The demo code or a current code from the app (`secret`: another app's key). */
+  digitsOk(code: string, secret?: string): Promise<boolean>;
   /** Uses up a backup code if it is current; false if not. */
   takeBackup(code: string): boolean;
   setBackupCodes(codes: readonly string[]): void;
-  check(email: string | null, code: StepUpCode): Promise<StepUpResult>;
+  /** Moves two-step to another app's key: the old app's codes stop working. */
+  setSecret(secret: string): void;
+  /** `secret` checks a code from another app (a new one being added). */
+  check(
+    email: string | null,
+    code: StepUpCode,
+    secret?: string,
+  ): Promise<StepUpResult>;
 }
 
 export function createStepUp(now: () => number = () => Date.now()): DemoStepUp {
   let backupLeft = new Set<string>(MOCK_BACKUP_CODES);
+  let appSecret = MOCK_TOTP_SECRET;
   const failures = new Map<string, number>();
   const lockedUntil = new Map<string, number>();
   const self: DemoStepUp = {
-    async digitsOk(code) {
+    async digitsOk(code, secret = appSecret) {
       const digits = code.replace(/\s/g, "");
-      return (
-        digits === MOCK_CODE ||
-        (await verifyTotp(MOCK_TOTP_SECRET, digits, now()))
-      );
+      return digits === MOCK_CODE || (await verifyTotp(secret, digits, now()));
     },
     takeBackup(code) {
       return backupLeft.delete(normalizeBackupCode(code));
@@ -58,13 +65,16 @@ export function createStepUp(now: () => number = () => Date.now()): DemoStepUp {
     setBackupCodes(codes) {
       backupLeft = new Set(codes);
     },
-    async check(email, code) {
+    setSecret(secret) {
+      appSecret = secret;
+    },
+    async check(email, code, secret) {
       const key = email?.toLowerCase() ?? "";
       if ((lockedUntil.get(key) ?? 0) > now()) return "locked";
       const ok =
         "backup_code" in code
           ? self.takeBackup(code.backup_code)
-          : await self.digitsOk(code.mfa_code);
+          : await self.digitsOk(code.mfa_code, secret);
       if (ok) {
         failures.delete(key);
         return "ok";

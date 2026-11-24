@@ -1,8 +1,10 @@
 import { setMockSignedIn } from "../api/mock";
 import { seedTeam, TEAM_EMAILS } from "../api/fixtures";
+import { ApiError } from "@mhai/api-client/errors";
 import {
   getDemoStepUp,
   MOCK_BACKUP_CODES,
+  MOCK_NEW_TOTP_SECRET,
   MOCK_TOTP_SECRET,
   type DemoStepUp,
 } from "../api/step-up";
@@ -24,6 +26,8 @@ export const MOCK_NEW_BACKUP_CODES = MOCK_BACKUP_CODES.map((c) =>
 );
 const LOCK_MS = 15 * 60_000;
 const MAX_TRIES = 5;
+/** How long a move to a new app waits for its first code (core: 15 minutes). */
+export const REPLACE_MS = 15 * 60_000;
 // Core's order: password and two-step first, then the terms.
 const ALL_STEPS: FirstStep[] = ["password", "mfa", "terms"];
 
@@ -81,6 +85,8 @@ export function createMockAuthClient({
   const failures = new Map<string, number>();
   const lockedUntil = new Map<string, number>();
   let devices: Device[] = [];
+  /** A move to a new app waiting for its first code (memory only). */
+  let replacing: { secret: string; at: number } | null = null;
 
   const userFor = (email: string, a: Account): User => ({
     id: email.split("@")[0]!,
@@ -117,6 +123,7 @@ export function createMockAuthClient({
     session = null;
     steps = [];
     pending = null;
+    replacing = null;
     setMockSignedIn(null);
   };
   const requireSession = () => {
@@ -202,6 +209,7 @@ export function createMockAuthClient({
     async startMfaSetup() {
       const u = requireSession();
       codes.setBackupCodes(MOCK_BACKUP_CODES);
+      codes.setSecret(MOCK_TOTP_SECRET);
       const label = encodeURIComponent("MHAI Platform Demo");
       return {
         // Listed as a demo in authenticator apps, so the shared demo key is
@@ -224,6 +232,38 @@ export function createMockAuthClient({
       codes.setBackupCodes(MOCK_NEW_BACKUP_CODES);
       session = { ...u, backupCodesLeft: 10 };
       return [...MOCK_NEW_BACKUP_CODES];
+    },
+
+    // Core's rules: a step-up starts it, the current app works until the
+    // new app's code confirms it (within 15 minutes), the backup codes stay.
+    async startMfaReplace(code) {
+      const u = session;
+      if (!u) throw new ApiError(401, "session_expired");
+      if (!u.mfaEnabled) throw new ApiError(403, "mfa_required");
+      const r = await codes.check(u.email, code);
+      if (r === "locked") throw new ApiError(429, "mfa_locked");
+      if (r === "invalid") throw new ApiError(403, "mfa_invalid");
+      replacing = { secret: MOCK_NEW_TOTP_SECRET, at: now() };
+      const label = encodeURIComponent("MHAI Platform Demo");
+      return {
+        otpauthUri: `otpauth://totp/${label}:${encodeURIComponent(u.email)}?secret=${MOCK_NEW_TOTP_SECRET}&issuer=${label}&algorithm=SHA1&digits=6&period=30`,
+        secret: MOCK_NEW_TOTP_SECRET,
+      };
+    },
+
+    async confirmMfaReplace(code) {
+      const u = session;
+      if (!u) throw new ApiError(401, "session_expired");
+      const waiting = replacing;
+      if (!waiting || now() - waiting.at > REPLACE_MS) {
+        replacing = null;
+        throw new ApiError(409, "conflict");
+      }
+      const r = await codes.check(u.email, { mfa_code: code }, waiting.secret);
+      if (r === "locked") throw new ApiError(429, "mfa_locked");
+      if (r === "invalid") throw new ApiError(403, "mfa_invalid");
+      codes.setSecret(waiting.secret);
+      replacing = null;
     },
 
     async listDevices() {
