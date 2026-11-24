@@ -32,7 +32,7 @@ describe("offline", () => {
     expect(screen.getAllByText(REASON)[0]).toBeVisible();
     for (const name of [
       "Change password",
-      "New backup codes",
+      "Make a new backup code",
       "Sign out everywhere",
     ]) {
       const b = screen.getByRole("button", { name });

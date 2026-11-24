@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, NotEligibleError } from "./errors";
+import { clearNewBackupCode, pendingBackupCode } from "./new-backup-code";
 import { createApiRequest } from "./request";
 
 describe("createApiRequest", () => {
@@ -256,5 +257,53 @@ describe("createApiRequest", () => {
     const e4 = await apiOk(other, "/x").catch((x) => x);
     expect(e4).toBeInstanceOf(ApiError);
     expect(e4).not.toBeInstanceOf(NotEligibleError);
+  });
+
+  describe("a new backup code in the reply", () => {
+    const withCode = (status: number, code: string) => async () =>
+      Response.json(status < 300 ? { ok: true } : { code: "x" }, {
+        status,
+        headers: { "X-MHAI-New-Backup-Code": code },
+      });
+    const { apiOk, apiRequest } = createApiRequest({
+      prefix: "/api/v1",
+      onUnauthorized: vi.fn(),
+    });
+    afterEach(() => clearNewBackupCode());
+
+    it("is held in memory from a success, never in the returned data", async () => {
+      const data = await apiOk(withCode(200, "ppppp-qqqqq"), "/x", {
+        method: "POST",
+      });
+      expect(data).toEqual({ ok: true });
+      expect(JSON.stringify(data)).not.toContain("ppppp-qqqqq");
+      expect(pendingBackupCode()).toBe("ppppp-qqqqq");
+    });
+    it("is held from a refusal too (the code was spent first)", async () => {
+      const e = await apiOk(withCode(409, "ppppp-qqqqq"), "/x", {
+        method: "POST",
+      }).catch((x: unknown) => x);
+      expect(e).toMatchObject({ status: 409, code: "x" });
+      expect(JSON.stringify(e)).not.toContain("ppppp-qqqqq");
+      expect(pendingBackupCode()).toBe("ppppp-qqqqq");
+    });
+    it("a refusal without it leaves nothing", async () => {
+      await apiRequest(
+        async () => Response.json({ code: "mfa_invalid" }, { status: 403 }),
+        "/x",
+        { method: "POST" },
+      );
+      expect(pendingBackupCode()).toBeNull();
+    });
+    it("is ignored when it isn't a backup code", async () => {
+      for (const bad of [
+        "PPPPP-QQQQQ",
+        "pppppqqqqq",
+        "<script>",
+        "ppppp-qqqqq, rrrrr-sssss",
+      ])
+        await apiOk(withCode(200, bad), "/x", { method: "POST" });
+      expect(pendingBackupCode()).toBeNull();
+    });
   });
 });

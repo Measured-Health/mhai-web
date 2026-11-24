@@ -4,7 +4,6 @@ import { AuthError, initials, isClinical } from "./types";
 import {
   MOCK_BACKUP_CODES,
   MOCK_CODE,
-  MOCK_NEW_BACKUP_CODES,
   MOCK_RESET_TOKEN,
   MOCK_SSO_CODE,
   MOCK_TOTP_SECRET,
@@ -102,15 +101,18 @@ describe("mock auth client", () => {
 
     await c.signOut();
     await c.signIn("mfa@h.org", "pw");
-    const code = MOCK_BACKUP_CODES[0]!.toLowerCase().replace("-", " ");
+    const code = MOCK_BACKUP_CODES[0].toUpperCase().replace("-", " ");
     expect(
-      (await c.verifyCode(code, { backup: true, trustDevice: false })).status,
-    ).toBe("signed_in");
+      await c.verifyCode(code, { backup: true, trustDevice: false }),
+    ).toMatchObject({
+      status: "signed_in",
+      newBackupCode: MOCK_BACKUP_CODES[1],
+    });
     await c.signOut();
     await c.signIn("mfa@h.org", "pw");
     expect(
       await fail(
-        c.verifyCode(MOCK_BACKUP_CODES[0]!, {
+        c.verifyCode(MOCK_BACKUP_CODES[0], {
           backup: true,
           trustDevice: false,
         }),
@@ -145,7 +147,7 @@ describe("mock auth client", () => {
     expect(new URL(setup.otpauthUri).searchParams.get("issuer")).toBe(
       "MHAI Demo",
     );
-    expect(setup.backupCodes).toHaveLength(10);
+    expect(setup.backupCode).toBe(MOCK_BACKUP_CODES[0]);
     await expect(c.confirmMfaSetup("111111")).rejects.toMatchObject({
       code: "mfa_invalid",
     });
@@ -280,16 +282,33 @@ describe("mock auth client", () => {
     );
   });
 
-  it("replaces backup codes and counts what's left", async () => {
+  it("keeps one backup code: using it or making a new one issues the next", async () => {
     const c = createMockAuthClient();
     await c.signIn("mfa@h.org", "pw");
-    await c.verifyCode(MOCK_BACKUP_CODES[0]!, {
+    const r = await c.verifyCode(MOCK_BACKUP_CODES[0], {
       backup: true,
       trustDevice: false,
     });
-    expect((await c.getSession())?.user.backupCodesLeft).toBe(7);
-    expect(await c.regenerateBackupCodes()).toEqual(MOCK_NEW_BACKUP_CODES);
-    expect((await c.getSession())?.user.backupCodesLeft).toBe(10);
+    expect(r).toMatchObject({ newBackupCode: MOCK_BACKUP_CODES[1] });
+    expect((await c.getSession())?.user.backupCodesLeft).toBe(1);
+    // A wrong code makes nothing.
+    await expect(
+      c.regenerateBackupCode({ mfa_code: "000000" }, "k-1"),
+    ).rejects.toMatchObject({ code: "mfa_invalid" });
+    expect(await c.regenerateBackupCode({ mfa_code: MOCK_CODE }, "k-2")).toBe(
+      MOCK_BACKUP_CODES[2],
+    );
+    // With the current backup code instead: it makes way for the new one.
+    expect(
+      await c.regenerateBackupCode(
+        { backup_code: MOCK_BACKUP_CODES[2] },
+        "k-3",
+      ),
+    ).toBe(MOCK_BACKUP_CODES[3]);
+    await expect(
+      c.regenerateBackupCode({ backup_code: MOCK_BACKUP_CODES[2] }, "k-4"),
+    ).rejects.toMatchObject({ code: "mfa_invalid" });
+    expect((await c.getSession())?.user.backupCodesLeft).toBe(1);
   });
 
   it("accepts a real authenticator code and rejects a wrong one", async () => {

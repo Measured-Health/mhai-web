@@ -5,6 +5,7 @@ import { ApiError } from "@mhai/api-client/errors";
 import type { StepUp } from "@/lib/api/clearances-contract";
 import { adminError, type AdminError } from "@/lib/admin/errors";
 import { useAuth } from "@/lib/auth/auth-context";
+import { backupCodesAfterUse } from "@/lib/auth/backup-code-used";
 import { errorText } from "@/lib/clearances/summary";
 import type { StepUpState } from "../step-up-fields";
 
@@ -51,7 +52,9 @@ export function useLetterAnswer(step: StepUpState) {
     /** A backup code works once; Profile & security shows what's left. */
     spent(auth: StepUp) {
       if ("backupCode" in auth && user?.backupCodesLeft != null)
-        updateUser({ backupCodesLeft: Math.max(0, user.backupCodesLeft - 1) });
+        updateUser({
+          backupCodesLeft: backupCodesAfterUse(user.backupCodesLeft),
+        });
     },
   };
 }

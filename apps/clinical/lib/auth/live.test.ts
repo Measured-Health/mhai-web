@@ -66,11 +66,33 @@ describe("live auth client", () => {
     expect(url).toBe("/api/auth/devices");
     expect(init.method).toBe("GET");
   });
-  it("regenerates backup codes", async () => {
-    const c = createLiveAuthClient({
-      fetchImpl: reply(200, { backupCodes: ["A"] }),
+  it("makes a new backup code, confirmed with a code", async () => {
+    const fetchImpl = reply(200, { backupCode: "rrrrr-sssss" });
+    const c = createLiveAuthClient({ fetchImpl });
+    expect(await c.regenerateBackupCode({ mfa_code: "123456" }, "k-1")).toBe(
+      "rrrrr-sssss",
+    );
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe("/api/auth/mfa/recovery-codes");
+    expect(JSON.parse(String(init.body))).toEqual({ mfa_code: "123456" });
+    expect(new Headers(init.headers).get("Idempotency-Key")).toBe("k-1");
+  });
+  it("a new backup code refusal is an ApiError; a reply that isn't one code is refused", async () => {
+    const refused = createLiveAuthClient({
+      fetchImpl: reply(403, { code: "mfa_invalid" }),
     });
-    expect(await c.regenerateBackupCodes()).toEqual(["A"]);
+    await expect(
+      refused.regenerateBackupCode({ mfa_code: "000000" }, "k-1"),
+    ).rejects.toMatchObject({ status: 403, code: "mfa_invalid" });
+    const odd = createLiveAuthClient({
+      fetchImpl: reply(200, { backupCode: "NOT-A-CODE" }),
+    });
+    await expect(
+      odd.regenerateBackupCode({ mfa_code: "123456" }, "k-1"),
+    ).rejects.toMatchObject({ status: 502 });
   });
   it("accepts empty success replies", async () => {
     const c = createLiveAuthClient({ fetchImpl: reply(202) });

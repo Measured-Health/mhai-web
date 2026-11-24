@@ -50,6 +50,9 @@ export const REPLY_HEADERS = [
   "Sunset",
   "Link",
   "X-Content-Type-Options",
+  // A step-up confirmed with a backup code: core's new code (the proxy
+  // checks its shape and passes it on a success only).
+  "X-MHAI-New-Backup-Code",
 ] as const;
 
 const METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);

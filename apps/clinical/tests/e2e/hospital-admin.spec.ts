@@ -155,8 +155,9 @@ test("a new hospital admin sets a password and two-step, accepts the terms, then
     page.getByRole("heading", { name: "Staff", level: 2 }),
   ).toHaveCount(0);
   await typeCode(page, "123456");
-  await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
-  await page.getByLabel("I've saved these codes somewhere safe").check();
+  await expect(
+    page.getByRole("group", { name: "Your backup code" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Finish setup" }).click();
   await page.getByLabel("I understand and agree to use MHAI this way").check();
   await page.getByRole("button", { name: "Continue" }).click();

@@ -3,14 +3,16 @@ import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import { isPlatformAdmin } from "@/lib/auth/types";
 import { useAuth } from "@/lib/auth/auth-context";
+import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { roleLabel, Avatar } from "../shell/account-menu";
 import { TopBar } from "../shell/top-bar";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 import { AnalyticsEmailSection } from "./analytics-email-section";
-import { BackupCodesDialog } from "./backup-codes-dialog";
 import { ChangePasswordDialog } from "./change-password-dialog";
 import { DevicesSection } from "./devices-section";
+import { MoveAppDialog } from "./move-app-dialog";
+import { NewBackupCodeDialog } from "./new-backup-code-dialog";
 
 const row =
   "flex min-h-14 items-center gap-3 border-t border-line py-3 text-[14px]";
@@ -20,6 +22,7 @@ export function AccountView() {
   const net = useNeedsConnection();
   const [pwOpen, setPwOpen] = useState(false);
   const [codesOpen, setCodesOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   if (!user) return null;
   return (
     <>
@@ -47,8 +50,9 @@ export function AccountView() {
           </section>
 
           <section
+            id="security"
             aria-labelledby="security-h"
-            className="card-v3 px-[22px] py-5"
+            className="card-v3 scroll-mt-4 px-[22px] py-5"
           >
             <h2 id="security-h" className="text-base font-semibold">
               Security
@@ -78,20 +82,55 @@ export function AccountView() {
             </div>
             <div className={row}>
               <span className="flex-1">
-                Backup codes
+                Backup code
                 <small className="block text-[12px] text-ink-3">
-                  {user.backupCodesLeft !== null
-                    ? `${user.backupCodesLeft} left`
-                    : "Use one if you lose your phone"}
+                  {user.backupCodesLeft === 0
+                    ? "None ready"
+                    : "Use it if you don't have your phone. You get a new one each time."}
+                </small>
+              </span>
+              {user.backupCodesLeft !== 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Make a new backup code"
+                  {...net.props}
+                  onClick={() => setCodesOpen(true)}
+                >
+                  New code
+                </Button>
+              )}
+            </div>
+            {user.backupCodesLeft === 0 && (
+              <Banner tone="warn" title="You have no backup code">
+                <p>
+                  Without one, you can&apos;t sign in if you don&apos;t have
+                  your phone.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-2"
+                  {...net.props}
+                  onClick={() => setCodesOpen(true)}
+                >
+                  Make a new backup code
+                </Button>
+              </Banner>
+            )}
+            <div className={row}>
+              <span className="flex-1">
+                Authenticator app
+                <small className="block text-[12px] text-ink-3">
+                  Got a new phone? Move your two-step codes to it.
                 </small>
               </span>
               <Button
                 variant="ghost"
                 size="sm"
                 {...net.props}
-                onClick={() => setCodesOpen(true)}
+                onClick={() => setMoveOpen(true)}
               >
-                New backup codes
+                Move to a new app
               </Button>
             </div>
           </section>
@@ -103,7 +142,11 @@ export function AccountView() {
         </div>
       </div>
       <ChangePasswordDialog open={pwOpen} onClose={() => setPwOpen(false)} />
-      <BackupCodesDialog open={codesOpen} onClose={() => setCodesOpen(false)} />
+      <NewBackupCodeDialog
+        open={codesOpen}
+        onClose={() => setCodesOpen(false)}
+      />
+      <MoveAppDialog open={moveOpen} onClose={() => setMoveOpen(false)} />
     </>
   );
 }

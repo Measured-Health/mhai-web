@@ -1,4 +1,6 @@
+import { NEW_BACKUP_CODE_HEADER, readBackupCode } from "./codes";
 import { ApiError, refusal } from "./errors";
+import { offerNewBackupCode } from "./new-backup-code";
 
 export interface RequestOpts {
   method?: string;
@@ -53,6 +55,12 @@ export function createApiRequest({ prefix, onUnauthorized }: ApiRequestConfig) {
       onUnauthorized();
       throw new ApiError(401, "session_expired");
     }
+    // A backup code was spent on this call: core's new one, shown once,
+    // whether the action then worked or not (core sends it on a refusal
+    // too once the code is spent). Only in the exact shape; held in
+    // memory, never in the reply the query cache sees.
+    const fresh = readBackupCode(res.headers.get(NEW_BACKUP_CODE_HEADER));
+    if (fresh) offerNewBackupCode(fresh);
     return res;
   }
 

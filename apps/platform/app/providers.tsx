@@ -1,6 +1,7 @@
 "use client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { NewBackupCode } from "@/components/auth/new-backup-code";
 import { IdleGuard } from "@/components/states/idle-guard";
 import { AuthProvider } from "@/lib/auth/auth-context";
 import { QUERY_DEFAULTS } from "@/lib/queries/keys";
@@ -22,6 +23,8 @@ export function Providers({ children }: { children: ReactNode }) {
           {children}
           {/* The 15-minute idle sign-out, on every page while signed in. */}
           <IdleGuard />
+          {/* A backup code confirmed an action: its replacement, once. */}
+          <NewBackupCode />
         </AuthProvider>
       </ToastProvider>
     </QueryClientProvider>

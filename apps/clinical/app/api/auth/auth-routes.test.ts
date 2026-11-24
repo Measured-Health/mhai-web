@@ -49,6 +49,12 @@ const post = (body?: unknown, origin = "http://demo.test") =>
     headers: { "content-type": "application/json", host: "demo.test", origin },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+/** A request with an Idempotency-Key, as the step-up calls send. */
+const keyed = (body?: unknown, key = "k-1") => {
+  const r = post(body);
+  r.headers.set("Idempotency-Key", key);
+  return r;
+};
 const LOGIN_OK = {
   access_token: "tok",
   expires_in: 900,
@@ -177,6 +183,64 @@ describe("mfa", () => {
       body: { mfa_token: "m", code: "123456", trust_device: false },
     });
     expect(jar.values.get(MFA_COOKIE)).toBeUndefined();
+  });
+  it("a backup code's replacement reaches the page in that reply only", async () => {
+    upstream.mockResolvedValueOnce({ mfa_required: true, mfa_token: "m" });
+    await login(post({ login: "a", password: "pw" }));
+    upstream.mockResolvedValueOnce({
+      ...LOGIN_OK,
+      new_backup_code: "rrrrr-sssss",
+    });
+    const res = await mfa(
+      post({ code: "ppppp-qqqqq", backup: true, trustDevice: false }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(await res.json()).toMatchObject({
+      status: "signed_in",
+      newBackupCode: "rrrrr-sssss",
+    });
+    // Never in a cookie (the session is sealed, so check what it holds).
+    expect(JSON.stringify(await readSession())).not.toContain("rrrrr-sssss");
+    expect(
+      [...jar.values.values()].some((v) => v.includes("rrrrr-sssss")),
+    ).toBe(false);
+    expect(await (await session()).text()).not.toContain("rrrrr-sssss");
+  });
+  it("drops a replacement that isn't a backup code, or comes without one used", async () => {
+    for (const [code, backup] of [
+      ["RRRRR-SSSSS", true],
+      ["<b>x</b>", true],
+      ["rrrrr-sssss", false],
+    ] as const) {
+      upstream.mockResolvedValueOnce({ mfa_required: true, mfa_token: "m" });
+      await login(post({ login: "a", password: "pw" }));
+      upstream.mockResolvedValueOnce({ ...LOGIN_OK, new_backup_code: code });
+      const res = await mfa(
+        post({ code: "ppppp-qqqqq", backup, trustDevice: false }),
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).not.toHaveProperty("newBackupCode");
+    }
+  });
+  it("a sign-in refused after core spent the backup code still passes the new one", async () => {
+    upstream.mockResolvedValueOnce({ mfa_required: true, mfa_token: "m" });
+    await login(post({ login: "a", password: "pw" }));
+    upstream.mockRejectedValueOnce(
+      new UpstreamError(500, "internal_error", "rrrrr-sssss"),
+    );
+    const res = await mfa(
+      post({ code: "ppppp-qqqqq", backup: true, trustDevice: false }),
+    );
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(await res.json()).toEqual({
+      code: "unavailable",
+      newBackupCode: "rrrrr-sssss",
+    });
+    expect(
+      [...jar.values.values()].some((v) => v.includes("rrrrr-sssss")),
+    ).toBe(false);
   });
   it("says the step expired when nothing is held", async () => {
     const res = await mfa(
@@ -364,13 +428,13 @@ describe("two-step setup", () => {
     upstream.mockResolvedValueOnce({
       otpauth_uri:
         "otpauth://totp/MHAI:a.reyes?secret=ABCDEF234567&issuer=MHAI",
-      recovery_codes: ["AAAA-1111"],
+      recovery_codes: ["ppppp-qqqqq"],
     });
     const res = await setup(post());
     expect(await res.json()).toEqual({
       otpauthUri: "otpauth://totp/MHAI:a.reyes?secret=ABCDEF234567&issuer=MHAI",
       secret: "ABCDEF234567",
-      backupCodes: ["AAAA-1111"],
+      backupCode: "ppppp-qqqqq",
     });
     upstream.mockResolvedValueOnce(undefined);
     upstream.mockResolvedValueOnce({
@@ -460,13 +524,86 @@ describe("assumed endpoints", () => {
     expect((await signOutAll(post())).status).toBe(204);
     expect(jar.values.get(SESSION_COOKIE)).toBeUndefined();
   });
-  it("issues new backup codes and updates the count", async () => {
+  it("makes a new backup code with a step-up code and the key, and counts it", async () => {
     await signedIn();
-    upstream.mockResolvedValueOnce({ recovery_codes: ["A", "B"] });
-    expect(await (await newCodes(post())).json()).toEqual({
-      backupCodes: ["A", "B"],
+    upstream.mockResolvedValueOnce({ recovery_codes: ["rrrrr-sssss"] });
+    const res = await newCodes(keyed({ mfa_code: "123456" }));
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(await res.json()).toEqual({ backupCode: "rrrrr-sssss" });
+    expect(upstream).toHaveBeenLastCalledWith("/auth/mfa/recovery-codes", {
+      method: "POST",
+      token: "tok",
+      body: { mfa_code: "123456" },
+      idempotencyKey: "k-1",
     });
-    expect((await readSession())?.user.backupCodesLeft).toBe(2);
+    expect((await readSession())?.user.backupCodesLeft).toBe(1);
+    upstream.mockResolvedValueOnce({ recovery_codes: ["ttttt-uuuuu"] });
+    await newCodes(keyed({ backup_code: "rrrrr-sssss" }, "k-2"));
+    expect(upstream).toHaveBeenLastCalledWith("/auth/mfa/recovery-codes", {
+      method: "POST",
+      token: "tok",
+      body: { backup_code: "rrrrr-sssss" },
+      idempotencyKey: "k-2",
+    });
+  });
+  it("a refused new backup code keeps only the code, and passes a spent code's replacement", async () => {
+    await signedIn();
+    upstream.mockRejectedValueOnce(new UpstreamError(403, "mfa_invalid"));
+    const res = await newCodes(keyed({ mfa_code: "000000" }));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ code: "mfa_invalid" });
+    upstream.mockRejectedValueOnce(
+      new UpstreamError(500, "internal_error", "rrrrr-sssss"),
+    );
+    const spent = await newCodes(keyed({ backup_code: "ppppp-qqqqq" }));
+    expect(spent.status).toBe(503);
+    expect(spent.headers.get("X-MHAI-New-Backup-Code")).toBe("rrrrr-sssss");
+    expect(await spent.json()).toEqual({ code: "unavailable" });
+  });
+  it("a new backup code reply that isn't exactly one code shows none, and none is counted", async () => {
+    for (const recovery_codes of [
+      ["rrrrr-sssss", "ttttt-uuuuu"],
+      [],
+      ["RRRRR-SSSSS"],
+      "rrrrr-sssss",
+    ]) {
+      await signedIn();
+      upstream.mockResolvedValueOnce({ recovery_codes });
+      const res = await newCodes(keyed({ mfa_code: "123456" }));
+      expect(res.status).toBe(502);
+      expect(await res.text()).not.toContain("rrrrr-sssss");
+      expect((await readSession())?.user.backupCodesLeft).toBe(0);
+    }
+  });
+  it("a new backup code needs exactly one code and a key, and nothing else", async () => {
+    await signedIn();
+    for (const body of [
+      undefined,
+      {},
+      { code: "123456", backup: false },
+      { mfa_code: "12345" },
+      { backup_code: "ABCD-2345" },
+      { mfa_code: "123456", backup_code: "ppppp-qqqqq" },
+      { mfa_code: "123456", user_id: "u2" },
+    ]) {
+      expect((await newCodes(keyed(body))).status).toBe(422);
+    }
+    // No key, or a bad one.
+    expect((await newCodes(post({ mfa_code: "123456" }))).status).toBe(422);
+    expect((await newCodes(keyed({ mfa_code: "123456" }, "a/b"))).status).toBe(
+      422,
+    );
+    expect(upstream).toHaveBeenCalledTimes(1); // the sign-in only
+  });
+  it("two-step setup that doesn't send exactly one backup code shows none", async () => {
+    await signedIn({ mfa_enabled: false });
+    upstream.mockResolvedValueOnce({
+      otpauth_uri: "otpauth://totp/MHAI:a?secret=ABCDEF234567&issuer=MHAI",
+      recovery_codes: ["ppppp-qqqqq", "rrrrr-sssss"],
+    });
+    const res = await setup(post());
+    expect(res.status).toBe(502);
+    expect(await res.text()).not.toContain("ABCDEF234567");
   });
   it("trusts a device after two-step, and offers it at the next sign-in", async () => {
     upstream.mockResolvedValueOnce({ mfa_required: true, mfa_token: "m" });

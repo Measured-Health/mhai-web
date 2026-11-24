@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { Hospital } from "@/lib/api/contract";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
+import { backupCodesAfterUse } from "@/lib/auth/backup-code-used";
 import { platformError } from "@/lib/errors";
 import { useRefreshHospital, useRequestRemoval } from "@/lib/queries/removal";
 import { Button } from "@mhai/ui/button";
@@ -50,7 +51,7 @@ export function DangerZone({ hospital: h }: { hospital: Hospital }) {
           // A backup code works once; Account shows what's left.
           if ("backup_code" in code && user?.backupCodesLeft != null)
             updateUser({
-              backupCodesLeft: Math.max(0, user.backupCodesLeft - 1),
+              backupCodesLeft: backupCodesAfterUse(user.backupCodesLeft),
             });
           close();
         },

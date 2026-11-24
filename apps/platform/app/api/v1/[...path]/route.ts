@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NEW_BACKUP_CODE_HEADER, readBackupCode } from "@mhai/api-client/codes";
 import { analysisSignedOff } from "@/lib/server/features";
 import { refreshSession, refreshWithinMs } from "@/lib/server/refresh";
 import {
@@ -397,6 +398,21 @@ function shapeOf(method: string, path: string[]): string | null {
 }
 
 /**
+ * Core's new backup code, once a backup code was spent on this call: the
+ * one upstream header passed to the page, on any reply (core sends it on a
+ * refusal too when the code was spent first), only in the code's exact
+ * shape (anything else is dropped). Never logged; every reply is no-store.
+ */
+function withNewBackupCode(upstream: Response, out: Response): Response {
+  const code = readBackupCode(upstream.headers.get(NEW_BACKUP_CODE_HEADER));
+  if (code) {
+    out.headers.set(NEW_BACKUP_CODE_HEADER, code);
+    out.headers.set("Cache-Control", "no-store");
+  }
+  return out;
+}
+
+/**
  * The problem body sent back: only the code, plus who blocks a removal, and
  * how many entries an export would hold.
  */
@@ -516,40 +532,47 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
       string,
       unknown
     > | null;
-    return json(res.status, problem(res.status, p));
+    return withNewBackupCode(res, json(res.status, problem(res.status, p)));
   }
   const reply = REPLIES.get(shape);
   if (reply) {
     const parsed = reply.safeParse(await res.json().catch(() => undefined));
-    if (!parsed.success) return json(502, { code: "bad_gateway" });
-    return new Response(JSON.stringify(parsed.data), {
-      status: res.status,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-      },
-    });
+    if (!parsed.success)
+      return withNewBackupCode(res, json(502, { code: "bad_gateway" }));
+    return withNewBackupCode(
+      res,
+      new Response(JSON.stringify(parsed.data), {
+        status: res.status,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        },
+      }),
+    );
   }
   const type = res.headers.get("Content-Type") ?? "application/json";
   // A file is passed through only as a type its shape allows.
   if (file && !file.types.includes(type.split(";")[0]!.trim().toLowerCase())) {
     await res.body?.cancel().catch(() => {});
-    return json(502, { code: "bad_gateway" });
+    return withNewBackupCode(res, json(502, { code: "bad_gateway" }));
   }
-  return new Response(res.body, {
-    status: res.status,
-    headers: {
-      "Content-Type": type,
-      "Cache-Control": "no-store",
-      // A page is shown, never saved or sniffed as anything else.
-      ...(file?.inline
-        ? {
-            "Content-Disposition": "inline",
-            "X-Content-Type-Options": "nosniff",
-          }
-        : {}),
-    },
-  });
+  return withNewBackupCode(
+    res,
+    new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": type,
+        "Cache-Control": "no-store",
+        // A page is shown, never saved or sniffed as anything else.
+        ...(file?.inline
+          ? {
+              "Content-Disposition": "inline",
+              "X-Content-Type-Options": "nosniff",
+            }
+          : {}),
+      },
+    }),
+  );
 }
 
 export const GET = handle;

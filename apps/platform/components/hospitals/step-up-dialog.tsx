@@ -403,7 +403,7 @@ function StepUpForm({
       <div className="mt-4">
         <p className="mb-2 text-[13px]">
           {c.backup
-            ? "Enter one of your backup codes to confirm."
+            ? "Enter your backup code to confirm."
             : "Enter the 6-digit code from your authenticator app to confirm."}
         </p>
         {c.backup ? (

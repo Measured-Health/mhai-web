@@ -1,3 +1,14 @@
+import { mfaReplaceCalls } from "@mhai/api-client/mfa-replace";
+import { readBackupCode } from "@mhai/api-client/codes";
+import { ApiError } from "@mhai/api-client/errors";
+import { createApiRequest, keyHeader } from "@mhai/api-client/request";
+import { reportUnauthorized } from "./events";
+
+/** The step-up calls under /api/auth (a 401 signs out, as /api/v1 does). */
+const stepUpApi = createApiRequest({
+  prefix: "/api/auth",
+  onUnauthorized: reportUnauthorized,
+});
 import {
   AUTH_ERROR_CODES,
   AuthError,
@@ -46,13 +57,19 @@ export function createLiveAuthClient({
       ) as T;
     const data = (await res.json().catch(() => null)) as {
       code?: string;
+      newBackupCode?: unknown;
     } | null;
     throw new AuthError(
       KNOWN.has(data?.code as AuthErrorCode)
         ? (data!.code as AuthErrorCode)
         : "unavailable",
+      undefined,
+      readBackupCode(data?.newBackupCode) ?? undefined,
     );
   }
+
+  // Step-up calls: refusals come back as ApiError, like other step-ups.
+  const replace = mfaReplaceCalls(fetchImpl);
 
   return {
     capabilities: LIVE_CAPABILITIES,
@@ -81,10 +98,19 @@ export function createLiveAuthClient({
     changePassword: (current, next) => call("/password", { current, next }),
     startMfaSetup: () => call("/mfa/setup"),
     confirmMfaSetup: (code) => call("/mfa/setup/confirm", { code }),
-    async regenerateBackupCodes() {
-      const r = await call<{ backupCodes: string[] }>("/mfa/recovery-codes");
-      return r.backupCodes;
+    async regenerateBackupCode(code, idempotencyKey) {
+      // A step-up: refusals come back as ApiError, like other step-ups.
+      const r = await stepUpApi.apiOk<{ backupCode?: unknown }>(
+        fetchImpl,
+        "/mfa/recovery-codes",
+        { method: "POST", body: code, headers: keyHeader({ idempotencyKey }) },
+      );
+      const fresh = readBackupCode(r?.backupCode);
+      if (!fresh) throw new ApiError(502, "bad_gateway");
+      return fresh;
     },
+    startMfaReplace: (code, key) => replace.start(code, key),
+    confirmMfaReplace: (code, key) => replace.confirm(code, key),
     requestPasswordReset: (email) => call("/password/forgot", { email }),
     resetPassword: (token, next) => call("/password/reset", { token, next }),
     listDevices: () => call("/devices", undefined, "GET"),

@@ -1,6 +1,11 @@
 "use client";
 import { useState } from "react";
+import {
+  pendingBackupCode,
+  whenBackupCodeSaved,
+} from "@mhai/api-client/new-backup-code";
 import { useAuth } from "../auth/auth-context";
+import { backupCodesAfterUse } from "@/lib/auth/backup-code-used";
 
 /** The parts of a keyed mutation a step-up call uses. */
 type Write<V, R> = {
@@ -39,16 +44,27 @@ export function useStepUpCall<V extends object, R>(m: Write<V, R>) {
       m.mutate(v, {
         onSuccess: (r) => {
           m.reset();
-          // A backup code works once: one fewer left.
-          if ("backup_code" in v && user?.backupCodesLeft != null)
+          if (!("backup_code" in v)) return on.onSuccess?.(r);
+          // A backup code works once. Core's new one came with the reply
+          // (held in memory, never in the cache): it shows on top, and the
+          // action finishes once the person has seen it and pressed Continue.
+          if (user?.backupCodesLeft != null)
             updateUser({
-              backupCodesLeft: Math.max(0, user.backupCodesLeft - 1),
+              backupCodesLeft: backupCodesAfterUse(user.backupCodesLeft),
             });
-          on.onSuccess?.(r);
+          void whenBackupCodeSaved().then(() => on.onSuccess?.(r));
         },
         onError: (e) => {
           m.reset();
-          if (!on.onError?.(e)) setError(e);
+          const refuse = () => {
+            if (!on.onError?.(e)) setError(e);
+          };
+          // Core spent the backup code before refusing: its new one shows
+          // first, and the refusal once the person has pressed Continue.
+          if (!("backup_code" in v) || pendingBackupCode() === null)
+            return refuse();
+          if (user?.backupCodesLeft != null) updateUser({ backupCodesLeft: 1 });
+          void whenBackupCodeSaved().then(refuse);
         },
       });
     },

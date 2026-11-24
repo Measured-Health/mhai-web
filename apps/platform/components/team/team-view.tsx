@@ -3,6 +3,7 @@ import { UserPlus } from "lucide-react";
 import { useState } from "react";
 import type { TeamMember } from "@/lib/api/contract";
 import { isPlatformAdmin, useAuth } from "@/lib/auth/auth-context";
+import { backupCodesAfterUse } from "@/lib/auth/backup-code-used";
 import { platformError } from "@/lib/errors";
 import { useRemoveMember, useTeam } from "@/lib/queries/team";
 import { Button } from "@mhai/ui/button";
@@ -62,7 +63,7 @@ export function TeamView() {
           // A backup code works once; Account shows what's left.
           if (backup && user?.backupCodesLeft != null)
             updateUser({
-              backupCodesLeft: Math.max(0, user.backupCodesLeft - 1),
+              backupCodesLeft: backupCodesAfterUse(user.backupCodesLeft),
             });
           closeRemove();
         },

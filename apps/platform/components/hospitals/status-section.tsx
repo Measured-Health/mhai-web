@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { DeactivateReason, Hospital } from "@/lib/api/contract";
 import { useAuth } from "@/lib/auth/auth-context";
+import { backupCodesAfterUse } from "@/lib/auth/backup-code-used";
 import { platformError } from "@/lib/errors";
 import { REASONS, reasonLabel } from "@/lib/labels";
 import { useDeactivate, useReactivate } from "@/lib/queries/hospitals";
@@ -64,7 +65,9 @@ export function StatusSection({
       toast.show({ title, body, tone: "ok" as const, live: "polite" as const });
       // A backup code works once; Account shows what's left.
       if (backup && user?.backupCodesLeft != null)
-        updateUser({ backupCodesLeft: Math.max(0, user.backupCodesLeft - 1) });
+        updateUser({
+          backupCodesLeft: backupCodesAfterUse(user.backupCodesLeft),
+        });
       close();
     },
     onError: (e: Error) => {

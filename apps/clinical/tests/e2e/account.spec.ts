@@ -5,7 +5,9 @@ import {
   expectNoStorage,
   openAccountMenu,
   signIn,
+  typeCode,
 } from "./helpers";
+import { MOCK_BACKUP_CODES } from "../../lib/auth/mock";
 
 test.afterEach(async ({ page }) => {
   // No account details, codes or tokens in browser storage, ever.
@@ -74,7 +76,7 @@ test("a deep link to the code step with nothing pending goes to sign-in", async 
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
-test("first sign-in: password, two-step, backup codes, then terms", async ({
+test("first sign-in: password, two-step, backup code, then terms", async ({
   page,
 }) => {
   await signIn(page, "new.bello@pilot-hospital.example");
@@ -86,8 +88,9 @@ test("first sign-in: password, two-step, backup codes, then terms", async ({
   await expect(page.getByRole("img", { name: /QR code/ })).toBeVisible();
   await page.getByLabel("Digit 1 of 6").click();
   await page.keyboard.type("123456");
-  await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
-  await page.getByLabel("I've saved these codes somewhere safe").check();
+  await expect(
+    page.getByRole("group", { name: "Your backup code" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Finish setup" }).click();
   await page.getByLabel("I understand and agree to use MHAI this way").check();
   await page.getByRole("button", { name: "Continue" }).click();
@@ -188,12 +191,91 @@ test("hospital sign-on in the demo", async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
 });
 
-test("new backup codes from the account page", async ({ page }) => {
+test("a new backup code from the account page, confirmed with your code", async ({
+  page,
+}) => {
   await signIn(page);
   await expect(page).toHaveURL(/\/$/);
   await openAccountMenu(page);
   await page.getByRole("menuitem", { name: "Profile & security" }).click();
-  await page.getByRole("button", { name: "Get new backup codes" }).click();
-  await page.getByRole("button", { name: "Get new codes" }).click();
-  await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
+  await page.getByRole("button", { name: "Make a new backup code" }).click();
+  const dialog = page.getByRole("dialog", { name: "New backup code" });
+  // The sixth digit confirms; the new code shows in its place.
+  await typeCode(page, "123456", dialog);
+  await expect(
+    dialog.getByRole("group", { name: "Your backup code" }),
+  ).toContainText(MOCK_BACKUP_CODES[1]);
+  const go = dialog.getByRole("button", { name: "Continue" });
+  await expect(go).toBeDisabled();
+  // Works after the 3-second wait (the click waits for it).
+  await go.click();
+  await expect(page.getByText(MOCK_BACKUP_CODES[1])).toHaveCount(0);
+});
+
+test("sign in with the backup code: the new one shows once before going on", async ({
+  page,
+}) => {
+  await signIn(page, "mfa.okafor@pilot-hospital.example");
+  await expect(page).toHaveURL(/\/sign-in\/code$/);
+  await page.getByRole("button", { name: "Use a backup code" }).click();
+  await page
+    .getByLabel("Backup code", { exact: true })
+    .fill(MOCK_BACKUP_CODES[0]);
+  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Save your new backup code" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("group", { name: "Your backup code" }),
+  ).toContainText(MOCK_BACKUP_CODES[1]);
+  await expect(
+    page.getByRole("button", { name: "Copy backup code" }),
+  ).toBeVisible();
+  expect(page.url()).not.toContain(MOCK_BACKUP_CODES[1]);
+  const go = page.getByRole("button", { name: "Continue" });
+  await expect(go).toBeDisabled();
+  await go.click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByText(MOCK_BACKUP_CODES[1])).toHaveCount(0);
+});
+
+test("move two-step to a new authenticator app from the account page", async ({
+  page,
+}) => {
+  await signIn(page);
+  await expect(page).toHaveURL(/\/$/);
+  await openAccountMenu(page);
+  await page.getByRole("menuitem", { name: "Profile & security" }).click();
+  await page.getByRole("button", { name: "Move to a new app" }).click();
+  // The current app's code (the sixth digit submits).
+  await page.getByLabel("Digit 1 of 6").click();
+  await page.keyboard.type("123456");
+  const qr = page.getByRole("img", {
+    name: "QR code for your authenticator app",
+  });
+  await expect(qr).toBeVisible();
+  await page.getByRole("button", { name: "Can't scan? Show key" }).click();
+  // The key, in groups of four.
+  const shown = page.getByText(/^(?:[A-Z2-7]{4} )+[A-Z2-7]{1,4}$/);
+  await expect(shown).toBeVisible();
+  const key = (await shown.textContent())!;
+  // A wrong code from the new app, then the right one.
+  await page.getByLabel("Digit 1 of 6").click();
+  await page.keyboard.type("000000");
+  await expect(
+    page.getByRole("alert").filter({ hasText: "That code didn't work." }),
+  ).toBeVisible();
+  await page.getByLabel("Digit 1 of 6").click();
+  await page.keyboard.type("123456");
+  await expect(page.getByText("Your new app is set up.")).toBeVisible();
+  await expect(
+    page.getByText(/your backup codes haven't changed/),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Done" }).click();
+  // The key is gone from the page, the address and the title.
+  await expect(qr).toHaveCount(0);
+  await expect(page.getByText(key)).toHaveCount(0);
+  await expect(page).toHaveURL(/\/account$/);
+  expect(page.url()).not.toContain(key.replace(/ /g, ""));
+  expect(await page.title()).not.toContain(key.slice(0, 4));
 });

@@ -5,6 +5,7 @@ import type { AdminError } from "@/lib/admin/errors";
 import type { StepUpAuth } from "@/lib/api/patients-contract";
 import { ApiError } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth/auth-context";
+import { backupCodesAfterUse } from "@/lib/auth/backup-code-used";
 import { BACKUP_FAILED_BODY } from "@mhai/ui/auth/backup-code-toggle";
 import { useNetwork } from "@mhai/api-client/network";
 import { ConfirmDialog } from "../confirm-dialog";
@@ -58,7 +59,7 @@ export function StepUpDialog({
         // A backup code works once; Profile & security shows what's left.
         if (backup && user?.backupCodesLeft != null)
           updateUser({
-            backupCodesLeft: Math.max(0, user.backupCodesLeft - 1),
+            backupCodesLeft: backupCodesAfterUse(user.backupCodesLeft),
           });
         return;
       }

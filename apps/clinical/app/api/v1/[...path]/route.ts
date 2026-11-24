@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NEW_BACKUP_CODE_HEADER, readBackupCode } from "@mhai/api-client/codes";
 import { LETTER_MAX_BYTES } from "@mhai/ui/clearances";
 import { handledFields } from "@/lib/api/alert-handled";
 import { LOOKUP_IN, readLookup } from "@/lib/api/lookup-schema";
@@ -234,6 +235,21 @@ const checkedList = (v: unknown, ok: (s: string) => boolean) =>
   v.every((x) => typeof x === "string" && x.length <= 254 && ok(x))
     ? (v as string[])
     : null;
+
+/**
+ * Core's new backup code, once a backup code was spent on this call: the
+ * one upstream header passed to the page, on any reply (core sends it on a
+ * refusal too when the code was spent first), only in the code's exact
+ * shape (anything else is dropped). Never logged; every reply is no-store.
+ */
+function withNewBackupCode(upstream: Response, out: Response): Response {
+  const code = readBackupCode(upstream.headers.get(NEW_BACKUP_CODE_HEADER));
+  if (code) {
+    out.headers.set(NEW_BACKUP_CODE_HEADER, code);
+    out.headers.set("Cache-Control", "no-store");
+  }
+  return out;
+}
 
 /**
  * A refusal's body: the problem code only, except where the live clients
@@ -633,7 +649,10 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
       string,
       unknown
     > | null;
-    return json(res.status, refusal(res.status, path, p));
+    return withNewBackupCode(
+      res,
+      json(res.status, refusal(res.status, path, p)),
+    );
   }
   if (files) {
     // A file passes only as a type its shape allows, inline, never sniffed
@@ -644,17 +663,20 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
       .toLowerCase();
     if (!files.includes(got)) {
       await res.body?.cancel().catch(() => {});
-      return json(502, { code: "bad_gateway" });
+      return withNewBackupCode(res, json(502, { code: "bad_gateway" }));
     }
-    return new Response(res.body, {
-      status: res.status,
-      headers: {
-        "Content-Type": got,
-        "Cache-Control": "no-store",
-        "Content-Disposition": "inline",
-        "X-Content-Type-Options": "nosniff",
-      },
-    });
+    return withNewBackupCode(
+      res,
+      new Response(res.body, {
+        status: res.status,
+        headers: {
+          "Content-Type": got,
+          "Cache-Control": "no-store",
+          "Content-Disposition": "inline",
+          "X-Content-Type-Options": "nosniff",
+        },
+      }),
+    );
   }
   if (lookedUp !== undefined) {
     // The one patient, read strictly, for the MRN asked about; anything
@@ -665,38 +687,48 @@ async function handle(req: Request, ctx: RouteContext<"/api/v1/[...path]">) {
         : null;
     if (!found) {
       await res.body?.cancel().catch(() => {});
-      return json(502, { code: "bad_gateway" });
+      return withNewBackupCode(res, json(502, { code: "bad_gateway" }));
     }
-    return new Response(JSON.stringify(found), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-      },
-    });
+    return withNewBackupCode(
+      res,
+      new Response(JSON.stringify(found), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      }),
+    );
   }
   if (isPatientsList(req.method, path)) {
     const raw = await res.json().catch(() => undefined);
     const list = PATIENTS_SCHEMA.safeParse(raw);
-    if (!list.success) return json(502, { code: "bad_gateway" });
-    return new Response(JSON.stringify(list.data), {
-      status: 200,
+    if (!list.success)
+      return withNewBackupCode(res, json(502, { code: "bad_gateway" }));
+    return withNewBackupCode(
+      res,
+      new Response(JSON.stringify(list.data), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      }),
+    );
+  }
+  return withNewBackupCode(
+    res,
+    new Response(res.body, {
+      status: res.status,
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": res.headers.get("Content-Type") ?? "application/json",
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
       },
-    });
-  }
-  return new Response(res.body, {
-    status: res.status,
-    headers: {
-      "Content-Type": res.headers.get("Content-Type") ?? "application/json",
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
+    }),
+  );
 }
 
 export const GET = handle;

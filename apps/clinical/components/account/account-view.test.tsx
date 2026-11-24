@@ -1,10 +1,14 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MhaiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import { createMockClient } from "@/lib/api/mock";
-import { createMockAuthClient } from "@/lib/auth/mock";
+import {
+  createMockAuthClient,
+  MOCK_BACKUP_CODES,
+  MOCK_CODE,
+} from "@/lib/auth/mock";
 import { AuthError } from "@/lib/auth/types";
 import { OutboxProvider } from "@/lib/offline/outbox-context";
 import { renderWithAuth, TEST_USER } from "@/tests/auth-wrapper";
@@ -207,37 +211,78 @@ describe("AccountView feedback", () => {
   });
 });
 
-describe("AccountView backup codes", () => {
-  it("shows backup codes left and replaces them", async () => {
-    const user = userEvent.setup();
-    await signedIn({ ...TEST_USER, backupCodesLeft: 8 });
+describe("AccountView backup code", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("makes a new backup code through the step-up, shown once", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await signedIn({ ...TEST_USER, backupCodesLeft: 1 });
     const security = screen.getByRole("region", { name: "Security" });
-    expect(within(security).getByText("8 of 10 left")).toBeInTheDocument();
-    await user.click(
-      within(security).getByRole("button", { name: "Get new backup codes" }),
-    );
-    const dialog = screen.getByRole("dialog", { name: "New backup codes" });
-    await user.click(
-      within(dialog).getByRole("button", { name: "Get new codes" }),
-    );
     expect(
-      await within(dialog).findByRole("list", { name: "Backup codes" }),
+      within(security).getByText(/You get a new one each time/),
     ).toBeInTheDocument();
     await user.click(
-      within(dialog).getByLabelText("I've saved these codes somewhere safe"),
+      within(security).getByRole("button", { name: "Make a new backup code" }),
     );
-    await user.click(within(dialog).getByRole("button", { name: "Done" }));
-    expect(within(security).getByText("10 of 10 left")).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "New backup code" });
+    // The sixth digit confirms.
+    await user.click(within(dialog).getByLabelText("Digit 1 of 6"));
+    await user.keyboard(MOCK_CODE);
+    const code = await screen.findByRole("group", {
+      name: "Your backup code",
+    });
+    expect(code).toHaveTextContent(MOCK_BACKUP_CODES[1]);
+    const go = screen.getByRole("button", { name: "Continue" });
+    expect(go).toHaveAttribute("aria-disabled", "true");
+    act(() => vi.advanceTimersByTime(3000));
+    await user.click(go);
+    expect(screen.queryByText(MOCK_BACKUP_CODES[1])).toBeNull();
   });
+
+  it("says a wrong code didn't work, and makes nothing", async () => {
+    const user = userEvent.setup();
+    await signedIn({ ...TEST_USER, backupCodesLeft: 1 });
+    await user.click(
+      screen.getByRole("button", { name: "Make a new backup code" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "New backup code" });
+    await user.click(within(dialog).getByLabelText("Digit 1 of 6"));
+    await user.keyboard("000000");
+    expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: "Your backup code" }),
+    ).toBeNull();
+  });
+
+  it("warns when no backup code is ready, and offers to make one", async () => {
+    const user = userEvent.setup();
+    await signedIn({ ...TEST_USER, backupCodesLeft: 0 });
+    const security = screen.getByRole("region", { name: "Security" });
+    expect(
+      within(security).getByText("You have no backup code"),
+    ).toBeInTheDocument();
+    const make = within(security).getAllByRole("button", {
+      name: "Make a new backup code",
+    });
+    expect(make).toHaveLength(1);
+    await user.click(make[0]!);
+    expect(
+      screen.getByRole("dialog", { name: "New backup code" }),
+    ).toBeInTheDocument();
+  });
+
   it("hides the row when two-step is off", async () => {
     await signedIn({ ...TEST_USER, mfaEnabled: false });
-    expect(screen.queryByText("Backup codes")).toBeNull();
+    expect(screen.queryByText("Backup code")).toBeNull();
   });
-  it("explains backup codes when the count is unknown", async () => {
+
+  it("explains the backup code when the count is unknown", async () => {
     await signedIn({ ...TEST_USER, backupCodesLeft: null });
     expect(
-      screen.getByText("Use one if you lose your phone"),
+      screen.getByText(/Use it if you don't have your phone/),
     ).toBeInTheDocument();
+    expect(screen.queryByText("You have no backup code")).toBeNull();
   });
 });
 

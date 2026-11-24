@@ -16,7 +16,7 @@ export const TEST_USER: User = {
   specialty: "Internal Medicine",
   hospital: "Pilot Hospital",
   mfaEnabled: true,
-  backupCodesLeft: 8,
+  backupCodesLeft: 1,
 };
 
 /** Pass as `user` to let the provider load the session from the client. */

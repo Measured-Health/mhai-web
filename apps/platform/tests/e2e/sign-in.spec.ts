@@ -4,7 +4,9 @@ import {
   CODE,
   expectNoStorage,
   NEW_ADMIN,
+  openNav,
   signIn,
+  stepUp,
   submitPassword,
   typeCode,
 } from "./helpers";
@@ -67,12 +69,13 @@ test("the new admin can't skip two-step", async ({ page }) => {
   await expect(page).toHaveURL(/\/welcome$/);
   await typeCode(page, CODE);
 
-  await expect(page.getByText("Step 3 of 4 · Backup codes")).toBeVisible();
-  await expect(page.getByRole("list", { name: "Backup codes" })).toBeVisible();
+  await expect(page.getByText("Step 3 of 4 · Backup code")).toBeVisible();
+  await expect(
+    page.getByRole("group", { name: "Your backup code" }),
+  ).toBeVisible();
   await expectNoSkip(page);
   const finish = page.getByRole("button", { name: "Finish setup" });
   await expect(finish).toBeDisabled();
-  await page.getByLabel("I've saved these codes somewhere safe").check();
   await finish.click();
 
   await expect(page.getByText("Step 4 of 4 · Terms of use")).toBeVisible();
@@ -122,4 +125,28 @@ test("after 15 idle minutes the app signs out", async ({ page }) => {
   await expect(page.getByRole("navigation", { name: "Platform" })).toHaveCount(
     0,
   );
+});
+
+test("move two-step to a new authenticator app from Account", async ({
+  page,
+}) => {
+  await signIn(page, "ada.bakare@measured-health.example");
+  await openNav(page, "Account");
+  await page.getByRole("button", { name: "Move to a new app" }).click();
+  const check = stepUp(page, "Move to a new authenticator app");
+  await typeCode(page, CODE, check);
+  await check.getByRole("button", { name: "Continue" }).click();
+  const qr = page.getByRole("img", {
+    name: "QR code for your authenticator app",
+  });
+  await expect(qr).toBeVisible();
+  await typeCode(page, "000000");
+  await expect(
+    page.getByText("That code didn't work. Try again."),
+  ).toBeVisible();
+  await typeCode(page, CODE);
+  await expect(page.getByText("Your new app is set up.")).toBeVisible();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(qr).toHaveCount(0);
+  await expect(page).toHaveURL(/\/account$/);
 });

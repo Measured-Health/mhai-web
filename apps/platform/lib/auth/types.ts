@@ -1,17 +1,32 @@
 // Type-only imports: the server session's shapes are what the routes return.
 import type { FirstStep, PlatformUser } from "../server/session";
 import type { PlatformRole } from "../server/roles";
+import type { MfaReplace, StepUpCode } from "@mhai/api-client/mfa-replace";
 
-export type { FirstStep, PlatformRole };
+/**
+ * `MfaReplace`: a new authenticator app's key while two-step moves to it,
+ * held in the dialog's state only until the move ends or is cancelled.
+ * `StepUpCode`: the app's code or a backup code, as the API takes it.
+ */
+export type { FirstStep, MfaReplace, PlatformRole, StepUpCode };
 
 /** The signed-in Measured Health staff member, as the UI shows them. */
 export type User = PlatformUser;
 
 export type SignInResult =
-  | { status: "signed_in"; user: User; steps: FirstStep[] }
+  | {
+      status: "signed_in";
+      user: User;
+      steps: FirstStep[];
+      /** Core's new backup code, when a backup code signed in: shown once. */
+      newBackupCode?: string;
+    }
   | { status: "mfa_required" }
-  /** A hospital (clinical) account: it gets no platform session. */
-  | { status: "not_platform" };
+  /**
+   * A hospital (clinical) account: it gets no platform session. A backup
+   * code spent on the way: core's new one, shown once.
+   */
+  | { status: "not_platform"; newBackupCode?: string };
 
 export const AUTH_ERROR_CODES = [
   "invalid_credentials",
@@ -34,6 +49,11 @@ export class AuthError extends Error {
     readonly code: AuthErrorCode,
     /** Only when the backend says so; never guessed. */
     readonly attemptsLeft?: number,
+    /**
+     * A backup code was spent before the refusal: core's new one, to show
+     * once (memory only, never logged; the message is only the code).
+     */
+    readonly newBackupCode?: string,
   ) {
     super(code);
     this.name = "AuthError";
@@ -53,8 +73,8 @@ export interface MfaSetup {
   otpauthUri: string;
   /** The same secret as text, for "Can't scan?". */
   secret: string;
-  /** Ten one-time codes, shown once. */
-  backupCodes: string[];
+  /** The account's one backup code, shown once. */
+  backupCode: string;
 }
 
 /** Who is signed in, and the first sign-in steps they still owe. */
@@ -83,8 +103,31 @@ export interface AuthClient {
   changePassword(current: string, next: string): Promise<void>;
   startMfaSetup(): Promise<MfaSetup>;
   confirmMfaSetup(code: string): Promise<void>;
-  /** Replaces all backup codes; returns the new ones (shown once). */
-  regenerateBackupCodes(): Promise<string[]>;
+  /**
+   * Makes a new backup code, confirmed with the person's two-step code or
+   * their current backup code (core's step-up); returns it, shown once.
+   * The old one stops working. Refusals are `ApiError`s (status and code),
+   * like other step-ups.
+   */
+  regenerateBackupCode(
+    code: { mfa_code: string } | { backup_code: string },
+    idempotencyKey: string,
+  ): Promise<string>;
+  /**
+   * Starts moving two-step to a new authenticator app, confirmed with the
+   * current app's code or a backup code. The current app keeps working
+   * until `confirmMfaReplace`. Refusals are `ApiError`s (status and code).
+   */
+  startMfaReplace(
+    code: StepUpCode,
+    idempotencyKey: string,
+  ): Promise<MfaReplace>;
+  /**
+   * Finishes it with a code from the new app: the old app stops working and
+   * remembered devices are signed out. 409 `conflict`: nothing is waiting
+   * any more (over 15 minutes), so start again.
+   */
+  confirmMfaReplace(code: string, idempotencyKey: string): Promise<void>;
   listDevices(): Promise<Device[]>;
   signOutDevice(id: string): Promise<void>;
   signOutEverywhere(): Promise<void>;

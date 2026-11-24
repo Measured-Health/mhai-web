@@ -2513,3 +2513,72 @@ describe("a clinician's patient lookup by MRN (core 1.29.0)", () => {
     expect(await res.json()).toEqual({ code: "bad_gateway" });
   });
 });
+
+describe("a new backup code in the reply", () => {
+  const H = "X-MHAI-New-Backup-Code";
+  const admin = () =>
+    writeSession({
+      token: "tok",
+      expiresAt: Date.now() + 10 * 60_000,
+      user: { ...TEST_USER, roles: ["hospital_admin"], mfaEnabled: true },
+      steps: [],
+    });
+  const remove = () =>
+    DELETE(
+      new Request("http://demo.test/api/v1/hospital/staff/s-1", {
+        method: "DELETE",
+        headers: {
+          host: "demo.test",
+          origin: "http://demo.test",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ backup_code: "ppppp-qqqqq" }),
+      }),
+      ctx("hospital", "staff", "s-1"),
+    );
+  const reply = (status: number, code: string) =>
+    Response.json(status < 300 ? { ok: true } : { code: "mfa_invalid" }, {
+      status,
+      headers: {
+        [H]: code,
+        "Set-Cookie": "a=1",
+        Location: "http://evil.test/",
+        "X-Debug": "secret",
+      },
+    });
+
+  it("is passed on a success, in its exact shape, and nothing else is", async () => {
+    await admin();
+    fetchMock.mockResolvedValueOnce(reply(200, "rrrrr-sssss"));
+    const res = await remove();
+    expect(res.status).toBe(200);
+    expect(res.headers.get(H)).toBe("rrrrr-sssss");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(res.headers.get("Set-Cookie")).toBeNull();
+    expect(res.headers.get("Location")).toBeNull();
+    expect(res.headers.get("X-Debug")).toBeNull();
+  });
+
+  it("is dropped when it isn't a backup code", async () => {
+    await admin();
+    for (const bad of ["RRRRR-SSSSS", "rrrrrsssss", "<b>x</b>", "a=1; b"]) {
+      fetchMock.mockResolvedValueOnce(reply(200, bad));
+      const res = await remove();
+      expect(res.status).toBe(200);
+      expect(res.headers.get(H)).toBeNull();
+    }
+  });
+
+  it("is passed on a refusal too (core spent the code first), still checked", async () => {
+    await admin();
+    fetchMock.mockResolvedValueOnce(reply(409, "rrrrr-sssss"));
+    const res = await remove();
+    expect(res.status).toBe(409);
+    expect(res.headers.get(H)).toBe("rrrrr-sssss");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(res.headers.get("Set-Cookie")).toBeNull();
+    expect(await res.text()).not.toContain("rrrrr-sssss");
+    fetchMock.mockResolvedValueOnce(reply(409, "<b>x</b>"));
+    expect((await remove()).headers.get(H)).toBeNull();
+  });
+});
