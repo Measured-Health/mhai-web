@@ -1,6 +1,9 @@
 "use client";
 import { useState, type Ref } from "react";
-import { normalizeBackupCode } from "@mhai/api-client/codes";
+import {
+  BACKUP_CODE_LENGTH,
+  normalizeBackupCode,
+} from "@mhai/api-client/codes";
 import { normalizeCode } from "./code-input";
 import { inputClass } from "./password-fields";
 
@@ -24,8 +27,10 @@ export function useCodeOrBackup() {
       setBackupState(next);
       setCode("");
     },
-    ready: backup ? code.length === 9 : normalizeCode(code).length === 6,
-    /** What to send: the digits only, or the backup code as XXXX-XXXX. */
+    ready: backup
+      ? code.length === BACKUP_CODE_LENGTH
+      : normalizeCode(code).length === 6,
+    /** What to send: the digits only, or the backup code as xxxxx-xxxxx. */
     value: backup ? code : normalizeCode(code),
   };
 }
@@ -52,10 +57,10 @@ export function BackupCodeInput({
         ref={inputRef}
         id={id}
         autoComplete="off"
-        autoCapitalize="characters"
+        autoCapitalize="none"
         spellCheck={false}
-        placeholder="XXXX-XXXX"
-        maxLength={9}
+        placeholder="xxxxx-xxxxx"
+        maxLength={BACKUP_CODE_LENGTH}
         disabled={disabled}
         value={value}
         onChange={(e) => onChange(normalizeBackupCode(e.target.value))}

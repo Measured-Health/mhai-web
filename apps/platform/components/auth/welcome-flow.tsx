@@ -13,13 +13,13 @@ const LABEL: Record<Shown, string> = {
   password: "Your password",
   terms: "Terms of use",
   mfa: "Protect your account",
-  codes: "Backup codes",
+  codes: "Backup code",
 };
 const ORDER: FirstStep[] = ["password", "mfa", "terms"];
 
 /**
  * First sign-in, in core's order: a new password (if owed), two-step setup
- * and the backup codes, then the terms (core takes them only from a session
+ * and the backup code, then the terms (core takes them only from a session
  * that has passed two-step). Every step is required; none can be skipped.
  */
 export function WelcomeFlow() {

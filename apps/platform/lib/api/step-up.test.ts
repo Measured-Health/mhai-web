@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { ApiError } from "@mhai/api-client/errors";
+import {
+  clearNewBackupCode,
+  pendingBackupCode,
+} from "@mhai/api-client/new-backup-code";
 import {
   MOCK_BACKUP_CODES,
   MOCK_CODE,
@@ -10,15 +14,24 @@ import {
 const EMAIL = "ada.bakare@measured-health.example";
 
 describe("platform demo step-up", () => {
-  it("accepts the demo code and each backup code once", async () => {
+  afterEach(() => clearNewBackupCode());
+
+  it("accepts the demo code, and the one backup code once, offering the next", async () => {
     const s = createStepUp(() => 0);
     expect(await s.check(EMAIL, { mfa_code: MOCK_CODE })).toBe("ok");
-    expect(MOCK_BACKUP_CODES).toHaveLength(10);
-    const code = MOCK_BACKUP_CODES[3]!;
-    expect(await s.check(EMAIL, { backup_code: code.toLowerCase() })).toBe(
+    expect(pendingBackupCode()).toBeNull();
+    const code = MOCK_BACKUP_CODES[0];
+    // Only the current code works; the next one isn't issued yet.
+    expect(await s.check(EMAIL, { backup_code: MOCK_BACKUP_CODES[1] })).toBe(
+      "invalid",
+    );
+    expect(await s.check(EMAIL, { backup_code: code.toUpperCase() })).toBe(
       "ok",
     );
+    // As core's reply header would carry it.
+    expect(pendingBackupCode()).toBe(MOCK_BACKUP_CODES[1]);
     expect(await s.check(EMAIL, { backup_code: code })).toBe("invalid");
+    expect(s.backupCode()).toBe(MOCK_BACKUP_CODES[1]);
   });
 
   it("locks after five wrong codes for 15 minutes of the clock", async () => {

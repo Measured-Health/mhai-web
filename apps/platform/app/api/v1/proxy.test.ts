@@ -1638,3 +1638,70 @@ describe("analytics query strings and bodies (core 1.15.0)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("a new backup code in the reply", () => {
+  const H = "X-MHAI-New-Backup-Code";
+  const path = ["platform", "team", "tm_1"];
+  const body = '{"backup_code":"ppppp-qqqqq"}';
+  const reply = (status: number, code: string) =>
+    Response.json(status < 300 ? { ok: true } : { code: "mfa_invalid" }, {
+      status,
+      headers: {
+        [H]: code,
+        "Set-Cookie": "a=1",
+        Location: "http://evil.test/",
+        "X-Debug": "secret",
+      },
+    });
+
+  it("is passed on a success, in its exact shape, and nothing else is", async () => {
+    await session();
+    fetchMock.mockResolvedValueOnce(reply(200, "rrrrr-sssss"));
+    const res = await call("DELETE", path, { body });
+    expect(res.status).toBe(200);
+    expect(res.headers.get(H)).toBe("rrrrr-sssss");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(res.headers.get("Set-Cookie")).toBeNull();
+    expect(res.headers.get("Location")).toBeNull();
+    expect(res.headers.get("X-Debug")).toBeNull();
+  });
+
+  it("is dropped when it isn't a backup code", async () => {
+    await session();
+    for (const bad of ["RRRRR-SSSSS", "rrrrrsssss", "<b>x</b>", "a=1; b"]) {
+      fetchMock.mockResolvedValueOnce(reply(200, bad));
+      const res = await call("DELETE", path, { body });
+      expect(res.status).toBe(200);
+      expect(res.headers.get(H)).toBeNull();
+    }
+  });
+
+  it("is passed on a refusal too (core spent the code first), still checked", async () => {
+    await session();
+    fetchMock.mockResolvedValueOnce(reply(409, "rrrrr-sssss"));
+    const res = await call("DELETE", path, { body });
+    expect(res.status).toBe(409);
+    expect(res.headers.get(H)).toBe("rrrrr-sssss");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(res.headers.get("Location")).toBeNull();
+    expect(await res.json()).toEqual({ code: "mfa_invalid" });
+    fetchMock.mockResolvedValueOnce(reply(409, "RRRRR-SSSSS"));
+    expect((await call("DELETE", path, { body })).headers.get(H)).toBeNull();
+  });
+
+  it("is passed with a reply the proxy refuses as bad_gateway", async () => {
+    await session();
+    // The reveal's reply is read strictly: a bad one is 502, but the code
+    // core issued still reaches the person.
+    await session({ roles: ["auditor"] });
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { pseudonyms: ["bad"] },
+        { headers: { [H]: "rrrrr-sssss" } },
+      ),
+    );
+    const res = await call("GET", ["platform", "audit", "42", "patients"]);
+    expect(res.status).toBe(502);
+    expect(res.headers.get(H)).toBe("rrrrr-sssss");
+  });
+});

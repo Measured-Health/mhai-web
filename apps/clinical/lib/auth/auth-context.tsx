@@ -11,6 +11,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { readBackupCode } from "@mhai/api-client/codes";
+import { clearNewBackupCode as forgetStepUpCode } from "@mhai/api-client/new-backup-code";
 import {
   endApprovalSession,
   flushPendingApprovals,
@@ -20,6 +22,7 @@ import { getAuthClient } from "./client";
 import { onUnauthorized } from "./events";
 import {
   ADMIN_HOME,
+  AuthError,
   canUseAnalysis,
   isClinical,
   isHospitalAdmin,
@@ -48,6 +51,13 @@ export interface AuthCtx extends State {
     opts: { backup: boolean; trustDevice: boolean },
   ): Promise<SignInResult>;
   cancelMfa(): void;
+  /**
+   * The new backup code a backup-code sign-in returned, until the person
+   * has seen it and pressed Continue. Memory only; null when none.
+   */
+  newBackupCode: string | null;
+  /** Forgets the new backup code (Continue on the save screen). */
+  clearNewBackupCode(): void;
   completeStep(step: FirstStep): void;
   updateUser(patch: Partial<User>): void;
   signOut(reason: SignOutReason): Promise<void>;
@@ -116,6 +126,7 @@ export function AuthProvider({
     [],
   );
   const [mfaPending, setMfaPending] = useState(false);
+  const [newBackupCode, setNewBackupCode] = useState<string | null>(null);
   const [reason, setReason] = useState<SignOutReason | null>(null);
   // Read by signOut to stay idempotent; written only in an effect.
   const live = useRef({ signedIn: state.status === "signed_in", mfaPending });
@@ -152,7 +163,15 @@ export function AuthProvider({
       setReason(null);
       // A new sign-in: nothing from before is ever sent under it.
       endApprovalSession();
-      setState({ status: "signed_in", user: r.user, steps: r.steps });
+      // A backup code signed in: its replacement, shown once on the code
+      // page before it moves on (set with the session, in one render).
+      const fresh = readBackupCode(r.newBackupCode);
+      setNewBackupCode(fresh);
+      setState({
+        status: "signed_in",
+        user: fresh ? { ...r.user, backupCodesLeft: 1 } : r.user,
+        steps: r.steps,
+      });
       return r;
     },
     [setState],
@@ -181,6 +200,9 @@ export function AuthProvider({
         history.clear();
         setRaw(SIGNED_OUT);
         setMfaPending(false);
+        // A new backup code never outlives the session it came with.
+        setNewBackupCode(null);
+        forgetStepUpCode();
         setReason(why);
         router.replace("/sign-in");
       });
@@ -223,16 +245,40 @@ export function AuthProvider({
       },
       verifyCode: async (code, opts) => {
         await afterSignOut();
-        return apply(await client.verifyCode(code, opts));
+        try {
+          return apply(await client.verifyCode(code, opts));
+        } catch (e) {
+          // Refused after core spent the backup code: its replacement
+          // still shows once, before the refusal.
+          // The refusal goes on without it, so the code never lingers in
+          // the page's error state.
+          if (e instanceof AuthError && e.newBackupCode) {
+            setNewBackupCode(readBackupCode(e.newBackupCode));
+            throw new AuthError(e.code, e.attemptsLeft);
+          }
+          throw e;
+        }
       },
       cancelMfa: () => setMfaPending(false),
+      newBackupCode,
+      clearNewBackupCode: () => setNewBackupCode(null),
       completeStep: (step) =>
         setState((s) => ({ ...s, steps: s.steps.filter((x) => x !== step) })),
       updateUser: (patch) =>
         setState((s) => (s.user ? { ...s, user: { ...s.user, ...patch } } : s)),
       signOut,
     }),
-    [state, mfaPending, client, reason, apply, afterSignOut, signOut, setState],
+    [
+      state,
+      mfaPending,
+      newBackupCode,
+      client,
+      reason,
+      apply,
+      afterSignOut,
+      signOut,
+      setState,
+    ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

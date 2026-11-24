@@ -3,9 +3,14 @@ import Link from "next/link";
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { StepUpAuth } from "@/lib/api/admin-contract";
 import { ApiError } from "@/lib/api/errors";
+import {
+  pendingBackupCode,
+  whenBackupCodeSaved,
+} from "@mhai/api-client/new-backup-code";
 import { isMfaRequired } from "@/lib/admin-queries";
 import { adminError, type AdminError } from "@/lib/admin/errors";
 import { useAuth } from "@/lib/auth/auth-context";
+import { backupCodesAfterUse } from "@/lib/auth/backup-code-used";
 import {
   BACKUP_FAILED_BODY,
   BackupCodeInput,
@@ -83,7 +88,7 @@ export function StepUpFields({
     <div className="mt-4">
       <p className="mb-2 text-[13px]">
         {step.backup
-          ? "Enter one of your backup codes to confirm."
+          ? "Enter your backup code to confirm."
           : "Enter the 6-digit code from your authenticator app to confirm."}
       </p>
       {step.backup ? (
@@ -181,11 +186,19 @@ export function StepUpDialog({
       await send(step.auth());
       // A backup code works once; Profile & security shows what's left.
       if (backup && user?.backupCodesLeft != null)
-        updateUser({ backupCodesLeft: Math.max(0, user.backupCodesLeft - 1) });
+        updateUser({
+          backupCodesLeft: backupCodesAfterUse(user.backupCodesLeft),
+        });
       reset();
       onDone();
     } catch (e) {
       reset();
+      // Core spent the backup code before refusing: its new one shows
+      // first (on top), and the refusal once the person has pressed Continue.
+      if (backup && pendingBackupCode() !== null) {
+        updateUser({ backupCodesLeft: 1 });
+        await whenBackupCodeSaved();
+      }
       const err = explain(e);
       if (err.gone && onGone) return onGone(err);
       if (err.stale && onStale) return onStale(err);

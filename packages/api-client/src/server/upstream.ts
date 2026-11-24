@@ -1,9 +1,16 @@
+import { NEW_BACKUP_CODE_HEADER, readBackupCode } from "../codes";
 import type { BackendFetch } from "./backend-fetch";
 
 export class UpstreamError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    /**
+     * Core's new backup code when a backup code was spent before the call
+     * failed (its `X-MHAI-New-Backup-Code` header, read strictly), else
+     * undefined. Never logged.
+     */
+    readonly newBackupCode?: string,
   ) {
     super(code);
     this.name = "UpstreamError";
@@ -58,7 +65,8 @@ export async function callUpstream<T>(
     } catch {
       // Not problem+json: keep the generic code.
     }
-    throw new UpstreamError(res.status, code);
+    const fresh = readBackupCode(res.headers.get(NEW_BACKUP_CODE_HEADER));
+    throw new UpstreamError(res.status, code, fresh ?? undefined);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;

@@ -67,9 +67,9 @@ describe("mfaReplaceCalls", () => {
       throw new TypeError("offline");
     });
     const calls = mfaReplaceCalls(fetchImpl as typeof fetch);
-    expect(await fails(calls.start({ backup_code: "AAAA-1111" }, "k"))).toEqual(
-      { status: 0, code: "network" },
-    );
+    expect(
+      await fails(calls.start({ backup_code: "ppppp-qqqqq" }, "k")),
+    ).toEqual({ status: 0, code: "network" });
   });
 
   it.each([

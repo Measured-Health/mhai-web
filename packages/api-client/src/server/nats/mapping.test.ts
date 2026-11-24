@@ -363,7 +363,7 @@ describe("fromNatsReply", () => {
       fromNatsReply("clinical", "GET", { headers, data: new Uint8Array() }),
     ).toThrow();
   });
-  it("keeps only the ten reply headers", () => {
+  it("keeps only the eleven reply headers", () => {
     const r = fromNatsReply(
       "platform",
       "GET",
@@ -379,6 +379,7 @@ describe("fromNatsReply", () => {
         ["Sunset", "Wed, 01 Jan 2031 00:00:00 GMT"],
         ["Link", "</x>; rel=successor-version"],
         ["X-Content-Type-Options", "nosniff"],
+        ["X-MHAI-New-Backup-Code", "ppppp-qqqqq"],
         ["Set-Cookie", "a=1"],
         ["Mhai-Status", "x"],
         ["Location", "http://evil.test/"],
@@ -395,6 +396,7 @@ describe("fromNatsReply", () => {
         "retry-after",
         "sunset",
         "x-content-type-options",
+        "x-mhai-new-backup-code",
         "x-request-id",
       ].sort(),
     );

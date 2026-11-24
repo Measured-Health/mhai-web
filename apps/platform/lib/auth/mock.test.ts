@@ -82,10 +82,17 @@ describe("mock auth client", () => {
     ).rejects.toMatchObject({ code: "mfa_locked" });
   });
 
-  it("a backup code spent at sign-in is spent for step-ups too", async () => {
+  it("a backup code spent at sign-in is spent for step-ups too, and the next one is issued", async () => {
     await client.signIn(TEAM_EMAILS.ada, "pw");
-    await client.verifyCode(MOCK_BACKUP_CODES[0], { backup: true });
-    expect(stepUp.takeBackup(MOCK_BACKUP_CODES[0])).toBe(false);
+    expect(
+      await client.verifyCode(MOCK_BACKUP_CODES[0], { backup: true }),
+    ).toMatchObject({
+      status: "signed_in",
+      newBackupCode: MOCK_BACKUP_CODES[1],
+      user: { backupCodesLeft: 1 },
+    });
+    expect(stepUp.takeBackup(MOCK_BACKUP_CODES[0])).toBeNull();
+    expect(stepUp.backupCode()).toBe(MOCK_BACKUP_CODES[1]);
     await client.signOut();
     await client.signIn(TEAM_EMAILS.ada, "pw");
     await expect(
@@ -130,7 +137,7 @@ describe("mock auth client", () => {
     await client.changePassword("temporary", "tram-lantern-okra");
     await client.acceptTerms();
     const setup = await client.startMfaSetup();
-    expect(setup.backupCodes).toEqual([...MOCK_BACKUP_CODES]);
+    expect(setup.backupCode).toBe(MOCK_BACKUP_CODES[0]);
     expect(setup.otpauthUri).toMatch(/^otpauth:\/\/totp\//);
     await expect(client.confirmMfaSetup("000000")).rejects.toMatchObject({
       code: "mfa_invalid",

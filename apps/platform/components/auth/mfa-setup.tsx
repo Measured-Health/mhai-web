@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { AuthError } from "@/lib/auth/types";
-import { BackupCodes } from "@mhai/ui/auth/backup-codes";
+import { SaveBackupCode } from "@mhai/ui/auth/save-backup-code";
 import { CodeInput, normalizeCode } from "@mhai/ui/auth/code-input";
 import { Button } from "@mhai/ui/button";
 import { AuthErrorBanner, errorCode } from "./auth-error";
@@ -13,7 +13,7 @@ import { ScanApp } from "./scan-app";
 export type MfaPhase = "setup" | "codes";
 
 /**
- * Enrol an authenticator app (QR, then a code), then show the backup codes
+ * Enrol an authenticator app (QR, then a code), then show the backup code
  * once. Required for every platform account: there is no way to skip it.
  */
 export function MfaSetup({
@@ -41,10 +41,13 @@ export function MfaSetup({
 
   if (phase === "codes" && setup.data)
     return (
-      <BackupCodes
+      <SaveBackupCode
+        page
+        kind="setup"
         eyebrow={eyebrow?.("codes")}
-        codes={setup.data.backupCodes}
-        onFinish={onDone}
+        code={setup.data.backupCode}
+        continueLabel="Finish setup"
+        onContinue={onDone}
       />
     );
 
@@ -57,7 +60,7 @@ export function MfaSetup({
       await client.confirmMfaSetup(normalizeCode(code));
       updateUser({
         mfaEnabled: true,
-        backupCodesLeft: setup.data?.backupCodes.length ?? null,
+        backupCodesLeft: setup.data ? 1 : null,
       });
       setPhase("codes");
     } catch (err) {

@@ -8,11 +8,12 @@ import { MfaSetup } from "../auth/mfa-setup";
 import { MenuButton } from "../shell/menu-button";
 import { Avatar } from "../shell/account-menu";
 import { TopBar } from "../shell/top-bar";
+import { Banner } from "@mhai/ui/banner";
 import { Button } from "@mhai/ui/button";
 import { Dialog } from "@mhai/ui/dialog";
 import { useToast } from "@mhai/ui/toast";
 import { ChangePasswordDialog } from "./change-password-dialog";
-import { NewBackupCodesDialog } from "./new-backup-codes-dialog";
+import { NewBackupCodeDialog } from "./new-backup-code-dialog";
 import { DevicesSection } from "./devices-section";
 import { FeedbackSection } from "./feedback-section";
 import { MoveAppDialog } from "./move-app-dialog";
@@ -169,22 +170,39 @@ export function AccountView() {
               {user.mfaEnabled && (
                 <div className={row}>
                   <span className="flex-1">
-                    Backup codes
+                    Backup code
                     <small className="block text-[12px] text-ink-3">
-                      {user.backupCodesLeft !== null
-                        ? `${user.backupCodesLeft} of 10 left`
-                        : "Use one if you lose your phone"}
+                      {user.backupCodesLeft === 0
+                        ? "None ready"
+                        : "Use it if you don't have your phone. You get a new one each time."}
                     </small>
                   </span>
+                  {user.backupCodesLeft !== 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Make a new backup code"
+                      onClick={() => setCodesOpen(true)}
+                    >
+                      New code
+                    </Button>
+                  )}
+                </div>
+              )}
+              {user.mfaEnabled && user.backupCodesLeft === 0 && (
+                <Banner tone="warn" title="You have no backup code">
+                  <p>
+                    Without one, you can&apos;t sign in if you don&apos;t have
+                    your phone.
+                  </p>
                   <Button
-                    variant="ghost"
                     size="sm"
-                    aria-label="Get new backup codes"
+                    className="mt-2"
                     onClick={() => setCodesOpen(true)}
                   >
-                    New codes
+                    Make a new backup code
                   </Button>
-                </div>
+                </Banner>
               )}
               {user.mfaEnabled && (
                 <div className={row}>
@@ -212,7 +230,7 @@ export function AccountView() {
         </div>
       </div>
       <ChangePasswordDialog open={pwOpen} onClose={() => setPwOpen(false)} />
-      <NewBackupCodesDialog
+      <NewBackupCodeDialog
         open={codesOpen}
         onClose={() => setCodesOpen(false)}
       />

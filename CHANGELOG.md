@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **One renewable backup code (product owner, 24 Nov; needs core's
+  `fix/mfa-one-renewable-backup-code`).** Each account now has one backup
+  code instead of ten. Whenever it is used, core issues a new one and the
+  person sees it once on a "Save your new backup code" screen (both apps,
+  shared `SaveBackupCode` in `packages/ui`): the code large, a copy button
+  beside it ("Copy backup code"; a tick and "Copied" for 2 s, or the code
+  selected when there is no clipboard), and Continue that works only after
+  a 3, 2, 1 countdown (read out; the same wait with reduced motion), with
+  "Lost your phone? Move to a new authenticator app" below it. Continue
+  forgets the code. At sign-in the BFF reads `new_backup_code` from core's
+  reply (or, when the sign-in is refused after the code was spent, core's
+  `X-MHAI-New-Backup-Code` header) strictly and passes it to the page in
+  that one no-store reply only; the sign-in code page shows the screen
+  before moving on or showing the refusal. After any action confirmed with
+  the backup code, the API proxies pass core's `X-MHAI-New-Backup-Code`
+  header on any reply, refusals included (core spends the code first on
+  most step-ups), in the code's exact shape only; every other upstream
+  header is still dropped, and the NATS reply list carries it. The app
+  shows the screen on top, and a step-up action finishes, or shows its
+  refusal, once it is closed. The code is held in memory only, never in
+  the query cache, cookies, storage, a URL or a log. Two-step setup and
+  Profile & security / Account show one code with the same screen; with
+  none ready, the Security section warns and offers "Make a new backup
+  code".
+
 ### Added
 
 - **Move two-step to a new authenticator app, from the Account page, in both
@@ -39,6 +66,17 @@ All notable changes to this project are documented here. The format follows
   locally"): since 22 Nov each deploy reported success while ai. and
   platforms. kept the 22 Nov build. Every pull in the deploy workflow is now
   `pull --policy always`.
+- **Making new backup codes works again.** Core's
+  `POST /auth/mfa/recovery-codes` is a step-up, but the BFF routes sent no
+  body, so core refused every request. "Make a new backup code" now goes
+  through the step-up dialog (the two-step code or the current backup
+  code), and the BFF forwards exactly one of `mfa_code` / `backup_code`,
+  checked strictly, with the call's Idempotency-Key; refusals keep only
+  their code, and the new code comes back no-store.
+- **Backup codes in core's shape.** Core issues `xxxxx-xxxxx` codes (ten
+  letters and digits); the code boxes took `XXXX-XXXX`, so a real backup
+  code could not be typed in full. The boxes, the readers and the demo
+  codes now follow core's shape.
 - **Platform app: a hospital's AI model section loads again.** Core 1.35.0
   added `own_model` to the model policy reply, and the app's strict reader
   refused the unknown key, so the section said it couldn't load. The reader

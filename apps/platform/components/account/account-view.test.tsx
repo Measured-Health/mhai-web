@@ -1,8 +1,8 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { TEAM_EMAILS } from "@/lib/api/fixtures";
-import { MOCK_NEW_BACKUP_CODES } from "@/lib/auth/mock";
+import { MOCK_BACKUP_CODES } from "@/lib/api/step-up";
 import { renderWithAuth, testAuthClient } from "@/tests/render";
 import { AccountView } from "./account-view";
 
@@ -26,27 +26,58 @@ describe("Account", () => {
     expect(screen.getByText("Ada Bakare")).toBeInTheDocument();
     expect(screen.getByText("Platform admin")).toBeInTheDocument();
     expect(screen.getByText("On")).toBeInTheDocument();
-    expect(screen.getByText("10 left")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Use it if you don't have your phone/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("You have no backup code")).toBeNull();
     expect(
       screen.queryByRole("button", { name: /turn off|disable|set up/i }),
     ).toBeNull();
     expect(document.body.textContent).not.toMatch(/trust/i);
   });
 
-  it("New backup codes shows the new codes once", async () => {
-    const u = userEvent.setup();
+  it("makes a new backup code with the current backup code, shown once", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    try {
+      const { client, user } = await signedIn();
+      renderWithAuth(<AccountView />, { client, user });
+      await u.click(
+        screen.getByRole("button", { name: "Make a new backup code" }),
+      );
+      const ask = screen.getByRole("dialog", { name: "New backup code" });
+      await u.click(
+        within(ask).getByRole("button", { name: "Use a backup code" }),
+      );
+      await u.type(
+        within(ask).getByLabelText("Backup code"),
+        MOCK_BACKUP_CODES[0],
+      );
+      await u.click(
+        within(ask).getByRole("button", { name: "Make a new backup code" }),
+      );
+      const shown = await screen.findByRole("group", {
+        name: "Your backup code",
+      });
+      expect(shown).toHaveTextContent(MOCK_BACKUP_CODES[1]);
+      act(() => vi.advanceTimersByTime(3000));
+      await u.click(screen.getByRole("button", { name: "Continue" }));
+      expect(screen.queryByText(MOCK_BACKUP_CODES[1])).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("warns when no backup code is ready, with one way to make one", async () => {
     const { client, user } = await signedIn();
-    renderWithAuth(<AccountView />, { client, user });
-    await u.click(screen.getByRole("button", { name: "New backup codes" }));
-    await u.click(screen.getByRole("button", { name: "Get new codes" }));
-    const dialog = (await screen.findByText(MOCK_NEW_BACKUP_CODES[0]!)).closest(
-      "dialog",
-    )!;
-    for (const c of MOCK_NEW_BACKUP_CODES)
-      expect(within(dialog).getByText(c)).toBeInTheDocument();
-    await u.click(within(dialog).getByRole("checkbox"));
-    await u.click(within(dialog).getByRole("button", { name: "Done" }));
-    expect(screen.queryByText(MOCK_NEW_BACKUP_CODES[0]!)).toBeNull();
+    renderWithAuth(<AccountView />, {
+      client,
+      user: { ...user, backupCodesLeft: 0 },
+    });
+    expect(screen.getByText("You have no backup code")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Make a new backup code" }),
+    ).toHaveLength(1);
   });
 
   it("signing out a device removes it", async () => {

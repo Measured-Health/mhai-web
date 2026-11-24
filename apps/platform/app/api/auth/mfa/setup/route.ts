@@ -1,3 +1,4 @@
+import { oneBackupCode } from "@mhai/api-client/codes";
 import {
   api,
   authCode,
@@ -14,14 +15,18 @@ export async function POST(req: Request) {
   if (!s) return sessionExpired();
   await touchSession(s);
   try {
-    const r = await api<{ otpauth_uri: string; recovery_codes: string[] }>(
+    const r = await api<{ otpauth_uri: string; recovery_codes: unknown }>(
       "/auth/mfa/enroll",
       { method: "POST", token: s.token },
     );
+    // One backup code per account: exactly one, in its exact shape, or
+    // nothing reaches the page.
+    const backupCode = oneBackupCode(r.recovery_codes);
+    if (!backupCode) return json(502, { code: "unavailable" });
     return json(200, {
       otpauthUri: r.otpauth_uri,
       secret: new URL(r.otpauth_uri).searchParams.get("secret") ?? "",
-      backupCodes: r.recovery_codes,
+      backupCode,
     });
   } catch (e) {
     const { status, code } = authCode(e, "other");

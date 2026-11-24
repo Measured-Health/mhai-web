@@ -1,3 +1,4 @@
+import { readBackupCode } from "../codes";
 import { UpstreamError } from "./upstream";
 
 /**
@@ -32,7 +33,6 @@ export type ReplaceCode =
 export const REPLACE_BODY_MAX = 1024;
 
 const DIGITS = /^\d{6}$/;
-const BACKUP = /^[A-Za-z0-9]{4}-?[A-Za-z0-9]{4}$/;
 /** The proxies' Idempotency-Key rule. */
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9-]{1,64}$/;
 
@@ -76,7 +76,8 @@ export function readStepUpBody(v: unknown): StepUpBody | null {
   const s = k === null ? undefined : v[k];
   if (typeof s !== "string") return null;
   if (k === "mfa_code" && DIGITS.test(s)) return { mfa_code: s };
-  if (k === "backup_code" && BACKUP.test(s)) return { backup_code: s };
+  // Core's shape exactly (xxxxx-xxxxx, its alphabet), as the page sends it.
+  if (k === "backup_code" && readBackupCode(s)) return { backup_code: s };
   return null;
 }
 

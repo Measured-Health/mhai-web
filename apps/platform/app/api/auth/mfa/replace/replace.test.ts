@@ -99,7 +99,7 @@ describe("POST /api/auth/mfa/replace", () => {
   it("sends exactly the step-up, with its key and the platform audience", async () => {
     await signedIn();
     fetchMock.mockResolvedValueOnce(reply({ otpauth_uri: CORE_URI }));
-    const res = await start(post({ backup_code: "4F7K-92QX" }));
+    const res = await start(post({ backup_code: "ppppp-qqqqq" }));
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(await res.json()).toEqual({
@@ -109,7 +109,9 @@ describe("POST /api/auth/mfa/replace", () => {
     const [url, init] = lastCall();
     expect(url).toBe("http://api.test/api/v1/auth/mfa/replace");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(String(init.body))).toEqual({ backup_code: "4F7K-92QX" });
+    expect(JSON.parse(String(init.body))).toEqual({
+      backup_code: "ppppp-qqqqq",
+    });
     const h = new Headers(init.headers);
     expect(h.get("Authorization")).toBe("Bearer tok-123");
     expect(h.get("Idempotency-Key")).toBe(KEY);
@@ -119,7 +121,7 @@ describe("POST /api/auth/mfa/replace", () => {
   it.each([
     ["no key", post({ mfa_code: "123456" }, { key: null })],
     ["an extra field", post({ mfa_code: "123456", role: "admin" })],
-    ["both codes", post({ mfa_code: "123456", backup_code: "4F7K-92QX" })],
+    ["both codes", post({ mfa_code: "123456", backup_code: "ppppp-qqqqq" })],
     ["a code in the wrong field", post({ code: "123456" })],
     ["not JSON", post(undefined, { raw: "{" })],
   ])("refuses %s before upstream", async (_, req) => {

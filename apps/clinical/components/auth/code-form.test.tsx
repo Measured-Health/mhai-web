@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/lib/auth/auth-context";
 import { createMockAuthClient, MOCK_BACKUP_CODES } from "@/lib/auth/mock";
+import { AuthError } from "@/lib/auth/types";
 import { renderWithAuth } from "@/tests/auth-wrapper";
 import { CodeForm } from "./code-form";
 
@@ -56,17 +57,130 @@ describe("CodeForm", () => {
     expect(screen.getByLabelText("Digit 1 of 6")).toHaveFocus();
   });
 
-  it("accepts a backup code instead", async () => {
+  it("accepts a backup code, shows the new one, and goes home only after Continue", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    try {
+      await pending();
+      await user.click(
+        screen.getByRole("button", { name: "Use a backup code" }),
+      );
+      await user.type(
+        screen.getByLabelText("Backup code"),
+        MOCK_BACKUP_CODES[0],
+      );
+      await user.click(screen.getByRole("button", { name: "Verify" }));
+      expect(
+        await screen.findByRole("heading", {
+          name: "Save your new backup code",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("group", { name: "Your backup code" }),
+      ).toHaveTextContent(MOCK_BACKUP_CODES[1]);
+      expect(auth.status).toBe("signed_in");
+      expect(auth.user?.backupCodesLeft).toBe(1);
+      // Nowhere but the screen: not the URL, not browser storage.
+      expect(replace).not.toHaveBeenCalledWith("/");
+      expect(
+        JSON.stringify({ ...localStorage, ...sessionStorage }),
+      ).not.toContain(MOCK_BACKUP_CODES[1]);
+      const go = screen.getByRole("button", { name: "Continue" });
+      await user.click(go);
+      expect(replace).not.toHaveBeenCalledWith("/");
+      act(() => vi.advanceTimersByTime(3000));
+      await user.click(go);
+      await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+      expect(auth.newBackupCode).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a backup code that isn't the current one is refused", async () => {
     await pending();
     await userEvent.click(
       screen.getByRole("button", { name: "Use a backup code" }),
     );
     await userEvent.type(
       screen.getByLabelText("Backup code"),
-      MOCK_BACKUP_CODES[1]!,
+      MOCK_BACKUP_CODES[1],
     );
     await userEvent.click(screen.getByRole("button", { name: "Verify" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That backup code didn't work.",
+    );
+  });
+
+  it("a sign-in refused after the backup code was spent shows the new one, then the refusal", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    try {
+      const client = createMockAuthClient();
+      vi.spyOn(client, "verifyCode").mockRejectedValue(
+        new AuthError("unavailable", undefined, "rrrrr-sssss"),
+      );
+      renderWithAuth(
+        <>
+          <Grab />
+          <CodeForm />
+        </>,
+        null,
+        client,
+      );
+      await act(() => auth.signIn("mfa@h.org", "pw"));
+      await user.click(
+        screen.getByRole("button", { name: "Use a backup code" }),
+      );
+      await user.type(
+        screen.getByLabelText("Backup code"),
+        MOCK_BACKUP_CODES[0],
+      );
+      await user.click(screen.getByRole("button", { name: "Verify" }));
+      expect(
+        await screen.findByRole("group", { name: "Your backup code" }),
+      ).toHaveTextContent("rrrrr-sssss");
+      // Not signed in: no way to the account page from here.
+      expect(
+        screen.queryByRole("link", { name: /Lost your phone/ }),
+      ).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      act(() => vi.advanceTimersByTime(3000));
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+      expect(screen.queryByText("rrrrr-sssss")).toBeNull();
+      expect(auth.newBackupCode).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the refusal the page keeps holds no code; the code is held for the screen", async () => {
+    const client = createMockAuthClient();
+    vi.spyOn(client, "verifyCode").mockRejectedValue(
+      new AuthError("unavailable", undefined, "rrrrr-sssss"),
+    );
+    renderWithAuth(<Grab />, null, client);
+    await act(() => auth.signIn("mfa@h.org", "pw"));
+    let refusal: unknown;
+    await act(async () => {
+      refusal = await auth
+        .verifyCode(MOCK_BACKUP_CODES[0], { backup: true, trustDevice: false })
+        .catch((e: unknown) => e);
+    });
+    expect(refusal).toBeInstanceOf(AuthError);
+    expect(refusal).toMatchObject({ code: "unavailable" });
+    expect((refusal as AuthError).newBackupCode).toBeUndefined();
+    expect(auth.newBackupCode).toBe("rrrrr-sssss");
+  });
+
+  it("a two-step code shows no backup code screen", async () => {
+    await pending();
+    await userEvent.click(screen.getByLabelText("Digit 1 of 6"));
+    await userEvent.keyboard("123456");
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+    expect(screen.queryByText("Save your new backup code")).toBeNull();
+    expect(auth.newBackupCode).toBeNull();
   });
 
   it("offers to trust the device only when supported", async () => {

@@ -101,9 +101,11 @@ describe("POST /api/auth/mfa/replace", () => {
   it("takes a backup code instead", async () => {
     await signedIn();
     upstream.mockResolvedValueOnce({ otpauth_uri: CORE_URI });
-    expect((await start(post({ backup_code: "4F7K-92QX" }))).status).toBe(200);
+    expect((await start(post({ backup_code: "ppppp-qqqqq" }))).status).toBe(
+      200,
+    );
     expect(upstream.mock.calls[0]![1]).toMatchObject({
-      body: { backup_code: "4F7K-92QX" },
+      body: { backup_code: "ppppp-qqqqq" },
     });
   });
 
@@ -111,7 +113,7 @@ describe("POST /api/auth/mfa/replace", () => {
     ["no key", post({ mfa_code: "123456" }, { key: null })],
     ["a bad key", post({ mfa_code: "123456" }, { key: "a b" })],
     ["an extra field", post({ mfa_code: "123456", user_id: "u2" })],
-    ["both codes", post({ mfa_code: "123456", backup_code: "4F7K-92QX" })],
+    ["both codes", post({ mfa_code: "123456", backup_code: "ppppp-qqqqq" })],
     ["a short code", post({ mfa_code: "12345" })],
     ["no body", post()],
     ["not JSON", post(undefined, { raw: "{" })],

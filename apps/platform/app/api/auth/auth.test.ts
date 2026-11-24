@@ -44,6 +44,12 @@ const post = (body?: unknown, origin = ORIGIN) =>
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+/** A request with an Idempotency-Key, as the step-up calls send. */
+const keyed = (body?: unknown, key = "k-1") => {
+  const r = post(body);
+  r.headers.set("Idempotency-Key", key);
+  return r;
+};
 const del = (id: string, origin = ORIGIN) =>
   new Request(`${ORIGIN}/api/auth/devices/${id}`, {
     method: "DELETE",
@@ -342,6 +348,69 @@ describe("mfa", () => {
     expect(await res.json()).toEqual({ code: "not_platform" });
   });
 
+  it("a backup code's replacement reaches the page in that reply only", async () => {
+    await pending();
+    fetchMock.mockResolvedValueOnce(
+      reply({ ...LOGIN_OK, new_backup_code: "rrrrr-sssss" }),
+    );
+    const res = await mfa(post({ code: "ppppp-qqqqq", backup: true }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(await res.json()).toMatchObject({
+      status: "signed_in",
+      newBackupCode: "rrrrr-sssss",
+    });
+    expect(JSON.stringify(await readSession())).not.toContain("rrrrr-sssss");
+    expect(await (await session()).text()).not.toContain("rrrrr-sssss");
+  });
+
+  it("drops a replacement that isn't a backup code, or comes without one used", async () => {
+    for (const [code, backup] of [
+      ["RRRRR-SSSSS", true],
+      ["<b>x</b>", true],
+      ["rrrrr-sssss", false],
+    ] as const) {
+      await pending();
+      fetchMock.mockResolvedValueOnce(
+        reply({ ...LOGIN_OK, new_backup_code: code }),
+      );
+      const res = await mfa(post({ code: "ppppp-qqqqq", backup }));
+      expect(res.status).toBe(200);
+      expect(await res.json()).not.toHaveProperty("newBackupCode");
+    }
+  });
+
+  it("a turned-away account still sees its spent code's replacement, and gets no session", async () => {
+    await pending();
+    fetchMock.mockResolvedValueOnce(
+      reply({ ...CLINICIAN, new_backup_code: "rrrrr-sssss" }),
+    );
+    fetchMock.mockResolvedValueOnce(reply());
+    const res = await mfa(post({ code: "ppppp-qqqqq", backup: true }));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      code: "not_platform",
+      newBackupCode: "rrrrr-sssss",
+    });
+    expect(jar.values.size).toBe(0);
+  });
+
+  it("a sign-in refused after core spent the backup code still passes the new one", async () => {
+    await pending();
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { code: "internal_error", detail: "x" },
+        { status: 500, headers: { "X-MHAI-New-Backup-Code": "rrrrr-sssss" } },
+      ),
+    );
+    const res = await mfa(post({ code: "ppppp-qqqqq", backup: true }));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      code: "unavailable",
+      newBackupCode: "rrrrr-sssss",
+    });
+  });
+
   it("says the step expired when nothing is held", async () => {
     const res = await mfa(post({ code: "123456", backup: false }));
     expect(res.status).toBe(401);
@@ -393,8 +462,8 @@ describe("session", () => {
     vi.setSystemTime(Date.parse("2026-10-20T09:00:00Z"));
     await signedIn();
     vi.setSystemTime(Date.parse("2026-10-20T09:14:00Z"));
-    fetchMock.mockResolvedValueOnce(reply({ recovery_codes: ["A"] }));
-    expect((await newCodes(post())).status).toBe(200);
+    fetchMock.mockResolvedValueOnce(reply({ recovery_codes: ["rrrrr-sssss"] }));
+    expect((await newCodes(keyed({ mfa_code: "123456" }))).status).toBe(200);
     vi.setSystemTime(Date.parse("2026-10-20T09:28:00Z"));
     expect((await session()).status).toBe(200);
   });
@@ -483,13 +552,13 @@ describe("first sign-in and account", () => {
     fetchMock.mockResolvedValueOnce(
       reply({
         otpauth_uri: "otpauth://totp/MHAI:ada?secret=ABCDEF234567&issuer=MHAI",
-        recovery_codes: ["AAAA-1111"],
+        recovery_codes: ["ppppp-qqqqq"],
       }),
     );
     expect(await (await setup(post())).json()).toEqual({
       otpauthUri: "otpauth://totp/MHAI:ada?secret=ABCDEF234567&issuer=MHAI",
       secret: "ABCDEF234567",
-      backupCodes: ["AAAA-1111"],
+      backupCode: "ppppp-qqqqq",
     });
     fetchMock.mockResolvedValueOnce(reply());
     fetchMock.mockResolvedValueOnce(
@@ -601,13 +670,47 @@ describe("first sign-in and account", () => {
     );
   });
 
-  it("issues new backup codes, lists and drops devices", async () => {
+  it("makes a new backup code with a step-up code, lists and drops devices", async () => {
     await signedIn();
-    fetchMock.mockResolvedValueOnce(reply({ recovery_codes: ["A", "B"] }));
-    expect(await (await newCodes(post())).json()).toEqual({
-      backupCodes: ["A", "B"],
-    });
-    expect((await readSession())?.user.backupCodesLeft).toBe(2);
+    fetchMock.mockResolvedValueOnce(reply({ recovery_codes: ["rrrrr-sssss"] }));
+    expect(
+      await (await newCodes(keyed({ backup_code: "ppppp-qqqqq" }))).json(),
+    ).toEqual({ backupCode: "rrrrr-sssss" });
+    expect(bodyOf(lastCall())).toEqual({ backup_code: "ppppp-qqqqq" });
+    expect(new Headers(lastCall()[1].headers).get("Idempotency-Key")).toBe(
+      "k-1",
+    );
+    expect((await readSession())?.user.backupCodesLeft).toBe(1);
+    // Not exactly one code in its shape: none shows, none is counted.
+    for (const recovery_codes of [["rrrrr-sssss", "ttttt-uuuuu"], [], ["X"]]) {
+      fetchMock.mockResolvedValueOnce(reply({ recovery_codes }));
+      const bad = await newCodes(keyed({ mfa_code: "123456" }));
+      expect(bad.status).toBe(502);
+      expect((await readSession())?.user.backupCodesLeft).toBe(0);
+    }
+    // A code is needed, and nothing else goes in the body.
+    const before = calls().length;
+    for (const body of [
+      undefined,
+      {},
+      { code: "123456", backup: false },
+      { mfa_code: "123456", x: 1 },
+      { mfa_code: "123456", backup_code: "ppppp-qqqqq" },
+    ])
+      expect((await newCodes(keyed(body))).status).toBe(422);
+    expect((await newCodes(post({ mfa_code: "123456" }))).status).toBe(422);
+    expect(calls()).toHaveLength(before);
+    // A refusal keeps only the code; a spent code's replacement still goes on.
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { code: "mfa_locked", detail: "x" },
+        { status: 429, headers: { "X-MHAI-New-Backup-Code": "ttttt-uuuuu" } },
+      ),
+    );
+    const locked = await newCodes(keyed({ backup_code: "ppppp-qqqqq" }));
+    expect(locked.status).toBe(429);
+    expect(await locked.json()).toEqual({ code: "mfa_locked" });
+    expect(locked.headers.get("X-MHAI-New-Backup-Code")).toBe("ttttt-uuuuu");
 
     fetchMock.mockResolvedValueOnce(
       // Core's SessionList (openapi 1.20.0): the network prefix never passes.
@@ -698,7 +801,10 @@ describe("guards", () => {
     fetchMock.mockResolvedValueOnce(reply());
     await terms(post());
     fetchMock.mockResolvedValueOnce(
-      reply({ otpauth_uri: "otpauth://totp/x?secret=A", recovery_codes: [] }),
+      reply({
+        otpauth_uri: "otpauth://totp/x?secret=A",
+        recovery_codes: ["ppppp-qqqqq"],
+      }),
     );
     await setup(post());
     fetchMock.mockResolvedValueOnce(reply());
@@ -706,8 +812,8 @@ describe("guards", () => {
       reply({ access_token: "t2", refresh_token: "r2", expires_in: 900 }),
     );
     await confirm(post({ code: "123456" }));
-    fetchMock.mockResolvedValueOnce(reply({ recovery_codes: [] }));
-    await newCodes(post());
+    fetchMock.mockResolvedValueOnce(reply({ recovery_codes: ["rrrrr-sssss"] }));
+    await newCodes(keyed({ mfa_code: "123456" }));
     fetchMock.mockResolvedValueOnce(reply({ sessions: [] }));
     await devices();
     fetchMock.mockResolvedValueOnce(reply());

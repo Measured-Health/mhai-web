@@ -1,6 +1,7 @@
 "use client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { NewBackupCode } from "@/components/auth/new-backup-code";
 import { NetworkEffects } from "@/components/states/network-effects";
 import { SessionGuard } from "@/components/states/session-timeout";
 import { ToastProvider } from "@mhai/ui/toast";
@@ -42,6 +43,8 @@ export function Providers({
             <OutboxProvider>
               <SessionGuard>{children}</SessionGuard>
             </OutboxProvider>
+            {/* A backup code confirmed an action: its replacement, once. */}
+            <NewBackupCode />
           </AuthProvider>
         </ToastProvider>
       </SessionProvider>

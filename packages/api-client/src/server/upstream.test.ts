@@ -81,4 +81,26 @@ describe("callUpstream", () => {
       }),
     ).rejects.toMatchObject({ status: 503, code: "unavailable" });
   });
+  it("a refusal keeps a new backup code core sent, in its exact shape only", async () => {
+    const refuse = (code: string) =>
+      vi.fn(async () =>
+        Response.json(
+          { code: "forbidden" },
+          { status: 403, headers: { "X-MHAI-New-Backup-Code": code } },
+        ),
+      );
+    const err = (fetchImpl: ReturnType<typeof refuse>) =>
+      callUpstream("http://api.test", "/x", { fetchImpl }).catch(
+        (e: unknown) => e,
+      );
+    expect(await err(refuse("rrrrr-sssss"))).toMatchObject({
+      status: 403,
+      code: "forbidden",
+      newBackupCode: "rrrrr-sssss",
+    });
+    const bad = (await err(refuse("RRRRR-SSSSS"))) as {
+      newBackupCode?: string;
+    };
+    expect(bad.newBackupCode).toBeUndefined();
+  });
 });

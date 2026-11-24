@@ -66,9 +66,9 @@ describe("StepUpDialog", () => {
       within(d).getByRole("button", { name: "Use a backup code" }),
     );
     const input = within(d).getByLabelText("Backup code");
-    await userEvent.type(input, "4f7k92qx");
+    await userEvent.type(input, "PPPPPQQQQQ");
     await userEvent.click(within(d).getByRole("button", { name: "Approve" }));
-    expect(onConfirm).toHaveBeenCalledWith({ backup_code: "4F7K-92QX" });
+    expect(onConfirm).toHaveBeenCalledWith({ backup_code: "ppppp-qqqqq" });
     expect(
       within(d).getByText(/it may have been used already/),
     ).toBeInTheDocument();

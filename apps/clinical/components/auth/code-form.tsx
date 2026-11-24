@@ -14,6 +14,8 @@ import {
   useCodeOrBackup,
 } from "@mhai/ui/auth/backup-code-toggle";
 import { CodeInput } from "@mhai/ui/auth/code-input";
+import { SaveBackupCode } from "@mhai/ui/auth/save-backup-code";
+import { LOST_PHONE_HREF } from "@/lib/auth/lost-phone";
 import { AuthErrorBanner } from "./auth-error-banner";
 import { errorCode } from "./auth-error-copy";
 import { DemoCode } from "./demo-code";
@@ -34,14 +36,43 @@ export function CodeForm() {
   const [focusKey, setFocusKey] = useState(0);
   const backupRef = useRef<HTMLInputElement>(null);
 
+  // A backup code spent at sign-in: its replacement is shown here first,
+  // signed in or refused, and only Continue moves on (it forgets the code).
+  // "Lost your phone?" goes to the account page instead of home.
+  const [leaving, setLeaving] = useState(false);
+  const saving = auth.status === "loading" ? null : auth.newBackupCode;
   const target =
-    auth.status === "signed_in"
-      ? homeFor(auth)
-      : auth.status === "signed_out" && !auth.mfaPending
-        ? "/sign-in"
-        : null;
+    saving || leaving
+      ? null
+      : auth.status === "signed_in"
+        ? homeFor(auth)
+        : auth.status === "signed_out" && !auth.mfaPending
+          ? "/sign-in"
+          : null;
   useRedirect(target);
   if (auth.status === "loading" || target) return null;
+  if (saving)
+    return (
+      <SaveBackupCode
+        page
+        kind="new"
+        eyebrow="Two-step verification"
+        code={saving}
+        onContinue={auth.clearNewBackupCode}
+        // Moving to a new app needs a session: only once signed in.
+        lostPhone={
+          auth.status === "signed_in"
+            ? {
+                href: LOST_PHONE_HREF,
+                navigate: (h) => {
+                  setLeaving(true);
+                  router.push(h);
+                },
+              }
+            : undefined
+        }
+      />
+    );
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -72,7 +103,7 @@ export function CodeForm() {
         title="Enter your code"
         sub={
           backup
-            ? "Enter one of the backup codes you saved when you set up two-step verification."
+            ? "Enter the backup code you saved. It works once, and you get a new one."
             : "Open your authenticator app and enter the 6-digit code for MHAI."
         }
       />

@@ -22,8 +22,8 @@ describe("readStepUpBody", () => {
     expect(readStepUpBody({ mfa_code: "123456" })).toEqual({
       mfa_code: "123456",
     });
-    expect(readStepUpBody({ backup_code: "4F7K-92QX" })).toEqual({
-      backup_code: "4F7K-92QX",
+    expect(readStepUpBody({ backup_code: "ppppp-qqqqq" })).toEqual({
+      backup_code: "ppppp-qqqqq",
     });
   });
   it.each([
@@ -35,10 +35,15 @@ describe("readStepUpBody", () => {
     { mfa_code: "1234567" },
     { mfa_code: 123456 },
     { mfa_code: "12345a" },
-    { backup_code: "4F7K-92Q" },
-    { backup_code: "4F7K 92QX" },
+    { backup_code: "ppppp-qqqq" },
+    { backup_code: "ppppp qqqqq" },
+    // Core's shape only: not the old XXXX-XXXX, not upper case, no 0/1/i/l/o.
+    { backup_code: "ABCD-2345" },
+    { backup_code: "ABCD2345" },
+    { backup_code: "PPPPP-QQQQQ" },
+    { backup_code: "ppppo-qqqqq" },
     // Both, or anything extra, is refused.
-    { mfa_code: "123456", backup_code: "4F7K-92QX" },
+    { mfa_code: "123456", backup_code: "ppppp-qqqqq" },
     { mfa_code: "123456", user_id: "u1" },
     { code: "123456" },
   ])("refuses %j", (v) => expect(readStepUpBody(v)).toBeNull());
