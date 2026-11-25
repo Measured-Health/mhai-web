@@ -60,7 +60,9 @@ export function BackupCodeInput({
         autoCapitalize="none"
         spellCheck={false}
         placeholder="xxxxx-xxxxx"
-        maxLength={BACKUP_CODE_LENGTH}
+        // No maxLength: the browser would cut a pasted code with a space or
+        // line break around it before normalizeBackupCode tidies it (it
+        // keeps at most 10 letters and digits anyway).
         disabled={disabled}
         value={value}
         onChange={(e) => onChange(normalizeBackupCode(e.target.value))}

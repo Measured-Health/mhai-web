@@ -56,6 +56,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A pasted backup code with a space or line break around it is no
+  longer cut short: the backup code box (sign-in and confirmations, both
+  apps) had an 11-character limit that the browser applied before the
+  code was tidied, leaving Verify unusable.
 - **Platform app: Add hospital works with core's new route (pairs with
   core #280, openapi 1.38.0).** The form now:
   - picks the country from a searchable list of names and sends its
