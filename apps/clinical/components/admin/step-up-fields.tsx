@@ -129,7 +129,9 @@ export function StepUpFields({
  * dialog open and clears the boxes; a backup code spent is counted; an
  * admin without two-step is pointed at Profile & security. `send` is the
  * mutation's `mutateAsync`; `reset` forgets it (and the code) after every
- * answer. `onGone` closes the dialog when the person no longer exists.
+ * answer. `onGone` closes the dialog when the person no longer exists;
+ * `onSaved` closes it when the change was saved but its email didn't go
+ * (424 `not_delivered`), so it is never sent again as if nothing happened.
  */
 export function StepUpDialog({
   title,
@@ -145,6 +147,7 @@ export function StepUpDialog({
   onDone,
   onGone,
   onStale,
+  onSaved,
   explain = adminError,
 }: {
   title: string;
@@ -162,6 +165,8 @@ export function StepUpDialog({
   onGone?(e: AdminError): void;
   /** Someone else changed it first (409): the latest is loading underneath. */
   onStale?(e: AdminError): void;
+  /** Saved, but its email didn't go through (424): close and say so. */
+  onSaved?(e: AdminError): void;
   /** The refusal in plain words (default: any staff refusal's). */
   explain?(e: unknown): AdminError;
 }) {
@@ -202,6 +207,7 @@ export function StepUpDialog({
       const err = explain(e);
       if (err.gone && onGone) return onGone(err);
       if (err.stale && onStale) return onStale(err);
+      if (err.saved && onSaved) return onSaved(err);
       if (isMfaRequired(e)) return setRequired(true);
       const wrong = e instanceof ApiError && e.code === "mfa_invalid";
       setError(wrong && backup ? { ...err, body: BACKUP_FAILED_BODY } : err);

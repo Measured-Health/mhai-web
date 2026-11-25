@@ -357,6 +357,7 @@ describe("live admin client (core 1.33.0)", () => {
 
   it.each([
     [503, "no_delivery"],
+    [424, "not_delivered"],
     [410, "invalid_token"],
     [501, "not_implemented"],
     [409, "conflict"],

@@ -498,6 +498,99 @@ describe("AccountActions (core 1.24.0: step-up on every staff write)", () => {
     expect(await statusOf(id)).toBeUndefined();
   });
 
+  // 424 not_delivered (core 1.41.0): the change was saved, only its email
+  // failed. Never "nothing was changed", never the dialog left open to send
+  // it again (core would answer 409), and the list refreshes.
+  it.each([
+    [
+      "Send password reset",
+      "Send a password reset?",
+      "The password reset was done, but the email didn't go through",
+      "They're signed out everywhere. Check their email address, then send the reset again.",
+    ],
+    [
+      "Reset two-step",
+      "Reset two-step verification?",
+      "Two-step was reset, but the email didn't go through",
+      "They set up two-step again at their next sign-in. Check their email address.",
+    ],
+  ])(
+    "%s saved but not emailed: says so truthfully and refreshes the list",
+    async (button, dialogName, title, body) => {
+      const err = new ApiError(424, "not_delivered");
+      if (button === "Send password reset")
+        vi.spyOn(holder.client, "sendLink").mockRejectedValue(err);
+      else vi.spyOn(holder.client, "staffAction").mockRejectedValue(err);
+      const { account } = await open("s-bello");
+      const list = vi.spyOn(holder.client, "listStaff");
+      await userEvent.click(
+        within(account).getByRole("button", { name: button }),
+      );
+      await enterCode(confirmIn(dialogName), MOCK_CODE);
+      const alert = await within(account).findByRole("alert");
+      expect(alert).toHaveTextContent(title);
+      expect(alert).toHaveTextContent(body);
+      expect(alert.textContent).not.toMatch(
+        /Nothing was changed|can't send emails|not_delivered|424/,
+      );
+      expect(screen.queryByRole("dialog", { name: dialogName })).toBeNull();
+      await waitFor(() => expect(list).toHaveBeenCalled());
+    },
+  );
+
+  it("a new invite saved but not emailed says so, and keeps the invite to resend or cancel", async () => {
+    // The demo's address with no mailbox: saved, then 424 not_delivered.
+    const email = "nomailbox@pilot-hospital.example";
+    await expect(
+      holder.client.inviteStaff(
+        { emails: [email], roles: ["clinician"] },
+        CODE,
+      ),
+    ).rejects.toMatchObject({ status: 424, code: "not_delivered" });
+    const id = (await holder.client.listStaff()).find(
+      (s) => s.email === email,
+    )!.id;
+    const { account } = await open(id);
+    const send = vi.spyOn(holder.client, "sendLink");
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Send a new invite" }),
+    );
+    await enterCode(confirmIn("Send a new invite?"), MOCK_CODE);
+    const alert = await within(account).findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "The new invite was saved, but the email didn't go through",
+    );
+    expect(alert).toHaveTextContent(
+      "Check the email address. You can send a new invite or cancel it.",
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Send a new invite?" }),
+    ).toBeNull();
+    // Sent once: never retried by the app.
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(
+      within(account).getByRole("button", { name: "Cancel invite" }),
+    ).toBeEnabled();
+    expect(await statusOf(id)).toBe("active");
+  });
+
+  it("a two-step reminder saved but not emailed says so", async () => {
+    vi.spyOn(holder.client, "remindStaff").mockRejectedValue(
+      new ApiError(424, "not_delivered"),
+    );
+    const { account } = await open("s-mensah");
+    await userEvent.click(
+      within(account).getByRole("button", { name: "Send a reminder" }),
+    );
+    const alert = await within(account).findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "The reminder was saved, but the email didn't go through",
+    );
+    expect(alert).toHaveTextContent(
+      "Check their email address. You can send another reminder tomorrow.",
+    );
+  });
+
   it("Esc closes the confirmation first, then the panel", async () => {
     const { dialog } = await askDeactivate();
     // jsdom has no top layer; say what a browser would for showModal().

@@ -56,6 +56,42 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **A saved invite whose email didn't go no longer says "Nothing was
+  changed" (needs core 1.41.0, `fix/not-delivered-code`).** When core saved
+  a hospital admin's change but couldn't deliver its email (seen live: an
+  invite to an address with no mailbox), it answered 503 `no_delivery` and
+  the clinical app said "MHAI can't send emails yet. Nothing was changed.
+  Try again later." The person was in fact on the staff list, and trying
+  again was refused. Core now answers 424 `not_delivered`, and the apps
+  say what happened:
+  - Invite: "The invite was saved, but the email didn't go through. Check
+    the email address. You can resend the invite or remove it."
+  - New invite: "The new invite was saved, but the email didn't go
+    through. Check the email address. You can send a new invite or cancel
+    it."
+  - Password reset: "The password reset was done, but the email didn't go
+    through. They're signed out everywhere. Check their email address,
+    then send the reset again."
+  - Two-step reset: "Two-step was reset, but the email didn't go through.
+    They set up two-step again at their next sign-in. Check their email
+    address."
+  - Two-step reminder and reviewer reminder: "The reminder was saved, but
+    the email didn't go through", with when another can be sent.
+  - Assigning a reviewer: "The reviewer was assigned, but the email didn't
+    go through. Check their email address in Staff, or let them know
+    another way."
+  - Platform app, Add hospital: "The hospital was added, but the invite
+    email didn't go through. Check the first admin's email address. Open
+    the hospital to resend the invite." The form goes to the refreshed
+    hospital list rather than inviting a second, duplicate submit.
+
+  The dialog closes (it is never sent again as if nothing happened), the
+  staff list, oversight or hospital list refreshes, and `not_delivered` is
+  never retried by the network layer. "MHAI can't send emails yet. Nothing
+  was changed." stays for 503 `no_delivery` (no email set up). The demo
+  treats `nomailbox@…` as an address with no mailbox; the platform mock
+  takes `delivery: "fails"`.
+
 - A pasted backup code with a space or line break around it is no
   longer cut short: the backup code box (sign-in and confirmations, both
   apps) had an 11-character limit that the browser applied before the

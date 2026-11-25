@@ -9,6 +9,12 @@ export interface AdminError {
   stale: boolean;
   /** Core doesn't do this yet (501): a calm note, not a failure. */
   unavailable: boolean;
+  /**
+   * The change was saved but its email didn't go (424 `not_delivered`):
+   * close the dialog and say so; never offer to send it again as if
+   * nothing happened (core would answer 409).
+   */
+  saved: boolean;
 }
 
 const E = (
@@ -21,6 +27,7 @@ const E = (
   gone: false,
   stale: false,
   unavailable: false,
+  saved: false,
   ...extra,
 });
 
@@ -33,6 +40,12 @@ export const NOT_AVAILABLE = "Not available yet";
 
 /** Core has no way to send this email (503 `no_delivery`); nothing happened. */
 export const NO_DELIVERY = "MHAI can't send emails yet";
+
+/**
+ * The change was saved, but its email didn't go through (424
+ * `not_delivered`, core 1.41.0): for example the address has no mailbox.
+ */
+export const NOT_DELIVERED = "Saved, but the email didn't go through";
 
 /** Plain words for every admin refusal; never a backend code (spec §6). */
 export function adminError(e: unknown): AdminError {
@@ -110,6 +123,12 @@ export function adminError(e: unknown): AdminError {
       return E("Too many changes at once", "Wait a minute and try again.");
     case "no_delivery":
       return E(NO_DELIVERY, "Nothing was changed. Try again later.");
+    case "not_delivered":
+      return E(
+        NOT_DELIVERED,
+        "Check the email address. The list has been refreshed.",
+        { saved: true },
+      );
     case "invalid_token":
       return E(
         "This link no longer works",
@@ -152,10 +171,13 @@ export const inviteError = withCopy({
     "MHAI couldn't accept these invites",
     "Check the email addresses and roles, then try again.",
   ],
+  not_delivered: [
+    "The invite was saved, but the email didn't go through",
+    "Check the email address. You can resend the invite or remove it.",
+  ],
 });
 
-/** Password reset, two-step reset, a new invite and removing someone. */
-export const accountError = withCopy({
+const ACCOUNT_COPY = {
   self_change: [
     "You can't do this to your own account",
     "Use Profile & security for your own password and two-step. Ask another hospital admin for anything else.",
@@ -167,6 +189,36 @@ export const accountError = withCopy({
   rate_limited: [
     "Too many tries for this person",
     "Wait a while, then try again.",
+  ],
+} satisfies Override;
+
+/** Password reset, two-step reset, a new invite and removing someone. */
+export const accountError = withCopy(ACCOUNT_COPY);
+
+/** A new invite: saved, but its email didn't go through. */
+export const resendInviteError = withCopy({
+  ...ACCOUNT_COPY,
+  not_delivered: [
+    "The new invite was saved, but the email didn't go through",
+    "Check the email address. You can send a new invite or cancel it.",
+  ],
+});
+
+/** A password reset: done (they're signed out), but its email didn't go through. */
+export const passwordResetError = withCopy({
+  ...ACCOUNT_COPY,
+  not_delivered: [
+    "The password reset was done, but the email didn't go through",
+    "They're signed out everywhere. Check their email address, then send the reset again.",
+  ],
+});
+
+/** A two-step reset: done, but the email telling them didn't go through. */
+export const mfaResetError = withCopy({
+  ...ACCOUNT_COPY,
+  not_delivered: [
+    "Two-step was reset, but the email didn't go through",
+    "They set up two-step again at their next sign-in. Check their email address.",
   ],
 });
 
@@ -180,6 +232,10 @@ export const staffReminderError = withCopy({
     "They don't need a reminder now",
     "Their two-step may already be set up. The list has been refreshed.",
   ],
+  not_delivered: [
+    "The reminder was saved, but the email didn't go through",
+    "Check their email address. You can send another reminder tomorrow.",
+  ],
 });
 
 /** Reminding a correction's reviewers: once an hour per correction. */
@@ -192,6 +248,10 @@ export const reviewerReminderError = withCopy({
     "Nobody can review this correction yet",
     "Make another clinician active in Staff, then try again.",
   ],
+  not_delivered: [
+    "The reminder was saved, but the email didn't go through",
+    "Check the reviewers' email addresses in Staff. You can remind them again in an hour.",
+  ],
 });
 
 /** Assigning a reviewer. */
@@ -203,5 +263,9 @@ export const assignError = withCopy({
   validation_failed: [
     "MHAI couldn't accept this change",
     "Pick someone from the list and try again.",
+  ],
+  not_delivered: [
+    "The reviewer was assigned, but the email didn't go through",
+    "Check their email address in Staff, or let them know another way.",
   ],
 });

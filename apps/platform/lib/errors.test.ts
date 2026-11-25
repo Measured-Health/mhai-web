@@ -30,6 +30,7 @@ describe("platformError", () => {
       last_admin: "There must always be at least one platform admin.",
       own_role: "You can't change your own role.",
       forbidden: "Your account can only view this.",
+      not_delivered: "Saved, but the email didn't go through.",
     };
     for (const [code, title] of Object.entries(words))
       expect(e(409, code)).toMatchObject({ title, stale: false, gone: false });

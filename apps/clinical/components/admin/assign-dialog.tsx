@@ -58,7 +58,11 @@ export function AssignDialog({
         },
         onError: (e) => {
           const err = assignError(e);
-          if (err.gone) {
+          // Saved, but the email didn't go: the assignment stands.
+          if (err.saved) {
+            toast.show({ title: err.title, body: err.body, ms: 8000 });
+            onClose();
+          } else if (err.gone) {
             toast.show({ title: err.title, body: err.body });
             onGone?.(item.id);
             onClose();

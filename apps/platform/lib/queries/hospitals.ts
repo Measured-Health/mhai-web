@@ -7,6 +7,7 @@ import {
   type InfiniteData,
   type QueryClient,
 } from "@tanstack/react-query";
+import { ApiError } from "@mhai/api-client/errors";
 import { useKeyedMutation } from "@mhai/api-client/keyed-mutation";
 import { getPlatformClient } from "../api/client";
 import type {
@@ -61,6 +62,11 @@ export function useAddHospital() {
     {
       onSuccess: () =>
         void qc.invalidateQueries({ queryKey: queryKeys.hospitals }),
+      // Added, but its invite email didn't go (424): the list has it now.
+      onError: (e) => {
+        if (e instanceof ApiError && e.code === "not_delivered")
+          void qc.invalidateQueries({ queryKey: queryKeys.hospitals });
+      },
     },
     { gcTime: 0 },
   );

@@ -267,6 +267,21 @@ describe("mock platform API", () => {
     expect((await m.listActivity({})).events).toHaveLength(before);
   });
 
+  it("add whose invite email can't be delivered is 424 not_delivered, and the hospital is added", async () => {
+    const m = createMockPlatform({
+      now: () => START,
+      me: () => TEAM_EMAILS.ada,
+      delayMs: 0,
+      stepUp: createStepUp(() => START),
+      delivery: "fails",
+    });
+    expect(await failure(m.addHospital(NEW, KEY()))).toEqual([
+      424,
+      "not_delivered",
+    ]);
+    expect((await m.listHospitals({})).hospitals).toHaveLength(13);
+  });
+
   it("add creates a set-up-incomplete hospital with one staff member and a 3-day first-admin invite", async () => {
     const { m } = setup();
     const key = KEY();

@@ -49,6 +49,7 @@ export function patientError(
       gone,
       stale: false,
       unavailable: false,
+      saved: false,
     });
     if (e.status === 404)
       return what === "match"

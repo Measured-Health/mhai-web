@@ -297,9 +297,11 @@ export function createMockPlatform({
   emrEnabled?: EmrRuleSetMockOptions["emrEnabled"];
   /**
    * "none": email isn't set up, so adding a hospital (which emails its
-   * first admin) is 503 `no_delivery` and nothing is added.
+   * first admin) is 503 `no_delivery` and nothing is added. "fails": the
+   * hospital is added but its invite email can't be delivered, 424
+   * `not_delivered` (core 1.41.0).
    */
-  delivery?: "normal" | "none";
+  delivery?: "normal" | "none" | "fails";
   /** For tests: the core the areas are built on, once it exists. */
   onCore?: (core: MockCore) => void;
 } = {}): PlatformClient {
@@ -742,6 +744,7 @@ export function createMockPlatform({
           hospital: hospitalRef(h),
           target: adminEmail,
         });
+        if (delivery === "fails") fail(424, "not_delivered");
         return copy(h);
       }),
 

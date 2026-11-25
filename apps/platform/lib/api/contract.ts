@@ -304,7 +304,9 @@ export interface PlatformClient
    * `POST /platform/hospitals` (core 1.38.0), confirmed with the person's
    * own two-step or backup code. Refusals: 422 `validation_failed`, 409
    * `duplicate` (the short code), 409 `email_in_use` (the first admin's
-   * email), 503 `no_delivery` (email isn't set up; nothing is added).
+   * email), 503 `no_delivery` (email isn't set up; nothing is added), 424
+   * `not_delivered` (core 1.41.0: the hospital was added, but its first
+   * admin's invite email didn't go; never retried).
    */
   addHospital(body: HospitalIn & StepUp, opts: WriteOpts): Promise<Hospital>;
   getHospital(id: string): Promise<Hospital>;
