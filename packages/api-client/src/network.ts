@@ -68,6 +68,10 @@ export function shouldRetry(failures: number, e: unknown, max = 3): boolean {
   if (e instanceof ApiError && e.status === 501) return false;
   // Core can't send the email (503 no_delivery): asking again won't help.
   if (e instanceof ApiError && e.code === "no_delivery") return false;
+  // The change was saved but its email didn't go (424 not_delivered, a 4xx
+  // already): asking again would only conflict. Never retried, whatever
+  // its status.
+  if (e instanceof ApiError && e.code === "not_delivered") return false;
   return failures < max;
 }
 

@@ -26,6 +26,7 @@ const words = (title: string, body: string): AdminError => ({
   gone: false,
   stale: false,
   unavailable: false,
+  saved: false,
 });
 
 /** Plain words for a refusal while moving to a new app; never a code. */

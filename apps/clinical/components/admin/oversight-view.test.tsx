@@ -281,6 +281,11 @@ describe("OversightView", () => {
   it.each([
     ["rate_limited", 429, "Reviewers were reminded in the last hour"],
     ["no_delivery", 503, "MHAI can't send emails yet"],
+    [
+      "not_delivered",
+      424,
+      "The reminder was saved, but the email didn't go through",
+    ],
     ["no_recipients", 422, "Nobody can review this correction yet"],
     ["not_implemented", 501, "Not available yet"],
   ])(
@@ -324,6 +329,41 @@ describe("OversightView", () => {
         "This person can't review this correction",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("an assignment saved but not emailed closes the dialog and says so", async () => {
+    const assign = vi
+      .spyOn(holder.client, "assignReviewer")
+      .mockRejectedValue(new ApiError(424, "not_delivered"));
+    const read = vi.spyOn(holder.client, "getOversight");
+    renderAdmin(<OversightView />);
+    await userEvent.click(
+      within(await rowFor("C-118")).getByRole("button", {
+        name: "Assign a reviewer to C-118",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Assign a reviewer",
+    });
+    await userEvent.click(
+      await within(dialog).findByRole("radio", { name: /Dr. Udo/ }),
+    );
+    const before = read.mock.calls.length;
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Assign" }),
+    );
+    expect(
+      await screen.findByText(
+        "The reviewer was assigned, but the email didn't go through",
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Assign a reviewer" }),
+      ).toBeNull(),
+    );
+    expect(assign).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(read.mock.calls.length).toBeGreaterThan(before));
   });
 
   it("never offers approve or reject; a clinician admin is pointed to Review corrections", async () => {

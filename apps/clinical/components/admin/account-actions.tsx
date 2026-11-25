@@ -10,6 +10,9 @@ import {
 import {
   accountError,
   adminError,
+  mfaResetError,
+  passwordResetError,
+  resendInviteError,
   staffReminderError,
   type AdminError,
 } from "@/lib/admin/errors";
@@ -42,6 +45,16 @@ type Copy = {
   blocked: string;
   doneTitle: string;
   doneBody: string;
+};
+
+/** Each change's refusals in plain words. */
+const EXPLAIN: Record<AccountChange, (e: unknown) => AdminError> = {
+  deactivate: adminError,
+  reactivate: adminError,
+  "reset-mfa": mfaResetError,
+  "password-reset": passwordResetError,
+  "resend-invite": resendInviteError,
+  remove: accountError,
 };
 
 const blocked = (what: string) =>
@@ -323,7 +336,7 @@ export function AccountActions({
       )}
       {error && !pending && (
         <div className="mb-2">
-          <Banner tone="bad" title={error.title}>
+          <Banner tone={error.saved ? "warn" : "bad"} title={error.title}>
             {error.body}
           </Banner>
         </div>
@@ -397,11 +410,7 @@ export function AccountActions({
           confirmVariant={copy.danger ? "danger" : "primary"}
           blockedTitle={copy.blocked}
           offline={!online}
-          explain={
-            pending === "deactivate" || pending === "reactivate"
-              ? adminError
-              : accountError
-          }
+          explain={EXPLAIN[pending]}
           send={(auth) => send(pending, auth)}
           reset={resetFor(pending)}
           onKeep={() => setPending(null)}
@@ -421,6 +430,11 @@ export function AccountActions({
           }}
           onGone={(e) => {
             // The panel shows "no longer on the staff list" instead.
+            setPending(null);
+            setError(e);
+          }}
+          onSaved={(e) => {
+            // The change stands (the list refreshes); only its email failed.
             setPending(null);
             setError(e);
           }}

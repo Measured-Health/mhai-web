@@ -7,7 +7,7 @@ import {
   useInviteStaff,
   useStaff,
 } from "@/lib/admin-queries";
-import { inviteError } from "@/lib/admin/errors";
+import { inviteError, type AdminError } from "@/lib/admin/errors";
 import {
   INVITE_DAYS,
   INVITE_MAX,
@@ -67,6 +67,8 @@ export function InviteDialog({ onClose }: { onClose(): void }) {
   const [specialty, setSpecialty] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
+  // Saved, but the email didn't go (424): the people are on the list now.
+  const [undelivered, setUndelivered] = useState<AdminError | null>(null);
 
   const s = settings.data;
   const lines = parseInviteList(text, {
@@ -83,6 +85,21 @@ export function InviteDialog({ onClose }: { onClose(): void }) {
   const canSend =
     !!s && emails.length > 0 && !tooMany && !noRole && online && !confirming;
   const count = emails.length === 1 ? "1 invite" : `${emails.length} invites`;
+
+  if (undelivered)
+    return (
+      <Dialog
+        key="undelivered"
+        open
+        onClose={onClose}
+        title={undelivered.title}
+      >
+        <p className="text-sm text-ink-2">{undelivered.body}</p>
+        <div className="mt-5 flex justify-end">
+          <Button onClick={onClose}>Done</Button>
+        </div>
+      </Dialog>
+    );
 
   if (result) {
     const n = result.sent;
@@ -164,6 +181,10 @@ export function InviteDialog({ onClose }: { onClose(): void }) {
         reset={invite.reset}
         onKeep={() => setConfirming(false)}
         onDone={() => setConfirming(false)}
+        onSaved={(e) => {
+          setConfirming(false);
+          setUndelivered(e);
+        }}
       >
         <p>
           {emails.length === 1

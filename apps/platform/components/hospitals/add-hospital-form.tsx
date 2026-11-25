@@ -30,6 +30,12 @@ export const ADD_WORDS = {
   emailInUse: "Someone already has an account with this email.",
   noDelivery: "Email isn't set up, so the invitation couldn't be sent.",
   notAdded: "Couldn't add the hospital. Try again.",
+  // 424 `not_delivered` (core 1.41.0): the hospital was added, only the
+  // first admin's invite email failed. Never "nothing was added".
+  notDelivered:
+    "The hospital was added, but the invite email didn't go through",
+  notDeliveredBody:
+    "Check the first admin's email address. Open the hospital to resend the invite.",
 } as const;
 
 const FALLBACK_ZONES = [
@@ -174,6 +180,20 @@ function Fields() {
             return onForm("adminEmail", ADD_WORDS.emailInUse);
           if (err.status === 503 && err.code === "no_delivery")
             return onBanner(ADD_WORDS.noDelivery);
+          // Added, but the invite didn't go: never submit it again (that
+          // would be a duplicate). Say so and go to the refreshed list.
+          if (err.code === "not_delivered") {
+            close();
+            toast.show({
+              title: ADD_WORDS.notDelivered,
+              body: ADD_WORDS.notDeliveredBody,
+              tone: "info",
+              ms: null,
+              live: "assertive",
+            });
+            router.push("/hospitals");
+            return true;
+          }
           // Nothing to highlight: the service refused the whole form.
           if (
             err.status === 422 &&

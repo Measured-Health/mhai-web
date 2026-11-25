@@ -687,6 +687,7 @@ describe("hospital admin routes", () => {
 
   it.each([
     [503, "no_delivery"],
+    [424, "not_delivered"],
     [501, "not_implemented"],
     [429, "rate_limited"],
   ])("passes core's %i %s through as its code only", async (status, code) => {

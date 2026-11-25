@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./errors";
 import {
+  isTransient,
   pollDelay,
   retryDelay,
   shouldRetry,
@@ -37,6 +38,10 @@ describe("shouldRetry / retryDelay", () => {
     expect(shouldRetry(0, new ApiError(501, "not_implemented"))).toBe(false);
     // No way to send the email: the action did nothing, and won't on a retry.
     expect(shouldRetry(0, new ApiError(503, "no_delivery"))).toBe(false);
+    // Saved, but its email didn't go: a retry would only conflict (409).
+    expect(shouldRetry(0, new ApiError(424, "not_delivered"))).toBe(false);
+    expect(shouldRetry(0, new ApiError(502, "not_delivered"))).toBe(false);
+    expect(isTransient(new ApiError(424, "not_delivered"))).toBe(false);
     expect(shouldRetry(3, new TypeError("offline"))).toBe(false);
   });
   it("backs off exponentially with jitter, capped at 30 s", () => {

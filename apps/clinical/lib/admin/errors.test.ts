@@ -6,8 +6,12 @@ import {
   adminError,
   assignError,
   inviteError,
+  mfaResetError,
+  passwordResetError,
+  resendInviteError,
   reviewerReminderError,
   staffReminderError,
+  type AdminError,
 } from "./errors";
 
 describe("adminError", () => {
@@ -101,6 +105,7 @@ describe("adminError", () => {
       "mfa_locked",
       "invalid",
       "no_delivery",
+      "not_delivered",
       "invalid_token",
       "no_recipients",
       "weird_new_code",
@@ -109,6 +114,9 @@ describe("adminError", () => {
       adminError,
       inviteError,
       accountError,
+      resendInviteError,
+      passwordResetError,
+      mfaResetError,
       staffReminderError,
       reviewerReminderError,
       assignError,
@@ -131,6 +139,70 @@ describe("adminError", () => {
     });
     expect(adminError(new ApiError(410, "invalid_token")).title).toBe(
       "This link no longer works",
+    );
+  });
+
+  it("never says nothing was changed when the change was saved but its email didn't go", () => {
+    const e = new ApiError(424, "not_delivered");
+    expect(adminError(e)).toMatchObject({
+      title: "Saved, but the email didn't go through",
+      body: "Check the email address. The list has been refreshed.",
+      saved: true,
+      stale: false,
+      gone: false,
+    });
+    const words: [(e: unknown) => AdminError, string, string][] = [
+      [
+        inviteError,
+        "The invite was saved, but the email didn't go through",
+        "Check the email address. You can resend the invite or remove it.",
+      ],
+      [
+        resendInviteError,
+        "The new invite was saved, but the email didn't go through",
+        "Check the email address. You can send a new invite or cancel it.",
+      ],
+      [
+        passwordResetError,
+        "The password reset was done, but the email didn't go through",
+        "They're signed out everywhere. Check their email address, then send the reset again.",
+      ],
+      [
+        mfaResetError,
+        "Two-step was reset, but the email didn't go through",
+        "They set up two-step again at their next sign-in. Check their email address.",
+      ],
+      [
+        staffReminderError,
+        "The reminder was saved, but the email didn't go through",
+        "Check their email address. You can send another reminder tomorrow.",
+      ],
+      [
+        reviewerReminderError,
+        "The reminder was saved, but the email didn't go through",
+        "Check the reviewers' email addresses in Staff. You can remind them again in an hour.",
+      ],
+      [
+        assignError,
+        "The reviewer was assigned, but the email didn't go through",
+        "Check their email address in Staff, or let them know another way.",
+      ],
+    ];
+    for (const [read, title, body] of words) {
+      const got = read(e);
+      expect(got).toMatchObject({ title, body, saved: true });
+      expect(`${got.title} ${got.body}`).not.toMatch(
+        /Nothing was changed|can't send emails|try again later/i,
+      );
+    }
+    // The real no-sender case keeps its words, and is not "saved".
+    expect(resendInviteError(new ApiError(503, "no_delivery"))).toMatchObject({
+      title: "MHAI can't send emails yet",
+      saved: false,
+    });
+    // The other actions' own words are kept.
+    expect(passwordResetError(new ApiError(429, "rate_limited")).title).toBe(
+      "Too many tries for this person",
     );
   });
 

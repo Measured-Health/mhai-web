@@ -77,6 +77,11 @@ export function platformError(
         "There must always be at least one platform admin.",
         "Make someone else a platform admin first.",
       );
+    case "not_delivered":
+      return W(
+        "Saved, but the email didn't go through.",
+        "Check the email address.",
+      );
     case "own_role":
       return W(
         "You can't change your own role.",

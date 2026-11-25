@@ -46,6 +46,12 @@ export const IN_USE_ELSEWHERE: ReadonlySet<string> = new Set([
   DEMO_EMAILS.platformAdmin,
   "f.ade@another-hospital.example",
 ]);
+/**
+ * An address with no mailbox: the change is saved but its email can't be
+ * delivered, so core answers 424 `not_delivered` (core 1.41.0).
+ */
+export const NO_MAILBOX = (email: string) =>
+  email.toLowerCase().startsWith("nomailbox@");
 const RESET_MS = 30 * MIN;
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -862,6 +868,7 @@ export function createMockAdmin({
         if (await isYou(s)) fail(403, "self_change");
         if (s.status !== "active" || invited(s)) fail(409, "conflict");
         await checkCode(auth);
+        if (NO_MAILBOX(s.email)) fail(424, "not_delivered");
         return { staff: await reply(s), link: demoLink(RESET_MS) };
       }
       if (!invited(s)) fail(409, "conflict");
@@ -870,6 +877,7 @@ export function createMockAdmin({
         ...s,
         invite_expires_at: iso(now() + INVITE_MS),
       });
+      if (NO_MAILBOX(s.email)) fail(424, "not_delivered");
       return { staff: await reply(next), link: demoLink(INVITE_MS) };
     },
 
@@ -885,6 +893,7 @@ export function createMockAdmin({
       const last = remindedStaff.get(id);
       if (last !== undefined && now() - last < D) fail(429, "rate_limited");
       remindedStaff.set(id, now());
+      if (NO_MAILBOX(s.email)) fail(424, "not_delivered");
       return reply(s);
     },
 
@@ -956,6 +965,9 @@ export function createMockAdmin({
           });
         }
       }
+      // Everyone is saved; one email that can't go fails the reply.
+      if (out.invited.some((i) => NO_MAILBOX(i.staff.email)))
+        fail(424, "not_delivered");
       return out;
     },
 

@@ -3,6 +3,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminClient } from "@/lib/api/admin";
+import { ADMIN_KEYS } from "@/lib/admin-queries";
 import { ApiError } from "@/lib/api/errors";
 import { DEMO_EMAILS, MOCK_CODE } from "@/lib/auth/mock";
 import { makeStaff, screenAdminAs } from "@/tests/admin";
@@ -246,6 +247,40 @@ describe("InviteDialog (core 1.33.0)", () => {
     await waitFor(() => expect(cached()).not.toMatch(/token=/));
     expect(window.location.href).not.toMatch(/token=/);
     await userEvent.click(within(result).getByRole("button", { name: "Done" }));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("an invite saved but not emailed says so truthfully, and the staff list refreshes", async () => {
+    let qc: QueryClient | undefined;
+    const send = vi.spyOn(holder.client, "inviteStaff");
+    const dialog = await openDialog((c) => (qc = c));
+    // The demo's address with no mailbox: saved, then 424 not_delivered.
+    await paste(dialog, "nomailbox@pilot-hospital.example");
+    const refetch = vi.spyOn(qc!, "invalidateQueries");
+    await sendWithCode(dialog, "Send 1 invite?");
+    const told = await screen.findByRole("dialog", {
+      name: "The invite was saved, but the email didn't go through",
+    });
+    expect(told).toHaveTextContent(
+      "Check the email address. You can resend the invite or remove it.",
+    );
+    expect(told.textContent).not.toMatch(
+      /Nothing was changed|can't send emails|not_delivered|424/,
+    );
+    expect(screen.queryByRole("dialog", { name: "Send 1 invite?" })).toBeNull();
+    // Sent once, never retried; the person is on the list now.
+    expect(send).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(refetch).toHaveBeenCalledWith(
+        expect.objectContaining({ queryKey: ADMIN_KEYS.staff }),
+      ),
+    );
+    expect(
+      (await holder.client.listStaff()).some(
+        (s) => s.email === "nomailbox@pilot-hospital.example",
+      ),
+    ).toBe(true);
+    await userEvent.click(within(told).getByRole("button", { name: "Done" }));
     expect(onClose).toHaveBeenCalled();
   });
 

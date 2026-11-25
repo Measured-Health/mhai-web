@@ -217,6 +217,37 @@ describe("the add hospital form", () => {
     expect((await api.listHospitals({})).hospitals).toHaveLength(12);
   });
 
+  it("424 not_delivered says the hospital was added but the invite email didn't go, and never sends it again", async () => {
+    api = createMockPlatform({
+      delayMs: 0,
+      me: () => ADA.email,
+      stepUp: createStepUp(),
+      delivery: "fails",
+    });
+    __setPlatformClientForTests(api);
+    const spy = vi.spyOn(api, "addHospital");
+    renderWithAuth(<AddHospitalForm />);
+    await addWith();
+    await closed();
+    expect(
+      await screen.findByText(
+        "The hospital was added, but the invite email didn't go through",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Check the first admin's email address. Open the hospital to resend the invite.",
+      ),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(
+      /Nothing was added|isn't set up|not_delivered|424/,
+    );
+    // Sent once, never retried (a retry would be a duplicate short code).
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith("/hospitals");
+    expect((await api.listHospitals({})).hospitals).toHaveLength(13);
+  });
+
   it.each([
     [422, "validation_failed", ADD_WORDS.invalid],
     [422, "invalid", ADD_WORDS.invalid],
