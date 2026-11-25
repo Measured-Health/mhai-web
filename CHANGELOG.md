@@ -56,6 +56,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Platform app: a deactivated hospital's page loads. The hospital page reader
+  only accepted `deactivation: null`; core 1.40.0 sends who deactivated it,
+  when, the reason and an optional note.
 - A pasted backup code with a space or line break around it is no
   longer cut short: the backup code box (sign-in and confirmations, both
   apps) had an 11-character limit that the browser applied before the
@@ -84,6 +87,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Platform app: a deactivated hospital's page loads. The hospital page reader
+  only accepted `deactivation: null`; core 1.40.0 sends who deactivated it,
+  when, the reason and an optional note.
 - **Platform app: a browser tab icon.** platforms. had no favicon (404); it
   now uses the same Measured Health icon as the clinical app
   (`app/favicon.ico` and `app/icon.svg`).
@@ -138,6 +144,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Platform app: a deactivated hospital's page loads. The hospital page reader
+  only accepted `deactivation: null`; core 1.40.0 sends who deactivated it,
+  when, the reason and an optional note.
 - **Deploy: image digests from one build no longer leak into another's merge.**
   The digest artifacts are named `digests-<scope>--<arch>`, so the `web`
   merge no longer picks up `web-live`'s digests ("expected 2 digests, found 4").
@@ -247,6 +256,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Platform app: a deactivated hospital's page loads. The hospital page reader
+  only accepted `deactivation: null`; core 1.40.0 sends who deactivated it,
+  when, the reason and an optional note.
 - **An alert for a patient who is no longer active** (core 1.27.0 sends
   `patient.id` null for an excluded or merged patient) no longer fails the
   whole alerts list: it reads as an alert with no patient to link.
@@ -505,6 +517,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Platform app: a deactivated hospital's page loads. The hospital page reader
+  only accepted `deactivation: null`; core 1.40.0 sends who deactivated it,
+  when, the reason and an optional note.
 - **Record connections work against core's live routes** (core openapi
   1.20.0). Found by the full live check:
   - Add a connection named the hospital from `GET /platform/hospitals/{id}`,
@@ -881,6 +896,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Platform app: a deactivated hospital's page loads. The hospital page reader
+  only accepted `deactivation: null`; core 1.40.0 sends who deactivated it,
+  when, the reason and an optional note.
 - The demo's two-step setup now appears in authenticator apps as
   "MHAI Demo" with the account's email (it showed "MHAI:new.bello").
 - Sign-in screens on desktop: only the form column scrolls, so the brand
