@@ -55,10 +55,13 @@ test("model policy: the hospital's policy through the BFF", async ({
       "cloud_provider",
       "hospital_id",
       "monthly_token_budget",
+      "own_model",
       "provider_code",
       "updated_at",
       "usage",
     ].sort(),
   );
   expect(p.hospital_id).toBe(id);
+  // Core 1.37.0: whether the hospital uses MHAI's own model (GPU server).
+  expect(typeof p.own_model).toBe("boolean");
 });
