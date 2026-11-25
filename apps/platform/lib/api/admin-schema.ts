@@ -7,9 +7,9 @@
 // Where core sends less than the old frontend contract, the schema pins it:
 // a hold keeps every record (scope both null), carries no note and no
 // "asked by" (both null), and a lift has no grace period (`records_due` and
-// `due_after` null). A hospital has no deactivation or removal record in
-// core (null); one made on core's command line has no country, domains or
-// invite either ("", [] and null).
+// `due_after` null). A hospital's deactivation is core's open record
+// (1.40.0: who, when, the reason and an optional note) or null; one made on
+// core's command line has no country, domains or invite ("", [] and null).
 import { z } from "zod";
 import { ApiError } from "@mhai/api-client/errors";
 import type {
@@ -178,7 +178,19 @@ const HOSPITAL = z.strictObject({
   time_zone: text(64),
   email_domains: z.array(text(253)).max(20),
   version,
-  deactivation: z.null(),
+  deactivation: z
+    .strictObject({
+      by: PERSON,
+      at: instant,
+      reason: z.enum([
+        "contract_ended",
+        "security_concern",
+        "hospital_request",
+        "other",
+      ]),
+      note: text(500).nullable(),
+    })
+    .nullable(),
   first_admin: z
     .strictObject({
       invite_id: id,

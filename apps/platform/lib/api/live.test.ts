@@ -205,6 +205,12 @@ const json = (v: unknown) => () => Response.json(v);
 const HOSPITALS = json({ hospitals: [coreSummary()], next_cursor: null });
 const HOSPITAL = json(coreHospital());
 /** A first admin's invite as core 1.38.0 sends it (synthetic). */
+const CORE_DEACTIVATION = {
+  by: { id: U2, name: "Synthetic Platform Admin" },
+  at: "2026-11-25T20:00:00Z",
+  reason: "other",
+  note: "Test hospital, no longer needed.",
+};
 const CORE_INVITE = {
   invite_id: U2,
   name: "Synthetic First Admin",
@@ -1401,6 +1407,27 @@ describe("live platform client", () => {
         (c) => c.getHospital(U1),
         coreAdded(),
         [coreHospital({ ...coreAdded(), country: "Nigeria" })],
+      ],
+      [
+        // A deactivated one (core 1.40.0): who, when, why, and a note or null.
+        (c) => c.getHospital(U1),
+        coreHospital({
+          status: "deactivated",
+          deactivation: CORE_DEACTIVATION,
+        }),
+        [
+          coreHospital({
+            deactivation: { ...CORE_DEACTIVATION, reason: "bored" },
+          }),
+          coreHospital({
+            deactivation: { ...CORE_DEACTIVATION, note: "x".repeat(501) },
+          }),
+          coreHospital({
+            deactivation: { ...CORE_DEACTIVATION, by: { id: U2 } },
+          }),
+          coreHospital({ deactivation: { ...CORE_DEACTIVATION, extra: 1 } }),
+          coreHospital({ deactivation: { ...CORE_DEACTIVATION, at: "today" } }),
+        ],
       ],
       [
         // Adding one replies with the hospital, read the same strict way.
