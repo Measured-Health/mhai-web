@@ -63,12 +63,13 @@ const add = (m: Mock, over: Partial<ConnectionIn> = {}) =>
 const events = async (m: Mock) => (await m.listActivity({})).events;
 
 describe("mock record connections", () => {
-  it("has the three connection types, named by standard or method", async () => {
+  it("has the four connection types, named by standard or method", async () => {
     const { types } = await setup().m.listConnectorTypes();
     expect(types.map((t) => [t.id, t.label])).toEqual([
       ["fhir_r4", "FHIR R4 server"],
       ["hl7v2_feed", "Results message feed"],
       ["file_export", "Scheduled file export"],
+      ["hl7v2_file", "HL7 v2 message files"],
     ]);
     expect(types[0]!.fields.map((f) => [f.key, f.label, f.kind])).toEqual([
       ["client_id", "Client ID", "text"],
@@ -415,7 +416,7 @@ describe("mock record connections", () => {
     // ...but reads everything.
     expect((await m.listConnections({})).connections).toHaveLength(5);
     expect((await m.getConnection("emr_hv1")).id).toBe("emr_hv1");
-    expect((await m.listConnectorTypes()).types).toHaveLength(3);
+    expect((await m.listConnectorTypes()).types).toHaveLength(4);
     // One at a time: each refusal is awaited before the next call.
     for (const p of [
       () => add(m),

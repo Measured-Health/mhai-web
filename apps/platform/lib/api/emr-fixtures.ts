@@ -48,6 +48,20 @@ export const CONNECTOR_TYPES: ConnectorType[] = [
     summary: "Collects an export file from a secure folder",
     fields: [text("folder", "Folder"), secret("access_key", "Access key")],
   },
+  {
+    // Core openapi 1.42.0: HL7 v2 message files over SFTP.
+    id: "hl7v2_file",
+    label: "HL7 v2 message files",
+    summary:
+      "Reads HL7 v2 result and medication messages from files in a secure folder.",
+    fields: [
+      text("folder", "Folder"),
+      text("username", "User name", 32),
+      text("host_key_fingerprint", "Host key fingerprint", 100),
+      text("expected_every_minutes", "Expected every (minutes)", 6),
+      secret("access_key", "Access key"),
+    ],
+  },
 ];
 
 /**
