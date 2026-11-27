@@ -78,10 +78,14 @@ test("the live deploy never starts the demo or the sample-data platform", () => 
     live.includes("for ps in mhai-web/web mhai-web-platform/platform; do"),
   );
   assert.ok(live.includes("[ -f /srv/mhai-backend/live-site ] ||"));
-  assert.ok(live.includes('start_live "$web_dir" compose.yml web-live 8093'));
   assert.ok(
     live.includes(
-      'start_live "$plat_dir" compose.platform.yml platform-live 8094',
+      'start_live "$web_dir" compose.yml compose.nats-tls.yml web-live 8093',
+    ),
+  );
+  assert.ok(
+    live.includes(
+      'start_live "$plat_dir" compose.platform.yml compose.platform.nats-tls.yml platform-live 8094',
     ),
   );
   // The live branch comes before anything the demo starts.
@@ -91,4 +95,39 @@ test("the live deploy never starts the demo or the sample-data platform", () => 
     wf,
     /\*\) echo "::error::Repository variable SITE_MODE must be demo or live/,
   );
+});
+
+// The backend in production mode (its marker production-mode): NATS takes TLS
+// only, so each live app runs with its override, which gives it TLS, its own
+// client certificate and the production NATS rules. The overrides ship with
+// every live deploy.
+test("the live apps take their NATS TLS override in production mode", () => {
+  const wf = read(".github/workflows/deploy.yml");
+  assert.ok(
+    wf.includes(
+      "compose.nats-tls.yml compose.platform.nats-tls.yml nginx/live-proxy.conf.template",
+    ),
+  );
+  assert.ok(wf.includes("if [ -e /srv/mhai-backend/production-mode ]; then"));
+  assert.ok(wf.includes('files+=(-f "$ovr")'));
+  for (const [file, svc, app] of [
+    ["deploy/compose.nats-tls.yml", "web-live", "clinical"],
+    ["deploy/compose.platform.nats-tls.yml", "platform-live", "platform"],
+  ]) {
+    const y = read(file);
+    assert.ok(y.includes(`  ${svc}:`), file);
+    assert.ok(y.includes("MHAI_DEPLOY_ENV: production"), file);
+    assert.ok(y.includes("NATS_URL: tls://mhai-nats:4222"), file);
+    assert.ok(
+      y.includes(`NATS_TLS_CERT_FILE: /run/secrets/nats-bff-${app}.pem`),
+      file,
+    );
+    assert.ok(
+      y.includes(`NATS_TLS_KEY_FILE: /run/secrets/nats-bff-${app}-key.pem`),
+      file,
+    );
+    assert.ok(y.includes(`secrets/bff/tls/bff-${app}-key.pem`), file);
+    // The key is a mounted secret, never a value in the environment.
+    assert.ok(!/BEGIN|PRIVATE KEY/.test(y), file);
+  }
 });

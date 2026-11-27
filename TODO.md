@@ -37,7 +37,8 @@ The frontend was called finished for the team demo on 23 Oct 2026. Everything be
   - patient-facing explanations, which a clinician reviews before anything is sent;
   - the rest of the EMR design follow-ups.
 - **BFF over NATS: what's left** (ADR 0005; the transport is built, default `http`):
-  - production: NATS TLS with client certificates for the BFFs;
+  - production: NATS TLS with client certificates for the BFFs (built: deploy/compose.nats-tls.yml and
+    compose.platform.nats-tls.yml, used once the backend is in production mode; not yet switched on live);
   - once every live BFF is on `nats` and core turns `CORE_HTTP_API` off, delete the HTTP transport, `MHAI_API_URL` and `BFF_SERVICE_KEY_FILE`;
   - letter uploads and file replies over NATS need the documents service (bodies over 64 KB are 413 on `nats`);
   - hospital sign-on on `nats` (it redirects the browser to core, which has no browser-facing address there).
