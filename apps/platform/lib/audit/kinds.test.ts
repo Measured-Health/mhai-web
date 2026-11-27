@@ -558,4 +558,71 @@ describe("Plan 13's record connection and alert settings kinds", () => {
       expect(k.words({ ...e, kind }), kind).toBe(text);
     }
   });
+  it("reads the kinds core already sends (core's pending_in_web)", () => {
+    // feedback.validated, correction.withdrawn, correction.decision_refused,
+    // correction.applied / apply_failed, audit.verify_started / finished:
+    // core maps them to these kinds, so each must read, never "This entry
+    // can't be displayed".
+    const e = auditEvent({ target: null, reason: null });
+    const cases: [string, string, string[], object, string][] = [
+      ["answer_agreed", "consultation", [], {}, "Agreed with an answer"],
+      ["review_withdrawn", "review", [], {}, "Withdrew a suggested correction"],
+      [
+        "review_refused",
+        "security",
+        [],
+        { outcome: "refused" },
+        "Review refused",
+      ],
+      ["learning_recorded", "review", [], {}, "Approved correction applied"],
+      [
+        "learning_recorded",
+        "review",
+        [],
+        { outcome: "failed" },
+        "Approved correction couldn't be applied",
+      ],
+    ];
+    for (const [kind, type, targets, over, text] of cases) {
+      const k = KINDS[kind];
+      expect(k, kind).toBeDefined();
+      expect(k.type, kind).toBe(type);
+      expect(k.targets, kind).toEqual(targets);
+      expect(k.note, kind).toBe(false);
+      expect(k.words({ ...e, type, kind, ...over } as typeof e), kind).toBe(
+        text,
+      );
+    }
+    const run = auditEvent({
+      type: "audit",
+      target: { kind: "run", id: "run_1" },
+      reason: null,
+    });
+    expect(KINDS.audit_check_started.type).toBe("audit");
+    expect(KINDS.audit_check_started.targets).toEqual(["run"]);
+    expect(
+      KINDS.audit_check_started.words({ ...run, kind: "audit_check_started" }),
+    ).toBe("Started the integrity check");
+    expect(
+      KINDS.audit_check_started.words({
+        ...run,
+        kind: "audit_check_started",
+        actor: { ...run.actor, kind: "system" },
+      }),
+    ).toBe("Daily integrity check started");
+    const finished = { ...run, kind: "audit_check_finished" };
+    expect(KINDS.audit_check_finished.targets).toEqual(["run"]);
+    expect(KINDS.audit_check_finished.words(finished)).toBe(
+      "Integrity check finished",
+    );
+    for (const [state, text] of [
+      ["intact", "Integrity check finished: intact"],
+      ["broken", "Integrity check finished: broken"],
+      ["error", "Integrity check couldn't finish"],
+    ] as const)
+      expect(
+        KINDS.audit_check_finished.words({ ...finished, facts: { state } }),
+        state,
+      ).toBe(text);
+  });
 });

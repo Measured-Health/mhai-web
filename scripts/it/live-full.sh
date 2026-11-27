@@ -10,6 +10,7 @@
 #   scripts/it/live-full.sh up        images, backend, seed, both apps
 #   scripts/it/live-full.sh test [spec filter...]
 #                                     the live Playwright suite (both apps)
+#   scripts/it/live-full.sh journey   the whole product journey (after up)
 #   scripts/it/live-full.sh down      remove everything it made, volumes too
 #   scripts/it/live-full.sh all       up, test, down (the nightly check)
 #
@@ -410,6 +411,47 @@ run_tests() {
   return $status
 }
 
+# The whole product journey (docs/live-e2e.md, "The journey"), after the
+# setup specs: platform part A adds a hospital in the app (it starts in
+# set-up, its first admin invited); then here, as an operator would, the
+# CLI activates it (the platform app has no activation yet), and the first
+# admin's invite link is replaced by one this script knows: core never
+# shows that link (the log sender records only that it is due), so the
+# live invite's stored hash is swapped for a fresh token's (development
+# stack only). Clinical part B and platform part C follow. Each step's
+# status and time go to LIVE_OUT/journey.jsonl.
+run_journey() {
+  local status=0 code token from=${JOURNEY_FROM:-a}
+  # Made here, so this script can read the ids part A leaves (the
+  # Playwright container runs as root).
+  mkdir -p "$out/journey-shots" "$state/journey"
+  [ "$from" = a ] && : > "$out/journey.jsonl"
+  run_pw clinical --project=setup || status=1
+  run_pw platform --project=setup || status=1
+  if [ "$from" = a ]; then
+    run_pw platform --project=journey-a || status=1
+    [ -s "$state/journey/hospital.id" ] || { echo "journey: no hospital was added" >&2; return 1; }
+    code=$(cat "$state/journey/hospital.code")
+    [[ $code =~ ^[A-Z0-9]{2,8}$ ]] || { echo "journey: no hospital code" >&2; return 1; }
+    psql_q "SELECT status FROM hospitals WHERE short_code = '$code'" | grep -qx setup_incomplete ||
+      { echo "journey: $code is not in set-up" >&2; status=1; }
+    cli hospitals activate "$code" >/dev/null
+    printf '{"step":"3-activation","kind":"cli","what":"core hospitals activate","status":"%s"}\n' \
+      "$(psql_q "SELECT status FROM hospitals WHERE short_code = '$code'")" >> "$out/journey.jsonl"
+    token=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')
+    [ "$(psql_q "UPDATE account_tokens t SET token_hash = encode(sha256('$token'::bytea), 'hex')
+            FROM hospitals h WHERE h.short_code = '$code' AND t.user_id = h.first_admin_id
+            AND t.purpose = 'invite' AND t.used_at IS NULL AND t.revoked_at IS NULL RETURNING t.id" | grep -cE "^[0-9a-f-]{36}$")" = 1 ] ||
+      { echo "journey: no live invite for the first admin" >&2; return 1; }
+    printf '/reset-password?token=%s' "$token" > "$state/journey/invite.link"
+    chmod 600 "$state/journey/invite.link"
+  fi
+  # JOURNEY_FROM=b or c reruns the later parts on the same hospital.
+  [ "$from" = c ] || run_pw clinical --project=journey "$@" || status=1
+  run_pw platform --project=journey-c "$@" || status=1
+  return $status
+}
+
 down() {
   docker rm -f "$project-proxy" "$project-web-clinical" "$project-web-platform" >/dev/null 2>&1 || true
   [ -f "$state/live.yml" ] && compose --profile test down -v --remove-orphans >/dev/null 2>&1 || true
@@ -424,6 +466,7 @@ case "${1:-}" in
   apps) apps_up ;;
   seed) seed; sample_ai ;;
   test) shift; run_tests "$@" ;;
+  journey) shift; run_journey "$@" ;;
   down) down ;;
   # The smoke subset: every path spec; the page tour (00-tour) only with
   # LIVE_TOUR=1, since it also lists the pages core can't serve yet.
@@ -432,5 +475,5 @@ case "${1:-}" in
     images; backend_up; seed; sample_ai; apps_up
     if [ "${LIVE_TOUR:-0}" = 1 ]; then run_tests; else run_tests --grep-invert "tour|debug"; fi ;;
   compose) shift; compose "$@" ;;
-  *) echo "usage: $0 up|backend|apps|seed|test|down|all|compose ..." >&2; exit 2 ;;
+  *) echo "usage: $0 up|backend|apps|seed|test|journey|down|all|compose ..." >&2; exit 2 ;;
 esac

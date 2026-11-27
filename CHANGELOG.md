@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **HL7 v2 message files in the platform app (core openapi 1.42.0).** The
+  connector-types read accepts `hl7v2_file`, so its connection form (fields
+  rendered from core's reply) loads. Must be deployed before core offers the
+  type (`CORE_EMR_CONNECTOR_TYPES`), because the read is strict.
+
 ### Changed
 
 - **One renewable backup code (product owner, 24 Nov; needs core's
@@ -35,6 +42,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The whole product journey, live (`scripts/it/live-full.sh journey`).**
+  On the build server's live stack: a hospital added in the platform app,
+  activated, its first admin's invite accepted; settings, invites, a resend
+  and a removal; two clinicians join; questions, agreement, corrections,
+  review, oversight, usage and activity; the account features; the
+  platform's view, audit log and integrity check; deactivate and
+  reactivate. Every step's status and time go to `journey.jsonl`
+  (docs/live-e2e.md, "The journey"). The analysis spec also waits out a
+  not-ready view after its filter is cleared.
+
 - **Move two-step to a new authenticator app, from the Account page, in both
   apps (product owner, 24 Nov).** "Move to a new app" asks for the current
   6-digit code or a backup code, shows the new app's QR code and key exactly
@@ -55,6 +72,18 @@ All notable changes to this project are documented here. The format follows
   shared `ScanApp` component in each app.
 
 ### Fixed
+
+- **Audit log: entries core already sends showed "This entry can't be
+  displayed" (platform app).** Core maps an agreed answer
+  (`feedback.validated`), a withdrawn correction, a refused review, the
+  learning step after an approval (`correction.applied` / `apply_failed`)
+  and the integrity check's start and finish (`audit.verify_started` /
+  `verify_finished`) to six kinds the app didn't know yet (`answer_agreed`,
+  `review_withdrawn`, `review_refused`, `learning_recorded`,
+  `audit_check_started`, `audit_check_finished`; core's `pending_in_web`),
+  so every such entry failed closed. Found by the whole-journey live check.
+  The app now reads and words them; core can drop them from its
+  `pending_in_web` list.
 
 - **A saved invite whose email didn't go no longer says "Nothing was
   changed" (needs core 1.41.0, `fix/not-delivered-code`).** When core saved
