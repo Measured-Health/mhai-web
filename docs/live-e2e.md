@@ -91,6 +91,26 @@ registers but doesn't do yet (501 `not_implemented`), made by a part of the
 page that isn't under test, is printed as `GAP` and doesn't fail the path
 (`tests/e2e-full/live.ts`, `KNOWN_GAPS`).
 
+## The journey
+
+`scripts/it/live-full.sh journey` (after `up`) walks the whole product
+journey on a hospital it adds, as each person would, and records every step
+(step, method, path, status, milliseconds; for each page, whether it
+rendered without an error state, its console errors and failed calls) in
+`LIVE_OUT/journey.jsonl`, with a screenshot of each page in
+`LIVE_OUT/journey-shots/`. Paths carry opaque ids only; no link, code or
+body is recorded.
+
+| Part                          | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| platform `journey-a-add`      | the platform admin's dashboards; Add hospital in the app with a step-up code: set-up incomplete, first admin invited                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| the script                    | `core hospitals activate` (the platform app has no activation yet); the first admin's invite link, which core never shows (the log sender records only that it is due), is replaced by one the script knows: the live invite's stored hash is swapped for a fresh token's (development stack only)                                                                                                                                                                                                                                                                            |
+| clinical `journey-b-hospital` | the first admin accepts the invite (password, two-step, backup code, terms); settings with step-up; invites two clinicians and a third, resends one, removes the third (the old and removed links refused); both accept; A asks (one in the app, three through the BFF), agrees, suggests three corrections; B reviews (approve, reject), A withdraws, the admin's oversight assigns and reminds; usage, activity; A's account: backup-code sign-in (renewed, the spent one refused), a new backup code, a new authenticator, a password change, devices, sign out everywhere |
+| platform `journey-c-oversee`  | the hospital's page, usage, activity, jobs, the audit log (every entry displayable) and the integrity check; deactivate with a step-up code (staff refused), reactivate                                                                                                                                                                                                                                                                                                                                                                                                       |
+
+The answers come from the stub pipeline worker, not a model. `JOURNEY_FROM=b`
+or `c` reruns the later parts on the same hospital.
+
 ## Not integrated yet
 
 Core (openapi 1.20.0) has no route yet for these, so their screens can't

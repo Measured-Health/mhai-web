@@ -35,6 +35,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The whole product journey, live (`scripts/it/live-full.sh journey`).**
+  On the build server's live stack: a hospital added in the platform app,
+  activated, its first admin's invite accepted; settings, invites, a resend
+  and a removal; two clinicians join; questions, agreement, corrections,
+  review, oversight, usage and activity; the account features; the
+  platform's view, audit log and integrity check; deactivate and
+  reactivate. Every step's status and time go to `journey.jsonl`
+  (docs/live-e2e.md, "The journey"). The analysis spec also waits out a
+  not-ready view after its filter is cleared.
+
 - **Move two-step to a new authenticator app, from the Account page, in both
   apps (product owner, 24 Nov).** "Move to a new app" asks for the current
   6-digit code or a backup code, shows the new app's QR code and key exactly
