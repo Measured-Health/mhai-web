@@ -411,6 +411,23 @@ deploy, and nothing falls back to the demo or to sample data.
 With `SITE_MODE` not `live` on a host the backend marked live, the deploy
 stops: the demo never comes back by accident.
 
+### Production mode (NATS over TLS)
+
+When the backend is in production mode (mhai-multiagent deploy/README.md,
+"Production mode"; its marker `/srv/mhai-backend/production-mode`), NATS
+accepts TLS only and verifies a client certificate. `web-live` and
+`platform-live` then run with an override each, `compose.nats-tls.yml` and
+`compose.platform.nats-tls.yml`: `MHAI_DEPLOY_ENV=production`,
+`NATS_URL=tls://mhai-nats:4222` and `NATS_TLS_CA_FILE`, `NATS_TLS_CERT_FILE`,
+`NATS_TLS_KEY_FILE` from `/srv/mhai-backend/secrets/bff/tls/` (written by the
+backend's `production/enable-production.sh`: mode 400, uid 1001), mounted as
+compose secrets. The NKey stays the same.
+
+The deploy ships both overrides on every live deploy and adds them whenever
+the marker exists; the backend's switch and its `--rollback` recreate the two
+apps with or without them. **Deploy this repository with the overrides before
+the backend's switch**: without them on the host the switch refuses.
+
 ### The client address (per-IP sign-in limits)
 
 Core counts sign-in attempts per client address, and the app passes it the

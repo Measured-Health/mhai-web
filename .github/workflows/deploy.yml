@@ -211,7 +211,7 @@ jobs:
         id: live_bundle
         run: |
           set -euo pipefail
-          b=$(tar -C deploy -czf - compose.yml compose.platform.yml nginx/live-proxy.conf.template | base64 -w0)
+          b=$(tar -C deploy -czf - compose.yml compose.platform.yml compose.nats-tls.yml compose.platform.nats-tls.yml nginx/live-proxy.conf.template | base64 -w0)
           echo "value=$b" >> "$GITHUB_OUTPUT"
 
       - name: Pull and restart on the instance
@@ -279,6 +279,11 @@ jobs:
               install -m 644 "$tmp/compose.yml" "$web_dir/compose.yml"
               install -m 644 "$tmp/nginx/live-proxy.conf.template" "$web_dir/live-proxy.conf.template"
               install -m 644 "$tmp/compose.platform.yml" "$plat_dir/compose.platform.yml"
+              # The NATS TLS overrides: used only while the backend is in
+              # production mode (start_live below; the backend's
+              # enable-production.sh uses them too).
+              install -m 644 "$tmp/compose.nats-tls.yml" "$web_dir/compose.nats-tls.yml"
+              install -m 644 "$tmp/compose.platform.nats-tls.yml" "$plat_dir/compose.platform.nats-tls.yml"
               install -m 644 "$tmp/nginx/live-proxy.conf.template" "$plat_dir/live-proxy.conf.template"
               rm -rf "$tmp"
 
@@ -315,14 +320,25 @@ jobs:
               done
               echo "No demo (web, 8090) and no sample-data platform (8091) run."
 
-              start_live() { # dir composefile service port
-                local dir=$1 file=$2 svc=$3 port=$4 h=000 s=000 csp=0 ok=0
+              start_live() { # dir composefile tls-override service port
+                local dir=$1 file=$2 ovr=$3 svc=$4 port=$5 h=000 s=000 csp=0 ok=0
                 cd "$dir"
-                docker compose -f "$file" --profile live config --quiet || fail "$file in $dir doesn't validate"
-                docker compose -f "$file" --profile live pull --policy always "$svc" "$svc-proxy" || fail "$svc: pull failed"
-                docker compose -f "$file" --profile live up -d "$svc" || fail "$svc: start failed"
+                # The backend in production mode (its marker production-mode;
+                # mhai-multiagent deploy/README.md, "Production mode"): NATS
+                # speaks TLS only, so the app takes its client certificate
+                # from the override (deploy/README.md, "Production mode").
+                local files=(-f "$file")
+                if [ -e /srv/mhai-backend/production-mode ]; then
+                  [ -f "$ovr" ] || fail "$ovr missing in $dir"
+                  [ -d /srv/mhai-backend/secrets/bff/tls ] || fail "the backend is in production mode but has no secrets/bff/tls (its production/enable-production.sh)"
+                  files+=(-f "$ovr")
+                  echo "$svc: NATS over TLS (the backend is in production mode)."
+                fi
+                docker compose "${files[@]}" --profile live config --quiet || fail "$file in $dir doesn't validate"
+                docker compose "${files[@]}" --profile live pull --policy always "$svc" "$svc-proxy" || fail "$svc: pull failed"
+                docker compose "${files[@]}" --profile live up -d "$svc" || fail "$svc: start failed"
                 # Recreated every time: it reads the template at start.
-                docker compose -f "$file" --profile live up -d --force-recreate --no-deps "$svc-proxy" || fail "$svc-proxy: start failed"
+                docker compose "${files[@]}" --profile live up -d --force-recreate --no-deps "$svc-proxy" || fail "$svc-proxy: start failed"
                 for _ in $(seq 1 24); do
                   h=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/api/health" || echo 000)
                   s=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/sign-in" || echo 000)
@@ -331,7 +347,7 @@ jobs:
                   sleep 5
                 done
                 if [ "$ok" != 1 ]; then
-                  docker compose -f "$file" --profile live logs --tail=80 "$svc" "$svc-proxy" || true
+                  docker compose "${files[@]}" --profile live logs --tail=80 "$svc" "$svc-proxy" || true
                   fail "$svc unhealthy through its proxy (/api/health=$h, /sign-in=$s, csp=$csp)"
                 fi
                 echo "$svc healthy through its proxy (connected to NATS)."
@@ -342,21 +358,21 @@ jobs:
                 local token got_host got_peer
                 token=$(openssl rand -hex 8)
                 curl -s -o /dev/null -H 'X-Real-IP: 192.0.2.77' "http://127.0.0.1:$port/api/health?probe=h$token" || true
-                docker compose -f "$file" --profile live exec -T "$svc-proxy" \
+                docker compose "${files[@]}" --profile live exec -T "$svc-proxy" \
                   wget -q -O /dev/null --header 'X-Real-IP: 192.0.2.78' "http://127.0.0.1:8080/api/health?probe=p$token" || true
                 sleep 1
-                got_host=$(docker compose -f "$file" --profile live logs --no-log-prefix --since 5m "$svc-proxy" | grep "probe=h$token" | awk '{print $1}' | tail -n1 || true)
-                got_peer=$(docker compose -f "$file" --profile live logs --no-log-prefix --since 5m "$svc-proxy" | grep "probe=p$token" | awk '{print $1}' | tail -n1 || true)
+                got_host=$(docker compose "${files[@]}" --profile live logs --no-log-prefix --since 5m "$svc-proxy" | grep "probe=h$token" | awk '{print $1}' | tail -n1 || true)
+                got_peer=$(docker compose "${files[@]}" --profile live logs --no-log-prefix --since 5m "$svc-proxy" | grep "probe=p$token" | awk '{print $1}' | tail -n1 || true)
                 if [ "$got_host" != 192.0.2.77 ] || [ "$got_peer" != 127.0.0.1 ]; then
                   # Shared or chosen client addresses would break core's per-IP
                   # sign-in limits: take the app off the public name.
-                  docker compose -f "$file" --profile live stop "$svc-proxy" || true
+                  docker compose "${files[@]}" --profile live stop "$svc-proxy" || true
                   fail "$svc-proxy: client address check failed (host saw '${got_host:-none}', want 192.0.2.77; peer saw '${got_peer:-none}', want 127.0.0.1); the proxy is stopped"
                 fi
                 echo "$svc-proxy takes the client address from the host's nginx only."
               }
-              start_live "$web_dir" compose.yml web-live 8093
-              start_live "$plat_dir" compose.platform.yml platform-live 8094
+              start_live "$web_dir" compose.yml compose.nats-tls.yml web-live 8093
+              start_live "$plat_dir" compose.platform.yml compose.platform.nats-tls.yml platform-live 8094
 
               # The host's nginx: the public names must go to the live proxies.
               # A site still on 8090/8091 now answers 502 (nothing listens

@@ -1,0 +1,32 @@
+# The platform app's BFF over NATS with TLS, for a backend in production mode
+# (mhai-multiagent deploy/README.md, "Production mode"): an override for the
+# `platform-live` service of compose.platform.yml, used as
+#   docker compose -f compose.platform.yml -f compose.platform.nats-tls.yml --profile live up -d platform-live
+# The deploy workflow adds it whenever /srv/mhai-backend/production-mode
+# exists, and the backend's production/enable-production.sh uses it for the
+# switch (its --rollback goes back to compose.platform.yml alone).
+#
+# NATS then verifies a client certificate from every client, so the app
+# shows its own (bff-platform, issued from the backend's private CA) and
+# still signs in with its NKey. MHAI_DEPLOY_ENV is production: tls:// and
+# the three files are required, a password is refused. The files are written
+# by the backend's enable-production.sh: mode 400, owned by uid 1001 (the
+# image's nextjs user); the key is never in the environment.
+
+services:
+  platform-live:
+    environment:
+      MHAI_DEPLOY_ENV: production
+      NATS_URL: tls://mhai-nats:4222
+      NATS_TLS_CA_FILE: /run/secrets/nats-tls-ca.pem
+      NATS_TLS_CERT_FILE: /run/secrets/nats-bff-platform.pem
+      NATS_TLS_KEY_FILE: /run/secrets/nats-bff-platform-key.pem
+    secrets: [nats-bff-platform.nk, nats-tls-ca.pem, nats-bff-platform.pem, nats-bff-platform-key.pem]
+
+secrets:
+  nats-tls-ca.pem:
+    file: ${MHAI_BACKEND_DIR:-/srv/mhai-backend}/secrets/bff/tls/ca.pem
+  nats-bff-platform.pem:
+    file: ${MHAI_BACKEND_DIR:-/srv/mhai-backend}/secrets/bff/tls/bff-platform.pem
+  nats-bff-platform-key.pem:
+    file: ${MHAI_BACKEND_DIR:-/srv/mhai-backend}/secrets/bff/tls/bff-platform-key.pem
