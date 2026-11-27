@@ -270,6 +270,55 @@ describe("readAuditEvent", () => {
     expect(bad(auditEvent({ after_break: "no" as never }))).toBe(true);
   });
 
+  it("the kinds core sends from feedback, review and the integrity check read", () => {
+    // Core maps feedback.validated, correction.withdrawn and the integrity
+    // check to these (its pending_in_web): never "can't be displayed".
+    for (const ok of [
+      auditEvent({
+        type: "consultation",
+        kind: "answer_agreed",
+        target: null,
+        reason: null,
+      }),
+      auditEvent({
+        type: "review",
+        kind: "review_withdrawn",
+        target: null,
+        reason: null,
+      }),
+      auditEvent({
+        type: "review",
+        kind: "learning_recorded",
+        target: null,
+        reason: null,
+        outcome: "failed",
+      }),
+      auditEvent({
+        type: "security",
+        kind: "review_refused",
+        target: null,
+        reason: null,
+        outcome: "refused",
+        flag: "policy",
+      }),
+      auditEvent({
+        type: "audit",
+        kind: "audit_check_started",
+        target: { kind: "run", id: "run_1" },
+        reason: null,
+      }),
+      auditEvent({
+        type: "audit",
+        kind: "audit_check_finished",
+        target: { kind: "run", id: "run_1" },
+        reason: null,
+        flag: "security",
+        facts: { state: "broken", first_broken_seq: 7 },
+      }),
+    ])
+      expect(readAuditEvent(ok), ok.kind).toEqual({ ok: true, event: ok });
+  });
+
   it("an unknown kind or reason is undisplayable", () => {
     expect(bad(auditEvent({ kind: "hospital_exploded" }))).toBe(true);
     expect(bad(auditEvent({ kind: "constructor" }))).toBe(true);

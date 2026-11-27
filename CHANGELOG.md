@@ -63,6 +63,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Audit log: entries core already sends showed "This entry can't be
+  displayed" (platform app).** Core maps an agreed answer
+  (`feedback.validated`), a withdrawn correction, a refused review, the
+  learning step after an approval (`correction.applied` / `apply_failed`)
+  and the integrity check's start and finish (`audit.verify_started` /
+  `verify_finished`) to six kinds the app didn't know yet (`answer_agreed`,
+  `review_withdrawn`, `review_refused`, `learning_recorded`,
+  `audit_check_started`, `audit_check_finished`; core's `pending_in_web`),
+  so every such entry failed closed. Found by the whole-journey live check.
+  The app now reads and words them; core can drop them from its
+  `pending_in_web` list.
+
 - **A saved invite whose email didn't go no longer says "Nothing was
   changed" (needs core 1.41.0, `fix/not-delivered-code`).** When core saved
   a hospital admin's change but couldn't deliver its email (seen live: an
