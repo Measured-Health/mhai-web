@@ -21,7 +21,13 @@ services:
       NATS_TLS_CA_FILE: /run/secrets/nats-tls-ca.pem
       NATS_TLS_CERT_FILE: /run/secrets/nats-bff-clinical.pem
       NATS_TLS_KEY_FILE: /run/secrets/nats-bff-clinical-key.pem
-    secrets: [nats-bff-clinical.nk, nats-tls-ca.pem, nats-bff-clinical.pem, nats-bff-clinical-key.pem]
+    secrets:
+      [
+        nats-bff-clinical.nk,
+        nats-tls-ca.pem,
+        nats-bff-clinical.pem,
+        nats-bff-clinical-key.pem,
+      ]
 
 secrets:
   nats-tls-ca.pem:

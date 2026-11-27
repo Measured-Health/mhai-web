@@ -103,7 +103,11 @@ test("the live deploy never starts the demo or the sample-data platform", () => 
 // every live deploy.
 test("the live apps take their NATS TLS override in production mode", () => {
   const wf = read(".github/workflows/deploy.yml");
-  assert.ok(wf.includes("compose.nats-tls.yml compose.platform.nats-tls.yml nginx/live-proxy.conf.template"));
+  assert.ok(
+    wf.includes(
+      "compose.nats-tls.yml compose.platform.nats-tls.yml nginx/live-proxy.conf.template",
+    ),
+  );
   assert.ok(wf.includes("if [ -e /srv/mhai-backend/production-mode ]; then"));
   assert.ok(wf.includes('files+=(-f "$ovr")'));
   for (const [file, svc, app] of [
@@ -114,8 +118,14 @@ test("the live apps take their NATS TLS override in production mode", () => {
     assert.ok(y.includes(`  ${svc}:`), file);
     assert.ok(y.includes("MHAI_DEPLOY_ENV: production"), file);
     assert.ok(y.includes("NATS_URL: tls://mhai-nats:4222"), file);
-    assert.ok(y.includes(`NATS_TLS_CERT_FILE: /run/secrets/nats-bff-${app}.pem`), file);
-    assert.ok(y.includes(`NATS_TLS_KEY_FILE: /run/secrets/nats-bff-${app}-key.pem`), file);
+    assert.ok(
+      y.includes(`NATS_TLS_CERT_FILE: /run/secrets/nats-bff-${app}.pem`),
+      file,
+    );
+    assert.ok(
+      y.includes(`NATS_TLS_KEY_FILE: /run/secrets/nats-bff-${app}-key.pem`),
+      file,
+    );
     assert.ok(y.includes(`secrets/bff/tls/bff-${app}-key.pem`), file);
     // The key is a mounted secret, never a value in the environment.
     assert.ok(!/BEGIN|PRIVATE KEY/.test(y), file);

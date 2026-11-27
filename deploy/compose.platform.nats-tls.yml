@@ -21,7 +21,13 @@ services:
       NATS_TLS_CA_FILE: /run/secrets/nats-tls-ca.pem
       NATS_TLS_CERT_FILE: /run/secrets/nats-bff-platform.pem
       NATS_TLS_KEY_FILE: /run/secrets/nats-bff-platform-key.pem
-    secrets: [nats-bff-platform.nk, nats-tls-ca.pem, nats-bff-platform.pem, nats-bff-platform-key.pem]
+    secrets:
+      [
+        nats-bff-platform.nk,
+        nats-tls-ca.pem,
+        nats-bff-platform.pem,
+        nats-bff-platform-key.pem,
+      ]
 
 secrets:
   nats-tls-ca.pem:
