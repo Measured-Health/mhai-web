@@ -15,6 +15,13 @@ Backend and API:
 Measured-Health/mhai-multiagent (read its SKILLS.md for the security
 model).
 
+## Product context
+
+- **MHAI** is clinical decision support. This repository holds its two apps: the clinical app (clinicians ask, read checked answers, give feedback and review corrections; hospital admins run their hospital) and the platform admin app (Measured Health staff: hospitals, AI model policy, EMR connections, audit, analytics). The backend is mhai-multiagent (core, EMR service, model pipeline).
+- **DocFlow** is Measured Health's scanned-records product (repos `emr-api` and `emr-web`). Its link to MHAI is the backend's documents pipeline through the EMR connector listed as "DocFlow" (`document_archive`): scanned history is read, reviewed by a person, and becomes the patient's EMR records. Not built yet (mhai-multiagent TODO.md).
+- **EMR connector types** come from core (`GET /platform/emr/connector-types`): `fhir_r4`, `file_export`, `document_archive` (DocFlow), and `hl7v2_file` (in progress). The platform readers are strict: when core adds a type id, add it to `apps/platform/lib/api/emr-schema.ts` in the same change, or the EMR screens refuse the reply.
+- **Never name the pilot hospital** in code, docs, tests, branches or commits.
+
 ## Read first
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): the clinical app, the platform
