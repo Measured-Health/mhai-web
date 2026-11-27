@@ -1,13 +1,19 @@
 # Architecture
 
-MHAI has **two frontend apps** and **three kinds of user**. Both apps talk
-only to the MHAI API (`Measured-Health/mhai-multiagent`, base path
-`/api/v1`).
+The apps, as they are on 27 Nov 2026. For the whole system (core, NATS, the
+model pipeline, the EMR service, the live host and production mode) start
+with mhai-multiagent's ARCHITECTURE.md; this file explains the two apps and
+how they reach the backend.
 
-| App                    | Who uses it                                         | What it does                                                                                                                                                                                                        | Status                                                                                    |
-| ---------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| **Clinical app**       | Clinicians, and hospital admins                     | **Clinical side:** ask questions, read evidence-checked results, give feedback, review corrections. **Hospital admin side:** manage the hospital's own staff, settings and usage                                    | This repo, Phase 1                                                                        |
-| **Platform admin app** | Measured Health staff: platform admins and auditors | Run the service: hospitals (add, deactivate, two-person removal, single sign-on), the platform team and its activity, usage and analysis across hospitals, legal holds, system health and failed jobs, and settings | This repo, on sample data ([ADR 0002](docs/adr/0002-separate-clinical-and-admin-apps.md)) |
+MHAI is clinical decision support. It has **two frontend apps** and **three
+kinds of user**. Both apps talk only to the MHAI API (core, in
+`Measured-Health/mhai-multiagent`, base path `/api/v1`), and only from their
+own server (the BFF), over NATS.
+
+| App                    | Who uses it                                         | What it does                                                                                                                                                                                                                                      | Status                                                                          |
+| ---------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Clinical app**       | Clinicians, and hospital admins                     | **Clinical side:** ask questions, read evidence-checked results, give feedback, review corrections. **Hospital admin side:** manage the hospital's own staff, settings and usage                                                                  | This repo, live                                                                 |
+| **Platform admin app** | Measured Health staff: platform admins and auditors | Run the service: hospitals (add, deactivate, two-person removal, single sign-on, AI model), record connections, the platform team and its activity, usage and analysis across hospitals, legal holds, system health and failed jobs, and settings | This repo, live ([ADR 0002](docs/adr/0002-separate-clinical-and-admin-apps.md)) |
 
 The three kinds of user:
 
@@ -32,32 +38,35 @@ flowchart LR
     aud([Auditor])
 
     subgraph web["mhai-web (this repo)"]
-        subgraph capp["Clinical app · app.&lt;domain&gt;"]
+        subgraph capp["Clinical app · ai.measured-health.org"]
             cside["Clinical side"]
             hside["Hospital admin side"]
         end
-        aapp["Platform admin app<br/>platforms.&lt;domain&gt;"]
+        aapp["Platform admin app<br/>platforms.measured-health.org"]
     end
 
     idp["Hospital identity provider<br/>(OIDC single sign-on)"]
 
-    subgraph api["mhai-multiagent"]
-        gw["MHAI API gateway<br/>/api/v1"]
-        wk["Worker<br/>(pipeline jobs)"]
-        inf["Inference services<br/>(embedder, NLI, generator, OCR)"]
-        db[("Postgres · Redis · object storage")]
+    subgraph api["mhai-multiagent (backend)"]
+        nats["NATS<br/>(TLS + client certificate + NKey)"]
+        core["Core service<br/>auth, permissions, audit"]
+        wk["Pipeline worker<br/>retrieval, answer, checks"]
+        emr["EMR service<br/>hospital record systems"]
+        db[("Postgres<br/>row-level security")]
     end
 
     clin --> cside
     hadm --> hside
     padm --> aapp
     aud --> aapp
-    cside -- "queries, results, feedback, corrections, alerts" --> gw
-    hside -- "staff, hospital settings, usage (one hospital)" --> gw
-    aapp -- "hospitals, health, DLQ, settings, audit" --> gw
+    cside -- "queries, results, feedback, corrections, alerts, patient lookup" --> nats
+    hside -- "staff, hospital settings, usage (one hospital)" --> nats
+    aapp -- "hospitals, AI model, connections, health, audit, analytics" --> nats
     capp -. "sign in" .-> idp
-    gw --> wk --> inf
-    gw --> db
+    nats --> core
+    core --> db
+    core -- "signed jobs" --> wk
+    core -- "signed calls" --> emr
     wk --> db
 ```
 
@@ -69,8 +78,8 @@ The same picture as a sketch:
      ▼                ▼                                 │
 ┌─────────────────────────────────┐                     ▼
 │          CLINICAL APP           │          ┌──────────────────────┐
-│          app.<domain>           │          │  PLATFORM ADMIN APP  │
-│ ┌──────────────┬──────────────┐ │          │  platforms.<domain>  │
+│       ai.measured-health.org    │          │  PLATFORM ADMIN APP  │
+│ ┌──────────────┬──────────────┐ │          │  platforms.…         │
 │ │ CLINICAL     │ HOSPITAL     │ │          │  (IP allow list)     │
 │ │ ask · result │ ADMIN        │ │          │ hospitals · health · │
 │ │ feedback ·   │ staff ·      │ │          │ DLQ · holds ·        │
@@ -82,10 +91,10 @@ The same picture as a sketch:
                  └──────────────┬───────────────────────┘
                                 ▼
                       ┌───────────────────┐
-                      │  MHAI API /api/v1 │  checks role + hospital
+                      │ NATS → core       │  checks role + hospital
                       └─────────┬─────────┘  on every route
                                 ▼
-                 worker · inference services · data stores
+                 pipeline worker · EMR service · Postgres
 ```
 
 ## 2. Who can do what
@@ -112,7 +121,7 @@ flowchart TB
         h6[Alert settings: units, what to flag, who hears]
     end
     subgraph A["Platform admin app"]
-        a0[Hospitals & SSO setup]
+        a0[Hospitals, SSO and AI model]
         a2[Record connections]
         a1[Platform users & roles]
         a3[Agent status & DLQ]
@@ -296,6 +305,9 @@ flowchart LR
   server only (`server-only`, an ESLint rule and `check:no-nats`). Any
   failure is 503 `unavailable` at the browser, as on HTTP. The HTTP
   transport (with `X-MHAI-Service`) goes once core turns its HTTP API off.
+  The live site uses `nats`. When the backend is in production mode the
+  connection is TLS with the app's own client certificate as well as its
+  NKey (section 6).
 
 - **Session:** the Next.js server keeps the API token in an `httpOnly`,
   `Secure`, `SameSite=Strict` cookie and forwards calls to the API. Browser
@@ -344,6 +356,19 @@ sequenceDiagram
     end
     Note over U,W: 13 min idle → countdown, 15 min → sign out
 ```
+
+- **Two-step for everyone.** Each account has **one renewable backup
+  code**. When it is used, core replaces it and the app shows the new code
+  once, with **Copy** and a 3-2-1 countdown before **Continue** works
+  (`@mhai/ui/auth/save-backup-code`). The new code comes in the challenge
+  reply after sign-in, or in a response header after a step-up.
+- **A new phone:** Profile & security moves two-step to a new authenticator
+  (`/auth/mfa/replace`, with the current code or the backup code).
+- **Security notice emails** (password changed or reset, two-step turned
+  on or moved, backup code used or made) are sent by the backend.
+- **Messages that didn't go:** 503 `no_delivery` means email isn't set up
+  and nothing changed; 424 `not_delivered` means the change was saved but
+  the email didn't go through ("Saved, but the email didn't go through").
 
 ### 4.4 Asking a question
 
@@ -404,7 +429,7 @@ sequenceDiagram
     Note over W,API: A's own corrections are never listed for A
     B->>W: Approve
     W->>API: POST /corrections/{id}/approve
-    API-->>W: approved → clinical sign-off before KB change
+    API-->>W: approved → recorded for a later, reviewed training run
     Note over A,W: A sees the outcome in My corrections
 ```
 
@@ -543,14 +568,18 @@ fail to load it says "Couldn't load named access" with **Try again**.
 ## 5. Platform admin app
 
 `apps/platform` (`@mhai/platform`) is for Measured Health staff: platform
-admins and auditors. It runs on sample data until the backend has the
-platform endpoints; the contract it assumes is in
+admins and auditors. It is live against core's platform routes; the
+contract it was built on is in
 [the platform admin spec, §13](docs/specs/2026-10-17-platform-admin-design.md).
+Where core doesn't serve a route yet (501), the screen says "Not available
+yet": team invites, notifications, platform settings and named access.
+Activating a new hospital is still core's CLI only. Audit exports stay off
+until legal sign-off.
 
 | Page        | What it does                                                                                                                                                                                                                                                                                               | Who                                           |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| Hospitals   | List, search, add a hospital and invite its first admin                                                                                                                                                                                                                                                    | platform admin (auditors read)                |
-| Hospital    | Details, deactivate and reactivate, single sign-on, two-person removal with retention and legal-hold checks, recent actions                                                                                                                                                                                | platform admin (auditors read)                |
+| Hospitals   | List, search, add a hospital and invite its first admin (with the admin's own two-step code)                                                                                                                                                                                                               | platform admin (auditors read)                |
+| Hospital    | Details, deactivate and reactivate (with the deactivation record), single sign-on, AI model (cloud provider, budget, our own model), two-person removal with retention and legal-hold checks, recent actions                                                                                               | platform admin (auditors read)                |
 | Connections | Every hospital's patient record connections with state filters (`?state=`), a connection's page (status, test, switch on and off, settings, last day's problems), and Add a connection. Credentials are write-only: "Set · {date}" or "Not set", never shown again; also a section on each hospital's page | platform admin (auditors read)                |
 | Usage       | What changed, the tabs and a CSV, in counts only; follow-ups                                                                                                                                                                                                                                               | platform admin (auditors read)                |
 | Analysis    | Counts and rates of conditions, who is affected, co-occurring conditions, findings and alerts, and MHAI quality across hospitals or for one, with filters, a fair comparison and a CSV; every visit and download is recorded, and its access trail is on Activity                                          | platform admin (auditors read the trail only) |
@@ -560,17 +589,17 @@ platform endpoints; the contract it assumes is in
 | Settings    | Retention periods (longer at once, shorter with a preview and a second admin), triage on and off, clearing unapproved learning data, pause clean-up, and the changes waiting for approval                                                                                                                  | platform admin (auditors read)                |
 | Team        | Invite, change role, remove (never your own row)                                                                                                                                                                                                                                                           | platform admin (auditors read)                |
 | Activity    | Every platform action, newest first, by hospital                                                                                                                                                                                                                                                           | both                                          |
-| Audit log   | Every entry in the log newest first, named access, exports, and the integrity check; reads are recorded                                                                                                                                                                                                    | both                                          |
-| Account     | Password, backup codes, signed-in devices                                                                                                                                                                                                                                                                  | both                                          |
+| Audit log   | Every entry in the log newest first (in words, from the kinds core sends; an entry without a known kind shows as "can't be displayed"), named access, exports, and the integrity check; reads are recorded                                                                                                 | both                                          |
+| Account     | Password, the backup code, a new authenticator, signed-in devices                                                                                                                                                                                                                                          | both                                          |
 
 When the service is having problems, a warning with **View health** shows on every page except Health itself.
 
 ```text
-browser ──> platforms.<domain> (IP allow list)
+browser ──> platforms.measured-health.org (IP allow list)
               Next.js: pages + /api/auth/* + /api/v1/[...path] proxy
                  │  sealed httpOnly cookie holds the platform token
                  ▼
-            api.<domain>/api/v1/platform/*   (X-MHAI-Audience: platform)
+            NATS api.v1.platform (user bff_platform) ──> core /platform/*
 ```
 
 **Rules:**
@@ -613,16 +642,39 @@ browser ──> platforms.<domain> (IP allow list)
 
 ## 6. Deployment
 
-```mermaid
-flowchart LR
-    u1([Clinicians, hospital admins]) --> cdn1["app.&lt;domain&gt;<br/>Clinical app"]
-    u2([Platform admins, auditors]) -->|IP allow list| cdn2["platforms.&lt;domain&gt;<br/>Platform admin app"]
-    cdn1 --> api["api.&lt;domain&gt;/api/v1"]
-    cdn2 --> api
+Both apps run on the live host with the backend (one server; the whole
+picture is in mhai-multiagent's ARCHITECTURE.md, section 3). Run-book:
+`deploy/README.md`, "Live site".
+
+```text
+browser ──https──> nginx (host) ──> web-live-proxy ──> web-live ──┐
+browser ──https──> nginx (host, IP allow list) ──> platform-live-proxy ──> platform-live ──┤
+                                                                   network mhai-bff (internal)
+                                                                   ▼
+                                                    NATS ──> core (mhai-multiagent)
 ```
 
-Each app is its own Next.js build and container, so they can be released
-and rolled back on their own.
+- **Each app is its own Next.js build and container**, so they can be
+  released and rolled back on their own. nginx on the host ends TLS; a small
+  proxy container in front of each app passes the client address for the
+  per-IP sign-in limits.
+- **The apps reach only NATS**, on the internal `mhai-bff` network, as
+  their own NKey users (`bff_clinical`, `bff_platform`).
+- **Production mode (#128).** When the backend is in production mode (it
+  is, since 27 Nov; its marker `/srv/mhai-backend/production-mode`), NATS
+  takes TLS only and checks a client certificate. The deploy then adds
+  `deploy/compose.nats-tls.yml` and `deploy/compose.platform.nats-tls.yml`:
+  `MHAI_DEPLOY_ENV=production`, `NATS_URL=tls://mhai-nats:4222`, and each
+  app's CA, certificate and key (issued by the backend's
+  `production/enable-production.sh`) as compose secrets. A password is
+  refused; the NKey stays.
+- **"Deploy demo"** (`.github/workflows/deploy.yml`) runs on every green
+  `main`. With `SITE_MODE=live` it builds the live images, refuses to run
+  unless the backend has marked the host live (so deploy the backend first),
+  starts both apps and checks each through its proxy. A host the backend
+  marked live never gets the demo back.
+- Real patient data still waits on the go-live sign-offs in
+  mhai-multiagent's TODO.md.
 
 ## 7. Cross-cutting rules
 
