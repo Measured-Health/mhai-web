@@ -4,7 +4,7 @@ The frontend was called finished for the team demo on 23 Oct 2026. Everything be
 
 ## Added 27 Nov 2026
 
-- **Scanned records, image to text and handwriting (owner, 27 Nov): backend in progress** (mhai-multiagent TODO, "Added 27 Nov 2026"). The upload and review screens from the documents PR 5 hand-off (`docs/handoffs/2026-11-18-documents-pr5-mhai-web.md`) are still to build once the backend's review routes land. **PDF to text** (digital PDFs' own text layer) is on the backend TODO, not to be implemented yet.
+- **Scanned records: image to text, handwriting, PDF to text (owner, 27 Nov): to do, not started** (mhai-multiagent TODO, documents service section; the documents work stays paused). The upload and review screens from the documents PR 5 hand-off (`docs/handoffs/2026-11-18-documents-pr5-mhai-web.md`) wait for it.
 - **HL7 v2 connector and the on-site bridge: backend in progress.** Check that the platform's EMR connection form shows the new `hl7v2_file` type's fields and help text correctly when core lists it.
 - **Platform team invites, notifications, platform settings and named access answer 501** (core gaps); the screens say "Not available yet". Activating a new hospital is still core's CLI only: decide whether the platform app gets an Activate button.
 - **Deactivate and reactivate a hospital** are live (core 1.40.0, #287; the hospital page reads the deactivation record since #123).
