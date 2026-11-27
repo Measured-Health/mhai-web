@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **HL7 v2 message files in the platform app (core openapi 1.42.0).** The
+  connector-types read accepts `hl7v2_file`, so its connection form (fields
+  rendered from core's reply) loads. Must be deployed before core offers the
+  type (`CORE_EMR_CONNECTOR_TYPES`), because the read is strict.
+
 ### Changed
 
 - **One renewable backup code (product owner, 24 Nov; needs core's

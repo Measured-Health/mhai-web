@@ -1,4 +1,4 @@
-// Record connections as core openapi 1.20.0 sends them (`EmrConnectorType`,
+// Record connections as core openapi 1.42.0 sends them (`EmrConnectorType`,
 // `EmrConnectionSummary`, `EmrConnection`, the list's `not_connected`),
 // read strictly: every field core sends and nothing else. A reply that
 // doesn't match is a failed read (502), never a guess. A secret is never in
@@ -31,7 +31,13 @@ const SYNC_CODE = z.enum([
 ]);
 
 const CONNECTOR_TYPE = z.strictObject({
-  id: z.enum(["fhir_r4", "document_archive", "file_export", "stub"]),
+  id: z.enum([
+    "fhir_r4",
+    "document_archive",
+    "file_export",
+    "hl7v2_file",
+    "stub",
+  ]),
   label: text(200),
   summary: text(500),
   fields: z
