@@ -2,6 +2,17 @@
 
 The frontend was called finished for the team demo on 23 Oct 2026. Everything below is what's left. Remove an entry once it's done or decided.
 
+## Added 27 Nov 2026
+
+- **Scanned records, image to text and handwriting (owner, 27 Nov): backend in progress** (mhai-multiagent TODO, "Added 27 Nov 2026"). The upload and review screens from the documents PR 5 hand-off (`docs/handoffs/2026-11-18-documents-pr5-mhai-web.md`) are still to build once the backend's review routes land. **PDF to text** (digital PDFs' own text layer) is on the backend TODO, not to be implemented yet.
+- **HL7 v2 connector and the on-site bridge: backend in progress.** Check that the platform's EMR connection form shows the new `hl7v2_file` type's fields and help text correctly when core lists it.
+- **Platform team invites, notifications, platform settings and named access answer 501** (core gaps); the screens say "Not available yet". Activating a new hospital is still core's CLI only: decide whether the platform app gets an Activate button.
+- **Deactivate and reactivate a hospital** are live (core 1.40.0, #287; the hospital page reads the deactivation record since #123).
+- **"Saved, but the email didn't go through"** (core `not_delivered`, 424; #124) is live: check the wording with the first hospital admin.
+- **Flaky test:** `apps/clinical/components/auth/code-form.test.tsx`, "shows the live demo's two-step code in the live demo only", failed once on #123's CI and passed on re-run (time-based code). Make it deterministic.
+- **End-to-end journey audit (27 Nov): in progress** on the build server; new e2e-full specs for the steps the suite didn't cover.
+- **Dependabot (25 Nov):** 7 new PRs; the GitHub Actions artifact majors (upload v7, download v8) need testing before merge.
+
 ## What's left (5 Nov 2026)
 
 - **Public demo dropped (product owner, 22 Nov): the live site.** ai. and platforms.measured-health.org serve the live apps (`SITE_MODE=live` in both repositories; deploy/README.md, "Live site"); the demo code (live-demo image, `compose.demo-live.yml`, mock mode, the sign-in helper) is kept but off. Operator: set the variable, deploy the backend then this repository, move the nginx sites to 8093 and 8094 (the host steps in the README). Real patient data still waits on the go-live sign-offs in mhai-multiagent's TODO.md.
