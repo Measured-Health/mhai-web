@@ -373,9 +373,19 @@ export const KINDS: Record<string, Kind> = {
   answer_sent_for_review: k("consultation", (e) =>
     join("Answer sent for review", specialty(e)),
   ),
+  // feedback.validated (core sends it as this kind).
+  answer_agreed: k("consultation", "Agreed with an answer"),
   // Review.
   review_submitted: k("review", "Submitted a review"),
   review_reassigned: k("review", "Reassigned a review"),
+  // correction.withdrawn, and the learning job's outcome after an approval
+  // (correction.applied, or apply_failed with outcome failed).
+  review_withdrawn: k("review", "Withdrew a suggested correction"),
+  learning_recorded: k("review", (e) =>
+    e.outcome === "failed"
+      ? "Approved correction couldn't be applied"
+      : "Approved correction applied",
+  ),
   // Alerts.
   alert_acknowledged: k("alerts", "Acknowledged an alert"),
   alert_escalated: k("alerts", "Escalated an alert"),
@@ -664,6 +674,26 @@ export const KINDS: Record<string, Kind> = {
         : "Ran the integrity check",
     { targets: ["run"] },
   ),
+  // audit.verify_started and audit.verify_finished (core's names for a run
+  // of the check, with the run as the target and the finished state).
+  audit_check_started: k(
+    "audit",
+    (e) =>
+      e.actor.kind === "system"
+        ? "Daily integrity check started"
+        : "Started the integrity check",
+    { targets: ["run"] },
+  ),
+  audit_check_finished: k(
+    "audit",
+    (e) =>
+      e.facts.state === "error"
+        ? "Integrity check couldn't finish"
+        : e.facts.state === "intact" || e.facts.state === "broken"
+          ? `Integrity check finished: ${e.facts.state}`
+          : "Integrity check finished",
+    { targets: ["run"] },
+  ),
   audit_check_outcome: k("audit", "Recorded the outcome of a failed check", {
     note: true,
     targets: ["run"],
@@ -726,6 +756,8 @@ export const KINDS: Record<string, Kind> = {
   ),
   // Security.
   step_up_refused: k("security", "Two-step code refused"),
+  // correction.decision_refused (flagged policy for approving one's own).
+  review_refused: k("security", "Review refused"),
   mfa_locked: k("security", "Locked after too many wrong codes"),
   session_revoked: k("security", "Session ended by an admin", {
     targets: ["session"],
