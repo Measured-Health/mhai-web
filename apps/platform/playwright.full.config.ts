@@ -35,5 +35,9 @@ export default defineConfig({
     { name: "setup", testMatch: /setup\.spec\.ts/ },
     { name: "live", testMatch: /[0-8]\d-.*\.spec\.ts/ },
     { name: "late", testMatch: /9\d-.*\.spec\.ts/ },
+    // The whole product journey (live-full.sh journey): A adds the
+    // hospital, C oversees, deactivates and reactivates it.
+    { name: "journey-a", testMatch: /journey-a-.*\.spec\.ts/ },
+    { name: "journey-c", testMatch: /journey-c-.*\.spec\.ts/ },
   ],
 });

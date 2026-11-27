@@ -73,6 +73,9 @@ test("analysis: views, a filter, not-ready, drill-down", async ({ page }) => {
   await settle(page);
   await page.getByLabel("Sex", { exact: true }).selectOption({ index: 0 });
   await page.waitForLoadState("networkidle");
+  // Back on the unfiltered view, it can be not-ready again (core computes a
+  // cold context on first ask, TODO.md "Precompute at freeze").
+  await settle(page);
   // The drill-down.
   const see = page
     .getByRole("button", { name: /^See patients/ })

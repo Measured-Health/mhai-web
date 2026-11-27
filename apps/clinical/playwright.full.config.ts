@@ -34,5 +34,8 @@ export default defineConfig({
   projects: [
     { name: "setup", testMatch: /setup\.spec\.ts/ },
     { name: "live", testMatch: /\d\d-.*\.spec\.ts/ },
+    // The whole product journey (live-full.sh journey), between the
+    // platform app's parts A and C.
+    { name: "journey", testMatch: /journey-b-.*\.spec\.ts/ },
   ],
 });
