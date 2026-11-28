@@ -115,24 +115,36 @@ describe("CodeForm", () => {
     }
   });
 
-  it("the lost-phone link forgets the new code and goes to the Account page", async () => {
-    await pending();
-    const user = userEvent.setup();
-    await user.click(
-      screen.getByRole("button", { name: "Use a backup code instead" }),
-    );
-    await user.type(screen.getByLabelText("Backup code"), MOCK_BACKUP_CODES[0]);
-    await user.click(screen.getByRole("button", { name: "Verify" }));
-    await user.click(
-      await screen.findByRole("link", {
+  it("the lost-phone link waits like Continue, then forgets the new code and goes to the Account page", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await pending();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(
+        screen.getByRole("button", { name: "Use a backup code instead" }),
+      );
+      await user.type(
+        screen.getByLabelText("Backup code"),
+        MOCK_BACKUP_CODES[0],
+      );
+      await user.click(screen.getByRole("button", { name: "Verify" }));
+      const link = await screen.findByRole("link", {
         name: "Lost your phone? Move to a new authenticator app",
-      }),
-    );
-    expect(push).toHaveBeenCalledWith("/account#security");
-    expect(auth.current.newBackupCode).toBeNull();
-    // Not sent home over it.
-    await new Promise((r) => setTimeout(r, 20));
-    expect(replace).not.toHaveBeenCalledWith("/hospitals");
+      });
+      // At once, it would take the only working code off screen unseen.
+      await user.click(link);
+      expect(push).not.toHaveBeenCalled();
+      expect(auth.current.newBackupCode).toBe(MOCK_BACKUP_CODES[1]);
+      act(() => vi.advanceTimersByTime(3000));
+      await user.click(link);
+      expect(push).toHaveBeenCalledWith("/account#security");
+      expect(auth.current.newBackupCode).toBeNull();
+      // Not sent home over it.
+      act(() => vi.advanceTimersByTime(20));
+      expect(replace).not.toHaveBeenCalledWith("/hospitals");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("after a wrong backup code the focus is on the backup field", async () => {

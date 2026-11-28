@@ -155,6 +155,9 @@ export function SaveBackupCode({
   const lost = (e: MouseEvent<HTMLAnchorElement>) => {
     if (!lostPhone) return;
     e.preventDefault();
+    // It forgets the code too, so it waits as Continue does: a click in
+    // the first 3 s can't take the only working code off screen unseen.
+    if (waiting) return;
     onContinue();
     lostPhone.navigate(lostPhone.href);
   };
@@ -205,6 +208,7 @@ export function SaveBackupCode({
           <a
             href={lostPhone.href}
             onClick={lost}
+            aria-disabled={waiting || undefined}
             className="inline-flex min-h-11 items-center font-semibold text-mint-deep"
           >
             Lost your phone? Move to a new authenticator app

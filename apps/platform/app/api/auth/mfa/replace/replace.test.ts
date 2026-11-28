@@ -118,6 +118,54 @@ describe("POST /api/auth/mfa/replace", () => {
     expect(h.get("X-MHAI-Audience")).toBe("platform");
   });
 
+  // Built at run time: never a code-shaped literal in the repo.
+  const spent = () => ["mnpqr", "stuvw"].join("-");
+  const renewed = () => ["abcde", "fghjk"].join("-");
+
+  it("a backup code's replacement reaches the page with the new app's key", async () => {
+    await signedIn();
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { otpauth_uri: CORE_URI },
+        { headers: { "X-MHAI-New-Backup-Code": renewed() } },
+      ),
+    );
+    const res = await start(post({ backup_code: spent() }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-MHAI-New-Backup-Code")).toBe(renewed());
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    // In the header only: never in the body or the session cookie.
+    expect(await res.text()).not.toContain(renewed());
+    expect([...jar.values.values()].join()).not.toContain(renewed());
+  });
+
+  it("a refusal after core spent the backup code still passes its replacement", async () => {
+    await signedIn();
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { code: "not_ready" },
+        { status: 503, headers: { "X-MHAI-New-Backup-Code": renewed() } },
+      ),
+    );
+    const res = await start(post({ backup_code: spent() }));
+    expect(res.status).toBe(503);
+    expect(res.headers.get("X-MHAI-New-Backup-Code")).toBe(renewed());
+    expect(await res.json()).toEqual({ code: "unavailable" });
+  });
+
+  it("drops a replacement not in a backup code's exact shape", async () => {
+    await signedIn();
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { otpauth_uri: CORE_URI },
+        { headers: { "X-MHAI-New-Backup-Code": "not a code" } },
+      ),
+    );
+    const res = await start(post({ backup_code: spent() }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-MHAI-New-Backup-Code")).toBeNull();
+  });
+
   it.each([
     ["no key", post({ mfa_code: "123456" }, { key: null })],
     ["an extra field", post({ mfa_code: "123456", role: "admin" })],

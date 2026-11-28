@@ -28,6 +28,7 @@ export async function callUpstream<T>(
     idempotencyKey,
     timeoutMs = 15_000,
     fetchImpl = fetch,
+    onNewBackupCode,
   }: {
     method?: string;
     body?: unknown;
@@ -36,6 +37,12 @@ export async function callUpstream<T>(
     idempotencyKey?: string;
     timeoutMs?: number;
     fetchImpl?: BackendFetch;
+    /**
+     * Given core's new backup code when a backup code confirmed this call
+     * and it worked (its `X-MHAI-New-Backup-Code` header, read strictly).
+     * A refusal carries it in UpstreamError instead. Never logged.
+     */
+    onNewBackupCode?: (code: string) => void;
   } = {},
 ): Promise<T> {
   const url = `${base}${path}`;
@@ -68,6 +75,8 @@ export async function callUpstream<T>(
     const fresh = readBackupCode(res.headers.get(NEW_BACKUP_CODE_HEADER));
     throw new UpstreamError(res.status, code, fresh ?? undefined);
   }
+  const fresh = readBackupCode(res.headers.get(NEW_BACKUP_CODE_HEADER));
+  if (fresh) onNewBackupCode?.(fresh);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }

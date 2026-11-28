@@ -1,4 +1,6 @@
+import { NEW_BACKUP_CODE_HEADER, readBackupCode } from "./codes";
 import { ApiError, refusal } from "./errors";
+import { offerNewBackupCode } from "./new-backup-code";
 
 /** A step-up as the API takes it: the app's code, or a backup code. */
 export type StepUpCode = { mfa_code: string } | { backup_code: string };
@@ -51,6 +53,10 @@ export function mfaReplaceCalls(
     } catch {
       throw new ApiError(0, "network");
     }
+    // A backup code confirmed the start: core's new one, shown once by the
+    // app's NewBackupCodeHost, whether the call then worked or not.
+    const fresh = readBackupCode(res.headers.get(NEW_BACKUP_CODE_HEADER));
+    if (fresh) offerNewBackupCode(fresh);
     if (res.ok) return res.status === 204 ? undefined : res.json();
     const data = (await res.json().catch(() => null)) as Record<
       string,

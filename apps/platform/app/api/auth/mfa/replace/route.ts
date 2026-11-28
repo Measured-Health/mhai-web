@@ -1,3 +1,4 @@
+import { NEW_BACKUP_CODE_HEADER } from "@mhai/api-client/codes";
 import {
   readCappedJson,
   readIdempotencyKey,
@@ -11,6 +12,7 @@ import {
   json,
   sameOrigin,
   sessionExpired,
+  UpstreamError,
 } from "@/lib/server/http";
 import { readSession, touchSession } from "@/lib/server/session";
 
@@ -27,6 +29,14 @@ export async function POST(req: Request) {
   const s = await readSession();
   if (!s) return sessionExpired();
   await touchSession(s);
+  // A backup code spent on this start: core's new one goes to the page in
+  // this no-store reply's header only (never the body or a cookie), worked
+  // or refused, so the person is never left without a code.
+  let fresh: string | null = null;
+  const carry = (res: Response) => {
+    if (fresh) res.headers.set(NEW_BACKUP_CODE_HEADER, fresh);
+    return res;
+  };
   let reply: unknown;
   try {
     reply = await api<unknown>("/auth/mfa/replace", {
@@ -34,13 +44,15 @@ export async function POST(req: Request) {
       token: s.token,
       body,
       idempotencyKey: key,
+      onNewBackupCode: (c) => void (fresh = c),
     });
   } catch (e) {
     const { status, code } = replaceRefusal(e, "start");
-    return json(status, { code });
+    if (e instanceof UpstreamError && e.newBackupCode) fresh = e.newBackupCode;
+    return carry(json(status, { code }));
   }
   // Only a reply that reads exactly as the contract says reaches the page.
   const setup = readReplaceReply(reply);
-  if (!setup) return json(502, { code: "unavailable" });
-  return json(200, setup);
+  if (!setup) return carry(json(502, { code: "unavailable" }));
+  return carry(json(200, setup));
 }

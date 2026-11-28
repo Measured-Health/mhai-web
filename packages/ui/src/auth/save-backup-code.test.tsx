@@ -71,7 +71,7 @@ describe("SaveBackupCode", () => {
     expect(onContinue).toHaveBeenCalledTimes(1);
   });
 
-  it("the lost-phone link forgets the code and goes to the account page", () => {
+  it("the lost-phone link waits like Continue, then forgets the code and goes to the account page", () => {
     const onContinue = vi.fn();
     const navigate = vi.fn();
     render(
@@ -86,6 +86,13 @@ describe("SaveBackupCode", () => {
       name: "Lost your phone? Move to a new authenticator app",
     });
     expect(link).toHaveAttribute("href", "/account#security");
+    // Like Continue, it waits until the code has been seen: it forgets it.
+    expect(link).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(link);
+    expect(onContinue).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    tick(SAVE_WAIT_S * 1000);
+    expect(link).not.toHaveAttribute("aria-disabled");
     fireEvent.click(link);
     expect(onContinue).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenCalledWith("/account#security");
