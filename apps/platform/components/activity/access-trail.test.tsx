@@ -11,6 +11,7 @@ import type { PlatformClient } from "@/lib/api/contract";
 import { TEAM_EMAILS } from "@/lib/api/fixtures";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp } from "@/lib/api/step-up";
+import { ApiError } from "@mhai/api-client/errors";
 import { AMARA, renderWithAuth } from "@/tests/render";
 import { ActivityView } from "./activity-view";
 
@@ -260,4 +261,46 @@ describe("Activity: Analysis access", () => {
     );
     expect(screen.queryByRole("list", { name: "Analysis access" })).toBeNull();
   });
+
+  // Core has no route for the trail yet (Analysis is off until signed off):
+  // 404 not_found, or 501 not_implemented, is the calm "not yet" state.
+  for (const [status, code] of [
+    [404, "not_found"],
+    [501, "not_implemented"],
+  ] as const)
+    it(`a ${status} ${code} says Analysis access isn't switched on yet, not an error`, async () => {
+      who = TEAM_EMAILS.amara;
+      mock({
+        listAnalysisAccess: () => Promise.reject(new ApiError(status, code)),
+      });
+      renderWithAuth(<ActivityView />, { user: AMARA, queryClient: qc() });
+      expect(await screen.findByText("Not available yet")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Measured Health hasn't switched on the Analysis access trail yet. Nothing is wrong.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Couldn't load/)).toBeNull();
+      expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+      // Nothing to export or filter while there is no trail.
+      expect(
+        screen.queryByRole("button", { name: /Export for a legal request/ }),
+      ).toBeNull();
+    });
+
+  for (const e of [
+    new ApiError(503, "unavailable"),
+    new ApiError(500, "internal_error"),
+    new ApiError(0, "network"),
+    new ApiError(404, "hospital_not_found"),
+  ])
+    it(`a real failure (${e.status} ${e.code}) still says it couldn't load`, async () => {
+      mock({ listAnalysisAccess: () => Promise.reject(e) });
+      renderWithAuth(<ActivityView />, { queryClient: qc() });
+      expect(
+        await screen.findByText("Couldn't load Analysis access."),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+      expect(screen.queryByText("Not available yet")).toBeNull();
+    });
 });
