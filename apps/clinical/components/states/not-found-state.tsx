@@ -4,7 +4,10 @@ export const MISSING_PAGE = "This page doesn't exist. Check the address.";
 export const MISSING_CONSULTATION =
   "This consultation doesn't exist, or it was in a session that has ended.";
 
-/** The 404 screen. The wording says what was missing: a page or a consultation. */
+/**
+ * The not-found screen (HTTP status 404). The wording says what was missing:
+ * a page or a consultation. Plain words only: no status code on screen.
+ */
 export function NotFoundState({ message }: { message: string }) {
   return (
     // A <div>, not <main>: inside the clinical shell this renders in its <main>.
@@ -28,7 +31,6 @@ export function NotFoundState({ message }: { message: string }) {
         >
           Back to home
         </Link>
-        <p className="mt-3.5 font-mono text-xs text-ink-3">Error 404</p>
       </div>
     </div>
   );
