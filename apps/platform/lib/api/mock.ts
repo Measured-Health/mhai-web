@@ -1006,10 +1006,41 @@ export function createMockPlatform({
 
     listTeam: () => read((m) => ({ members: team.map((t) => mark(t, m)) })),
 
-    // Core keeps no invites (openapi 1.26.0): platform accounts are made
-    // with `core users create`, so the demo refuses as core does.
-    inviteTeam: (_body, opts) =>
-      write(opts, () => fail(501, "not_implemented")),
+    // Core 1.43.0: step-up (an invite can make a platform admin); an email
+    // any account already has is 409 `duplicate`, before the code is
+    // checked. The member is `invite_pending` until their first sign-in.
+    inviteTeam: (body, opts) =>
+      write(opts, async (m) => {
+        const b = (body ?? {}) as Record<string, unknown>;
+        const name = typeof b.name === "string" ? b.name.trim() : "";
+        const email =
+          typeof b.email === "string" ? b.email.trim().toLowerCase() : "";
+        const role = b.role as TeamRole;
+        if (
+          name.length < 1 ||
+          [...name].length > 120 ||
+          !EMAIL.test(email) ||
+          !ROLES.includes(role)
+        )
+          unvalidated();
+        if (team.some((t) => t.email.toLowerCase() === email))
+          fail(409, "duplicate");
+        await checkCode(m, body);
+        const t: TeamMember = {
+          id: newId("tm"),
+          name,
+          email,
+          role,
+          status: "invite_pending",
+          mfa_enabled: false,
+          last_sign_in_at: null,
+          is_you: false,
+          version: 1,
+        };
+        team = [...team, t];
+        log(person(m), "team_invited", { target: name });
+        return mark(t, m);
+      }),
 
     // Step-up, as core (1.26.0): a demotion is as damaging as a removal.
     // Every refusal comes before the code is checked.

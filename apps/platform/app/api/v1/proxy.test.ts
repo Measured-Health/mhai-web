@@ -275,6 +275,9 @@ const VALID: Record<string, { query?: string; body?: string }> = {
   "PATCH platform/team/{id}": {
     body: '{"role":"auditor","version":3,"mfa_code":"123456"}',
   },
+  "POST platform/team/invites": {
+    body: '{"name":"Synthetic Staff","email":"staff@synthetic.example","role":"auditor","mfa_code":"123456"}',
+  },
   "POST platform/legal-holds": {
     body: '{"hospital_id":"h1","reason":"court_case","reference":"LH-2026-0042","review_on":"2027-05-01","mfa_code":"123456"}',
   },
@@ -663,6 +666,36 @@ describe("platform API proxy", () => {
       expect(res.status).toBe(422);
       expect(await res.json()).toEqual({ code: "validation_failed" });
     }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("a team invite: the write is checked strictly before it goes upstream", async () => {
+    await session();
+    const post = (body: string) =>
+      call("POST", ["platform", "team", "invites"], { body });
+    fetchMock.mockImplementation(async () => Response.json({}));
+    const base = {
+      name: "Synthetic Staff",
+      email: "staff@synthetic.example",
+      role: "platform_admin",
+    };
+    const ok = await post(
+      JSON.stringify({ ...base, backup_code: "abcd-efgh" }),
+    );
+    expect(ok.status).toBe(200);
+    expect(calls()[0][0]).toBe("http://api.test/api/v1/platform/team/invites");
+    fetchMock.mockClear();
+    for (const bad of [
+      { ...base, role: "hospital_admin", mfa_code: "123456" },
+      { ...base, hospital_id: "h2", mfa_code: "123456" },
+      { ...base, name: "x".repeat(201), mfa_code: "123456" },
+      { ...base, status: "active", mfa_code: "123456" },
+    ]) {
+      const res = await post(JSON.stringify(bad));
+      expect(res.status).toBe(422);
+      expect(await res.json()).toEqual({ code: "validation_failed" });
+    }
+    expect((await post("not json")).status).toBe(422);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

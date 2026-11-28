@@ -4,6 +4,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
+import { ApiError } from "@mhai/api-client/errors";
 import { useKeyedMutation } from "@mhai/api-client/keyed-mutation";
 import { getPlatformClient } from "../api/client";
 import type { StepUp, TeamMember, TeamRole } from "../api/contract";
@@ -27,18 +28,31 @@ function changed(qc: QueryClient) {
   void qc.invalidateQueries({ queryKey: queryKeys.activity });
 }
 
-export type InviteTeamInput = { name: string; email: string; role: TeamRole };
+export type InviteTeamInput = {
+  name: string;
+  email: string;
+  role: TeamRole;
+} & StepUp;
 
 /**
- * Invites a team member: one Idempotency-Key per submit, reused on retries.
- * Core keeps no invites yet (501 `not_implemented`).
+ * Invites a team member with the person's own two-step code (core 1.43.0):
+ * one Idempotency-Key per submit, reused on retries. The code is in the
+ * variables, so the cache forgets the call at once (gcTime 0); callers
+ * `reset()` after. A 424 `not_delivered` still invited them: the team is
+ * refreshed on it too.
  */
 export function useInviteTeam() {
   const qc = useQueryClient();
   return useKeyedMutation(
     (body: InviteTeamInput, key) =>
       getPlatformClient().inviteTeam(body, { idempotencyKey: key }),
-    { onSuccess: () => changed(qc) },
+    {
+      onSuccess: () => changed(qc),
+      onError: (e) => {
+        if (e instanceof ApiError && e.code === "not_delivered") changed(qc);
+      },
+    },
+    { gcTime: 0 },
   );
 }
 

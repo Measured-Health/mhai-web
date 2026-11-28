@@ -7,6 +7,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -103,9 +104,12 @@ export function AuthProvider({
   const [mfaPending, setMfaPending] = useState(false);
   const [newBackupCode, setNewBackupCode] = useState<string | null>(null);
   const [reason, setReason] = useState<SignOutReason | null>(null);
-  // Read by signOut to stay idempotent; written in an effect and by signOut.
+  // Read by signOut to stay idempotent; written in a layout effect and by
+  // signOut. A layout effect, so it is current before any screen's effect
+  // in the same commit: a /sign-out opened directly (or a refusal on a
+  // reload) calls signOut on the very render the session lookup lands.
   const live = useRef({ signedIn: state.status === "signed_in", mfaPending });
-  useEffect(() => {
+  useLayoutEffect(() => {
     live.current = { signedIn: state.status === "signed_in", mfaPending };
   }, [state.status, mfaPending]);
 

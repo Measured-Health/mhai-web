@@ -5,6 +5,7 @@ import {
   ADA,
   AMARA,
   auth,
+  FROM_CLIENT,
   GrabAuth,
   renderWithAuth,
   testAuthClient,
@@ -74,6 +75,25 @@ describe("AuthGate", () => {
       screen.getByText("This account can't use the platform admin app."),
     ).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalledWith("/sign-in");
+  });
+
+  it("also ends a no-role session found on a reload", async () => {
+    const client = testAuthClient();
+    vi.spyOn(client, "getSession").mockResolvedValue({
+      user: NO_ROLE,
+      steps: [],
+    });
+    const signOut = vi.spyOn(client, "signOut");
+    renderWithAuth(
+      <>
+        <GrabAuth />
+        <AuthGate>secret page</AuthGate>
+      </>,
+      { user: FROM_CLIENT, client },
+    );
+    await waitFor(() => expect(auth.current.status).toBe("signed_out"));
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("secret page")).toBeNull();
   });
 });
 

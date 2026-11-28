@@ -515,10 +515,13 @@ const ROWS: Row[] = [
   [
     "inviteTeam",
     (c) =>
-      c.inviteTeam({ name: "S", email: "s@m.example", role: "auditor" }, K),
+      c.inviteTeam(
+        { name: "S", email: "s@m.example", role: "auditor", ...CODE },
+        K,
+      ),
     "POST",
     "/api/v1/platform/team/invites",
-    { name: "S", email: "s@m.example", role: "auditor" },
+    { name: "S", email: "s@m.example", role: "auditor", mfa_code: "123456" },
     MEMBER,
   ],
   [
