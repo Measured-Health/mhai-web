@@ -15,6 +15,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Activity's Analysis access tab is calm while core has no trail
+  (platform app).** Core doesn't serve `platform/audit/analysis-access`
+  yet (Analysis is off pending sign-off), so the tab, where auditors land
+  from Analysis, said "Couldn't load Analysis access." A 404 `not_found` or
+  a 501 from that read now shows Not available yet ("Measured Health
+  hasn't switched on the Analysis access trail yet. Nothing is wrong."),
+  with nothing to filter or export. Any other 404, a 5xx or a network
+  failure still shows the error with Try again.
 - **Opening /sign-out directly or reloading it signs out (both apps).**
   The page stayed on "Signing out": the auth context's sign-out guard was
   updated in a passive effect, after the page's own effect had already
