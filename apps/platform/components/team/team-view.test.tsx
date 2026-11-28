@@ -57,7 +57,7 @@ describe("the team page", () => {
     expect(within(ada).getByText("Platform admin")).toBeInTheDocument();
     expect(within(ada).getByText("Active")).toBeInTheDocument();
     expect(within(ada).getByText("On")).toBeInTheDocument();
-    // Core keeps no invites: every member is active (1.26.0).
+    // The sample team has no pending invite.
     const kemi = rowOf(table, "Kemi Lawal");
     expect(within(kemi).getByText("Auditor")).toBeInTheDocument();
     expect(within(kemi).getByText("Active")).toBeInTheDocument();
@@ -65,7 +65,9 @@ describe("the team page", () => {
     expect(within(rowOf(table, "Chidi Nwosu")).getByText("Off")).toBeVisible();
   });
 
-  it("invites aren't served yet: a calm Not available yet, and no row is added", async () => {
+  it("an invite asks for the code (core 1.43.0) and adds the member as Invite pending", async () => {
+    const api = install();
+    const spy = vi.spyOn(api, "inviteTeam");
     renderWithAuth(<TeamView />);
     await screen.findByRole("table");
     await userEvent.click(
@@ -84,13 +86,128 @@ describe("the team page", () => {
     await userEvent.click(
       within(d).getByRole("button", { name: "Send invite" }),
     );
-    const note = await within(d).findByText("Not available yet");
-    expect(note.closest("[role=status]")).not.toBeNull();
-    expect(within(d).queryByRole("alert")).toBeNull();
-    expect(
+    const s = await screen.findByRole("dialog", {
+      name: "Invite Ngozi Adeyemi as an auditor?",
+    });
+    expect(spy).not.toHaveBeenCalled();
+    await userEvent.keyboard("123456");
+    await userEvent.click(
+      within(s).getByRole("button", { name: "Send invite" }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(spy.mock.calls[0]![0]).toEqual({
+      name: "Ngozi Adeyemi",
+      email: "ngozi@measured-health.example",
+      role: "auditor",
+      mfa_code: "123456",
+    });
+    const table = await screen.findByRole("table");
+    await waitFor(() =>
+      expect(
+        within(rowOf(table, "Ngozi Adeyemi")).getByText("Invite pending"),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("an email already used goes back to the form, before any code is spent", async () => {
+    const api = install();
+    const spy = vi.spyOn(api, "inviteTeam");
+    renderWithAuth(<TeamView />);
+    await screen.findByRole("table");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Invite team member" }),
+    );
+    const d = screen.getByRole("dialog", { name: "Invite a team member" });
+    await userEvent.type(within(d).getByLabelText("Name"), "Someone Else");
+    await userEvent.type(within(d).getByLabelText("Email"), ADA.email);
+    await userEvent.click(
       within(d).getByRole("button", { name: "Send invite" }),
-    ).toBeDisabled();
-    expect(screen.queryByText("Ngozi Adeyemi")).toBeNull();
+    );
+    const s = await screen.findByRole("dialog", {
+      name: "Invite Someone Else as an auditor?",
+    });
+    await userEvent.keyboard("123456");
+    await userEvent.click(
+      within(s).getByRole("button", { name: "Send invite" }),
+    );
+    const form = await screen.findByRole("dialog", {
+      name: "Invite a team member",
+    });
+    expect(
+      within(form).getByText("Someone already has an account with this email."),
+    ).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("424 not_delivered says they were invited but the email didn't go, and never sends it again", async () => {
+    const api = install();
+    const spy = vi
+      .spyOn(api, "inviteTeam")
+      .mockRejectedValue(new ApiError(424, "not_delivered"));
+    renderWithAuth(<TeamView />);
+    await screen.findByRole("table");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Invite team member" }),
+    );
+    const d = screen.getByRole("dialog", { name: "Invite a team member" });
+    await userEvent.type(within(d).getByLabelText("Name"), "Ngozi Adeyemi");
+    await userEvent.type(
+      within(d).getByLabelText("Email"),
+      "ngozi@measured-health.example",
+    );
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Send invite" }),
+    );
+    const s = await screen.findByRole("dialog", {
+      name: "Invite Ngozi Adeyemi as an auditor?",
+    });
+    await userEvent.keyboard("123456");
+    await userEvent.click(
+      within(s).getByRole("button", { name: "Send invite" }),
+    );
+    expect(
+      await screen.findByText(
+        "Invited, but the invite email didn't go through",
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("503 no_delivery says email isn't set up and no one was invited", async () => {
+    const api = install();
+    vi.spyOn(api, "inviteTeam").mockRejectedValue(
+      new ApiError(503, "no_delivery"),
+    );
+    renderWithAuth(<TeamView />);
+    await screen.findByRole("table");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Invite team member" }),
+    );
+    const d = screen.getByRole("dialog", { name: "Invite a team member" });
+    await userEvent.type(within(d).getByLabelText("Name"), "Ngozi Adeyemi");
+    await userEvent.type(
+      within(d).getByLabelText("Email"),
+      "ngozi@measured-health.example",
+    );
+    await userEvent.click(
+      within(d).getByRole("button", { name: "Send invite" }),
+    );
+    const s = await screen.findByRole("dialog", {
+      name: "Invite Ngozi Adeyemi as an auditor?",
+    });
+    await userEvent.keyboard("123456");
+    await userEvent.click(
+      within(s).getByRole("button", { name: "Send invite" }),
+    );
+    const form = await screen.findByRole("dialog", {
+      name: "Invite a team member",
+    });
+    expect(
+      within(form).getByText(
+        "Email isn't set up, so the invite couldn't be sent. No one was invited.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("your own row has no Change role and no Remove", async () => {

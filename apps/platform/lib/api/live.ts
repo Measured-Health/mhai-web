@@ -358,7 +358,7 @@ export function createLivePlatformClient({
     inviteAdmin: (x, b, o) => ok(h(x, "/invites"), "POST", b, o),
     resendInvite: (x, inv, o) =>
       ok(h(x, `/invites/${id(inv)}/resend`), "POST", undefined, o),
-    // The team (core 1.26.0), read strictly. Invites are 501 in core.
+    // The team (core 1.26.0; invites 1.43.0), read strictly.
     listTeam: () => ok<unknown>("/team").then(readTeam),
     inviteTeam: (b, o) =>
       ok<unknown>("/team/invites", "POST", b, o).then(readTeamMember),
