@@ -15,6 +15,16 @@ export interface PlatformErrorWords {
 export const isNotImplemented = (e: unknown): boolean =>
   e instanceof ApiError && (e.code === "not_implemented" || e.status === 501);
 
+/**
+ * A read core has no route for yet: 404 `not_found` (an unknown route), or
+ * 501. Only for reads of features still off pending sign-off (the
+ * Analysis access trail), where no route can't mean anything else; any
+ * other 404, a 5xx or a network failure is a real failure.
+ */
+export const isNotSwitchedOn = (e: unknown): boolean =>
+  isNotImplemented(e) ||
+  (e instanceof ApiError && e.status === 404 && e.code === "not_found");
+
 /** What the calm state says, by default. */
 export const NOT_AVAILABLE = "Not available yet";
 

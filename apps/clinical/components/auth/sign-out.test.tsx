@@ -4,7 +4,13 @@ import { Activity, useEffect, useRef, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/lib/auth/auth-context";
 import { OutboxProvider, useOutbox } from "@/lib/offline/outbox-context";
-import { AuthTestProvider, renderWithAuth } from "@/tests/auth-wrapper";
+import { createMockAuthClient } from "@/lib/auth/mock";
+import {
+  AuthTestProvider,
+  FROM_CLIENT,
+  renderWithAuth,
+  TEST_USER,
+} from "@/tests/auth-wrapper";
 import { SignOut } from "./sign-out";
 
 const replace = vi.fn();
@@ -108,6 +114,29 @@ describe("SignOut", () => {
     renderWithAuth(<SignOut />);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
     expect(replace).toHaveBeenCalledTimes(1);
+  });
+  // A typed /sign-out or a reload: the session is looked up first, and the
+  // sign-out starts on the same render that learns the person is signed in.
+  it("signs out when the page is opened directly (session looked up first)", async () => {
+    const client = createMockAuthClient();
+    vi.spyOn(client, "getSession").mockResolvedValue({
+      user: TEST_USER,
+      steps: [],
+    });
+    const signOut = vi.spyOn(client, "signOut");
+    renderWithAuth(
+      <>
+        <Status />
+        <SignOut />
+      </>,
+      FROM_CLIENT,
+      client,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("auth")).toHaveTextContent("signed_out"),
+    );
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(replace).toHaveBeenCalledWith("/sign-in");
   });
   it("sends a signed-out visitor to sign-in", async () => {
     renderWithAuth(<SignOut />, null);

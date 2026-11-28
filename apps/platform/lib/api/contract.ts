@@ -140,7 +140,10 @@ export type SsoIn = {
 };
 
 export type TeamRole = "platform_admin" | "auditor";
-/** Core keeps no invites: a member is always `active` (openapi 1.26.0). */
+/**
+ * A platform team member. An invited one is `invite_pending` until their
+ * first sign-in (core 1.43.0).
+ */
 export type TeamMember = {
   id: string;
   name: string;
@@ -347,9 +350,16 @@ export interface PlatformClient
     opts: WriteOpts,
   ): Promise<Hospital>;
   listTeam(): Promise<{ members: TeamMember[] }>;
-  /** Not served by core yet: 501 `not_implemented`. */
+  /**
+   * `POST /platform/team/invites` (core 1.43.0), confirmed with the
+   * person's own two-step or backup code. Refusals: 422
+   * `validation_failed`, 409 `duplicate` (the email has an account; before
+   * the code), 503 `no_delivery` (email isn't set up; nothing is changed),
+   * 424 `not_delivered` (the member was invited, but the email didn't go;
+   * never retried).
+   */
   inviteTeam(
-    body: { name: string; email: string; role: TeamRole },
+    body: { name: string; email: string; role: TeamRole } & StepUp,
     opts: WriteOpts,
   ): Promise<TeamMember>;
   /**
@@ -388,8 +398,9 @@ export interface PlatformClient
   /** Guardrail statistics for the latest finished period (503 `not_ready` before the first). */
   getGuardrailPeriods(period: Period): Promise<GuardrailPeriodsOut>;
   /**
-   * The signed-in person's notifications, newest first, at most 20. Not
-   * served by core yet: 501 `not_implemented`.
+   * The signed-in person's notifications, at most 20 (core 1.43.0): a
+   * broken audit check first, then What changed's open changes, newest
+   * first.
    */
   listNotifications(): Promise<NotificationsOut>;
   /**

@@ -22,6 +22,28 @@ All notable changes to this project are documented here. The format follows
   POST /auth/password/reset 200 `{sign_in}`) and the page points platform
   accounts to the platform admin app (a link when `PLATFORM_APP_URL` is
   set). An older core's 204 still means the clinical app.
+- **Usage's What changed says there is nothing to compare yet (platform
+  app).** Before core's first weekly comparison it sends
+  `what_changed: {unavailable: true}`, which the page showed as "Couldn't
+  load what changed. Check your connection". It now says "Nothing to
+  compare yet. The first weekly comparison appears after the first full
+  week of use." on the screen and in the CSV, never "Nothing unusual".
+  Anything else malformed in its place still fails closed.
+- **Activity's Analysis access tab is calm while core has no trail
+  (platform app).** Core doesn't serve `platform/audit/analysis-access`
+  yet (Analysis is off pending sign-off), so the tab, where auditors land
+  from Analysis, said "Couldn't load Analysis access." A 404 `not_found` or
+  a 501 from that read now shows Not available yet ("Measured Health
+  hasn't switched on the Analysis access trail yet. Nothing is wrong."),
+  with nothing to filter or export. Any other 404, a 5xx or a network
+  failure still shows the error with Try again.
+- **Opening /sign-out directly or reloading it signs out (both apps).**
+  The page stayed on "Signing out": the auth context's sign-out guard was
+  updated in a passive effect, after the page's own effect had already
+  asked to sign out on the render where the session lookup landed. It is
+  now updated in a layout effect. The same race let the platform app's
+  refusal of an account with no platform role, and /no-access, leave the
+  session alive after a reload.
 
 - **A backup code spent moving to a new authenticator app is replaced on
   screen (both apps).** Starting "Move to a new app" with a backup code

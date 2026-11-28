@@ -20,7 +20,7 @@ const OWN_ROW_NOTE =
 const member = (page: Page, name: string) =>
   page.getByRole(isMobile(page) ? "listitem" : "row").filter({ hasText: name });
 
-test("team: invites aren't available yet; change role and remove need a code; your own row can't be changed", async ({
+test("team: an invite, a role change and a removal each need a code; your own row can't be changed", async ({
   page,
 }) => {
   await signIn(page, ADA);
@@ -33,19 +33,34 @@ test("team: invites aren't available yet; change role and remove need a code; yo
   await expect(you.getByText(OWN_ROW_NOTE)).toBeVisible();
   await expect(you.getByRole("button")).toHaveCount(0);
 
-  // Invite: core keeps no invites yet, so a calm Not available yet.
+  // Invite: the form, then your own code (core 1.43.0). An email that
+  // already has an account goes back to the form, before any code counts.
   await page.getByRole("button", { name: "Invite team member" }).click();
-  const invite = page.getByRole("dialog", { name: "Invite a team member" });
+  let invite = page.getByRole("dialog", { name: "Invite a team member" });
+  await invite.getByLabel("Name").fill("Someone Else");
+  await invite.getByLabel("Email").fill(ADA);
+  await invite.getByRole("button", { name: "Send invite" }).click();
+  let confirmInvite = stepUp(page, "Invite Someone Else as an auditor?");
+  await typeCode(page, CODE, confirmInvite);
+  await confirmInvite.getByRole("button", { name: "Send invite" }).click();
+  invite = page.getByRole("dialog", { name: "Invite a team member" });
+  await expect(
+    invite.getByText("Someone already has an account with this email."),
+  ).toBeVisible();
   await invite.getByLabel("Name").fill("Femi Ojo");
   await invite.getByLabel("Email").fill("femi.ojo@measured-health.example");
   await invite.getByRole("button", { name: "Send invite" }).click();
-  await expect(invite.getByText("Not available yet")).toBeVisible();
-  await expect(invite.getByRole("alert")).toHaveCount(0);
-  await invite.getByRole("button", { name: "Cancel" }).click();
-  await expect(invite).toBeHidden();
-  await expect(member(page, "Femi Ojo")).toHaveCount(0);
-  // Everyone is active: no invites.
-  await expect(page.getByText("Invite pending")).toHaveCount(0);
+  confirmInvite = stepUp(page, "Invite Femi Ojo as an auditor?");
+  await typeCode(page, CODE, confirmInvite);
+  await confirmInvite.getByRole("button", { name: "Send invite" }).click();
+  await expect(confirmInvite).toBeHidden();
+  await expect(
+    toast(page, "Invite sent to femi.ojo@measured-health.example"),
+  ).toBeVisible();
+  await expect(
+    member(page, "Femi Ojo").getByText("Invite pending"),
+  ).toBeVisible();
+  await expect(page.getByText("7 team members shown")).toBeAttached();
 
   // Change role: with your own code; their sessions end.
   await page
@@ -89,7 +104,7 @@ test("team: invites aren't available yet; change role and remove need a code; yo
   ).toBeVisible();
   await expect(toast(page, "Team member removed")).toBeVisible();
   await expect(member(page, "Kemi Lawal")).toHaveCount(0);
-  await expect(page.getByText("5 team members shown")).toBeAttached();
+  await expect(page.getByText("6 team members shown")).toBeAttached();
 
   // Still no way to change your own row.
   await expect(

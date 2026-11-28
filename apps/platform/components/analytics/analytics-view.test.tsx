@@ -9,6 +9,7 @@ import {
 import type { PlatformClient } from "@/lib/api/contract";
 import { createMockPlatform } from "@/lib/api/mock";
 import { createStepUp } from "@/lib/api/step-up";
+import { CHANGES_NONE_YET } from "@/lib/analytics/read";
 import { ADA, AMARA, renderWithAuth } from "@/tests/render";
 import { downloadCsv } from "@mhai/ui/csv";
 import { AnalyticsView } from "./analytics-view";
@@ -109,8 +110,9 @@ describe("the Usage page", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      within(region("What changed")).getByText("Couldn't load what changed."),
+      within(region("What changed")).getByText(CHANGES_NONE_YET),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't load what changed/)).toBeNull();
     expect(screen.queryByText("Nothing unusual this period")).toBeNull();
     expect(screen.queryByText(/^0$/)).toBeNull();
   });
@@ -283,9 +285,12 @@ describe("the Usage page", () => {
   it("every area unavailable still renders the header and each Couldn't load", async () => {
     install("unavailable");
     renderWithAuth(<AnalyticsView />);
-    expect(
-      await screen.findByText("Couldn't load what changed."),
-    ).toBeInTheDocument();
+    // What changed has no weekly comparison yet: calm, nothing to retry.
+    const wc = region("What changed");
+    expect(await within(wc).findByText(CHANGES_NONE_YET)).toBeInTheDocument();
+    expect(within(wc).queryByText(/Couldn't load/)).toBeNull();
+    expect(within(wc).queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(await screen.findByText("Couldn't load use.")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 1, name: "Usage" }),
     ).toBeInTheDocument();

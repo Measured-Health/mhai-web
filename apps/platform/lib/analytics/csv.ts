@@ -19,7 +19,13 @@ import {
   periodLabel,
   windowText,
 } from "./periods";
-import { AREA_TITLE, AREAS, readAnalytics, type AreaKey } from "./read";
+import {
+  AREA_TITLE,
+  AREAS,
+  CHANGES_NONE_YET,
+  readAnalytics,
+  type AreaKey,
+} from "./read";
 
 /** The one row a failed or unavailable area leaves (as in Plan 5b). */
 export const CSV_FAILED = "Couldn't load";
@@ -57,6 +63,7 @@ export function analyticsCsv(a: AnalyticsOut, period: Period): string {
       notes[k] = firstFiguresText(period, st.first_from);
   }
   if (s.alerts.status === "off") notes.alerts = CSV_OFF;
+  if (s.changes.status === "none_yet") notes.changes = CHANGES_NONE_YET;
   // Every figure of an area is the one period's.
   const named = s.from ? periodLabel(period, s.from) : "";
   const withPeriod = (t: Table): Table => ({
@@ -127,10 +134,11 @@ export function analyticsCsv(a: AnalyticsOut, period: Period): string {
       ]),
     };
 
-  if (s.changes.status === "ok") {
+  const ch = s.changes;
+  if (ch.status === "ok") {
     // The latest week against the month before it, per day: two periods,
     // each its own figure, never a total.
-    const compared = windowText(s.changes.window);
+    const compared = windowText(ch.window);
     tables.changes = {
       header: [
         "Compared",
@@ -145,7 +153,7 @@ export function analyticsCsv(a: AnalyticsOut, period: Period): string {
         "Followed up by",
         "Followed up on",
       ],
-      rows: s.changes.items.map((c) => {
+      rows: ch.items.map((c) => {
         const k = MEASURE_KIND[c.measure];
         return [
           compared,

@@ -18,6 +18,7 @@ import {
   analyticsCsv,
   analyticsCsvName,
 } from "./csv";
+import { CHANGES_NONE_YET } from "./read";
 
 // The latest finished week is 1–7 Nov, month October, quarter Jul–Sep.
 const NOW = Date.parse("2026-11-11T09:30:00.000Z");
@@ -98,11 +99,24 @@ describe("analyticsCsv", () => {
       for (const c of l.split(",").slice(2)) expect(c).not.toMatch(/^[1-4]$/);
   });
 
+  it("What changed with nothing to compare yet says so, as the screen does", () => {
+    const a = structuredClone(sample()) as AnalyticsOut &
+      Record<string, unknown>;
+    a.what_changed = { unavailable: true } as AnalyticsOut["what_changed"];
+    expect(section(analyticsCsv(a, "month"), "What changed")).toEqual([
+      CHANGES_NONE_YET,
+    ]);
+  });
+
   it('an unavailable area written as "Couldn\'t load"', () => {
     const csv = analyticsCsv(sample("unavailable"), "month");
     expect(CSV_FAILED).toBe("Couldn't load");
-    for (const s of CSV_SECTIONS.filter((x) => x !== "Alert safety"))
+    for (const s of CSV_SECTIONS.filter(
+      (x) => x !== "Alert safety" && x !== "What changed",
+    ))
       expect(section(csv, s)).toEqual([CSV_FAILED]);
+    // No weekly comparison yet: said in the screen's words, not a failure.
+    expect(section(csv, "What changed")).toEqual([CHANGES_NONE_YET]);
     // A leak the reader refuses is written the same way, and never shows.
     const leak = structuredClone(sample());
     ok(leak.use).rows[3]!.questions = { value: 3, suppressed: false };
@@ -116,7 +130,7 @@ describe("analyticsCsv", () => {
     expect(lines(csv)[0]).toBe("Analytics,Last month,No period published yet");
     for (const s of ["Use", "Answer quality", "Hospitals"])
       expect(section(csv, s)).toEqual(["First figures after 1–31 Dec 2026"]);
-    expect(section(csv, "What changed")).toEqual([CSV_FAILED]);
+    expect(section(csv, "What changed")).toEqual([CHANGES_NONE_YET]);
   });
 
   it("no patient fields, no notes", () => {

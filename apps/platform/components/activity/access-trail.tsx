@@ -10,9 +10,11 @@ import {
 } from "@/lib/queries/activity";
 import { Button } from "@mhai/ui/button";
 import { Chip } from "@mhai/ui/chip";
+import { isNotSwitchedOn } from "@/lib/errors";
 import { CouldntLoad } from "../states/couldnt-load";
 import { Empty } from "../states/empty";
 import { Loading } from "../states/loading";
+import { NotAvailable } from "../states/not-available";
 import { OfflineNote, useNeedsConnection } from "../states/offline-strip";
 
 const control =
@@ -46,6 +48,11 @@ export function AccessTrail({ hospital }: { hospital?: string }) {
   const entries = failed
     ? []
     : pages.flatMap((p) => (p.status === "ok" ? p.data.entries : []));
+
+  // Core has no trail yet (Analysis is off until signed off): a calm note,
+  // with nothing to filter, export or retry.
+  if (q.isError && !q.data && isNotSwitchedOn(q.error))
+    return <NotAvailable what="the Analysis access trail" />;
 
   return (
     <>
