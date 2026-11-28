@@ -15,6 +15,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Activity's Analysis access tab is calm while core has no trail
+  (platform app).** Core doesn't serve `platform/audit/analysis-access`
+  yet (Analysis is off pending sign-off), so the tab, where auditors land
+  from Analysis, said "Couldn't load Analysis access." A 404 `not_found` or
+  a 501 from that read now shows Not available yet ("Measured Health
+  hasn't switched on the Analysis access trail yet. Nothing is wrong."),
+  with nothing to filter or export. Any other 404, a 5xx or a network
+  failure still shows the error with Try again.
+
 - **A backup code spent moving to a new authenticator app is replaced on
   screen (both apps).** Starting "Move to a new app" with a backup code
   spent it at core, but the BFF's `/api/auth/mfa/replace` dropped core's
