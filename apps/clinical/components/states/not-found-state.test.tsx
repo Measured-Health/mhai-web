@@ -22,4 +22,13 @@ describe("NotFoundState", () => {
     expect(MISSING_PAGE).not.toMatch(/consultation/i);
     expect(MISSING_CONSULTATION).toMatch(/consultation/);
   });
+  // Plain language (CONTRIBUTING): no status codes or error jargon on screen.
+  // The HTTP status stays 404; only the words change.
+  it.each([MISSING_PAGE, MISSING_CONSULTATION])(
+    "shows no technical terms (%s)",
+    (message) => {
+      const { container } = render(<NotFoundState message={message} />);
+      expect(container.textContent).not.toMatch(/404|error/i);
+    },
+  );
 });
