@@ -15,6 +15,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **A platform team member's invite ends at the platform sign-in.** After
+  choosing a password with an invite link on the clinical app's
+  /reset-password page, a platform account was sent to the clinical
+  sign-in, which refuses it. The BFF now reads core's `sign_in` (core
+  POST /auth/password/reset 200 `{sign_in}`) and the page points platform
+  accounts to the platform admin app (a link when `PLATFORM_APP_URL` is
+  set). An older core's 204 still means the clinical app.
+
 - **A backup code spent moving to a new authenticator app is replaced on
   screen (both apps).** Starting "Move to a new app" with a backup code
   spent it at core, but the BFF's `/api/auth/mfa/replace` dropped core's
