@@ -15,6 +15,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Usage's What changed says there is nothing to compare yet (platform
+  app).** Before core's first weekly comparison it sends
+  `what_changed: {unavailable: true}`, which the page showed as "Couldn't
+  load what changed. Check your connection". It now says "Nothing to
+  compare yet. The first weekly comparison appears after the first full
+  week of use." on the screen and in the CSV, never "Nothing unusual".
+  Anything else malformed in its place still fails closed.
 - **Activity's Analysis access tab is calm while core has no trail
   (platform app).** Core doesn't serve `platform/audit/analysis-access`
   yet (Analysis is off pending sign-off), so the tab, where auditors land

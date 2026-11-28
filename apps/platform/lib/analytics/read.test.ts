@@ -144,8 +144,9 @@ describe("readAnalytics: not yet, unavailable, alerts", () => {
         period: "month",
         first_from: "2026-12-01T00:00:00.000Z",
       });
-    // What changed isn't evaluated yet: Couldn't load, never "Nothing unusual".
-    expect(s.changes.status).toBe("failed");
+    // What changed isn't evaluated yet: nothing to compare, never "Nothing
+    // unusual".
+    expect(s.changes.status).toBe("none_yet");
     expect(s.alerts.status).toBe("off");
   });
 
@@ -174,10 +175,38 @@ describe("readAnalytics: not yet, unavailable, alerts", () => {
     expect(odd.use.status).toBe("failed");
   });
 
-  it("every area unavailable: each says Couldn't load; alerts stay off", () => {
+  it("every area unavailable: each says Couldn't load, but What changed has nothing to compare yet; alerts stay off", () => {
     const s = readAnalytics(sample("unavailable"), "month");
-    expect(statuses(s)).toEqual({ ...ALL_FAILED, alerts: "off" });
+    expect(statuses(s)).toEqual({
+      ...ALL_FAILED,
+      alerts: "off",
+      changes: "none_yet",
+    });
     expect(failedText("changes")).toBe("Couldn't load what changed");
+  });
+
+  it("What changed unavailable (no weekly comparison yet) is not a failure", () => {
+    const s = readAnalytics(
+      edit((a) => {
+        (a as Record<string, unknown>).what_changed = { unavailable: true };
+      }),
+    );
+    expect(s.changes.status).toBe("none_yet");
+    expect(s.use.status).toBe("ok");
+    // Anything else in its place still fails closed.
+    for (const odd of [
+      { unavailable: false },
+      { unavailable: true, items: [] },
+      { unavailable: "true" },
+      null,
+    ]) {
+      const t = readAnalytics(
+        edit((a) => {
+          (a as Record<string, unknown>).what_changed = odd;
+        }),
+      );
+      expect(t.changes.status).toBe("failed");
+    }
   });
 
   it("alerts sent as anything but null fail closed, and What changed with them", () => {

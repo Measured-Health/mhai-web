@@ -45,6 +45,13 @@ import {
 } from "./usage-guards";
 
 export const NOTHING_UNUSUAL = "Nothing unusual this period";
+/**
+ * What changed before core's first weekly comparison (it sends
+ * `what_changed: {unavailable: true}`): nothing went wrong, and nothing is
+ * claimed about the period (never "Nothing unusual").
+ */
+export const CHANGES_NONE_YET =
+  "Nothing to compare yet. The first weekly comparison appears after the first full week of use.";
 export const NOT_ENOUGH_TO_COMPARE = "Not enough data to compare yet";
 
 export type AreaKey = "changes" | "use" | "alerts" | "quality" | "hospitals";
@@ -90,7 +97,8 @@ export type AnalyticsState = {
   /** The period kind, and the latest published one's start (null before it). */
   period: Period;
   from: string | null;
-  changes: ({ status: "ok" } & ChangesBlock) | Failed;
+  /** `none_yet`: no weekly comparison yet (`{unavailable: true}`). */
+  changes: ({ status: "ok" } & ChangesBlock) | Failed | { status: "none_yet" };
   use: AreaState<AreaBlock<UseRow>>;
   /** Off while core sends `alerts: null` (F4); anything else fails closed. */
   alerts: Failed | OffState;
@@ -397,6 +405,10 @@ function readChanges(
   c: unknown,
   alerts: AnalyticsState["alerts"],
 ): AnalyticsState["changes"] {
+  // No weekly comparison yet: exactly {unavailable: true}, said as such.
+  // It claims nothing about the period, so the Critical guard below has
+  // nothing to vouch for; anything else in its place still fails closed.
+  if (UNAVAILABLE(c)) return { status: "none_yet" };
   // The Critical guard (anti-goal 2) has nothing to check while alerts are
   // not switched on (null, F4). Alerts sent any other way can't be vouched
   // for, so What changed fails closed rather than say "Nothing unusual".
