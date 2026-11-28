@@ -23,6 +23,13 @@ All notable changes to this project are documented here. The format follows
   hasn't switched on the Analysis access trail yet. Nothing is wrong."),
   with nothing to filter or export. Any other 404, a 5xx or a network
   failure still shows the error with Try again.
+- **Opening /sign-out directly or reloading it signs out (both apps).**
+  The page stayed on "Signing out": the auth context's sign-out guard was
+  updated in a passive effect, after the page's own effect had already
+  asked to sign out on the render where the session lookup landed. It is
+  now updated in a layout effect. The same race let the platform app's
+  refusal of an account with no platform role, and /no-access, leave the
+  session alive after a reload.
 
 - **A backup code spent moving to a new authenticator app is replaced on
   screen (both apps).** Starting "Move to a new app" with a backup code

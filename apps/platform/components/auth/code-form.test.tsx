@@ -55,7 +55,10 @@ describe("CodeForm", () => {
       "That code didn't work.",
     );
     for (const d of digits()) expect(d).toHaveValue("");
-    expect(screen.getByLabelText("Digit 1 of 6")).toHaveFocus();
+    // Focus moves in an effect after the error renders.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Digit 1 of 6")).toHaveFocus(),
+    );
     expect(auth.current.status).not.toBe("signed_in");
   });
 
@@ -159,7 +162,10 @@ describe("CodeForm", () => {
       "That backup code didn't work.",
     );
     expect(screen.getByLabelText("Backup code")).toHaveValue("");
-    expect(screen.getByLabelText("Backup code")).toHaveFocus();
+    // Focus moves in an effect after the error renders.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Backup code")).toHaveFocus(),
+    );
   });
 
   it("a hospital account turned away at the code step is told why on the sign-in page", async () => {

@@ -54,7 +54,10 @@ describe("CodeForm", () => {
       "That code didn't work.",
     );
     expect(screen.getByLabelText("Digit 1 of 6")).toHaveValue("");
-    expect(screen.getByLabelText("Digit 1 of 6")).toHaveFocus();
+    // Focus moves in an effect after the error renders.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Digit 1 of 6")).toHaveFocus(),
+    );
   });
 
   it("accepts a backup code, shows the new one, and goes home only after Continue", async () => {
@@ -212,9 +215,12 @@ describe("CodeForm", () => {
     vi.stubEnv("NEXT_PUBLIC_DEMO", "true");
     try {
       await pending();
-      expect(
-        await screen.findByLabelText("Demo two-step code"),
-      ).toHaveTextContent(/\d{6}/);
+      // The code is made asynchronously (Web Crypto); the box shows first.
+      await waitFor(() =>
+        expect(screen.getByLabelText("Demo two-step code")).toHaveTextContent(
+          /\d{6}/,
+        ),
+      );
     } finally {
       vi.unstubAllEnvs();
     }
