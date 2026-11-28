@@ -14,24 +14,40 @@ async function openView(page: Page, title: string) {
   ).toBeVisible();
 }
 
-/** Waits past "still being prepared": the not-ready state, retried. */
+/**
+ * Waits until the view on screen has loaded: past loading and past "still
+ * being prepared" (the not-ready state, retried with Try again). Loaded is
+ * the view's Download CSV switching on; it stays off, with a reason, while
+ * the view loads or can't be shown. A check made before the not-ready
+ * state appears (the view still loading) no longer counts as settled.
+ */
 async function settle(page: Page) {
   const waiting = page.getByText(
     "These numbers are still being prepared. Try again shortly.",
   );
-  for (let i = 0; i < 20 && (await waiting.isVisible()); i++) {
-    test
-      .info()
-      .annotations.push({ type: "not_ready", description: "shown, retried" });
-    await page.waitForTimeout(5_000);
-    const again = page.getByRole("button", { name: "Try again" }).first();
-    if (await again.isVisible()) await again.click();
+  const csv = page.getByRole("button", { name: "Download CSV" });
+  const deadline = Date.now() + 150_000;
+  let annotated = false;
+  while (Date.now() < deadline) {
     await page.waitForLoadState("networkidle");
+    if (await csv.isEnabled()) return;
+    if (await waiting.isVisible()) {
+      if (!annotated)
+        test.info().annotations.push({
+          type: "not_ready",
+          description: "shown, retried",
+        });
+      annotated = true;
+      await page.waitForTimeout(5_000);
+      const again = page.getByRole("button", { name: "Try again" }).first();
+      if (await again.isVisible()) await again.click();
+    } else await page.waitForTimeout(1_000);
   }
+  await expect(csv, "the view never loaded").toBeEnabled({ timeout: 1 });
 }
 
 test("analysis: views, a filter, not-ready, drill-down", async ({ page }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(600_000);
   await signIn(page, "analyst");
   const calls = recordApi(page);
   await page.goto("/analysis");
@@ -51,13 +67,11 @@ test("analysis: views, a filter, not-ready, drill-down", async ({ page }) => {
     "Who is affected",
     "Co-occurring",
     "Findings",
-    "Data quality",
+    "MHAI quality",
   ]) {
+    // Every view's tab must be there: a renamed one fails, never skips.
     const tab = page.getByRole("tab", { name: new RegExp(`^${v}`) });
-    if (!(await tab.count())) {
-      test.info().annotations.push({ type: "missing-tab", description: v });
-      continue;
-    }
+    await expect(tab).toHaveCount(1);
     await tab.click();
     await page.waitForLoadState("networkidle");
     await settle(page);
