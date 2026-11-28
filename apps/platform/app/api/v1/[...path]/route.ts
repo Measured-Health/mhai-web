@@ -257,6 +257,17 @@ const TEAM_ROLE_IN = z.strictObject({
   version: VERSION,
   ...STEP_UP,
 });
+/**
+ * A team invite (core 1.43.0, `invitePlatformTeam`): exactly the form's
+ * fields, a platform role, and the step-up code. Core still decides the
+ * rest (the name's and email's rules, an email already used).
+ */
+const TEAM_INVITE_IN = z.strictObject({
+  name: z.string().max(200),
+  email: z.string().max(320),
+  role: z.enum(["platform_admin", "auditor"]),
+  ...STEP_UP,
+});
 const PLACE_HOLD_IN = z.strictObject({
   hospital_id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
   reason: z.enum([
@@ -314,6 +325,7 @@ const BODIES: ReadonlyMap<string, z.ZodType> = new Map<string, z.ZodType>([
   ["POST platform/hospitals", HOSPITAL_IN],
   ["PUT platform/hospitals/{id}/emr-rule-set", EMR_RULE_SET_IN],
   ["PUT platform/hospitals/{id}/model-policy", MODEL_POLICY_IN],
+  ["POST platform/team/invites", TEAM_INVITE_IN],
   ["PATCH platform/team/{id}", TEAM_ROLE_IN],
   ["POST platform/legal-holds", PLACE_HOLD_IN],
   ["POST platform/legal-holds/{id}/lift", LIFT_IN],

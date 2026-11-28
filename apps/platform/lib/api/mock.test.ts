@@ -680,23 +680,45 @@ describe("mock platform API", () => {
     expect(done).toMatchObject({ role: "platform_admin", status: "active" });
   });
 
-  it("team invites are not served (501): core keeps no invites", async () => {
+  it("a team invite needs the code (core 1.43.0) and adds an invite_pending member", async () => {
     const { m } = setup();
+    const body = {
+      name: "  Sade Uche ",
+      email: "Sade.Uche@measured-health.example",
+      role: "auditor" as const,
+    };
     expect(
       await failure(
-        m.inviteTeam(
-          {
-            name: "Sade Uche",
-            email: "sade.uche@measured-health.example",
-            role: "auditor",
-          },
-          KEY(),
-        ),
+        m.inviteTeam({ ...body, role: "clinician" } as never, KEY()),
       ),
-    ).toEqual([501, "not_implemented"]);
+    ).toEqual([422, "validation_failed"]);
     expect(
-      (await m.listTeam()).members.every((x) => x.status === "active"),
-    ).toBe(true);
+      await failure(
+        m.inviteTeam({ ...body, email: TEAM_EMAILS.amara, ...CODE }, KEY()),
+      ),
+    ).toEqual([409, "duplicate"]);
+    expect(
+      await failure(m.inviteTeam({ ...body, mfa_code: "000000" }, KEY())),
+    ).toEqual([403, "mfa_invalid"]);
+    const t = await m.inviteTeam({ ...body, ...CODE }, KEY());
+    expect(t).toMatchObject({
+      name: "Sade Uche",
+      email: "sade.uche@measured-health.example",
+      role: "auditor",
+      status: "invite_pending",
+      mfa_enabled: false,
+      last_sign_in_at: null,
+      is_you: false,
+    });
+    expect((await m.listTeam()).members.some((x) => x.id === t.id)).toBe(true);
+    expect((await m.listActivity({})).events[0]).toMatchObject({
+      action: "team_invited",
+      target: "Sade Uche",
+    });
+    expect(await failure(m.inviteTeam({ ...body, ...CODE }, KEY()))).toEqual([
+      409,
+      "duplicate",
+    ]);
   });
 
   it("an auditor can't mark notifications seen (a write rule in core 1.26.0)", async () => {
