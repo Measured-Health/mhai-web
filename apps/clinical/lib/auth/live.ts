@@ -15,6 +15,7 @@ import {
   type AuthClient,
   type AuthErrorCode,
   type Capabilities,
+  readPasswordSaved,
 } from "./types";
 
 /** The BFF routes cover everything the UI offers. */
@@ -112,7 +113,8 @@ export function createLiveAuthClient({
     startMfaReplace: (code, key) => replace.start(code, key),
     confirmMfaReplace: (code, key) => replace.confirm(code, key),
     requestPasswordReset: (email) => call("/password/forgot", { email }),
-    resetPassword: (token, next) => call("/password/reset", { token, next }),
+    resetPassword: async (token, next) =>
+      readPasswordSaved(await call("/password/reset", { token, next })),
     listDevices: () => call("/devices", undefined, "GET"),
     signOutDevice: (id) =>
       call(`/devices/${encodeURIComponent(id)}`, undefined, "DELETE"),

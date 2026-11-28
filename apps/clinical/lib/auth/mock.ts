@@ -14,6 +14,8 @@ import {
 
 export const MOCK_CODE = "123456";
 export const MOCK_RESET_TOKEN = "demo";
+/** A platform team member's invite: they then sign in to the platform app. */
+export const MOCK_PLATFORM_INVITE_TOKEN = "demo-platform";
 /** An obviously synthetic code in core's shape: "aaaaa-aaaaa" for "a". */
 const fakeCode = (c: string) => `${c.repeat(5)}-${c.repeat(5)}`;
 /**
@@ -506,8 +508,12 @@ export function createMockAuthClient({
     },
 
     async resetPassword(token, next) {
-      if (token !== MOCK_RESET_TOKEN) throw new AuthError("link_expired");
+      if (token !== MOCK_RESET_TOKEN && token !== MOCK_PLATFORM_INVITE_TOKEN)
+        throw new AuthError("link_expired");
       strong(next);
+      return token === MOCK_PLATFORM_INVITE_TOKEN
+        ? { app: "platform", signInUrl: null }
+        : { app: "clinical" };
     },
 
     async listDevices() {

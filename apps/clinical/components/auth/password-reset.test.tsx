@@ -1,7 +1,11 @@
 import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createMockAuthClient, MOCK_RESET_TOKEN } from "@/lib/auth/mock";
+import {
+  createMockAuthClient,
+  MOCK_PLATFORM_INVITE_TOKEN,
+  MOCK_RESET_TOKEN,
+} from "@/lib/auth/mock";
 import { renderWithAuth } from "@/tests/auth-wrapper";
 import { ForgotPassword } from "./forgot-password";
 import { ResetPassword } from "./reset-password";
@@ -73,6 +77,18 @@ describe("ForgotPassword", () => {
   });
 });
 
+async function savePassword() {
+  await userEvent.type(
+    screen.getByLabelText("New password"),
+    "tram-lantern-okra",
+  );
+  await userEvent.type(
+    screen.getByLabelText("Confirm password"),
+    "tram-lantern-okra",
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Save password" }));
+}
+
 describe("ResetPassword", () => {
   it("strips the token from the address bar, then saves the new password", async () => {
     window.history.replaceState(
@@ -95,6 +111,36 @@ describe("ResetPassword", () => {
       screen.getByRole("button", { name: "Save password" }),
     );
     expect(await screen.findByText("Password saved")).toBeInTheDocument();
+  });
+
+  it("sends a platform team member to the platform app's sign-in, not this one", async () => {
+    search = new URLSearchParams({ token: MOCK_PLATFORM_INVITE_TOKEN });
+    const client = createMockAuthClient();
+    vi.spyOn(client, "resetPassword").mockResolvedValue({
+      app: "platform",
+      signInUrl: "https://platforms.example.org/sign-in",
+    });
+    renderWithAuth(<ResetPassword />, null, client);
+    await savePassword();
+    expect(await screen.findByText("Password saved")).toBeInTheDocument();
+    const link = screen.getByRole("link", {
+      name: "Go to the platform admin sign-in",
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://platforms.example.org/sign-in",
+    );
+    expect(screen.queryByRole("link", { name: "Back to sign in" })).toBeNull();
+  });
+
+  it("names the platform admin app when its address isn't known", async () => {
+    search = new URLSearchParams({ token: MOCK_PLATFORM_INVITE_TOKEN });
+    renderWithAuth(<ResetPassword />, null);
+    await savePassword();
+    expect(
+      await screen.findByText(/Sign in to the platform admin app/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Back to sign in" })).toBeNull();
   });
 
   it("explains an expired link", async () => {

@@ -468,9 +468,10 @@ describe("assumed endpoints", () => {
   });
   it("resets a password, and calls a dead link expired", async () => {
     upstream.mockResolvedValueOnce(undefined);
-    expect(
-      (await reset(post({ token: "t", next: "tram-lantern-okra" }))).status,
-    ).toBe(204);
+    const done = await reset(post({ token: "t", next: "tram-lantern-okra" }));
+    expect(done.status).toBe(200);
+    // An older core (204, no body): the clinical app's sign-in.
+    expect(await done.json()).toEqual({ app: "clinical" });
     expect(upstream).toHaveBeenLastCalledWith("/auth/password/reset", {
       method: "POST",
       body: { token: "t", new_password: "tram-lantern-okra" },
@@ -483,6 +484,34 @@ describe("assumed endpoints", () => {
     ).toEqual({
       code: "link_expired",
     });
+  });
+  it("sends a platform team member's invite to the platform app's sign-in", async () => {
+    vi.stubEnv("PLATFORM_APP_URL", "https://platforms.example.org");
+    try {
+      upstream.mockResolvedValueOnce({ sign_in: "platform" });
+      const r = await reset(post({ token: "t", next: "tram-lantern-okra" }));
+      expect(r.status).toBe(200);
+      expect(await r.json()).toEqual({
+        app: "platform",
+        signInUrl: "https://platforms.example.org/sign-in",
+      });
+      upstream.mockResolvedValueOnce({ sign_in: "clinical" });
+      expect(
+        await (
+          await reset(post({ token: "t", next: "tram-lantern-okra" }))
+        ).json(),
+      ).toEqual({ app: "clinical" });
+      // Without the platform app's address: still the platform, no link.
+      vi.stubEnv("PLATFORM_APP_URL", "");
+      upstream.mockResolvedValueOnce({ sign_in: "platform" });
+      expect(
+        await (
+          await reset(post({ token: "t", next: "tram-lantern-okra" }))
+        ).json(),
+      ).toEqual({ app: "platform", signInUrl: null });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
   it("lists, drops and revokes devices", async () => {
     await signedIn();

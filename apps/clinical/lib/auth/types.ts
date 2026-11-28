@@ -163,7 +163,12 @@ export interface AuthClient {
    */
   confirmMfaReplace(code: string, idempotencyKey: string): Promise<void>;
   requestPasswordReset(email: string): Promise<void>;
-  resetPassword(token: string, next: string): Promise<void>;
+  /**
+   * Chooses a password with a reset or invite link. Says which app the
+   * account signs in to: a platform team member's invite opens this page
+   * too, but they sign in to the platform admin app.
+   */
+  resetPassword(token: string, next: string): Promise<PasswordSaved>;
   listDevices(): Promise<Device[]>;
   signOutDevice(id: string): Promise<void>;
   signOutEverywhere(): Promise<void>;
@@ -235,4 +240,29 @@ export function initials(name: string): string {
     .slice(0, 2)
     .map((w) => w[0]!.toUpperCase())
     .join("");
+}
+
+/**
+ * Where to sign in after a password is chosen with a link. Known only to
+ * the link's holder, after the link worked: it never says whether an
+ * email has an account. `signInUrl` is the platform admin app's sign-in
+ * page when this deployment knows its address (PLATFORM_APP_URL).
+ */
+export type PasswordSaved =
+  { app: "clinical" } | { app: "platform"; signInUrl: string | null };
+
+/** Reads the BFF's reply; anything unexpected is the clinical app's. */
+export function readPasswordSaved(r: unknown): PasswordSaved {
+  const o = (r ?? {}) as { app?: unknown; signInUrl?: unknown };
+  if (o.app !== "platform") return { app: "clinical" };
+  let url: string | null = null;
+  if (typeof o.signInUrl === "string") {
+    try {
+      const u = new URL(o.signInUrl);
+      if (u.protocol === "https:" || u.protocol === "http:") url = u.href;
+    } catch {
+      url = null;
+    }
+  }
+  return { app: "platform", signInUrl: url };
 }
