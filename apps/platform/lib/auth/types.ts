@@ -130,6 +130,11 @@ export interface AuthClient {
   confirmMfaReplace(code: string, idempotencyKey: string): Promise<void>;
   listDevices(): Promise<Device[]>;
   signOutDevice(id: string): Promise<void>;
+  /**
+   * Signs out every other session (all tried), then always this one: the
+   * caller only clears the tab (`signOut(reason, { elsewhere: true })`)
+   * and doesn't ask the server again. Rejects with the first failure.
+   */
   signOutEverywhere(): Promise<void>;
 }
 

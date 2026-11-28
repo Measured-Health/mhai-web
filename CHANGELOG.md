@@ -15,6 +15,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Sign out everywhere asks the server to sign out once (platform app).**
+  It signed out the other sessions, then this one, and then the page's
+  sign-out called /logout a second time. The page now only clears the tab
+  and goes to /sign-in; the other tabs still follow, and a session that
+  couldn't be signed out is still reported. (The clinical app was checked:
+  its one core call is revoke-all, which clears the cookie, so its later
+  /logout never reaches core.)
 - **A platform team member's invite ends at the platform sign-in.** After
   choosing a password with an invite link on the clinical app's
   /reset-password page, a platform account was sent to the clinical

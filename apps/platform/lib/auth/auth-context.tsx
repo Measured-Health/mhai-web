@@ -58,8 +58,9 @@ export interface AuthCtx extends State {
   updateUser(patch: Partial<User>): void;
   /**
    * Ends the session, clears the cached data and goes to /sign-in. With
-   * `elsewhere`, another tab has already ended the shared session: this tab
-   * only follows, without asking the server again.
+   * `elsewhere`, the shared session has already been ended (by another tab,
+   * or by `client.signOutEverywhere`): this tab only follows, without asking
+   * the server again. The other tabs are still told (IdleGuard).
    */
   signOut(reason: SignOutReason, opts?: { elsewhere?: boolean }): Promise<void>;
   /**

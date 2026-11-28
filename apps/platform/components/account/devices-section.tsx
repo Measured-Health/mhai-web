@@ -61,7 +61,10 @@ export function DevicesSection() {
       setFailed(ae);
       return;
     }
-    await signOut("manual");
+    // signOutEverywhere has already ended this session (its one /logout):
+    // only clear this tab and go to /sign-in. The other tabs still follow,
+    // as for any sign-out here.
+    await signOut("manual", { elsewhere: true });
   };
 
   return (
