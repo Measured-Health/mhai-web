@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { passwordError } from "@mhai/api-client/password-rules";
-import type { AuthError } from "@/lib/auth/types";
+import type { AuthError, PasswordSaved } from "@/lib/auth/types";
 import { Button } from "@mhai/ui/button";
 import { AuthErrorBanner } from "./auth-error-banner";
 import { AuthHeading } from "./auth-layout";
@@ -24,7 +24,7 @@ export function ResetPassword() {
   const [showErrors, setShowErrors] = useState(false);
   const [error, setError] = useState<AuthError | null>(null);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<PasswordSaved | null>(null);
 
   useEffect(() => {
     if (window.location.search)
@@ -45,6 +45,34 @@ export function ResetPassword() {
           Send a new link
         </Link>
         <BackToSignIn />
+      </>
+    );
+
+  if (done?.app === "platform")
+    return (
+      <>
+        <div
+          aria-hidden
+          className="mb-4 grid size-14 place-items-center rounded-2xl bg-ok-wash text-ok-deep"
+        >
+          <CheckCircle2 className="size-6" />
+        </div>
+        <AuthHeading
+          title="Password saved"
+          sub={
+            done.signInUrl
+              ? "Sign in to the platform admin app with your new password. You'll set up two-step verification there next."
+              : "Sign in to the platform admin app with your new password. You'll set up two-step verification there next. Ask the person who invited you for its address."
+          }
+        />
+        {done.signInUrl && (
+          <a
+            href={done.signInUrl}
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-gradient-to-br from-mint to-mint-deep px-5 text-sm font-semibold text-white"
+          >
+            Go to the platform admin sign-in
+          </a>
+        )}
       </>
     );
 
@@ -77,8 +105,7 @@ export function ResetPassword() {
     setBusy(true);
     setError(null);
     try {
-      await client.resetPassword(token, next);
-      setDone(true);
+      setDone(await client.resetPassword(token, next));
     } catch (err) {
       setError(errorCode(err));
     } finally {

@@ -444,6 +444,11 @@ sealed in an `httpOnly` cookie and never reaches browser JavaScript. Set:
   `NATS_USER` and `NATS_PASSWORD_FILE`);
 - `TRUSTED_CLIENT_IP_HEADER`: the header the host's nginx overwrites with
   the user's IP (`x-real-ip`); core needs it for sign-in.
+- `PLATFORM_APP_URL` (optional): the platform admin app's address
+  (`https://...`, nothing after the host). A platform team member who
+  chooses their password with an invite link on this app's
+  `/reset-password` page is then given a link to its sign-in page; unset,
+  the page tells them to sign in to the platform admin app, with no link.
 
 The platform admin app takes the same backend settings. Each app's
 `GET /api/health` answers 200 while it can reach core (always on `http`).

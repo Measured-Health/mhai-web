@@ -47,6 +47,9 @@ services:
       # A file, mounted below; the seed is never in the environment.
       NATS_NKEY_SEED_FILE: /run/secrets/nats-bff-clinical.nk
       TRUSTED_CLIENT_IP_HEADER: x-real-ip
+      # The platform app's address, for a platform invitee's "sign in" link
+      # after /reset-password (README, PLATFORM_APP_URL). Unset: no link.
+      PLATFORM_APP_URL: ${PLATFORM_APP_URL:-}
       # Not :? here: the whole file is checked even when the profile is off,
       # and the public deploy must never stop on it. The deploy step checks it.
       SESSION_SECRET: ${WEB_LIVE_SESSION_SECRET:-}
