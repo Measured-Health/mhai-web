@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "./errors";
 import { base32Encode } from "./totp";
 import { mfaReplaceCalls } from "./mfa-replace";
+import { clearNewBackupCode, pendingBackupCode } from "./new-backup-code";
 
 // Synthetic: never a real key.
 const SECRET = base32Encode("synthetic-test-key-1");
@@ -83,6 +84,45 @@ describe("mfaReplaceCalls", () => {
     expect(await fails(calls.start({ mfa_code: "123456" }, "k"))).toEqual({
       status: 502,
       code: "unavailable",
+    });
+  });
+
+  describe("a backup code spent on the step-up", () => {
+    // Built at run time: never a code-shaped literal in the repo.
+    const renewed = () => ["abcde", "fghjk"].join("-");
+    const withCode = (body: unknown, status = 200, code = renewed()) =>
+      vi.fn(async () =>
+        Response.json(body, {
+          status,
+          headers: { "X-MHAI-New-Backup-Code": code },
+        }),
+      );
+
+    it("offers core's replacement to be shown, on success", async () => {
+      clearNewBackupCode();
+      const calls = mfaReplaceCalls(withCode(SETUP) as typeof fetch);
+      await calls.start({ backup_code: "x" }, "k");
+      expect(pendingBackupCode()).toBe(renewed());
+      clearNewBackupCode();
+    });
+
+    it("and on a refusal after the code was spent", async () => {
+      clearNewBackupCode();
+      const calls = mfaReplaceCalls(
+        withCode({ code: "unavailable" }, 503) as typeof fetch,
+      );
+      await fails(calls.start({ backup_code: "x" }, "k"));
+      expect(pendingBackupCode()).toBe(renewed());
+      clearNewBackupCode();
+    });
+
+    it("never one not in the exact shape", async () => {
+      clearNewBackupCode();
+      const calls = mfaReplaceCalls(
+        withCode(SETUP, 200, "not a code") as typeof fetch,
+      );
+      await calls.start({ backup_code: "x" }, "k");
+      expect(pendingBackupCode()).toBeNull();
     });
   });
 });

@@ -95,6 +95,7 @@ describe("POST /api/auth/mfa/replace", () => {
       token: "tok",
       body: { mfa_code: "123456" },
       idempotencyKey: KEY,
+      onNewBackupCode: expect.any(Function),
     });
   });
 
@@ -172,6 +173,38 @@ describe("POST /api/auth/mfa/replace", () => {
     expect(res.status).toBe(status);
     expect(await res.json()).toEqual({ code });
     expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+});
+
+describe("POST /api/auth/mfa/replace with a backup code", () => {
+  // Built at run time: never a code-shaped literal in the repo.
+  const spent = () => ["mnpqr", "stuvw"].join("-");
+  const renewed = () => ["abcde", "fghjk"].join("-");
+
+  it("passes core's replacement code to the page in the header only", async () => {
+    await signedIn();
+    upstream.mockImplementationOnce(
+      async (_p: string, o: { onNewBackupCode?: (c: string) => void }) => {
+        o.onNewBackupCode?.(renewed());
+        return { otpauth_uri: CORE_URI };
+      },
+    );
+    const res = await start(post({ backup_code: spent() }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-MHAI-New-Backup-Code")).toBe(renewed());
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(await res.text()).not.toContain(renewed());
+    expect([...jar.values.values()].join()).not.toContain(renewed());
+  });
+
+  it("passes it on a refusal after the code was spent", async () => {
+    await signedIn();
+    upstream.mockRejectedValueOnce(
+      new UpstreamError(503, "not_ready", renewed()),
+    );
+    const res = await start(post({ backup_code: spent() }));
+    expect(res.status).toBe(503);
+    expect(res.headers.get("X-MHAI-New-Backup-Code")).toBe(renewed());
   });
 });
 

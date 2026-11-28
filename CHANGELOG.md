@@ -13,6 +13,20 @@ All notable changes to this project are documented here. The format follows
   rendered from core's reply) loads. Must be deployed before core offers the
   type (`CORE_EMR_CONNECTOR_TYPES`), because the read is strict.
 
+### Fixed
+
+- **A backup code spent moving to a new authenticator app is replaced on
+  screen (both apps).** Starting "Move to a new app" with a backup code
+  spent it at core, but the BFF's `/api/auth/mfa/replace` dropped core's
+  `X-MHAI-New-Backup-Code`, so the replacement was never shown and the
+  person was left with no working backup code. The route now passes it on
+  (header only, no-store; on a refusal after the code was spent too) and
+  the page shows it once (`NewBackupCodeHost`). The "Lost your phone?"
+  link on the save screen now waits out the same 3 s as Continue, since it
+  forgets the code too. Guarded end to end by the platform's
+  `tests/e2e-full/07-backup-code.spec.ts` (backup sign-in renewal, the old
+  code refused, and a backup-code step-up).
+
 ### Changed
 
 - **One renewable backup code (product owner, 24 Nov; needs core's
