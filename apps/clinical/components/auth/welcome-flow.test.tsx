@@ -110,7 +110,7 @@ describe("WelcomeFlow", () => {
     expect(
       await screen.findByText("Step 3 of 4 · Just in case"),
     ).toBeInTheDocument();
-    expect(auth.user?.mfaEnabled).toBe(true);
+    await waitFor(() => expect(auth.user?.mfaEnabled).toBe(true));
     await finishSetup(user);
 
     expect(
@@ -267,7 +267,9 @@ describe("WelcomeFlow", () => {
     expect(
       await screen.findByText("Step 2 of 2 · Just in case"),
     ).toBeInTheDocument();
-    expect(auth.user?.backupCodesLeft).toBe(1);
+    // Grab copies the context in an effect, which can run after the text
+    // shows: wait for it rather than read it once.
+    await waitFor(() => expect(auth.user?.backupCodesLeft).toBe(1));
   });
 
   it("sends a signed-out visitor to sign in", async () => {

@@ -81,6 +81,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  vi.useRealTimers();
   clock = undefined;
   env.online = true;
   env.desktop = true;
@@ -138,6 +139,10 @@ async function verifyWithCode() {
 
 describe("the queue", () => {
   it("opens on To verify, oldest first", async () => {
+    // The sample letters are a few seconds short of whole days old, counted
+    // to when the list was fetched: hold the clock so a slow run still
+    // reads "Waiting 23 hours", not "Waiting 1 day".
+    vi.useFakeTimers({ toFake: ["Date"] });
     await open();
     expect(tab("To verify")).toHaveAttribute("aria-selected", "true");
     const list = rows();
