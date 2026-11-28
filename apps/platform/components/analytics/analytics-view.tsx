@@ -20,6 +20,7 @@ import { analyticsCsv, analyticsCsvName } from "@/lib/analytics/csv";
 import { PERIOD_PICK, periodRange, windowText } from "@/lib/analytics/periods";
 import {
   NOTHING_UNUSUAL,
+  CHANGES_NONE_YET,
   readAnalytics,
   type AnalyticsState,
 } from "@/lib/analytics/read";
@@ -335,6 +336,11 @@ function WhatChanged({
         <CouldntLoad what="what changed" onRetry={onRetry} />
       ) : !c ? (
         <Loading label="Loading what changed" />
+      ) : c.status === "none_yet" ? (
+        // No weekly comparison yet: calm, and never "Nothing unusual".
+        <p role="status" className="text-[14px] text-ink-2">
+          {CHANGES_NONE_YET}
+        </p>
       ) : c.items.length === 0 ? (
         <p className="text-[14px] text-ink-2">{NOTHING_UNUSUAL}</p>
       ) : (
