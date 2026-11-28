@@ -1,7 +1,14 @@
 import { QueryClient } from "@tanstack/react-query";
 import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { auth, GrabAuth, renderWithAuth, testAuthClient } from "@/tests/render";
+import {
+  ADA,
+  auth,
+  FROM_CLIENT,
+  GrabAuth,
+  renderWithAuth,
+  testAuthClient,
+} from "@/tests/render";
 import { SignOut } from "./sign-out";
 import { SignInForm } from "./sign-in-form";
 
@@ -28,6 +35,24 @@ describe("SignOut", () => {
     expect(auth.current.signedOutReason).toBe("manual");
     expect(signOut).toHaveBeenCalledTimes(1);
     expect(queryClient.getQueryData(["hospitals"])).toBeUndefined();
+    expect(replace).toHaveBeenCalledWith("/sign-in");
+  });
+
+  // A typed /sign-out or a reload: the session is looked up first, and the
+  // sign-out starts on the same render that learns the person is signed in.
+  it("signs out when the page is opened directly (session looked up first)", async () => {
+    const client = testAuthClient();
+    vi.spyOn(client, "getSession").mockResolvedValue({ user: ADA, steps: [] });
+    const signOut = vi.spyOn(client, "signOut");
+    renderWithAuth(
+      <>
+        <GrabAuth />
+        <SignOut />
+      </>,
+      { client, user: FROM_CLIENT },
+    );
+    await waitFor(() => expect(auth.current.status).toBe("signed_out"));
+    expect(signOut).toHaveBeenCalledTimes(1);
     expect(replace).toHaveBeenCalledWith("/sign-in");
   });
 
