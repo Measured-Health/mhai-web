@@ -8,10 +8,10 @@ export default function NotFound() {
     <main className="canvas-v3 grid min-h-full place-items-center p-6">
       <div className="card-v3 max-w-md p-8 text-center">
         <h1 className="font-display text-3xl font-black text-ink">
-          Page not found
+          We can&apos;t find that page
         </h1>
         <p className="mt-2 text-ink-2">
-          This page doesn&apos;t exist or has moved.
+          This page doesn&apos;t exist or has moved. Check the address.
         </p>
         <Link
           href="/hospitals"

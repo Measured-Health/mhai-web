@@ -22,6 +22,10 @@ All notable changes to this project are documented here. The format follows
   couldn't be signed out is still reported. (The clinical app was checked:
   its one core call is revoke-all, which clears the cookie, so its later
   /logout never reaches core.)
+- **Not-found pages use plain words (both apps).** The clinical app's
+  not-found screen (unknown pages, a missing /c/{id} or /print/{id}, and
+  /ended) no longer shows "Error 404"; the platform app's says "We can't
+  find that page" with a link to hospitals. The HTTP status is still 404.
 - **A platform team member's invite ends at the platform sign-in.** After
   choosing a password with an invite link on the clinical app's
   /reset-password page, a platform account was sent to the clinical
